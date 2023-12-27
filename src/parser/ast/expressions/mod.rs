@@ -1,4 +1,8 @@
-use nom::{branch::alt, combinator::map, sequence::delimited};
+use nom::{
+    branch::alt,
+    combinator::{cut, map},
+    sequence::delimited,
+};
 
 use crate::parser::utils::{
     io::{PResult, Span},
@@ -36,7 +40,7 @@ impl TryParse for Expression {
      * | Error
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
+        cut(alt((
             map(
                 delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
                 |value| Expression::Paren(Box::new(value)),
@@ -47,6 +51,6 @@ impl TryParse for Expression {
             }),
             map(flows::ExprFlow::parse, |value| Expression::ExprFlow(value)),
             map(error::Error::parse, |value| Expression::Error(value)),
-        ))(input)
+        )))(input)
     }
 }

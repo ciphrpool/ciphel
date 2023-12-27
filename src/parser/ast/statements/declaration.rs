@@ -181,7 +181,15 @@ impl TryParse for PatternVar {
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |(typename, vars)| PatternVar::StructInline { typename, vars },
+                |(typename, vars)| PatternVar::StructFields { typename, vars },
+            ),
+            map(
+                delimited(
+                    wst(lexem::PAR_O),
+                    separated_list1(wst(lexem::COMA), parse_id),
+                    wst(lexem::PAR_C),
+                ),
+                |value| PatternVar::Tuple(value),
             ),
         ))(input)
     }

@@ -193,12 +193,243 @@ pub enum ComparaisonOperator {
 impl TryParse for ComparaisonOperator {
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            value(ComparaisonOperator::LE, wst(lexem::LE)),
             value(ComparaisonOperator::ELE, wst(lexem::ELE)),
-            value(ComparaisonOperator::GE, wst(lexem::GE)),
+            value(ComparaisonOperator::LE, wst(lexem::LE)),
             value(ComparaisonOperator::EGE, wst(lexem::EGE)),
+            value(ComparaisonOperator::GE, wst(lexem::GE)),
             value(ComparaisonOperator::EQ, wst(lexem::EQ)),
             value(ComparaisonOperator::NEQ, wst(lexem::NEQ)),
         ))(input)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::expressions::data::{Data, Primitive};
+
+    use super::*;
+
+    #[test]
+    fn valid_unary() {
+        let res = UnaryOperation::parse("-10".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            UnaryOperation::Minus(Box::new(Expression::Data(Data::Primitive(
+                Primitive::Number(10)
+            )))),
+            value
+        );
+
+        let res = UnaryOperation::parse("!true".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            UnaryOperation::Not(Box::new(Expression::Data(Data::Primitive(
+                Primitive::Bool(true)
+            )))),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_binary_math() {
+        let res = BinaryOperation::parse("10 + 10".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Add,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 * 10".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Mult,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 / 10".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Div,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 % 2".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Mod,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 << 2".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Shl,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 >> 2".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Math(MathOperation {
+                operator: MathOperator::Shr,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_binary_logical() {
+        let res = BinaryOperation::parse("true and true".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Logical(LogicalOperation {
+                operator: LogicalOperator::And,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("true or true".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Logical(LogicalOperation {
+                operator: LogicalOperator::Or,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("true xor true".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Logical(LogicalOperation {
+                operator: LogicalOperator::Xor,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("true in true".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Logical(LogicalOperation {
+                operator: LogicalOperator::In,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_binary_comparaison() {
+        let res = BinaryOperation::parse("10 < 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::LE,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 <= 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::ELE,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 > 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::GE,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 >= 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::EGE,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 == 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::EQ,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
+
+        let res = BinaryOperation::parse("10 != 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            BinaryOperation::Comparaison(ComparaisonOperation {
+                operator: ComparaisonOperator::NEQ,
+                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            }),
+            value
+        );
     }
 }

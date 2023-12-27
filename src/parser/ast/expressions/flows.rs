@@ -43,6 +43,7 @@ impl TryParse for ExprFlow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfExpr {
+    condition: Box<Expression>,
     main_branch: Box<Expression>,
     else_branch: Box<Expression>,
 }
@@ -57,8 +58,8 @@ impl TryParse for IfExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(
-                    wst(lexem::IF),
+                pair(
+                    preceded(wst(lexem::IF), Expression::parse),
                     delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
                 ),
                 preceded(
@@ -66,7 +67,8 @@ impl TryParse for IfExpr {
                     delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
                 ),
             ),
-            |(main_branch, else_branch)| IfExpr {
+            |((condition, main_branch), else_branch)| IfExpr {
+                condition: Box::new(condition),
                 main_branch: Box::new(main_branch),
                 else_branch: Box::new(else_branch),
             },
@@ -130,10 +132,6 @@ impl TryParse for Pattern {
             map(Primitive::parse, |value| Pattern::Primitive(value)),
             map(parse_string, |value| Pattern::String(value)),
             map(
-                separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                |(typename, value)| Pattern::Enum { typename, value },
-            ),
-            map(
                 pair(
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
                     delimited(
@@ -164,6 +162,10 @@ impl TryParse for Pattern {
                 },
             ),
             map(
+                separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                |(typename, value)| Pattern::Enum { typename, value },
+            ),
+            map(
                 pair(
                     parse_id,
                     delimited(
@@ -183,7 +185,15 @@ impl TryParse for Pattern {
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |(typename, vars)| Pattern::StructInline { typename, vars },
+                |(typename, vars)| Pattern::StructFields { typename, vars },
+            ),
+            map(
+                delimited(
+                    wst(lexem::PAR_O),
+                    separated_list1(wst(lexem::COMA), parse_id),
+                    wst(lexem::PAR_C),
+                ),
+                |value| Pattern::Tuple(value),
             ),
         ))(input)
     }
@@ -315,5 +325,137 @@ impl TryParse for FnCall {
             ),
             |(fn_id, params)| FnCall { fn_id, params },
         )(input)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::expressions::data::Data;
+
+    use super::*;
+
+    #[test]
+    fn valid_if() {
+        let res = IfExpr::parse("if true { 10 } else { 20 }".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            IfExpr {
+                condition: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
+                main_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(20)))),
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_match() {
+        let res = MatchExpr::parse(
+            r#"
+        match x { 
+            case 10 => true,
+            case "Hello world" => true,
+            case Geo::Point => true,
+            case Geo::Point(y) => true,
+            case Geo::Point{y} => true,
+            case Point(y) => true,
+            case Point{y} => true,
+            case (y,z) => true,
+            else => true
+        }"#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            MatchExpr {
+                expr: Box::new(Expression::Data(Data::Variable("x".into()))),
+                patterns: vec![
+                    PatternExpr {
+                        pattern: Pattern::Primitive(Primitive::Number(10)),
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::String("Hello world".into()),
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::Enum {
+                            typename: "Geo".into(),
+                            value: "Point".into()
+                        },
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::UnionInline {
+                            typename: "Geo".into(),
+                            variant: "Point".into(),
+                            vars: vec!["y".into()]
+                        },
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::UnionFields {
+                            typename: "Geo".into(),
+                            variant: "Point".into(),
+                            vars: vec!["y".into()]
+                        },
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::StructInline {
+                            typename: "Point".into(),
+                            vars: vec!["y".into()]
+                        },
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::StructFields {
+                            typename: "Point".into(),
+                            vars: vec!["y".into()]
+                        },
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    },
+                    PatternExpr {
+                        pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
+                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                    }
+                ],
+                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_try() {
+        let res = TryExpr::parse("try { 10 } else { 20 }".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            TryExpr {
+                try_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
+                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(20)))),
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_fn_call() {
+        let res = FnCall::parse("f(x,10)".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            FnCall {
+                fn_id: "f".into(),
+                params: vec![
+                    Expression::Data(Data::Variable("x".into())),
+                    Expression::Data(Data::Primitive(Primitive::Number(10)))
+                ]
+            },
+            value
+        );
     }
 }

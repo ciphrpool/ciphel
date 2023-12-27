@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use nom::{
     branch::alt,
     combinator::map,
-    multi::{fold_many1, separated_list0},
+    multi::{fold_many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
 };
 
@@ -50,7 +50,7 @@ pub struct StructDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StructVariant {
-    Fields(HashMap<ID, Type>),
+    Fields(Vec<(ID, Type)>),
     Inline(Types),
 }
 
@@ -66,16 +66,9 @@ impl TryParse for StructVariant {
             map(
                 delimited(
                     wst(lexem::BRA_O),
-                    fold_many1(
-                        terminated(
-                            separated_pair(parse_id, wst(lexem::COLON), Type::parse),
-                            wst(lexem::COMA),
-                        ),
-                        HashMap::new,
-                        |mut acc, (key, value)| {
-                            acc.insert(key, value);
-                            acc
-                        },
+                    separated_list1(
+                        wst(lexem::COMA),
+                        separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                     ),
                     wst(lexem::BRA_C),
                 ),
@@ -109,13 +102,13 @@ impl TryParse for StructDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDef {
     id: ID,
-    variants: HashMap<ID, UnionVariant>,
+    variants: Vec<(ID, UnionVariant)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnionVariant {
     Id,
-    Fields(HashMap<ID, Type>),
+    Fields(Vec<(ID, Type)>),
     Inline(Types),
 }
 impl TryParse for UnionVariant {
@@ -130,16 +123,9 @@ impl TryParse for UnionVariant {
             map(
                 delimited(
                     wst(lexem::BRA_O),
-                    fold_many1(
-                        terminated(
-                            separated_pair(parse_id, wst(lexem::COLON), Type::parse),
-                            wst(lexem::COMA),
-                        ),
-                        HashMap::new,
-                        |mut acc, (key, value)| {
-                            acc.insert(key, value);
-                            acc
-                        },
+                    separated_list1(
+                        wst(lexem::COMA),
+                        separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                     ),
                     wst(lexem::BRA_C),
                 ),
@@ -168,16 +154,12 @@ impl TryParse for UnionDef {
                 preceded(wst(lexem::STRUCT), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    fold_many1(
+                    separated_list1(
+                        wst(lexem::COMA),
                         alt((
                             map(parse_id, |value| (value, UnionVariant::Id)),
                             pair(parse_id, UnionVariant::parse),
                         )),
-                        HashMap::new,
-                        |mut acc, (key, value)| {
-                            acc.insert(key, value);
-                            acc
-                        },
                     ),
                     wst(lexem::BRA_C),
                 ),
@@ -190,7 +172,7 @@ impl TryParse for UnionDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
     id: ID,
-    values: HashSet<ID>,
+    values: Vec<ID>,
 }
 
 impl TryParse for EnumDef {
@@ -208,14 +190,7 @@ impl TryParse for EnumDef {
                 preceded(wst(lexem::STRUCT), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    fold_many1(
-                        terminated(parse_id, wst(lexem::COMA)),
-                        HashSet::new,
-                        |mut acc, value| {
-                            acc.insert(value);
-                            acc
-                        },
-                    ),
+                    separated_list1(wst(lexem::COMA), parse_id),
                     wst(lexem::BRA_C),
                 ),
             ),

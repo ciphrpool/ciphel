@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    combinator::{map, value},
+    combinator::{cut, map, value},
     multi::{fold_many0, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
@@ -43,8 +43,7 @@ pub enum Data {
 
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(parse_id, |value| Data::Variable(value)),
+        cut(alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
             map(Slice::parse, |value| Data::Slice(value)),
             map(Vector::parse, |value| Data::Vec(value)),
@@ -58,7 +57,8 @@ impl TryParse for Data {
             map(Struct::parse, |value| Data::Struct(value)),
             map(Union::parse, |value| Data::Union(value)),
             map(Enum::parse, |value| Data::Enum(value)),
-        ))(input)
+            map(parse_id, |value| Data::Variable(value)),
+        )))(input)
     }
 }
 
@@ -340,7 +340,7 @@ pub enum Struct {
     },
     Field {
         id: ID,
-        fields: HashMap<String, Expression>,
+        fields: Vec<(String, Expression)>,
     },
 }
 
@@ -354,7 +354,7 @@ pub enum Union {
     Field {
         typename: ID,
         variant: ID,
-        fields: HashMap<String, Expression>,
+        fields: Vec<(String, Expression)>,
     },
 }
 
@@ -374,13 +374,9 @@ impl TryParse for Struct {
                     parse_id,
                     delimited(
                         wst(lexem::BRA_O),
-                        fold_many0(
+                        separated_list1(
+                            wst(lexem::COMA),
                             separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                            HashMap::new,
-                            |mut acc, (key, value)| {
-                                acc.insert(key, value);
-                                acc
-                            },
                         ),
                         wst(lexem::BRA_C),
                     ),
@@ -414,13 +410,9 @@ impl TryParse for Union {
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
                     delimited(
                         wst(lexem::BRA_O),
-                        fold_many0(
+                        separated_list1(
+                            wst(lexem::COMA),
                             separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                            HashMap::new,
-                            |mut acc, (key, value)| {
-                                acc.insert(key, value);
-                                acc
-                            },
                         ),
                         wst(lexem::BRA_C),
                     ),
@@ -490,13 +482,9 @@ impl TryParse for Map {
                     wst(lexem::platform::MAP),
                     delimited(
                         wst(lexem::BRA_O),
-                        fold_many0(
+                        separated_list1(
+                            wst(lexem::COMA),
                             separated_pair(KeyData::parse, wst(lexem::COLON), Expression::parse),
-                            Vec::new,
-                            |mut acc, (key, value)| {
-                                acc.push((key, value));
-                                acc
-                            },
                         ),
                         wst(lexem::BRA_C),
                     ),
@@ -642,8 +630,206 @@ mod tests {
     #[test]
     fn valid_closure() {
         let res = Closure::parse("(x,y) -> x".into());
-        dbg!(&res);
         assert!(res.is_ok());
         let value = res.unwrap().1;
+        assert_eq!(
+            Closure {
+                params: vec![
+                    ClosureParam::Minimal("x".into()),
+                    ClosureParam::Minimal("y".into())
+                ],
+                scope: ClosureScope::Expr(Box::new(Expression::Data(Data::Variable("x".into()))))
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_chan() {
+        let res = Channel::parse("receive[&chan1](10)".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Channel::Receive {
+                addr: Address(Box::new(Expression::Data(Data::Variable("chan1".into())))),
+                timeout: 10
+            },
+            value
+        );
+
+        let res = Channel::parse("send[&chan1](10)".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Channel::Send {
+                addr: Address(Box::new(Expression::Data(Data::Variable("chan1".into())))),
+                msg: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            },
+            value
+        );
+
+        let res = Channel::parse("chan(\"ID_CHAN\")".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(Channel::Init("ID_CHAN".into()), value);
+    }
+
+    #[test]
+    fn valid_tuple() {
+        let res = Tuple::parse("(2,'a')".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Tuple(vec![
+                Expression::Data(Data::Primitive(Primitive::Number(2))),
+                Expression::Data(Data::Primitive(Primitive::Char('a')))
+            ]),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_address() {
+        let res = Address::parse("&x".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Address(Box::new(Expression::Data(Data::Variable("x".into())))),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_access() {
+        let res = Access::parse("*x".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Access(Box::new(Expression::Data(Data::Variable("x".into())))),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_map() {
+        let res = Map::parse(r#"map{"x":2,"y":6}"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Map::Init {
+                fields: vec![
+                    (
+                        KeyData::String("x".into()),
+                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                    ),
+                    (
+                        KeyData::String("y".into()),
+                        Expression::Data(Data::Primitive(Primitive::Number(6)))
+                    )
+                ]
+            },
+            value
+        );
+
+        let res = Map::parse(r#"map(2,8)"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Map::Def {
+                length: 2,
+                capacity: 8
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_struct() {
+        let res = Struct::parse(r#"Point { x : 2, y : 8}"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Struct::Field {
+                id: "Point".into(),
+                fields: vec![
+                    (
+                        "x".into(),
+                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                    ),
+                    (
+                        "y".into(),
+                        Expression::Data(Data::Primitive(Primitive::Number(8)))
+                    )
+                ],
+            },
+            value
+        );
+
+        let res = Struct::parse(r#"Point (2, 8)"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Struct::Inline {
+                id: "Point".into(),
+                data: vec![
+                    Expression::Data(Data::Primitive(Primitive::Number(2))),
+                    Expression::Data(Data::Primitive(Primitive::Number(8)))
+                ]
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_union() {
+        let res = Union::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Union::Field {
+                typename: "Geo".into(),
+                variant: "Point".into(),
+                fields: vec![
+                    (
+                        "x".into(),
+                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                    ),
+                    (
+                        "y".into(),
+                        Expression::Data(Data::Primitive(Primitive::Number(8)))
+                    )
+                ],
+            },
+            value
+        );
+
+        let res = Union::parse(r#"Geo::Point (2, 8)"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Union::Inline {
+                typename: "Geo".into(),
+                variant: "Point".into(),
+                data: vec![
+                    Expression::Data(Data::Primitive(Primitive::Number(2))),
+                    Expression::Data(Data::Primitive(Primitive::Number(8)))
+                ]
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_enum() {
+        let res = Enum::parse(r#"Geo::Point"#.into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Enum {
+                typename: "Geo".into(),
+                value: "Point".into(),
+            },
+            value
+        )
     }
 }

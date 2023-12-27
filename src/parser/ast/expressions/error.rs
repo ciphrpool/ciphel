@@ -27,3 +27,16 @@ impl TryParse for Error {
         )(input)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_error() {
+        let res = Error::parse("error(10)".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(Error(10), value);
+    }
+}
