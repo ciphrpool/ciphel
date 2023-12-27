@@ -10,15 +10,15 @@ use super::TryParse;
 
 pub mod data;
 pub mod error;
+pub mod flows;
 pub mod operation;
-pub mod statements;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Data(data::Data),
     Operation(operation::Operation),
     Paren(Box<Expression>),
-    Statement(statements::Statement),
+    ExprFlow(flows::ExprFlow),
     Error(error::Error),
 }
 
@@ -45,9 +45,7 @@ impl TryParse for Expression {
             map(operation::Operation::parse, |value| {
                 Expression::Operation(value)
             }),
-            map(statements::Statement::parse, |value| {
-                Expression::Statement(value)
-            }),
+            map(flows::ExprFlow::parse, |value| Expression::ExprFlow(value)),
             map(error::Error::parse, |value| Expression::Error(value)),
         ))(input)
     }

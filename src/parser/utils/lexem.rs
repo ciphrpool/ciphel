@@ -9,6 +9,12 @@ pub const TRY: &str = "try";
 pub const IF: &str = "if";
 pub const MATCH: &str = "match";
 pub const CASE: &str = "case";
+pub const RETURN: &str = "return";
+pub const LET: &str = "let";
+pub const EVENT: &str = "event";
+pub const WHILE: &str = "while";
+pub const FOR: &str = "for";
+pub const LOOP: &str = "loop";
 // TYPE
 pub const UINT: &str = "uint";
 pub const INT: &str = "int";

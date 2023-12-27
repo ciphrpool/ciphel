@@ -17,14 +17,14 @@ use crate::parser::{
 use super::{data::Primitive, Expression};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
+pub enum ExprFlow {
     If(IfExpr),
     Match(MatchExpr),
     Try(TryExpr),
     Call(FnCall),
 }
 
-impl TryParse for Statement {
+impl TryParse for ExprFlow {
     /*
      * @desc Parse expression statement
      *
@@ -33,10 +33,10 @@ impl TryParse for Statement {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(IfExpr::parse, |value| Statement::If(value)),
-            map(MatchExpr::parse, |value| Statement::Match(value)),
-            map(TryExpr::parse, |value| Statement::Try(value)),
-            map(FnCall::parse, |value| Statement::Call(value)),
+            map(IfExpr::parse, |value| ExprFlow::If(value)),
+            map(MatchExpr::parse, |value| ExprFlow::Match(value)),
+            map(TryExpr::parse, |value| ExprFlow::Try(value)),
+            map(FnCall::parse, |value| ExprFlow::Call(value)),
         ))(input)
     }
 }
@@ -111,6 +111,20 @@ pub enum Pattern {
 }
 
 impl TryParse for Pattern {
+    /*
+     * @desc Parse pattern
+     *
+     * @grammar
+     * Pattern :=
+     *      | PrimitiveData
+     *      | String
+     *      | ID :: ID
+     *      | ID :: ID \( IDs \)
+     *      | ID :: ID { IDs }
+     *      | ID { IDs }
+     *      | ID \( IDs \)
+     *      | \(  IDs \)
+     */
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Pattern::Primitive(value)),

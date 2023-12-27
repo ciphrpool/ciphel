@@ -44,6 +44,7 @@ pub enum Data {
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
         alt((
+            map(parse_id, |value| Data::Variable(value)),
             map(Primitive::parse, |value| Data::Primitive(value)),
             map(Slice::parse, |value| Data::Slice(value)),
             map(Vector::parse, |value| Data::Vec(value)),
@@ -57,7 +58,6 @@ impl TryParse for Data {
             map(Struct::parse, |value| Data::Struct(value)),
             map(Union::parse, |value| Data::Union(value)),
             map(Enum::parse, |value| Data::Enum(value)),
-            map(parse_id, |value| Data::Variable(value)),
         ))(input)
     }
 }
@@ -188,7 +188,13 @@ impl TryParse for MultiData {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     params: Vec<ClosureParam>,
-    scope: ast::statements::scope::Scope,
+    scope: ClosureScope,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClosureScope {
+    Scope(ast::statements::scope::Scope),
+    Expr(Box<Expression>),
 }
 
 impl TryParse for Closure {
@@ -200,10 +206,23 @@ impl TryParse for Closure {
                     separated_list0(wst(lexem::COMA), ClosureParam::parse),
                     wst(lexem::PAR_C),
                 ),
-                ast::statements::scope::Scope::parse,
+                preceded(wst(lexem::ARROW), ClosureScope::parse),
             ),
             |(params, scope)| Closure { params, scope },
         )(input)
+    }
+}
+
+impl TryParse for ClosureScope {
+    fn parse(input: Span) -> PResult<Self> {
+        alt((
+            map(ast::statements::scope::Scope::parse, |value| {
+                ClosureScope::Scope(value)
+            }),
+            map(Expression::parse, |value| {
+                ClosureScope::Expr(Box::new(value))
+            }),
+        ))(input)
     }
 }
 
@@ -255,7 +274,7 @@ impl TryParse for Access {
      * @desc Parse pointer access
      *
      * @grammar
-     * Addr := &DATA
+     * Addr := -DATA
      */
     fn parse(input: Span) -> PResult<Self> {
         map(preceded(wst(lexem::ACCESS), Expression::parse), |value| {
@@ -542,7 +561,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_primitive_data() {
+    fn valid_primitive() {
         let res = Primitive::parse("true".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
@@ -592,5 +611,39 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Slice::String("Hello World".to_string()), value);
+    }
+
+    #[test]
+    fn valid_vector() {
+        let res = Vector::parse("vec[2,5,6]".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Vector::Init(vec![
+                Expression::Data(Data::Primitive(Primitive::Number(2))),
+                Expression::Data(Data::Primitive(Primitive::Number(5))),
+                Expression::Data(Data::Primitive(Primitive::Number(6)))
+            ]),
+            value,
+        );
+
+        let res = Vector::parse("vec(2,8)".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Vector::Def {
+                length: 2,
+                capacity: 8
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_closure() {
+        let res = Closure::parse("(x,y) -> x".into());
+        dbg!(&res);
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
     }
 }
