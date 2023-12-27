@@ -99,3 +99,57 @@ impl TryParse for Assignee {
         ))(input)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::expressions::{
+        data::{Data, Primitive, Variable},
+        Atomic,
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_assignation() {
+        let res = Assignation::parse("x = 10;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Assignation {
+                left: Assignee::Variable("x".into()),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Primitive(Primitive::Number(10))
+                ))))
+            },
+            value
+        );
+
+        let res = Assignation::parse("*x = 10;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Assignation {
+                left: Assignee::PointerAccess(Access(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Variable(Variable::Var("x".into()))
+                ))))),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Primitive(Primitive::Number(10))
+                ))))
+            },
+            value
+        );
+
+        let res = Assignation::parse("x.y = 10;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Assignation {
+                left: Assignee::FieldAccess(vec!["x".into(), "y".into()]),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Primitive(Primitive::Number(10))
+                ))))
+            },
+            value
+        );
+    }
+}

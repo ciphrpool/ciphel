@@ -55,8 +55,7 @@ impl TryParse for Type {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimitiveType {
-    Uint,
-    Int,
+    Number,
     Float,
     Char,
     Bool,
@@ -67,12 +66,11 @@ impl TryParse for PrimitiveType {
      * @desc Parse Primitive types
      *
      * @grammar
-     * Primitive := uint | int | float | char | bool
+     * Primitive := num | int | float | char | bool
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            value(PrimitiveType::Uint, wst(lexem::UINT)),
-            value(PrimitiveType::Int, wst(lexem::INT)),
+            value(PrimitiveType::Number, wst(lexem::NUMBER)),
             value(PrimitiveType::Float, wst(lexem::FLOAT)),
             value(PrimitiveType::Char, wst(lexem::CHAR)),
             value(PrimitiveType::Bool, wst(lexem::BOOL)),
@@ -93,7 +91,7 @@ impl TryParse for SliceType {
      * @grammar
      * Slice :=
      *  | string
-     *  | [ uint ] Type
+     *  | [ num ] Type
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
@@ -294,15 +292,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Bool, value);
 
-        let res = PrimitiveType::parse("uint".into());
+        let res = PrimitiveType::parse("number".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(PrimitiveType::Uint, value);
-
-        let res = PrimitiveType::parse("int".into());
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(PrimitiveType::Int, value);
+        assert_eq!(PrimitiveType::Number, value);
 
         let res = PrimitiveType::parse("char".into());
         assert!(res.is_ok());
@@ -322,15 +315,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(SliceType::String, value);
 
-        let res = SliceType::parse("[8]uint".into());
+        let res = SliceType::parse("[8]number".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            SliceType::List(8, Box::new(Type::Primitive(PrimitiveType::Uint))),
+            SliceType::List(8, Box::new(Type::Primitive(PrimitiveType::Number))),
             value
         );
 
-        let res = SliceType::parse("[8][2]uint".into());
+        let res = SliceType::parse("[8][2]number".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -338,7 +331,7 @@ mod tests {
                 8,
                 Box::new(Type::Slice(SliceType::List(
                     2,
-                    Box::new(Type::Primitive(PrimitiveType::Uint))
+                    Box::new(Type::Primitive(PrimitiveType::Number))
                 )))
             ),
             value
@@ -347,13 +340,13 @@ mod tests {
 
     #[test]
     fn valid_vec_type() {
-        let res = VecType::parse("Vec<[8]uint>".into());
+        let res = VecType::parse("Vec<[8]number>".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             VecType(Box::new(Type::Slice(SliceType::List(
                 8,
-                Box::new(Type::Primitive(PrimitiveType::Uint))
+                Box::new(Type::Primitive(PrimitiveType::Number))
             )))),
             value
         );
@@ -361,12 +354,12 @@ mod tests {
 
     #[test]
     fn valid_fn_type() {
-        let res = FnType::parse("fn(uint) -> bool".into());
+        let res = FnType::parse("fn(number) -> bool".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             FnType {
-                params: vec![Type::Primitive(PrimitiveType::Uint)],
+                params: vec![Type::Primitive(PrimitiveType::Number)],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool))
             },
             value
@@ -375,13 +368,13 @@ mod tests {
 
     #[test]
     fn valid_chan_type() {
-        let res = ChanType::parse("Chan<[8]uint>".into());
+        let res = ChanType::parse("Chan<[8]number>".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             ChanType(Box::new(Type::Slice(SliceType::List(
                 8,
-                Box::new(Type::Primitive(PrimitiveType::Uint))
+                Box::new(Type::Primitive(PrimitiveType::Number))
             )))),
             value
         );
@@ -389,11 +382,11 @@ mod tests {
 
     #[test]
     fn valid_address_type() {
-        let res = AddrType::parse("&uint".into());
+        let res = AddrType::parse("&number".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            AddrType(Box::new(Type::Primitive(PrimitiveType::Uint))),
+            AddrType(Box::new(Type::Primitive(PrimitiveType::Number))),
             value
         );
     }
@@ -414,13 +407,13 @@ mod tests {
 
     #[test]
     fn valid_tuple_type() {
-        let res = TupleType::parse("(uint,uint)".into());
+        let res = TupleType::parse("(number,number)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             TupleType(vec![
-                Type::Primitive(PrimitiveType::Uint),
-                Type::Primitive(PrimitiveType::Uint)
+                Type::Primitive(PrimitiveType::Number),
+                Type::Primitive(PrimitiveType::Number)
             ]),
             value
         );

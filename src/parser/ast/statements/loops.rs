@@ -136,3 +136,103 @@ impl TryParse for WhileLoop {
         )(input)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::{
+        expressions::{
+            data::{Data, Primitive},
+            Atomic,
+        },
+        statements::{
+            flows::{CallStat, Flow},
+            Statement,
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_for() {
+        let res = ForLoop::parse(
+            r#"
+        for i in x {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            ForLoop {
+                item: DeclaredVar::Id("i".into()),
+                iterator: ForIterator::Id("x".into()),
+                scope: Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                })
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_while() {
+        let res = WhileLoop::parse(
+            r#"
+        while true {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            WhileLoop {
+                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                scope: Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                })
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_loop() {
+        let res = Loop::parse(
+            r#"
+        loop {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Loop::Loop(Box::new(Scope {
+                instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                    fn_id: "f".into(),
+                    params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(10)
+                    )))]
+                }))]
+            })),
+            value
+        );
+    }
+}

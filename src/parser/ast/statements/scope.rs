@@ -13,7 +13,7 @@ use super::Statement;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scope {
-    instructions: Vec<Statement>,
+    pub instructions: Vec<Statement>,
 }
 
 impl TryParse for Scope {

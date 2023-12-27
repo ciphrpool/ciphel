@@ -52,8 +52,8 @@ impl TryParse for Declaration {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedVar {
-    id: ID,
-    signature: Type,
+    pub id: ID,
+    pub signature: Type,
 }
 
 impl TryParse for TypedVar {
@@ -87,9 +87,9 @@ impl TryParse for DeclaredVar {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(parse_id, |value| DeclaredVar::Id(value)),
             map(TypedVar::parse, |value| DeclaredVar::Typed(value)),
             map(PatternVar::parse, |value| DeclaredVar::Pattern(value)),
+            map(parse_id, |value| DeclaredVar::Id(value)),
         ))(input)
     }
 }
@@ -192,5 +192,80 @@ impl TryParse for PatternVar {
                 |value| PatternVar::Tuple(value),
             ),
         ))(input)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::{
+        expressions::{
+            data::{Data, Primitive, Tuple},
+            Atomic, Expression,
+        },
+        types::PrimitiveType,
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_declaration_declared() {
+        let res = Declaration::parse("let x:number;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Declaration::Declared(TypedVar {
+                id: "x".into(),
+                signature: Type::Primitive(PrimitiveType::Number)
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_declaration_assigned() {
+        let res = Declaration::parse("let x:number = 10;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Declaration::Assigned {
+                left: DeclaredVar::Typed(TypedVar {
+                    id: "x".into(),
+                    signature: Type::Primitive(PrimitiveType::Number)
+                }),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Primitive(Primitive::Number(10))
+                ))))
+            },
+            value
+        );
+
+        let res = Declaration::parse("let x = 10;".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Declaration::Assigned {
+                left: DeclaredVar::Id("x".into()),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Primitive(Primitive::Number(10))
+                ))))
+            },
+            value
+        );
+
+        let res = Declaration::parse("let (x,y) = (10,10);".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Declaration::Assigned {
+                left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".into(), "y".into()])),
+                right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
+                    Tuple(vec![
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10)))),
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
+                    ])
+                )))))
+            },
+            value
+        );
     }
 }

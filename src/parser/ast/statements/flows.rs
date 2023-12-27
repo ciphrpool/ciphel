@@ -42,6 +42,7 @@ impl TryParse for Flow {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfStat {
+    condition: Box<Expression>,
     main_branch: Box<Scope>,
     else_branch: Option<Box<Scope>>,
 }
@@ -56,16 +57,11 @@ impl TryParse for IfStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(
-                    wst(lexem::IF),
-                    delimited(wst(lexem::BRA_O), Scope::parse, wst(lexem::BRA_C)),
-                ),
-                opt(preceded(
-                    wst(lexem::ELSE),
-                    delimited(wst(lexem::BRA_O), Scope::parse, wst(lexem::BRA_C)),
-                )),
+                pair(preceded(wst(lexem::IF), Expression::parse), Scope::parse),
+                opt(preceded(wst(lexem::ELSE), Scope::parse)),
             ),
-            |(main_branch, else_branch)| IfStat {
+            |((condition, main_branch), else_branch)| IfStat {
+                condition: Box::new(condition),
                 main_branch: Box::new(main_branch),
                 else_branch: else_branch.map(|value| Box::new(value)),
             },
@@ -160,14 +156,8 @@ impl TryParse for TryStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(
-                    wst(lexem::TRY),
-                    delimited(wst(lexem::BRA_O), Scope::parse, wst(lexem::BRA_C)),
-                ),
-                opt(preceded(
-                    wst(lexem::ELSE),
-                    delimited(wst(lexem::BRA_O), Scope::parse, wst(lexem::BRA_C)),
-                )),
+                preceded(wst(lexem::TRY), Scope::parse),
+                opt(preceded(wst(lexem::ELSE), Scope::parse)),
             ),
             |(try_branch, else_branch)| TryStat {
                 try_branch: Box::new(try_branch),
@@ -179,8 +169,8 @@ impl TryParse for TryStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
-    fn_id: ID,
-    params: Vec<Expression>,
+    pub fn_id: ID,
+    pub params: Vec<Expression>,
 }
 
 impl TryParse for CallStat {
@@ -236,5 +226,108 @@ impl TryParse for Return {
                 None => Return::Unit,
             },
         )(input)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::ast::{
+        expressions::{
+            data::{Data, Primitive},
+            Atomic,
+        },
+        statements::Statement,
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_if() {
+        let res = IfStat::parse(
+            r#"
+        if true {
+            f(10);
+        } else {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            IfStat {
+                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                main_branch: Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                }),
+                else_branch: Some(Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                }))
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_try() {
+        let res = TryStat::parse(
+            r#"
+        try {
+            f(10);
+        } else {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            TryStat {
+                try_branch: Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                }),
+                else_branch: Some(Box::new(Scope {
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        fn_id: "f".into(),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }))]
+                }))
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_return() {
+        let res = Return::parse(
+            r#"
+            return ;
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(Return::Unit, value);
     }
 }

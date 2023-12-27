@@ -151,14 +151,14 @@ impl TryParse for UnionDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::STRUCT), parse_id),
+                preceded(wst(lexem::UNION), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
                         alt((
-                            map(parse_id, |value| (value, UnionVariant::Id)),
                             pair(parse_id, UnionVariant::parse),
+                            map(parse_id, |value| (value, UnionVariant::Id)),
                         )),
                     ),
                     wst(lexem::BRA_C),
@@ -187,7 +187,7 @@ impl TryParse for EnumDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::STRUCT), parse_id),
+                preceded(wst(lexem::ENUM), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
                     separated_list1(wst(lexem::COMA), parse_id),
@@ -218,7 +218,11 @@ impl TryParse for FnDef {
         map(
             tuple((
                 preceded(wst(lexem::FN), parse_id),
-                separated_list0(wst(lexem::COMA), TypedVar::parse),
+                delimited(
+                    wst(lexem::PAR_O),
+                    separated_list0(wst(lexem::COMA), TypedVar::parse),
+                    wst(lexem::PAR_C),
+                ),
                 preceded(wst(lexem::ARROW), Type::parse),
                 Scope::parse,
             )),
@@ -269,5 +273,189 @@ pub enum EventCondition {}
 impl TryParse for EventCondition {
     fn parse(input: Span) -> PResult<Self> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::parser::ast::{
+        expressions::{
+            data::{Data, Primitive},
+            Atomic, Expression,
+        },
+        statements::{
+            flows::{CallStat, Flow, Return},
+            Statement,
+        },
+        types::PrimitiveType,
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_struct_def() {
+        let res = StructDef::parse(
+            r#"
+        struct Point {
+            x : number,
+            y : number
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            StructDef {
+                id: "Point".into(),
+                fields: StructVariant::Fields(vec![
+                    ("x".into(), Type::Primitive(PrimitiveType::Number)),
+                    ("y".into(), Type::Primitive(PrimitiveType::Number))
+                ])
+            },
+            value
+        );
+
+        let res = StructDef::parse(
+            r#"
+        struct Point(number,number)
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            StructDef {
+                id: "Point".into(),
+                fields: StructVariant::Inline(vec![
+                    Type::Primitive(PrimitiveType::Number),
+                    Type::Primitive(PrimitiveType::Number)
+                ])
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_union_def() {
+        let res = UnionDef::parse(
+            r#"
+        union Geo {
+            Point {
+                x : number,
+                y : number
+            },
+            Axe(number,number),
+            Plan
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            UnionDef {
+                id: "Geo".into(),
+                variants: vec![
+                    (
+                        "Point".into(),
+                        UnionVariant::Fields(vec![
+                            ("x".into(), Type::Primitive(PrimitiveType::Number)),
+                            ("y".into(), Type::Primitive(PrimitiveType::Number))
+                        ])
+                    ),
+                    (
+                        "Axe".into(),
+                        UnionVariant::Inline(vec![
+                            Type::Primitive(PrimitiveType::Number),
+                            Type::Primitive(PrimitiveType::Number)
+                        ])
+                    ),
+                    ("Plan".into(), UnionVariant::Id),
+                ]
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_enum_def() {
+        let res = EnumDef::parse(
+            r#"
+        enum Sport {
+            Football,
+            Basketball
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            EnumDef {
+                id: "Sport".into(),
+                values: vec!["Football".into(), "Basketball".into()]
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_fn_def() {
+        let res = FnDef::parse(
+            r#"
+        fn f(x:number) -> number {
+            return 10;
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            FnDef {
+                id: "f".into(),
+                params: vec![TypedVar {
+                    id: "x".into(),
+                    signature: Type::Primitive(PrimitiveType::Number)
+                }],
+                ret: Box::new(Type::Primitive(PrimitiveType::Number)),
+                scope: Scope {
+                    instructions: vec![Statement::Flow(Flow::Return(Return::Expr(Box::new(
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
+                    ))))]
+                }
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_event_def() {
+        unimplemented!("Events condition are not implemented ");
+        // let res = EventDef::parse(
+        //     r#"
+        // event Event( TODO ) {
+        //     f(10);
+        // }
+        // "#
+        //     .into(),
+        // );
+        // assert!(res.is_ok());
+        // let value = res.unwrap().1;
+        // assert_eq!(
+        //     EventDef {
+        //         id: "Event".into(),
+        //         condition: todo!(),
+        //         scope: Scope {
+        //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
+        //                 fn_id: "f".into(),
+        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10)))]
+        //             }))]
+        //         }
+        //     },
+        //     value
+        // );
     }
 }

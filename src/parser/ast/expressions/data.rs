@@ -14,7 +14,7 @@ use crate::parser::{
         lexem,
         numbers::{parse_float, parse_number, Number},
         strings::{
-            parse_id,
+            eater, parse_id,
             string_parser::{parse_char, parse_string},
             wst, ID,
         },
@@ -33,17 +33,17 @@ pub enum Data {
     Tuple(Tuple),
     Address(Address),
     Access(Access),
+    Variable(Variable),
     Unit,
     Map(Map),
     Struct(Struct),
     Union(Union),
     Enum(Enum),
-    Variable(ID),
 }
 
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
-        cut(alt((
+        alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
             map(Slice::parse, |value| Data::Slice(value)),
             map(Vector::parse, |value| Data::Vec(value)),
@@ -57,8 +57,32 @@ impl TryParse for Data {
             map(Struct::parse, |value| Data::Struct(value)),
             map(Union::parse, |value| Data::Union(value)),
             map(Enum::parse, |value| Data::Enum(value)),
-            map(parse_id, |value| Data::Variable(value)),
-        )))(input)
+            map(Variable::parse, |value| Data::Variable(value)),
+        ))(input)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Variable {
+    Var(ID),
+    FieldAccess(Vec<ID>),
+}
+
+impl TryParse for Variable {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Variable := ID | (ID . ) * ID
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(separated_list1(wst(lexem::DOT), parse_id), |value| {
+            if value.len() == 1 {
+                Variable::Var(value.first().unwrap().to_string())
+            } else {
+                Variable::FieldAccess(value)
+            }
+        })(input)
     }
 }
 
@@ -159,7 +183,7 @@ impl TryParse for Vector {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Tuple(MultiData);
+pub struct Tuple(pub MultiData);
 
 impl TryParse for Tuple {
     fn parse(input: Span) -> PResult<Self> {
@@ -251,7 +275,7 @@ impl TryParse for ClosureParam {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Address(Box<Expression>);
+pub struct Address(pub Box<Expression>);
 
 impl TryParse for Address {
     /*
@@ -268,7 +292,7 @@ impl TryParse for Address {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Access(Box<Expression>);
+pub struct Access(pub Box<Expression>);
 impl TryParse for Access {
     /*
      * @desc Parse pointer access
@@ -546,6 +570,8 @@ impl TryParse for KeyData {
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::ast::expressions::Atomic;
+
     use super::*;
 
     #[test]
@@ -588,9 +614,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Slice::List(vec![
-                Expression::Data(Data::Primitive(Primitive::Number(2))),
-                Expression::Data(Data::Primitive(Primitive::Number(5))),
-                Expression::Data(Data::Primitive(Primitive::Number(6)))
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(5)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
             ]),
             value
         );
@@ -608,9 +634,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Vector::Init(vec![
-                Expression::Data(Data::Primitive(Primitive::Number(2))),
-                Expression::Data(Data::Primitive(Primitive::Number(5))),
-                Expression::Data(Data::Primitive(Primitive::Number(6)))
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(5)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
             ]),
             value,
         );
@@ -638,7 +664,9 @@ mod tests {
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
-                scope: ClosureScope::Expr(Box::new(Expression::Data(Data::Variable("x".into()))))
+                scope: ClosureScope::Expr(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Variable(Variable::Var("x".into()))
+                ))))
             },
             value
         )
@@ -651,7 +679,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Receive {
-                addr: Address(Box::new(Expression::Data(Data::Variable("chan1".into())))),
+                addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                    Variable::Var("chan1".into())
+                ))))),
                 timeout: 10
             },
             value
@@ -662,8 +692,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Send {
-                addr: Address(Box::new(Expression::Data(Data::Variable("chan1".into())))),
-                msg: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+                addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                    Variable::Var("chan1".into())
+                ))))),
+                msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                ))))
             },
             value
         );
@@ -681,8 +715,8 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Tuple(vec![
-                Expression::Data(Data::Primitive(Primitive::Number(2))),
-                Expression::Data(Data::Primitive(Primitive::Char('a')))
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
             ]),
             value
         );
@@ -694,7 +728,9 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Address(Box::new(Expression::Data(Data::Variable("x".into())))),
+            Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                Variable::Var("x".into())
+            ))))),
             value
         );
     }
@@ -705,7 +741,9 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Access(Box::new(Expression::Data(Data::Variable("x".into())))),
+            Access(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                Variable::Var("x".into())
+            ))))),
             value
         );
     }
@@ -720,11 +758,11 @@ mod tests {
                 fields: vec![
                     (
                         KeyData::String("x".into()),
-                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
                     ),
                     (
                         KeyData::String("y".into()),
-                        Expression::Data(Data::Primitive(Primitive::Number(6)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
                     )
                 ]
             },
@@ -754,11 +792,11 @@ mod tests {
                 fields: vec![
                     (
                         "x".into(),
-                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
                     ),
                     (
                         "y".into(),
-                        Expression::Data(Data::Primitive(Primitive::Number(8)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
                     )
                 ],
             },
@@ -772,8 +810,8 @@ mod tests {
             Struct::Inline {
                 id: "Point".into(),
                 data: vec![
-                    Expression::Data(Data::Primitive(Primitive::Number(2))),
-                    Expression::Data(Data::Primitive(Primitive::Number(8)))
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
                 ]
             },
             value
@@ -792,11 +830,11 @@ mod tests {
                 fields: vec![
                     (
                         "x".into(),
-                        Expression::Data(Data::Primitive(Primitive::Number(2)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
                     ),
                     (
                         "y".into(),
-                        Expression::Data(Data::Primitive(Primitive::Number(8)))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
                     )
                 ],
             },
@@ -811,8 +849,8 @@ mod tests {
                 typename: "Geo".into(),
                 variant: "Point".into(),
                 data: vec![
-                    Expression::Data(Data::Primitive(Primitive::Number(2))),
-                    Expression::Data(Data::Primitive(Primitive::Number(8)))
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
                 ]
             },
             value

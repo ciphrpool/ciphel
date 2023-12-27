@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, value},
+    combinator::{map, opt, value},
     sequence::{preceded, separated_pair, tuple},
 };
 
@@ -13,22 +13,7 @@ use crate::parser::{
     },
 };
 
-use super::Expression;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operation {
-    Unary(UnaryOperation),
-    Binary(BinaryOperation),
-}
-
-impl TryParse for Operation {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(UnaryOperation::parse, |value| Operation::Unary(value)),
-            map(BinaryOperation::parse, |value| Operation::Binary(value)),
-        ))(input)
-    }
-}
+use super::{Atomic, Expression};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOperation {
@@ -55,151 +40,375 @@ impl TryParse for UnaryOperation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum BinaryOperation {
-    Math(MathOperation),
-    Logical(LogicalOperation),
-    Comparaison(ComparaisonOperation),
-}
-
-impl TryParse for BinaryOperation {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(MathOperation::parse, |value| BinaryOperation::Math(value)),
-            map(LogicalOperation::parse, |value| {
-                BinaryOperation::Logical(value)
-            }),
-            map(ComparaisonOperation::parse, |value| {
-                BinaryOperation::Comparaison(value)
-            }),
-        ))(input)
-    }
-}
-#[derive(Debug, Clone, PartialEq)]
-pub struct MathOperation {
-    operator: MathOperator,
-    left: Box<Expression>,
-    right: Box<Expression>,
-}
-
-impl TryParse for MathOperation {
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            tuple((Expression::parse, MathOperator::parse, Expression::parse)),
-            |(left, operator, right)| MathOperation {
-                left: Box::new(left),
-                right: Box::new(right),
-                operator,
-            },
-        )(input)
-    }
+pub trait TryParseOperation {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized;
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum MathOperator {
-    Add,
+pub enum HighOrdMath {
+    Mult {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    Div {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    Mod {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum HighOrdMathOPERATOR {
     Mult,
     Div,
     Mod,
-    Shl,
-    Shr,
 }
+impl TryParseOperation for HighOrdMath {
+    /*
+     * @desc Parse Multiplication, division, modulo operation
+     *
+     * @grammar
+     * HighM := Atom (* | / | % ) Atom | Atom
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = Atomic::parse(input)?;
+        let (remainder, op) = opt(alt((
+            value(HighOrdMathOPERATOR::Mult, wst(lexem::MULT)),
+            value(HighOrdMathOPERATOR::Div, wst(lexem::DIV)),
+            value(HighOrdMathOPERATOR::Mod, wst(lexem::MOD)),
+        )))(remainder)?;
 
-impl TryParse for MathOperator {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            value(MathOperator::Add, wst(lexem::ADD)),
-            value(MathOperator::Mult, wst(lexem::MULT)),
-            value(MathOperator::Div, wst(lexem::DIV)),
-            value(MathOperator::Mod, wst(lexem::MOD)),
-            value(MathOperator::Shl, wst(lexem::SHL)),
-            value(MathOperator::Shr, wst(lexem::SHR)),
-        ))(input)
+        if let Some(op) = op {
+            let (remainder, right) = Atomic::parse(remainder)?;
+            let left = Box::new(Expression::Atomic(left));
+            let right = Box::new(Expression::Atomic(right));
+            Ok((
+                remainder,
+                Expression::HighOrdMath(match op {
+                    HighOrdMathOPERATOR::Mult => HighOrdMath::Mult { left, right },
+                    HighOrdMathOPERATOR::Div => HighOrdMath::Div { left, right },
+                    HighOrdMathOPERATOR::Mod => HighOrdMath::Mod { left, right },
+                }),
+            ))
+        } else {
+            Ok((remainder, Expression::Atomic(left)))
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LogicalOperation {
-    operator: LogicalOperator,
+pub enum LowOrdMath {
+    Add {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+}
+
+impl TryParseOperation for LowOrdMath {
+    /*
+     * @desc Parse addition operation
+     *
+     * @grammar
+     * LowM := HighM + HighM | HighM
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = HighOrdMath::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::ADD))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = HighOrdMath::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::LowOrdMath(LowOrdMath::Add { left, right }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Shift {
+    Left {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    Right {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ShiftOPERATOR {
+    Left,
+    Right,
+}
+impl TryParseOperation for Shift {
+    /*
+     * @desc Parse bitwise shift operation
+     *
+     * @grammar
+     * Shift := LowM (<<|>>) LowM | LowM
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = LowOrdMath::parse(input)?;
+        let (remainder, op) = opt(alt((
+            value(ShiftOPERATOR::Left, wst(lexem::SHL)),
+            value(ShiftOPERATOR::Right, wst(lexem::SHR)),
+        )))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = LowOrdMath::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::Shift(match op {
+                    ShiftOPERATOR::Left => Shift::Left { left, right },
+                    ShiftOPERATOR::Right => Shift::Right { left, right },
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BitwiseAnd {
     left: Box<Expression>,
     right: Box<Expression>,
 }
 
-impl TryParse for LogicalOperation {
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            tuple((Expression::parse, LogicalOperator::parse, Expression::parse)),
-            |(left, operator, right)| LogicalOperation {
-                left: Box::new(left),
-                right: Box::new(right),
-                operator,
-            },
-        )(input)
+impl TryParseOperation for BitwiseAnd {
+    /*
+     * @desc Parse bitwise and operation
+     *
+     * @grammar
+     * BAnd := Shift & Shift | Shift
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = Shift::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = Shift::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::BitwiseAnd(BitwiseAnd { left, right }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct BitwiseXOR {
+    left: Box<Expression>,
+    right: Box<Expression>,
+}
+
+impl TryParseOperation for BitwiseXOR {
+    /*
+     * @desc Parse bitwise xor operation
+     *
+     * @grammar
+     * XOr := BAnd ^ BAnd | BAnd
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = BitwiseAnd::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = BitwiseAnd::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::BitwiseXOR(BitwiseXOR { left, right }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LogicalOperator {
-    Or,
-    And,
-    Xor,
+pub struct BitwiseOR {
+    left: Box<Expression>,
+    right: Box<Expression>,
+}
+
+impl TryParseOperation for BitwiseOR {
+    /*
+     * @desc Parse bitwise or operation
+     *
+     * @grammar
+     * BOr := XOr \| XOr  | XOr
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = BitwiseXOR::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = BitwiseXOR::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((remainder, Expression::BitwiseOR(BitwiseOR { left, right })))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Comparaison {
+    Less {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    LessEqual {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    Greater {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    GreaterEqual {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    Equal {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    NotEqual {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    In {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ComparaisonOPERATOR {
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Equal,
+    NotEqual,
     In,
 }
+impl TryParseOperation for Comparaison {
+    /*
+     * @desc Parse comparaison operation
+     *
+     * @grammar
+     * CompOp := BOr (< |<= | >= | >| == | != | in ) BOr | BOr
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = BitwiseOR::parse(input)?;
+        let (remainder, op) = opt(alt((
+            value(ComparaisonOPERATOR::LessEqual, wst(lexem::ELE)),
+            value(ComparaisonOPERATOR::Less, wst(lexem::LE)),
+            value(ComparaisonOPERATOR::GreaterEqual, wst(lexem::EGE)),
+            value(ComparaisonOPERATOR::Greater, wst(lexem::GE)),
+            value(ComparaisonOPERATOR::Equal, wst(lexem::EQ)),
+            value(ComparaisonOPERATOR::NotEqual, wst(lexem::NEQ)),
+            value(ComparaisonOPERATOR::In, wst(lexem::IN)),
+        )))(remainder)?;
 
-impl TryParse for LogicalOperator {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            value(LogicalOperator::Or, wst(lexem::OR)),
-            value(LogicalOperator::And, wst(lexem::AND)),
-            value(LogicalOperator::Xor, wst(lexem::XOR)),
-            value(LogicalOperator::In, wst(lexem::IN)),
-        ))(input)
+        if let Some(op) = op {
+            let (remainder, right) = BitwiseOR::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::Comparaison(match op {
+                    ComparaisonOPERATOR::Less => Comparaison::Less { left, right },
+                    ComparaisonOPERATOR::LessEqual => Comparaison::LessEqual { left, right },
+                    ComparaisonOPERATOR::Greater => Comparaison::Greater { left, right },
+                    ComparaisonOPERATOR::GreaterEqual => Comparaison::GreaterEqual { left, right },
+                    ComparaisonOPERATOR::Equal => Comparaison::Equal { left, right },
+                    ComparaisonOPERATOR::NotEqual => Comparaison::NotEqual { left, right },
+                    ComparaisonOPERATOR::In => Comparaison::In { left, right },
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ComparaisonOperation {
-    operator: ComparaisonOperator,
+pub struct LogicalAnd {
     left: Box<Expression>,
     right: Box<Expression>,
 }
 
-impl TryParse for ComparaisonOperation {
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            tuple((
-                Expression::parse,
-                ComparaisonOperator::parse,
-                Expression::parse,
-            )),
-            |(left, operator, right)| ComparaisonOperation {
-                left: Box::new(left),
-                right: Box::new(right),
-                operator,
-            },
-        )(input)
+impl TryParseOperation for LogicalAnd {
+    /*
+     * @desc Parse logical and operation
+     *
+     * @grammar
+     * AndOp := CompOp And CompOp | CompOp
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = Comparaison::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = Comparaison::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((
+                remainder,
+                Expression::LogicalAnd(LogicalAnd { left, right }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
     }
 }
-
 #[derive(Debug, Clone, PartialEq)]
-pub enum ComparaisonOperator {
-    LE,
-    ELE,
-    GE,
-    EGE,
-    EQ,
-    NEQ,
+pub struct LogicalOr {
+    left: Box<Expression>,
+    right: Box<Expression>,
 }
-impl TryParse for ComparaisonOperator {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            value(ComparaisonOperator::ELE, wst(lexem::ELE)),
-            value(ComparaisonOperator::LE, wst(lexem::LE)),
-            value(ComparaisonOperator::EGE, wst(lexem::EGE)),
-            value(ComparaisonOperator::GE, wst(lexem::GE)),
-            value(ComparaisonOperator::EQ, wst(lexem::EQ)),
-            value(ComparaisonOperator::NEQ, wst(lexem::NEQ)),
-        ))(input)
+
+impl TryParseOperation for LogicalOr {
+    /*
+     * @desc Parse logical or operation
+     *
+     * @grammar
+     * Expr := AndOp Or AndOp | AndOp
+     */
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = LogicalAnd::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
+
+        if let Some(op) = op {
+            let (remainder, right) = LogicalAnd::parse(remainder)?;
+            let left = Box::new(left);
+            let right = Box::new(right);
+            Ok((remainder, Expression::LogicalOr(LogicalOr { left, right })))
+        } else {
+            Ok((remainder, left))
+        }
     }
 }
 
@@ -215,9 +424,9 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            UnaryOperation::Minus(Box::new(Expression::Data(Data::Primitive(
+            UnaryOperation::Minus(Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                 Primitive::Number(10)
-            )))),
+            ))))),
             value
         );
 
@@ -225,83 +434,101 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            UnaryOperation::Not(Box::new(Expression::Data(Data::Primitive(
+            UnaryOperation::Not(Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                 Primitive::Bool(true)
-            )))),
+            ))))),
             value
         );
     }
 
     #[test]
     fn valid_binary_math() {
-        let res = BinaryOperation::parse("10 + 10".into());
+        let res = LowOrdMath::parse("10 + 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Add,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            Expression::LowOrdMath(LowOrdMath::Add {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 * 10".into());
+        let res = HighOrdMath::parse("10 * 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Mult,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            Expression::HighOrdMath(HighOrdMath::Mult {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 / 10".into());
+        let res = HighOrdMath::parse("10 / 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Div,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10))))
+            Expression::HighOrdMath(HighOrdMath::Div {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 % 2".into());
+        let res = HighOrdMath::parse("10 % 2".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Mod,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            Expression::HighOrdMath(HighOrdMath::Mod {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(2)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 << 2".into());
+        let res = Shift::parse("10 << 2".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Shl,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            Expression::Shift(Shift::Left {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(2)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 >> 2".into());
+        let res = Shift::parse("10 >> 2".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Math(MathOperation {
-                operator: MathOperator::Shr,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(2))))
+            Expression::Shift(Shift::Right {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(2)
+                ))))
             }),
             value
         );
@@ -309,50 +536,47 @@ mod tests {
 
     #[test]
     fn valid_binary_logical() {
-        let res = BinaryOperation::parse("true and true".into());
+        let res = LogicalAnd::parse("true and true".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Logical(LogicalOperation {
-                operator: LogicalOperator::And,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            Expression::LogicalAnd(LogicalAnd {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("true or true".into());
+        let res = LogicalOr::parse("true or true".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Logical(LogicalOperation {
-                operator: LogicalOperator::Or,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            Expression::LogicalOr(LogicalOr {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("true xor true".into());
+        let res = BitwiseXOR::parse("true ^ true".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Logical(LogicalOperation {
-                operator: LogicalOperator::Xor,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
-            }),
-            value
-        );
-
-        let res = BinaryOperation::parse("true in true".into());
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(
-            BinaryOperation::Logical(LogicalOperation {
-                operator: LogicalOperator::In,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+            Expression::BitwiseXOR(BitwiseXOR {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                ))))
             }),
             value
         );
@@ -360,74 +584,107 @@ mod tests {
 
     #[test]
     fn valid_binary_comparaison() {
-        let res = BinaryOperation::parse("10 < 5".into());
+        let res = Comparaison::parse("true in true".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::LE,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::In {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 <= 5".into());
+        let res = Comparaison::parse("10 < 5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::ELE,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::Less {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 > 5".into());
+        let res = Comparaison::parse("10 <= 5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::GE,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::LessEqual {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 >= 5".into());
+        let res = Comparaison::parse("10 > 5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::EGE,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::Greater {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 == 5".into());
+        let res = Comparaison::parse("10 >= 5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::EQ,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::GreaterEqual {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
             }),
             value
         );
 
-        let res = BinaryOperation::parse("10 != 5".into());
+        let res = Comparaison::parse("10 == 5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            BinaryOperation::Comparaison(ComparaisonOperation {
-                operator: ComparaisonOperator::NEQ,
-                left: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                right: Box::new(Expression::Data(Data::Primitive(Primitive::Number(5))))
+            Expression::Comparaison(Comparaison::Equal {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
+            }),
+            value
+        );
+
+        let res = Comparaison::parse("10 != 5".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Comparaison(Comparaison::NotEqual {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(5)
+                ))))
             }),
             value
         );

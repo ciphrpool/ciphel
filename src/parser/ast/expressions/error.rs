@@ -9,7 +9,7 @@ use crate::parser::{
         io::{PResult, Span},
         lexem,
         numbers::parse_number,
-        strings::wst,
+        strings::{eater, wst},
     },
 };
 
@@ -30,6 +30,8 @@ impl TryParse for Error {
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::ast::expressions::Expression;
+
     use super::*;
 
     #[test]

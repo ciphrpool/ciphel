@@ -10,7 +10,7 @@ use crate::parser::{
     utils::{
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, string_parser::parse_string, wst, ID},
+        strings::{eater, parse_id, string_parser::parse_string, wst, ID},
     },
 };
 
@@ -330,7 +330,10 @@ impl TryParse for FnCall {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::ast::expressions::data::Data;
+    use crate::parser::ast::expressions::{
+        data::{Data, Variable},
+        Atomic,
+    };
 
     use super::*;
 
@@ -341,9 +344,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             IfExpr {
-                condition: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true)))),
-                main_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(20)))),
+                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                main_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(20)
+                )))),
             },
             value
         );
@@ -370,22 +379,30 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             MatchExpr {
-                expr: Box::new(Expression::Data(Data::Variable("x".into()))),
+                expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                    Variable::Var("x".into())
+                )))),
                 patterns: vec![
                     PatternExpr {
                         pattern: Pattern::Primitive(Primitive::Number(10)),
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::String("Hello world".into()),
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::Enum {
                             typename: "Geo".into(),
                             value: "Point".into()
                         },
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::UnionInline {
@@ -393,7 +410,9 @@ mod tests {
                             variant: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::UnionFields {
@@ -401,28 +420,38 @@ mod tests {
                             variant: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::StructInline {
                             typename: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::StructFields {
                             typename: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     },
                     PatternExpr {
                         pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
-                        expr: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Bool(true)
+                        ))))
                     }
                 ],
-                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Bool(true))))
+                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                ))))
             },
             value
         );
@@ -435,8 +464,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             TryExpr {
-                try_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(10)))),
-                else_branch: Box::new(Expression::Data(Data::Primitive(Primitive::Number(20)))),
+                try_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(20)
+                )))),
             },
             value
         );
@@ -451,8 +484,8 @@ mod tests {
             FnCall {
                 fn_id: "f".into(),
                 params: vec![
-                    Expression::Data(Data::Variable("x".into())),
-                    Expression::Data(Data::Primitive(Primitive::Number(10)))
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var("x".into())))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
                 ]
             },
             value
