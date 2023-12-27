@@ -236,10 +236,8 @@ These types are stored directly on the stack.
         - **Energy Cost**: There is no energy cost associated with storing, reading, or modifying stack data. This makes stack storage efficient but risky due to its lack of protection.
         
 1. **Primitive Types**:
-    - `uint` (64-bit Unsigned Integer):
-        - **Operations**: Supports mathematical (+, -, *, /, %, <<, >>) and logical (or, and, xor) operations, returning an `uint`. Comparison operators (>=, >, <, <=, =\=, !=) yield a `bool`. The negation operator returns true if the uint is strictly greater than 0, otherwise false.
-    - `int` (64-bit Signed Integer):
-        - **Operations**: Mathematical (+, -, *, /, %, <<, >>) and logical (or, and, xor) operations return `int`. Comparison operators yield a `bool`. The negation operator returns `true` if the `int` is non-zero.
+    - `number` (64-bit signed Integer):
+        - **Operations**: Supports mathematical (+, -, *, /, %, <<, >>) and logical (or, and, xor) operations, returning an `number`. Comparison operators (>=, >, <, <=, =\=, !=) yield a `bool`. The negation operator returns true if the uint is strictly greater than 0, otherwise false.
     - `float` (64-bit Floating Point):
         - **Operations**: Mathematical and logical operations return `float`. Comparison operators result in a `bool`. Negation returns `true` if the `float` is non-zero.
     - `char` (1 Byte Unsigned Integer for ASCII Characters):

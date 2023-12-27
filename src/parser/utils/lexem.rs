@@ -1,0 +1,77 @@
+pub const ENUM: &str = "enum";
+pub const STRUCT: &str = "struct";
+pub const UNION: &str = "union";
+pub const AS: &str = "as";
+pub const ARROW: &str = "->";
+pub const BIGARROW: &str = "=>";
+pub const ELSE: &str = "else";
+pub const TRY: &str = "try";
+pub const IF: &str = "if";
+pub const MATCH: &str = "match";
+pub const CASE: &str = "case";
+// TYPE
+pub const UINT: &str = "uint";
+pub const INT: &str = "int";
+pub const FLOAT: &str = "float";
+pub const CHAR: &str = "char";
+pub const STRING: &str = "string";
+pub const BOOL: &str = "bool";
+pub const UNIT: &str = "unit";
+pub const UUNIT: &str = "Unit";
+pub const UVEC: &str = "Vec";
+pub const UMAP: &str = "Map";
+pub const UCHAN: &str = "Chan";
+pub const FN: &str = "fn";
+
+// PONCTUATION
+pub const COMA: &str = ",";
+pub const DOT: &str = ".";
+pub const SEMI_COLON: &str = ";";
+pub const BRA_O: &str = "{";
+pub const BRA_C: &str = "}";
+pub const SQ_BRA_O: &str = "[";
+pub const SQ_BRA_C: &str = "]";
+pub const PAR_O: &str = "(";
+pub const PAR_C: &str = ")";
+pub const ANNOTATION: &str = "@";
+pub const HASHTAG: &str = "#";
+pub const SL_COMMENT: &str = "//";
+pub const ML_OP_COMMENT: &str = "/*";
+pub const ML_CL_COMMENT: &str = "*/";
+pub const EQUAL: &str = "=";
+pub const TRUE: &str = "true";
+pub const FALSE: &str = "false";
+pub const LESSER: &str = "<";
+pub const GREATER: &str = ">";
+pub const BAR: &str = "|";
+pub const COLON: &str = ":";
+pub const ADDR: &str = "&";
+pub const ACCESS: &str = "*";
+pub const SEP: &str = "::";
+pub const MINUS: &str = "-";
+pub const NEGATION: &str = "!";
+pub const ADD: &str = "+";
+pub const MULT: &str = "*";
+pub const DIV: &str = "/";
+pub const MOD: &str = "%";
+pub const SHL: &str = "<<";
+pub const SHR: &str = ">>";
+pub const OR: &str = "or";
+pub const AND: &str = "and";
+pub const XOR: &str = "xor";
+pub const IN: &str = "in";
+pub const LE: &str = "<";
+pub const ELE: &str = "<=";
+pub const GE: &str = ">";
+pub const EGE: &str = ">=";
+pub const EQ: &str = "==";
+pub const NEQ: &str = "!=";
+
+pub mod platform {
+    pub const RECEIVE: &str = "receive";
+    pub const SEND: &str = "send";
+    pub const VEC: &str = "vec";
+    pub const MAP: &str = "map";
+    pub const CHAN: &str = "chan";
+    pub const ERROR: &str = "error";
+}
