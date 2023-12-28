@@ -1,4 +1,4 @@
-mod parser;
+mod ast;
 mod semantic;
 mod vm;
 
