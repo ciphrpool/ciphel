@@ -2,8 +2,8 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl TypeOf for Declaration {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Declaration {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -12,13 +12,13 @@ impl TypeOf for Declaration {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for TypedVar {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -27,13 +27,13 @@ impl TypeOf for TypedVar {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for DeclaredVar {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -42,13 +42,13 @@ impl TypeOf for DeclaredVar {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for PatternVar {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -57,7 +57,7 @@ impl TypeOf for PatternVar {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

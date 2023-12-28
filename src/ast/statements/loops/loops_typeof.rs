@@ -2,8 +2,8 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
 
-impl TypeOf for Loop {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Loop {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -12,13 +12,13 @@ impl TypeOf for Loop {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for ForIterator {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -27,13 +27,13 @@ impl TypeOf for ForIterator {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for ForLoop {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -42,13 +42,13 @@ impl TypeOf for ForLoop {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for WhileLoop {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -57,7 +57,7 @@ impl TypeOf for WhileLoop {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

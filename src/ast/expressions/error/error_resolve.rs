@@ -2,8 +2,9 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError};
 
 use super::Error;
 
-impl Resolve for Error {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Error {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

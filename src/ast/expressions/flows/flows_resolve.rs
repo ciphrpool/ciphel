@@ -2,8 +2,9 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError};
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl Resolve for ExprFlow {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -11,8 +12,9 @@ impl Resolve for ExprFlow {
         todo!()
     }
 }
-impl Resolve for IfExpr {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -20,8 +22,9 @@ impl Resolve for IfExpr {
         todo!()
     }
 }
-impl Resolve for Pattern {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -29,8 +32,9 @@ impl Resolve for Pattern {
         todo!()
     }
 }
-impl Resolve for PatternExpr {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -38,8 +42,9 @@ impl Resolve for PatternExpr {
         todo!()
     }
 }
-impl Resolve for MatchExpr {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -47,8 +52,9 @@ impl Resolve for MatchExpr {
         todo!()
     }
 }
-impl Resolve for TryExpr {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -56,8 +62,9 @@ impl Resolve for TryExpr {
         todo!()
     }
 }
-impl Resolve for FnCall {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

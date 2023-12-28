@@ -2,8 +2,9 @@ use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl Resolve for Assignation {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Assignation {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -16,8 +17,9 @@ impl Resolve for Assignation {
         Ok(())
     }
 }
-impl Resolve for AssignValue {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for AssignValue {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -26,8 +28,9 @@ impl Resolve for AssignValue {
     }
 }
 
-impl Resolve for Assignee {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

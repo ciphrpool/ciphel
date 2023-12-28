@@ -2,8 +2,9 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError};
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
 
-impl Resolve for Loop {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Loop {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -11,8 +12,9 @@ impl Resolve for Loop {
         todo!()
     }
 }
-impl Resolve for ForIterator {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -20,8 +22,9 @@ impl Resolve for ForIterator {
         todo!()
     }
 }
-impl Resolve for ForLoop {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -29,8 +32,9 @@ impl Resolve for ForLoop {
         todo!()
     }
 }
-impl Resolve for WhileLoop {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

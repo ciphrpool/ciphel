@@ -5,8 +5,9 @@ use super::{
     LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 
-impl Resolve for UnaryOperation {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -14,8 +15,9 @@ impl Resolve for UnaryOperation {
         todo!()
     }
 }
-impl Resolve for HighOrdMath {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -23,8 +25,9 @@ impl Resolve for HighOrdMath {
         todo!()
     }
 }
-impl Resolve for LowOrdMath {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -32,8 +35,9 @@ impl Resolve for LowOrdMath {
         todo!()
     }
 }
-impl Resolve for Shift {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Shift {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -41,8 +45,9 @@ impl Resolve for Shift {
         todo!()
     }
 }
-impl Resolve for BitwiseAnd {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -50,8 +55,9 @@ impl Resolve for BitwiseAnd {
         todo!()
     }
 }
-impl Resolve for BitwiseXOR {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -59,8 +65,9 @@ impl Resolve for BitwiseXOR {
         todo!()
     }
 }
-impl Resolve for BitwiseOR {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -68,8 +75,9 @@ impl Resolve for BitwiseOR {
         todo!()
     }
 }
-impl Resolve for Comparaison {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Comparaison {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -77,8 +85,9 @@ impl Resolve for Comparaison {
         todo!()
     }
 }
-impl Resolve for LogicalAnd {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -86,8 +95,9 @@ impl Resolve for LogicalAnd {
         todo!()
     }
 }
-impl Resolve for LogicalOr {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

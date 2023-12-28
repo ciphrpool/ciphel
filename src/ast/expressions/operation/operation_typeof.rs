@@ -5,8 +5,8 @@ use super::{
     LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 
-impl TypeOf for UnaryOperation {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -15,13 +15,13 @@ impl TypeOf for UnaryOperation {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for HighOrdMath {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -30,13 +30,13 @@ impl TypeOf for HighOrdMath {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for LowOrdMath {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -45,13 +45,13 @@ impl TypeOf for LowOrdMath {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for Shift {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Shift {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -60,13 +60,13 @@ impl TypeOf for Shift {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for BitwiseAnd {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -75,13 +75,13 @@ impl TypeOf for BitwiseAnd {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for BitwiseXOR {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -90,13 +90,13 @@ impl TypeOf for BitwiseXOR {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for BitwiseOR {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -105,13 +105,13 @@ impl TypeOf for BitwiseOR {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for Comparaison {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -120,13 +120,13 @@ impl TypeOf for Comparaison {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for LogicalAnd {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -135,13 +135,13 @@ impl TypeOf for LogicalAnd {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for LogicalOr {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for LogicalOr {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -150,7 +150,7 @@ impl TypeOf for LogicalOr {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

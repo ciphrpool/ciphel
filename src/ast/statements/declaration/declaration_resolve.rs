@@ -2,8 +2,9 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError};
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl Resolve for Declaration {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -11,8 +12,9 @@ impl Resolve for Declaration {
         todo!()
     }
 }
-impl Resolve for TypedVar {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -20,8 +22,9 @@ impl Resolve for TypedVar {
         todo!()
     }
 }
-impl Resolve for DeclaredVar {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -29,8 +32,9 @@ impl Resolve for DeclaredVar {
         todo!()
     }
 }
-impl Resolve for PatternVar {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

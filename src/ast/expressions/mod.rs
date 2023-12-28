@@ -14,7 +14,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{Resolve, ScopeApi, SemanticError},
+    semantic::{Resolve, ScopeApi, SemanticError, TypeOf},
 };
 
 use self::operation::operation_parse::TryParseOperation;
@@ -77,13 +77,42 @@ impl TryParse for Atomic {
     }
 }
 
-impl Resolve for Atomic {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Atomic {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Atomic::Data(value) => value.resolve(scope),
+            Atomic::UnaryOperation(value) => value.resolve(scope),
+            Atomic::Paren(value) => value.resolve(scope),
+            Atomic::ExprFlow(value) => value.resolve(scope),
+            Atomic::Error(value) => value.resolve(scope),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Atomic {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<
+        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
+        SemanticError,
+    >
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Atomic::Data(value) => value.type_of(scope),
+            Atomic::UnaryOperation(value) => value.type_of(scope),
+            Atomic::Paren(value) => value.type_of(scope),
+            Atomic::ExprFlow(value) => value.type_of(scope),
+            Atomic::Error(value) => value.type_of(scope),
+        }
     }
 }
 
@@ -107,13 +136,52 @@ impl TryParse for Expression {
     }
 }
 
-impl Resolve for Expression {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Expression {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Expression::HighOrdMath(value) => value.resolve(scope),
+            Expression::LowOrdMath(value) => value.resolve(scope),
+            Expression::Shift(value) => value.resolve(scope),
+            Expression::BitwiseAnd(value) => value.resolve(scope),
+            Expression::BitwiseXOR(value) => value.resolve(scope),
+            Expression::BitwiseOR(value) => value.resolve(scope),
+            Expression::Comparaison(value) => value.resolve(scope),
+            Expression::LogicalAnd(value) => value.resolve(scope),
+            Expression::LogicalOr(value) => value.resolve(scope),
+            Expression::Atomic(value) => value.resolve(scope),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<
+        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
+        SemanticError,
+    >
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Expression::HighOrdMath(value) => value.type_of(scope),
+            Expression::LowOrdMath(value) => value.type_of(scope),
+            Expression::Shift(value) => value.type_of(scope),
+            Expression::BitwiseAnd(value) => value.type_of(scope),
+            Expression::BitwiseXOR(value) => value.type_of(scope),
+            Expression::BitwiseOR(value) => value.type_of(scope),
+            Expression::Comparaison(value) => value.type_of(scope),
+            Expression::LogicalAnd(value) => value.type_of(scope),
+            Expression::LogicalOr(value) => value.type_of(scope),
+            Expression::Atomic(value) => value.type_of(scope),
+        }
     }
 }
 

@@ -5,8 +5,8 @@ use super::{
     UnionVariant,
 };
 
-impl TypeOf for Definition {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Definition {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -15,14 +15,14 @@ impl TypeOf for Definition {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for StructVariant {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for StructVariant {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -31,14 +31,14 @@ impl TypeOf for StructVariant {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for StructDef {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for StructDef {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -47,14 +47,14 @@ impl TypeOf for StructDef {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for UnionVariant {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for UnionVariant {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -63,14 +63,14 @@ impl TypeOf for UnionVariant {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for UnionDef {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for UnionDef {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -79,14 +79,14 @@ impl TypeOf for UnionDef {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for EnumDef {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for EnumDef {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -95,14 +95,14 @@ impl TypeOf for EnumDef {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for FnDef {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for FnDef {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -111,14 +111,14 @@ impl TypeOf for FnDef {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for EventDef {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for EventDef {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -127,14 +127,14 @@ impl TypeOf for EventDef {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for EventCondition {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for EventCondition {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -143,7 +143,7 @@ impl TypeOf for EventCondition {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

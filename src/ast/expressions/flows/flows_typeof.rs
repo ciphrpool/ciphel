@@ -2,8 +2,8 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl TypeOf for ExprFlow {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -12,13 +12,13 @@ impl TypeOf for ExprFlow {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for IfExpr {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -27,13 +27,13 @@ impl TypeOf for IfExpr {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for Pattern {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Pattern {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -42,13 +42,13 @@ impl TypeOf for Pattern {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for PatternExpr {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -57,13 +57,13 @@ impl TypeOf for PatternExpr {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for MatchExpr {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -72,13 +72,13 @@ impl TypeOf for MatchExpr {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for TryExpr {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -87,13 +87,13 @@ impl TypeOf for TryExpr {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for FnCall {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for FnCall {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -102,7 +102,7 @@ impl TypeOf for FnCall {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

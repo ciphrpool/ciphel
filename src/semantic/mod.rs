@@ -5,46 +5,37 @@ use crate::ast::utils::strings::ID;
 #[derive(Debug, Clone)]
 pub enum SemanticError {}
 
-pub trait Resolve {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+pub trait Resolve<Scope: ScopeApi> {
+    type Output;
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
-        Self: Sized,
-        Scope: ScopeApi;
+        Self: Sized;
 }
 
-pub trait CompatibleWith {
-    fn compatible_with<Other, Scope>(
-        &self,
-        other: &Other,
-        scope: &Scope,
-    ) -> Result<(), SemanticError>
+pub trait CompatibleWith<Scope: ScopeApi> {
+    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
-        Other: TypeOf,
-        Scope: ScopeApi;
+        Other: TypeOf<Scope>;
 }
 
-pub trait TypeOf {
-    fn type_of<Scope>(
+pub trait TypeOf<Scope: ScopeApi> {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve;
+        Self: Sized + Resolve<Scope>;
 }
 
-impl<User, Static> CompatibleWith for Option<EitherType<User, Static>>
+impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for Option<EitherType<User, Static>>
 where
-    User: CompatibleWith + TypeOf + Resolve,
-    Static: CompatibleWith + TypeOf + Resolve,
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
 {
-    fn compatible_with<Other, Scope>(
-        &self,
-        other: &Other,
-        scope: &Scope,
-    ) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
-        Other: TypeOf,
+        Other: TypeOf<Scope>,
         Scope: ScopeApi,
     {
         todo!()
@@ -57,20 +48,16 @@ pub enum EitherType<User, Static> {
     User(User),
 }
 
-impl<User, Static> CompatibleWith for EitherType<User, Static>
+impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith + TypeOf + Resolve,
-    Static: CompatibleWith + TypeOf + Resolve,
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
 {
-    fn compatible_with<Other, Scope>(
-        &self,
-        other: &Other,
-        scope: &Scope,
-    ) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
-        Other: TypeOf,
+        Other: TypeOf<Scope>,
         Scope: ScopeApi,
-        Self: TypeOf,
+        Self: TypeOf<Scope>,
     {
         match self {
             EitherType::Static(static_type) => static_type.compatible_with(other, scope),
@@ -79,18 +66,18 @@ where
     }
 }
 
-impl<User, Static> TypeOf for EitherType<User, Static>
+impl<User, Static, Scope: ScopeApi> TypeOf<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith + TypeOf + Resolve,
-    Static: CompatibleWith + TypeOf + Resolve,
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
 {
-    fn type_of<Scope>(
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         match self {
             EitherType::Static(static_type) => static_type.type_of(scope),
@@ -99,39 +86,43 @@ where
     }
 }
 
-impl<User, Static> Resolve for EitherType<User, Static>
+// impl<User, Static> Resolve for EitherType<User, Static>
+// where
+//     User: CompatibleWith + TypeOf + Resolve,
+//     Static: CompatibleWith + TypeOf + Resolve,
+// {
+//     type Output = ();
+//     fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+//     where
+//         Self: Sized,
+//         Scope: ScopeApi,
+//     {
+//         match self {
+//             EitherType::Static(static_type) => static_type.resolve(scope),
+//             EitherType::User(user_type) => user_type.resolve(scope),
+//         }
+//     }
+// }
+pub trait ScopeApi
 where
-    User: CompatibleWith + TypeOf + Resolve,
-    Static: CompatibleWith + TypeOf + Resolve,
+    Self: Sized,
 {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            EitherType::Static(static_type) => static_type.resolve(scope),
-            EitherType::User(user_type) => user_type.resolve(scope),
-        }
-    }
-}
-pub trait ScopeApi {
-    type UserType: CompatibleWith + TypeOf + Resolve;
-    type StaticType: CompatibleWith + TypeOf + Resolve;
-    type Fn: Resolve;
-    type Var: Resolve;
-    type Chan: Resolve;
-    type Event: Resolve;
+    type UserType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
+    type StaticType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
+    type Fn: Resolve<Self>;
+    type Var: Resolve<Self>;
+    type Chan: Resolve<Self>;
+    type Event: Resolve<Self>;
 
-    fn register_type(reg: Self::UserType) -> Result<(), SemanticError>;
-    fn register_fn(reg: Self::Fn) -> Result<(), SemanticError>;
-    fn register_chan(reg: Self::Chan) -> Result<(), SemanticError>;
-    fn register_var(reg: Self::Var) -> Result<(), SemanticError>;
-    fn register_event(reg: Self::Event) -> Result<(), SemanticError>;
+    fn register_type(&self, reg: Self::UserType) -> Result<(), SemanticError>;
+    fn register_fn(&self, reg: Self::Fn) -> Result<(), SemanticError>;
+    fn register_chan(&self, reg: Self::Chan) -> Result<(), SemanticError>;
+    fn register_var(&self, reg: Self::Var) -> Result<(), SemanticError>;
+    fn register_event(&self, reg: Self::Event) -> Result<(), SemanticError>;
 
-    fn find_var(id: ID) -> Result<Self::Var, SemanticError>;
-    fn find_fn(id: ID) -> Result<Self::Fn, SemanticError>;
-    fn find_chan() -> Result<Self::Chan, SemanticError>;
-    fn find_type(id: ID) -> Result<Self::UserType, SemanticError>;
-    fn find_event() -> Result<Self::Event, SemanticError>;
+    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError>;
+    fn find_fn(&self, id: &ID) -> Result<Self::Fn, SemanticError>;
+    fn find_chan(&self) -> Result<Self::Chan, SemanticError>;
+    fn find_type(id: &ID) -> Result<Self::UserType, SemanticError>;
+    fn find_event(&self) -> Result<Self::Event, SemanticError>;
 }

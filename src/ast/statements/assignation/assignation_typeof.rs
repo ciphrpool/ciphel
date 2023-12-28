@@ -2,8 +2,8 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl TypeOf for Assignation {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Assignation {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -12,13 +12,13 @@ impl TypeOf for Assignation {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for AssignValue {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -27,14 +27,14 @@ impl TypeOf for AssignValue {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
 
-impl TypeOf for Assignee {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Assignee {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -43,7 +43,7 @@ impl TypeOf for Assignee {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }

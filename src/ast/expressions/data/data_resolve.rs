@@ -5,8 +5,9 @@ use super::{
     MultiData, Primitive, Slice, Struct, Tuple, Union, Variable, Vector,
 };
 
-impl Resolve for Data {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Data {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -29,8 +30,26 @@ impl Resolve for Data {
         }
     }
 }
-impl Resolve for Variable {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Variable {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match self {
+            Variable::Var(value) => {
+                let _ = scope.find_var(value)?;
+
+                Ok(())
+            }
+            Variable::FieldAccess(_) => todo!(),
+        }
+    }
+}
+impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -38,8 +57,9 @@ impl Resolve for Variable {
         todo!()
     }
 }
-impl Resolve for Primitive {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Slice {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -47,8 +67,9 @@ impl Resolve for Primitive {
         todo!()
     }
 }
-impl Resolve for Slice {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Vector {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -56,8 +77,9 @@ impl Resolve for Slice {
         todo!()
     }
 }
-impl Resolve for Vector {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -65,8 +87,9 @@ impl Resolve for Vector {
         todo!()
     }
 }
-impl Resolve for Tuple {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -74,8 +97,9 @@ impl Resolve for Tuple {
         todo!()
     }
 }
-impl Resolve for MultiData {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Closure {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -83,8 +107,9 @@ impl Resolve for MultiData {
         todo!()
     }
 }
-impl Resolve for Closure {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -92,8 +117,9 @@ impl Resolve for Closure {
         todo!()
     }
 }
-impl Resolve for ClosureScope {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -101,8 +127,9 @@ impl Resolve for ClosureScope {
         todo!()
     }
 }
-impl Resolve for ClosureParam {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Address {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -110,8 +137,9 @@ impl Resolve for ClosureParam {
         todo!()
     }
 }
-impl Resolve for Address {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Access {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -119,8 +147,9 @@ impl Resolve for Address {
         todo!()
     }
 }
-impl Resolve for Access {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Channel {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -128,8 +157,9 @@ impl Resolve for Access {
         todo!()
     }
 }
-impl Resolve for Channel {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Struct {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -137,8 +167,9 @@ impl Resolve for Channel {
         todo!()
     }
 }
-impl Resolve for Struct {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Union {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -146,8 +177,9 @@ impl Resolve for Struct {
         todo!()
     }
 }
-impl Resolve for Union {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Enum {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -155,8 +187,9 @@ impl Resolve for Union {
         todo!()
     }
 }
-impl Resolve for Enum {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for Map {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -164,17 +197,9 @@ impl Resolve for Enum {
         todo!()
     }
 }
-impl Resolve for Map {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        todo!()
-    }
-}
-impl Resolve for KeyData {
-    fn resolve<Scope>(&self, scope: &Scope) -> Result<(), SemanticError>
+impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

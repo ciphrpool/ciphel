@@ -2,8 +2,8 @@ use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
 
-impl TypeOf for Flow {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -12,13 +12,13 @@ impl TypeOf for Flow {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for IfStat {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -27,13 +27,13 @@ impl TypeOf for IfStat {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for MatchStat {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -42,13 +42,13 @@ impl TypeOf for MatchStat {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for PatternStat {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternStat {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -57,13 +57,13 @@ impl TypeOf for PatternStat {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for TryStat {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -72,13 +72,13 @@ impl TypeOf for TryStat {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for CallStat {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -87,13 +87,13 @@ impl TypeOf for CallStat {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
 }
-impl TypeOf for Return {
-    fn type_of<Scope>(
+impl<Scope: ScopeApi> TypeOf<Scope> for Return {
+    fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
@@ -102,7 +102,7 @@ impl TypeOf for Return {
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve,
+        Self: Sized + Resolve<Scope>,
     {
         todo!()
     }
