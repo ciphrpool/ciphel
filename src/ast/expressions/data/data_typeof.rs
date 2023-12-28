@@ -4,8 +4,8 @@ use crate::{
 };
 
 use super::{
-    Access, Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map,
-    MultiData, Primitive, Slice, Struct, Tuple, Union, Variable, Vector,
+    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map, MultiData,
+    Primitive, PtrAccess, Slice, Struct, Tuple, Union, Variable, Vector,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Data {
@@ -177,7 +177,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
         todo!()
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Access {
+impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
     fn type_of(
         &self,
         scope: &Scope,

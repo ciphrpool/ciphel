@@ -19,14 +19,15 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    combinator::{cut, map, value},
+    combinator::{cut, map, opt, value},
     multi::{fold_many0, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
 use super::{
-    Access, Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map,
-    MultiData, Primitive, Slice, Struct, Tuple, Union, Variable, Vector,
+    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
+    Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -38,7 +39,7 @@ impl TryParse for Data {
             map(Channel::parse, |value| Data::Chan(value)),
             map(Tuple::parse, |value| Data::Tuple(value)),
             map(Address::parse, |value| Data::Address(value)),
-            map(Access::parse, |value| Data::Access(value)),
+            map(PtrAccess::parse, |value| Data::PtrAccess(value)),
             value(Data::Unit, wst(lexem::UNIT)),
             map(Map::parse, |value| Data::Map(value)),
             map(Struct::parse, |value| Data::Struct(value)),
@@ -49,21 +50,64 @@ impl TryParse for Data {
     }
 }
 
+impl VarID {
+    fn parse(input: Span) -> PResult<Variable> {
+        map(parse_id, |id| Variable::Var(VarID(id)))(input)
+    }
+}
+
+impl ListAccess {
+    fn parse(input: Span) -> PResult<Variable> {
+        let (remainder, var) = VarID::parse(input)?;
+        let (remainder, index) = opt(delimited(
+            wst(lexem::SQ_BRA_O),
+            parse_number,
+            wst(lexem::SQ_BRA_C),
+        ))(remainder)?;
+
+        if let Some(index) = index {
+            Ok((
+                remainder,
+                Variable::ListAccess(ListAccess {
+                    var: Box::new(var),
+                    index: index.unsigned_abs() as usize,
+                }),
+            ))
+        } else {
+            Ok((remainder, var))
+        }
+    }
+}
+
+impl FieldAccess {
+    fn parse(input: Span) -> PResult<Variable> {
+        let (remainder, var) = ListAccess::parse(input)?;
+        let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
+
+        if let Some(index) = index {
+            let (remainder, right) = FieldAccess::parse(remainder)?;
+            Ok((
+                remainder,
+                Variable::FieldAccess(FieldAccess {
+                    var: Box::new(var),
+                    field: Box::new(right),
+                }),
+            ))
+        } else {
+            Ok((remainder, var))
+        }
+    }
+}
+
 impl TryParse for Variable {
     /*
      * @desc Parse variable
      *
      * @grammar
-     * Variable := ID | (ID . ) * ID
+     * Variable := ID | Variable . Variable | Variable [ num ]
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(separated_list1(wst(lexem::DOT), parse_id), |value| {
-            if value.len() == 1 {
-                Variable::Var(value.first().unwrap().to_string())
-            } else {
-                Variable::FieldAccess(value)
-            }
-        })(input)
+        FieldAccess::parse(input)
     }
 }
 
@@ -226,7 +270,7 @@ impl TryParse for Address {
     }
 }
 
-impl TryParse for Access {
+impl TryParse for PtrAccess {
     /*
      * @desc Parse pointer access
      *
@@ -235,7 +279,7 @@ impl TryParse for Access {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(preceded(wst(lexem::ACCESS), Expression::parse), |value| {
-            Access(Box::new(value))
+            PtrAccess(Box::new(value))
         })(input)
     }
 }
@@ -543,7 +587,7 @@ mod tests {
                     ClosureParam::Minimal("y".into())
                 ],
                 scope: ClosureScope::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Variable(Variable::Var("x".into()))
+                    Data::Variable(Variable::Var(VarID("x".into())))
                 ))))
             },
             value
@@ -558,7 +602,7 @@ mod tests {
         assert_eq!(
             Channel::Receive {
                 addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var("chan1".into())
+                    Variable::Var(VarID("chan1".into()))
                 ))))),
                 timeout: 10
             },
@@ -571,7 +615,7 @@ mod tests {
         assert_eq!(
             Channel::Send {
                 addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var("chan1".into())
+                    Variable::Var(VarID("chan1".into()))
                 ))))),
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
@@ -607,7 +651,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                Variable::Var("x".into())
+                Variable::Var(VarID("x".into()))
             ))))),
             value
         );
@@ -615,12 +659,12 @@ mod tests {
 
     #[test]
     fn valid_access() {
-        let res = Access::parse("*x".into());
+        let res = PtrAccess::parse("*x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Access(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                Variable::Var("x".into())
+            PtrAccess(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                Variable::Var(VarID("x".into()))
             ))))),
             value
         );
@@ -747,5 +791,74 @@ mod tests {
             },
             value
         )
+    }
+
+    #[test]
+    fn valid_variable() {
+        let res = Variable::parse("x".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(Variable::Var(VarID("x".into())), value);
+
+        let res = Variable::parse("x[3]".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Variable::ListAccess(ListAccess {
+                var: Box::new(Variable::Var(VarID("x".into()))),
+                index: 3
+            }),
+            value
+        );
+
+        let res = Variable::parse("x.y".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Variable::FieldAccess(FieldAccess {
+                var: Box::new(Variable::Var(VarID("x".into()))),
+                field: Box::new(Variable::Var(VarID("y".into())))
+            }),
+            value
+        );
+        let res = Variable::parse("x.y.z".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Variable::FieldAccess(FieldAccess {
+                var: Box::new(Variable::Var(VarID("x".into()))),
+                field: Box::new(Variable::FieldAccess(FieldAccess {
+                    var: Box::new(Variable::Var(VarID("y".into()))),
+                    field: Box::new(Variable::Var(VarID("z".into())))
+                }))
+            }),
+            value
+        );
+        let res = Variable::parse("x.y[3]".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Variable::FieldAccess(FieldAccess {
+                var: Box::new(Variable::Var(VarID("x".into()))),
+                field: Box::new(Variable::ListAccess(ListAccess {
+                    var: Box::new(Variable::Var(VarID("y".into()))),
+                    index: 3
+                }))
+            }),
+            value
+        );
+        let res = Variable::parse("x[3].y".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Variable::FieldAccess(FieldAccess {
+                var: Box::new(Variable::ListAccess(ListAccess {
+                    var: Box::new(Variable::Var(VarID("x".into()))),
+                    index: 3
+                })),
+                field: Box::new(Variable::Var(VarID("y".into())))
+            }),
+            value
+        );
     }
 }

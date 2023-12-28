@@ -32,7 +32,7 @@ pub enum Data {
     Chan(Channel),
     Tuple(Tuple),
     Address(Address),
-    Access(Access),
+    PtrAccess(PtrAccess),
     Variable(Variable),
     Unit,
     Map(Map),
@@ -43,8 +43,24 @@ pub enum Data {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
-    Var(ID),
-    FieldAccess(Vec<ID>),
+    Var(VarID),
+    FieldAccess(FieldAccess),
+    ListAccess(ListAccess),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarID(pub ID);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListAccess {
+    var: Box<Variable>,
+    index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldAccess {
+    pub var: Box<Variable>,
+    pub field: Box<Variable>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,7 +110,7 @@ pub enum ClosureParam {
 pub struct Address(pub Box<Expression>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Access(pub Box<Expression>);
+pub struct PtrAccess(pub Box<Expression>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Channel {

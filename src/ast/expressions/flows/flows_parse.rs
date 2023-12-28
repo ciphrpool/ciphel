@@ -266,7 +266,7 @@ impl TryParse for FnCall {
 #[cfg(test)]
 mod tests {
     use crate::ast::expressions::{
-        data::{Data, Primitive, Variable},
+        data::{Data, Primitive, VarID, Variable},
         flows::PatternExpr,
         Atomic, Expression,
     };
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(
             MatchExpr {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var("x".into())
+                    Variable::Var(VarID("x".into()))
                 )))),
                 patterns: vec![
                     PatternExpr {
@@ -420,7 +420,9 @@ mod tests {
             FnCall {
                 fn_id: "f".into(),
                 params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var("x".into())))),
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
+                        "x".into()
+                    ))))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
                 ]
             },

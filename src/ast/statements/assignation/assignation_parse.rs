@@ -7,7 +7,10 @@ use nom::{
 
 use crate::{
     ast::{
-        expressions::{data::Access, Expression},
+        expressions::{
+            data::{PtrAccess, Variable},
+            Expression,
+        },
         statements::scope::Scope,
         types::Type,
         utils::{
@@ -71,14 +74,8 @@ impl TryParse for Assignee {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(Access::parse, |value| Assignee::PointerAccess(value)),
-            map(separated_list1(wst(lexem::DOT), parse_id), |value| {
-                if value.len() == 1 {
-                    Assignee::Variable(value.first().unwrap().to_string())
-                } else {
-                    Assignee::FieldAccess(value)
-                }
-            }),
+            map(PtrAccess::parse, |value| Assignee::PtrAccess(value)),
+            map(Variable::parse, |value| Assignee::Variable(value)),
         ))(input)
     }
 }
@@ -86,7 +83,7 @@ impl TryParse for Assignee {
 #[cfg(test)]
 mod tests {
     use crate::ast::expressions::{
-        data::{Data, Primitive, Variable},
+        data::{Data, FieldAccess, Primitive, VarID, Variable},
         Atomic,
     };
 
@@ -99,7 +96,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::Variable("x".into()),
+                left: Assignee::Variable(Variable::Var(VarID("x".into()))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(10))
                 ))))
@@ -112,8 +109,8 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::PointerAccess(Access(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Variable(Variable::Var("x".into()))
+                left: Assignee::PtrAccess(PtrAccess(Box::new(Expression::Atomic(Atomic::Data(
+                    Data::Variable(Variable::Var(VarID("x".into())))
                 ))))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(10))
@@ -127,7 +124,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::FieldAccess(vec!["x".into(), "y".into()]),
+                left: Assignee::Variable(Variable::FieldAccess(FieldAccess {
+                    var: Box::new(Variable::Var(VarID("x".into()))),
+                    field: Box::new(Variable::Var(VarID("y".into())))
+                })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(10))
                 ))))

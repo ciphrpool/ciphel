@@ -39,12 +39,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
         Scope: ScopeApi,
     {
         match self {
-            Assignee::Variable(value) => {
-                let _ = scope.find_var(value)?;
-                Ok(())
-            }
-            Assignee::FieldAccess(value) => todo!(),
-            Assignee::PointerAccess(value) => value.resolve(scope),
+            Assignee::Variable(value) => value.resolve(scope),
+            Assignee::PtrAccess(value) => value.resolve(scope),
         }
     }
 }

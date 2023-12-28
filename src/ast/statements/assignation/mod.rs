@@ -1,5 +1,8 @@
 use crate::ast::{
-    expressions::{data::Access, Expression},
+    expressions::{
+        data::{PtrAccess, Variable},
+        Expression,
+    },
     utils::strings::ID,
 };
 
@@ -20,7 +23,6 @@ pub enum AssignValue {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Assignee {
-    Variable(ID),
-    FieldAccess(Vec<ID>),
-    PointerAccess(Access),
+    Variable(Variable),
+    PtrAccess(PtrAccess),
 }

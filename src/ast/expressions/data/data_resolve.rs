@@ -1,8 +1,8 @@
 use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError};
 
 use super::{
-    Access, Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map,
-    MultiData, Primitive, Slice, Struct, Tuple, Union, Variable, Vector,
+    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map, MultiData,
+    Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
 impl<Scope: ScopeApi> Resolve<Scope> for Data {
@@ -20,7 +20,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data {
             Data::Chan(value) => value.resolve(scope),
             Data::Tuple(value) => value.resolve(scope),
             Data::Address(value) => value.resolve(scope),
-            Data::Access(value) => value.resolve(scope),
+            Data::PtrAccess(value) => value.resolve(scope),
             Data::Variable(value) => value.resolve(scope),
             Data::Unit => Ok(()),
             Data::Map(value) => value.resolve(scope),
@@ -38,12 +38,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable {
         Scope: ScopeApi,
     {
         match self {
-            Variable::Var(value) => {
+            Variable::Var(VarID(value)) => {
                 let _ = scope.find_var(value)?;
 
                 Ok(())
             }
             Variable::FieldAccess(_) => todo!(),
+            Variable::ListAccess(_) => todo!(),
         }
     }
 }
@@ -170,7 +171,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address {
         self.0.resolve(scope)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Access {
+impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
     type Output = ();
     fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
     where
