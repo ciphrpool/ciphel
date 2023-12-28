@@ -24,7 +24,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            AssignValue::Scope(value) => value.resolve(scope),
+            AssignValue::Expr(value) => value.resolve(scope),
+        }
     }
 }
 
@@ -35,6 +38,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Assignee::Variable(value) => {
+                let _ = scope.find_var(value)?;
+                Ok(())
+            }
+            Assignee::FieldAccess(value) => todo!(),
+            Assignee::PointerAccess(value) => value.resolve(scope),
+        }
     }
 }

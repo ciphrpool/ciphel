@@ -1,4 +1,7 @@
-use crate::semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::{
+    ast::expressions::Expression,
+    semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf},
+};
 
 use super::{
     Access, Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map,
@@ -78,6 +81,55 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Tuple {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for MultiData {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Vec<(String, Expression)> {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
+impl<Scope: ScopeApi> TypeOf<Scope> for (&String, &String) {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
+impl<Scope: ScopeApi> TypeOf<Scope> for (&String, &Vec<Expression>) {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
+impl<Scope: ScopeApi> TypeOf<Scope> for (&String, &Vec<(String, Expression)>) {
     fn type_of(
         &self,
         scope: &Scope,

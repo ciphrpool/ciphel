@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError};
+use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError};
 
 use super::{
     Access, Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map,
@@ -22,7 +22,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data {
             Data::Address(value) => value.resolve(scope),
             Data::Access(value) => value.resolve(scope),
             Data::Variable(value) => value.resolve(scope),
-            Data::Unit => todo!(),
+            Data::Unit => Ok(()),
             Data::Map(value) => value.resolve(scope),
             Data::Struct(value) => value.resolve(scope),
             Data::Union(value) => value.resolve(scope),
@@ -54,7 +54,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Slice {
@@ -64,7 +64,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Slice::String(value) => Ok(()),
+            Slice::List(value) => match value.iter().find_map(|expr| expr.resolve(scope).err()) {
+                Some(err) => Err(err),
+                None => Ok(()),
+            },
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Vector {
@@ -74,7 +80,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Vector::Init(value) => match value.iter().find_map(|expr| expr.resolve(scope).err()) {
+                Some(err) => Err(err),
+                None => Ok(()),
+            },
+            Vector::Def { length, capacity } => Ok(()),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
@@ -84,7 +96,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        self.0.resolve(scope)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
@@ -94,7 +106,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self.iter().find_map(|expr| expr.resolve(scope).err()) {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Closure {
@@ -104,7 +119,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = {
+            match self
+                .params
+                .iter()
+                .find_map(|expr| expr.resolve(scope).err())
+            {
+                Some(err) => Err(err),
+                None => Ok(()),
+            }
+        }?;
+        let _ = self.scope.resolve(scope)?;
+
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
@@ -114,7 +141,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            ClosureScope::Scope(value) => value.resolve(scope),
+            ClosureScope::Expr(value) => value.resolve(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
@@ -124,7 +154,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            ClosureParam::Full { id, signature } => signature.resolve(scope),
+            ClosureParam::Minimal(value) => Ok(()),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Address {
@@ -134,7 +167,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        self.0.resolve(scope)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Access {
@@ -144,7 +177,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Access {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        self.0.resolve(scope)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Channel {
@@ -154,7 +187,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Channel::Receive { addr, .. } => addr.resolve(scope),
+            Channel::Send { addr, msg } => {
+                let _ = addr.resolve(scope)?;
+                let _ = msg.resolve(scope)?;
+                Ok(())
+            }
+            Channel::Init(id) => scope.register_chan(id),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Struct {
@@ -164,7 +205,28 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Struct::Inline { id, data } => {
+                let user_type = scope.find_type(id)?;
+                let _ = data.resolve(scope)?;
+                let _ = user_type.compatible_with(data, scope)?;
+                Ok(())
+            }
+            Struct::Field { id, fields } => {
+                let user_type = scope.find_type(id)?;
+                let _ = {
+                    match fields
+                        .iter()
+                        .find_map(|(_, expr)| expr.resolve(scope).err())
+                    {
+                        Some(e) => Err(e),
+                        None => Ok(()),
+                    }
+                }?;
+                let _ = user_type.compatible_with(fields, scope)?;
+                Ok(())
+            }
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
@@ -174,7 +236,37 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Union::Inline {
+                typename,
+                variant,
+                data,
+            } => {
+                let user_type = scope.find_type(typename)?;
+                let _ = data.resolve(scope)?;
+
+                let _ = user_type.compatible_with(&(variant, data), scope)?;
+                Ok(())
+            }
+            Union::Field {
+                typename,
+                variant,
+                fields,
+            } => {
+                let user_type = scope.find_type(typename)?;
+                let _ = {
+                    match fields
+                        .iter()
+                        .find_map(|(_, expr)| expr.resolve(scope).err())
+                    {
+                        Some(e) => Err(e),
+                        None => Ok(()),
+                    }
+                }?;
+                let _ = user_type.compatible_with(&(variant, fields), scope)?;
+                Ok(())
+            }
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
@@ -184,7 +276,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let user_type = scope.find_type(&self.typename)?;
+        user_type.compatible_with(&(&self.typename, &self.value), scope)?;
+
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Map {
@@ -194,7 +289,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Map::Init { fields } => {
+                match fields
+                    .iter()
+                    .find_map(|(key, value)| match key.resolve(scope) {
+                        Ok(_) => value.resolve(scope).err(),
+                        Err(e) => Some(e),
+                    }) {
+                    Some(e) => Err(e),
+                    None => Ok(()),
+                }
+            }
+            Map::Def { length, capacity } => Ok(()),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
@@ -204,6 +312,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            KeyData::Number(_) => Ok(()),
+            KeyData::Bool(_) => Ok(()),
+            KeyData::Char(_) => Ok(()),
+            KeyData::String(_) => Ok(()),
+            KeyData::Address(value) => value.resolve(scope),
+            KeyData::Enum(value) => value.resolve(scope),
+        }
     }
 }

@@ -9,6 +9,13 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope {
         Self: Sized,
         OuterScope: ScopeApi,
     {
-        todo!()
+        match self
+            .instructions
+            .iter()
+            .find_map(|instruction| instruction.resolve(scope).err())
+        {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
 }

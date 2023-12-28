@@ -9,7 +9,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Flow::If(value) => value.resolve(scope),
+            Flow::Match(value) => value.resolve(scope),
+            Flow::Try(value) => value.resolve(scope),
+            Flow::Call(value) => value.resolve(scope),
+            Flow::Return(value) => value.resolve(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
@@ -19,7 +25,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.condition.resolve(scope)?;
+        // TODO : check that condition is a boolean
+        let _ = self.main_branch.resolve(scope)?;
+        if let Some(else_branch) = &self.else_branch {
+            let _ = else_branch.resolve(scope)?;
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
@@ -29,7 +41,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.expr.resolve(scope)?;
+
+        let _ = {
+            match self
+                .patterns
+                .iter()
+                .find_map(|value| value.resolve(scope).err())
+            {
+                Some(err) => Err(err),
+                None => Ok(()),
+            }
+        }?;
+        if let Some(else_branch) = &self.else_branch {
+            let _ = else_branch.resolve(scope)?;
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
@@ -39,7 +66,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.pattern.resolve(scope)?;
+        let _ = self.scope.resolve(scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
@@ -49,7 +78,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.try_branch.resolve(scope)?;
+        if let Some(else_branch) = &self.else_branch {
+            let _ = else_branch.resolve(scope)?;
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
@@ -59,7 +92,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = scope.find_fn(&self.fn_id)?;
+        let _ = self.params.resolve(scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Return {
@@ -69,6 +104,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Return::Unit => Ok(()),
+            Return::Expr(value) => value.resolve(scope),
+        }
     }
 }

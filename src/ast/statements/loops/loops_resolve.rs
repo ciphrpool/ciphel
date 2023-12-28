@@ -1,6 +1,6 @@
 use crate::semantic::{Resolve, ScopeApi, SemanticError};
 
-use super::{ForIterator, ForLoop, Loop, WhileLoop};
+use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();
@@ -9,7 +9,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Loop {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Loop::For(value) => value.resolve(scope),
+            Loop::While(value) => value.resolve(scope),
+            Loop::Loop(value) => value.resolve(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
@@ -19,7 +23,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            ForIterator::Id(value) => {
+                let _ = scope.find_var(value)?;
+                // TODO : check that the variable is iterable
+
+                Ok(())
+            }
+            ForIterator::Vec(value) => value.resolve(scope),
+            ForIterator::Slice(value) => value.resolve(scope),
+            ForIterator::Tuple(value) => value.resolve(scope),
+            ForIterator::Receive { addr, .. } => addr.resolve(scope),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match self {
+            ForItem::Id(value) => Ok(()),
+            ForItem::Pattern(_) => todo!(),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
@@ -29,7 +58,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.iterator.resolve(scope)?;
+        let _ = self.item.resolve(scope)?;
+        // TODO : attach the item to the scope
+        let _ = self.scope.resolve(scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
@@ -39,6 +72,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        let _ = self.condition.resolve(scope)?;
+        // TODO check that the condition is a boolean
+        let _ = self.scope.resolve(scope)?;
+        Ok(())
     }
 }

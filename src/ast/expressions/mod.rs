@@ -185,6 +185,33 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
     }
 }
 
+impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<
+        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
+        SemanticError,
+    >
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        (self.as_ref()).type_of(scope)
+    }
+}
+
+impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression> {
+    type Output = ();
+    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        (self.as_ref()).resolve(scope)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::ast::expressions::{

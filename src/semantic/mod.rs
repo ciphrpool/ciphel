@@ -109,20 +109,22 @@ where
 {
     type UserType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
     type StaticType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type Fn: Resolve<Self>;
-    type Var: Resolve<Self>;
-    type Chan: Resolve<Self>;
+    type Fn: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
+    type Var: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
+    type Chan: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
     type Event: Resolve<Self>;
+
+    fn child_scope(&self) -> Result<Self, SemanticError>;
 
     fn register_type(&self, reg: Self::UserType) -> Result<(), SemanticError>;
     fn register_fn(&self, reg: Self::Fn) -> Result<(), SemanticError>;
-    fn register_chan(&self, reg: Self::Chan) -> Result<(), SemanticError>;
+    fn register_chan(&self, reg: &ID) -> Result<(), SemanticError>;
     fn register_var(&self, reg: Self::Var) -> Result<(), SemanticError>;
     fn register_event(&self, reg: Self::Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError>;
-    fn find_fn(&self, id: &ID) -> Result<Self::Fn, SemanticError>;
-    fn find_chan(&self) -> Result<Self::Chan, SemanticError>;
-    fn find_type(id: &ID) -> Result<Self::UserType, SemanticError>;
-    fn find_event(&self) -> Result<Self::Event, SemanticError>;
+    fn find_var(&self, id: &ID) -> Result<&Self::Var, SemanticError>;
+    fn find_fn(&self, id: &ID) -> Result<&Self::Fn, SemanticError>;
+    fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;
+    fn find_type(&self, id: &ID) -> Result<&Self::UserType, SemanticError>;
+    fn find_event(&self) -> Result<&Self::Event, SemanticError>;
 }

@@ -1,9 +1,15 @@
 use crate::ast::{
-    expressions::{data::{Address, Slice, Tuple, Vector}, Expression},
+    expressions::{
+        data::{Address, Slice, Tuple, Vector},
+        Expression,
+    },
     utils::strings::ID,
 };
 
-use super::{declaration::DeclaredVar, scope::Scope};
+use super::{
+    declaration::{DeclaredVar, PatternVar},
+    scope::Scope,
+};
 
 pub mod loops_parse;
 pub mod loops_resolve;
@@ -18,9 +24,15 @@ pub enum Loop {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForLoop {
-    item: DeclaredVar,
+    item: ForItem,
     iterator: ForIterator,
     scope: Box<Scope>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ForItem {
+    Id(ID),
+    Pattern(PatternVar),
 }
 
 #[derive(Debug, Clone, PartialEq)]

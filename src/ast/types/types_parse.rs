@@ -12,23 +12,12 @@ use crate::ast::utils::{
     strings::{parse_id, wst, ID},
 };
 
-use super::TryParse;
+use crate::ast::TryParse;
 
-type SubType = Box<Type>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    Primitive(PrimitiveType),
-    Slice(SliceType),
-    UserType(ID),
-    Vec(VecType),
-    Fn(FnType),
-    Chan(ChanType),
-    Tuple(TupleType),
-    Unit,
-    Address(AddrType),
-    Map(MapType),
-}
+use super::{
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, TupleType, Type, Types,
+    VecType,
+};
 
 impl TryParse for Type {
     /*
@@ -52,15 +41,6 @@ impl TryParse for Type {
         ))(input)
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum PrimitiveType {
-    Number,
-    Float,
-    Char,
-    Bool,
-}
-
 impl TryParse for PrimitiveType {
     /*
      * @desc Parse Primitive types
@@ -77,13 +57,6 @@ impl TryParse for PrimitiveType {
         ))(input)
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SliceType {
-    String,
-    List(usize, SubType),
-}
-
 impl TryParse for SliceType {
     /*
      * @desc Parse Slice types
@@ -107,9 +80,6 @@ impl TryParse for SliceType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct VecType(SubType);
-
 impl TryParse for VecType {
     /*
      * @desc Parse Vec Type
@@ -127,13 +97,6 @@ impl TryParse for VecType {
         )(input)
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct FnType {
-    params: Types,
-    ret: SubType,
-}
-pub type Types = Vec<Type>;
 
 impl TryParse for FnType {
     /*
@@ -157,6 +120,7 @@ impl TryParse for FnType {
         )(input)
     }
 }
+
 impl TryParse for Types {
     /*
      * @desc Parse multiple Types
@@ -168,9 +132,6 @@ impl TryParse for Types {
         separated_list1(wst(lexem::COMA), Type::parse)(input)
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChanType(SubType);
 
 impl TryParse for ChanType {
     /*
@@ -190,9 +151,6 @@ impl TryParse for ChanType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TupleType(Types);
-
 impl TryParse for TupleType {
     /*
      * @desc Parse Tuple Type
@@ -209,9 +167,6 @@ impl TryParse for TupleType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct AddrType(SubType);
-
 impl TryParse for AddrType {
     /*
      * @desc Parse Address Type
@@ -226,11 +181,6 @@ impl TryParse for AddrType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct MapType {
-    keys_type: KeyType,
-    values_type: SubType,
-}
 impl TryParse for MapType {
     /*
      * @desc Parse Map Type
@@ -254,13 +204,6 @@ impl TryParse for MapType {
             },
         )(input)
     }
-}
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyType {
-    Primitive(PrimitiveType),
-    Address(AddrType),
-    Slice(SliceType),
-    EnumID(ID),
 }
 
 impl TryParse for KeyType {

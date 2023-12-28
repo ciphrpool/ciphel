@@ -10,7 +10,10 @@ use crate::{
             data::{Address, Slice, Tuple, Vector},
             Expression,
         },
-        statements::{declaration::DeclaredVar, scope::Scope},
+        statements::{
+            declaration::{DeclaredVar, PatternVar},
+            scope::Scope,
+        },
         utils::{
             io::{PResult, Span},
             lexem,
@@ -22,7 +25,7 @@ use crate::{
     semantic::{EitherType, Resolve, ScopeApi, SemanticError},
 };
 
-use super::{ForIterator, ForLoop, Loop, WhileLoop};
+use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
 impl TryParse for Loop {
     /*
@@ -67,6 +70,15 @@ impl TryParse for ForIterator {
     }
 }
 
+impl TryParse for ForItem {
+    fn parse(input: Span) -> PResult<Self> {
+        alt((
+            map(PatternVar::parse, |value| ForItem::Pattern(value)),
+            map(parse_id, |value| ForItem::Id(value)),
+        ))(input)
+    }
+}
+
 impl TryParse for ForLoop {
     /*
      * @desc Parse for loop
@@ -79,7 +91,7 @@ impl TryParse for ForLoop {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FOR), DeclaredVar::parse),
+                preceded(wst(lexem::FOR), ForItem::parse),
                 preceded(wst(lexem::IN), ForIterator::parse),
                 Scope::parse,
             )),
@@ -139,7 +151,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             ForLoop {
-                item: DeclaredVar::Id("i".into()),
+                item: ForItem::Id("i".into()),
                 iterator: ForIterator::Id("x".into()),
                 scope: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {

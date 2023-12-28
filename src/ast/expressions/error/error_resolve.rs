@@ -9,6 +9,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Error {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        Ok(())
     }
 }
