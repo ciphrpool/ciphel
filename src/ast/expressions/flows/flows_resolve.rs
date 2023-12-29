@@ -100,7 +100,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 }
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &vars[index];
-                    scope_vars.push(Scope::Var::build_from(var_name, field_type));
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -133,7 +133,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    scope_vars.push(Scope::Var::build_from(var_name, field_type));
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -153,7 +153,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 }
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &vars[index];
-                    scope_vars.push(Scope::Var::build_from(var_name, field_type));
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -181,7 +181,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    scope_vars.push(Scope::Var::build_from(var_name, field_type));
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -199,7 +199,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 }
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &value[index];
-                    scope_vars.push(Scope::Var::build_from(var_name, field_type));
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }

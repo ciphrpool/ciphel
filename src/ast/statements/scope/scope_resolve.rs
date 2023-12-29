@@ -10,10 +10,11 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope {
         Self: Sized,
         OuterScope: ScopeApi,
     {
+        let mut inner_scope = scope.child_scope()?;
         match self
             .instructions
             .iter()
-            .find_map(|instruction| instruction.resolve(scope, &()).err())
+            .find_map(|instruction| instruction.resolve(&inner_scope, &()).err())
         {
             Some(err) => Err(err),
             None => Ok(()),

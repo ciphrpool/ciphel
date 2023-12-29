@@ -1,9 +1,14 @@
-use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
-
 use super::{
     Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
     UnionDef, UnionVariant,
 };
+use crate::semantic::BuildFn;
+use crate::semantic::BuildType;
+use crate::semantic::BuildVar;
+use crate::semantic::EitherType;
+use crate::semantic::RetrieveTypeInfo;
+
+use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     type Output = ();
@@ -29,11 +34,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
+        let _ = match self {
             TypeDef::Struct(value) => value.resolve(scope, context),
             TypeDef::Union(value) => value.resolve(scope, context),
             TypeDef::Enum(value) => value.resolve(scope, context),
-        }
+        }?;
+        let _ = scope.register_type(Scope::UserType::build_type(self))?;
+        Ok(())
     }
 }
 
@@ -67,7 +74,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
         Scope: ScopeApi,
     {
         let _ = self.fields.resolve(scope, context)?;
-        let _ = scope.register_type(todo!())?;
         Ok(())
     }
 }
@@ -112,7 +118,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
                 None => Ok(()),
             }
         }?;
-        let _ = scope.register_type(todo!())?;
         Ok(())
     }
 }
@@ -125,7 +130,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = scope.register_type(todo!())?;
         Ok(())
     }
 }
@@ -149,11 +153,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
             }
         }?;
         let _ = self.ret.resolve(scope, context)?;
-        let _ = self.scope.resolve(scope, &None)?;
+
+        let mut inner_scope = scope.child_scope()?;
+        inner_scope.attach(self.params.iter().map(|param| {
+            let param_type = param.type_of(scope).unwrap_or(None);
+            let id = &param.id;
+            Scope::Var::build_var(id, &param_type.unwrap())
+        }));
+        let _ = self.scope.resolve(&inner_scope, &None)?;
 
         let return_type = self.ret.type_of(scope)?;
         let _ = return_type.compatible_with(&self.scope, scope)?;
 
+        let _ = scope.register_fn(Scope::Fn::build_fn(self))?;
         Ok(())
     }
 }

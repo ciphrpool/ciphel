@@ -43,16 +43,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
-    type Output = ();
-    type Context = ();
+    type Output = Vec<Scope::Var>;
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ForItem::Id(value) => Ok(()),
-            ForItem::Pattern(_) => todo!(),
+            ForItem::Id(value) => {
+                let Some(item_type) = context else {
+                    return Err(SemanticError::CantInferType);
+                };
+                Ok(vec![Scope::Var::build_var(value, &item_type)])
+            }
+            ForItem::Pattern(pattern) => pattern.resolve(scope, context),
         }
     }
 }
@@ -68,18 +73,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         let item_type = self.iterator.type_of(scope)?;
         let item_type = <Option<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        > as RetrieveTypeInfo<Scope>>::get_item(&item_type)
-        .unwrap();
+        > as RetrieveTypeInfo<Scope>>::get_item(&item_type);
 
-        let _ = self.item.resolve(scope, context)?;
+        let item_vars = self.item.resolve(scope, &item_type)?;
         // attach the item to the scope
         let mut inner_scope = scope.child_scope()?;
-
-        let items: Vec<Scope::Var> = match &self.item {
-            ForItem::Id(id) => vec![Scope::Var::build_from(id, &item_type)],
-            ForItem::Pattern(pattern) => todo!(),
-        };
-        inner_scope.attach(items.into_iter());
+        inner_scope.attach(item_vars.into_iter());
 
         let _ = self.scope.resolve(&inner_scope, &None)?;
         Ok(())

@@ -235,7 +235,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
                 ClosureParam::Full { id, .. } => id,
                 ClosureParam::Minimal(id) => id,
             };
-            Scope::Var::build_from(id, &param_type.unwrap())
+            Scope::Var::build_var(id, &param_type.unwrap())
         }));
         let _ = self.scope.resolve(&inner_scope, context)?;
 

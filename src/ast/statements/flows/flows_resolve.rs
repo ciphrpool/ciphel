@@ -77,8 +77,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.pattern.resolve(scope, context)?;
-        let _ = self.scope.resolve(scope, context)?;
+        let vars = self.pattern.resolve(scope, context)?;
+        // create a scope and assign the pattern variable to it before resolving the expression
+        let mut inner_scope = scope.child_scope()?;
+        inner_scope.attach(vars.into_iter());
+        let _ = self.scope.resolve(&inner_scope, context)?;
         Ok(())
     }
 }

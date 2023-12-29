@@ -112,24 +112,23 @@ pub trait MergeType<Scope: ScopeApi> {
 }
 
 pub trait BuildFn<Scope: ScopeApi> {
-    fn build_from(func: &definition::FnDef) -> Scope::Fn;
+    fn build_fn(func: &definition::FnDef) -> Scope::Fn;
 }
 
 pub trait BuildType<Scope: ScopeApi> {
-    fn build_from(type_sig: &definition::TypeDef) -> Scope::UserType;
+    fn build_type(type_sig: &definition::TypeDef) -> Scope::UserType;
 }
 
 pub trait BuildVar<Scope: ScopeApi> {
-    fn build_from(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
-        -> Scope::Var;
+    fn build_var(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
 }
 pub trait BuildChan<Scope: ScopeApi> {
-    fn build_from(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
+    fn build_chan(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
         -> Scope::Var;
 }
 
 pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_from(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
+    fn build_event(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
 }
 
 pub trait RetrieveTypeInfo<Scope: ScopeApi> {

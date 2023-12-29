@@ -1,6 +1,6 @@
-use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
-
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
+use crate::semantic::{BuildVar, EitherType, RetrieveTypeInfo};
+use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();
@@ -13,21 +13,34 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
         match self {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, context)?;
-                let _ = scope.register_var(todo!())?;
-
+                let Some(var_type) = value.signature.type_of(scope)? else {
+                    return Err(SemanticError::CantInferType);
+                };
+                let var = Scope::Var::build_var(&value.id, &var_type);
+                let _ = scope.register_var(var)?;
+                Ok(())
+            }
+            Declaration::Assigned {
+                left: DeclaredVar::Typed(value),
+                right,
+            } => {
+                let _ = value.resolve(scope, context)?;
+                let Some(var_type) = value.signature.type_of(scope)? else {
+                    return Err(SemanticError::CantInferType);
+                };
+                let var = Scope::Var::build_var(&value.id, &var_type);
+                let _ = right.resolve(scope, &Some(var_type))?;
+                let _ = scope.register_var(var)?;
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let left_type = left.type_of(scope)?;
-                let _ = right.resolve(scope, &left_type)?;
+                let _ = right.resolve(scope, &None)?;
+                let right_type = left.type_of(scope)?;
 
-                if left_type.is_some() {
-                    let _ = left_type.compatible_with(right, scope)?;
+                let vars = left.resolve(scope, &right_type)?;
+                for var in vars {
+                    let _ = scope.register_var(var)?;
                 }
-
-                let _ = scope.register_var(todo!())?;
-
                 Ok(())
             }
         }
@@ -45,23 +58,33 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
-    type Output = ();
-    type Context = ();
+    type Output = Vec<Scope::Var>;
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            DeclaredVar::Id(_) => Ok(()),
-            DeclaredVar::Typed(value) => value.resolve(scope, context),
+            DeclaredVar::Id(id) => {
+                let mut vars = Vec::with_capacity(1);
+                let Some(var_type) = context else {
+                    return Err(SemanticError::CantInferType);
+                };
+                let var = Scope::Var::build_var(id, var_type);
+                vars.push(var);
+                Ok(vars)
+            }
+            DeclaredVar::Typed(_) => {
+                unreachable!("Path already covered in Declaration::resolve")
+            }
             DeclaredVar::Pattern(value) => value.resolve(scope, context),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
-    type Output = ();
-    type Context = ();
+    type Output = Vec<Scope::Var>;
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -72,15 +95,126 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 typename,
                 variant,
                 vars,
-            } => todo!(),
+            } => {
+                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
+                    user_type.get_variant(variant);
+                let mut scope_vars = Vec::with_capacity(vars.len());
+                let Some(fields) =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::iter_on_fields(&variant_type)
+                else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                if vars.len() != fields.len() {
+                    return Err(SemanticError::InvalidPattern);
+                }
+                for (index, (_, field_type)) in fields.iter().enumerate() {
+                    let var_name = &vars[index];
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                }
+                Ok(scope_vars)
+            }
             PatternVar::UnionFields {
                 typename,
                 variant,
                 vars,
-            } => todo!(),
-            PatternVar::StructInline { typename, vars } => todo!(),
-            PatternVar::StructFields { typename, vars } => todo!(),
-            PatternVar::Tuple(_) => todo!(),
+            } => {
+                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
+                    user_type.get_variant(variant);
+                let mut scope_vars = Vec::with_capacity(vars.len());
+                let Some(fields) =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::iter_on_fields(&variant_type)
+                else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                if vars.len() != fields.len() {
+                    return Err(SemanticError::InvalidPattern);
+                }
+                for (field_name, field_type) in fields.iter() {
+                    let Some(var_name) = vars.iter().find(|name| {
+                        field_name
+                            .clone()
+                            .map(|inner| if inner == **name { Some(()) } else { None })
+                            .flatten()
+                            .is_some()
+                    }) else {
+                        return Err(SemanticError::InvalidPattern);
+                    };
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                }
+                Ok(scope_vars)
+            }
+            PatternVar::StructInline { typename, vars } => {
+                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let user_type = user_type.type_of(scope)?;
+                let mut scope_vars = Vec::with_capacity(vars.len());
+                let Some(fields) =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::iter_on_fields(&user_type)
+                else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                if vars.len() != fields.len() {
+                    return Err(SemanticError::InvalidPattern);
+                }
+                for (index, (_, field_type)) in fields.iter().enumerate() {
+                    let var_name = &vars[index];
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                }
+                Ok(scope_vars)
+            }
+            PatternVar::StructFields { typename, vars } => {
+                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let user_type = user_type.type_of(scope)?;
+                let mut scope_vars = Vec::with_capacity(vars.len());
+                let Some(fields) =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::iter_on_fields(&user_type)
+                else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                if vars.len() != fields.len() {
+                    return Err(SemanticError::InvalidPattern);
+                }
+                for (field_name, field_type) in fields.iter() {
+                    let Some(var_name) = vars.iter().find(|name| {
+                        field_name
+                            .clone()
+                            .map(|inner| if inner == **name { Some(()) } else { None })
+                            .flatten()
+                            .is_some()
+                    }) else {
+                        return Err(SemanticError::InvalidPattern);
+                    };
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                }
+                Ok(scope_vars)
+            }
+            PatternVar::Tuple(value) => {
+                let mut scope_vars = Vec::with_capacity(value.len());
+                let Some(fields) =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::iter_on_fields(&context)
+                else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                if value.len() != fields.len() {
+                    return Err(SemanticError::InvalidPattern);
+                }
+                for (index, (_, field_type)) in fields.iter().enumerate() {
+                    let var_name = &value[index];
+                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                }
+                Ok(scope_vars)
+            }
         }
     }
 }
