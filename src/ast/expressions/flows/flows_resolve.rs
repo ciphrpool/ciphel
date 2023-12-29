@@ -53,7 +53,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     {
         match self {
             Pattern::Primitive(value) => {
-                value.resolve(scope, context);
+                let _ = value.resolve(scope, context)?;
                 Ok(Vec::default())
             }
             Pattern::String(value) => {

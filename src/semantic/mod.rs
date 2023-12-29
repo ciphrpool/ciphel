@@ -264,13 +264,13 @@ impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Sc
 
     fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
-            EitherType::Static(static_type) => None,
+            EitherType::Static(_) => None,
             EitherType::User(user_type) => user_type.get_field(field_id),
         }
     }
     fn get_variant(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
-            EitherType::Static(static_type) => None,
+            EitherType::Static(_) => None,
             EitherType::User(user_type) => user_type.get_field(field_id),
         }
     }
@@ -279,7 +279,7 @@ impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Sc
     ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
         match self {
             EitherType::Static(static_type) => static_type.get_item(),
-            EitherType::User(user_type) => None,
+            EitherType::User(_) => None,
         }
     }
     fn iter_on_fields(
