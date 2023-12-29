@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, MergeType, Resolve, SemanticError, TypeOf};
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
 
@@ -14,7 +14,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Flow::If(value) => value.type_of(scope),
+            Flow::Match(value) => value.type_of(scope),
+            Flow::Try(value) => value.type_of(scope),
+            Flow::Call(value) => value.type_of(scope),
+            Flow::Return(value) => value.type_of(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
@@ -29,7 +35,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        let main_type = self.main_branch.type_of(scope)?;
+        match &self.else_branch {
+            Some(else_branch) => {
+                let else_type = else_branch.type_of(scope)?;
+                main_type.merge(&else_type, scope)
+            }
+            None => Ok(main_type),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
@@ -44,7 +57,27 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        let pattern_type = {
+            if let Some(res) = self.patterns.first() {
+                let mut res = res.type_of(scope)?;
+                if self.patterns.len() > 1 {
+                    for pattern in &self.patterns {
+                        let pattern_type = pattern.type_of(scope)?;
+                        res = res.merge(&pattern_type, scope)?;
+                    }
+                }
+                res
+            } else {
+                None
+            }
+        };
+        match &self.else_branch {
+            Some(else_branch) => {
+                let else_type = else_branch.type_of(scope)?;
+                pattern_type.merge(&else_type, scope)
+            }
+            None => Ok(pattern_type),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternStat {
@@ -59,7 +92,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternStat {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        self.scope.type_of(scope)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
@@ -74,7 +107,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        let main_type = self.try_branch.type_of(scope)?;
+        match &self.else_branch {
+            Some(else_branch) => {
+                let else_type = else_branch.type_of(scope)?;
+                main_type.merge(&else_type, scope)
+            }
+            None => Ok(main_type),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
@@ -89,7 +129,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        Ok(None)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Return {
@@ -104,6 +144,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Return::Unit => Ok(None),
+            Return::Expr(expr) => expr.type_of(scope),
+        }
     }
 }

@@ -1,4 +1,4 @@
-use crate::semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf};
 
 use super::Scope;
 

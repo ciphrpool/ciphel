@@ -1,5 +1,9 @@
 use crate::semantic::{
-    CompatibleWith, EitherType, Resolve, RetrieveTypeInfo, ScopeApi, SemanticError, TypeOf,
+    scope::{
+        type_traits::{GetSubTypes, TypeChecking},
+        ScopeApi,
+    },
+    CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
@@ -32,7 +36,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
         let _ = self.condition.resolve(scope, &None)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
-        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as RetrieveTypeInfo<Scope>>::is_boolean(&condition_type) {
+        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectBoolean);
         }
 

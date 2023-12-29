@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Declaration {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        Ok(None)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
@@ -29,7 +29,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        self.signature.type_of(scope)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
@@ -44,7 +44,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            DeclaredVar::Id(_) => Ok(None),
+            DeclaredVar::Typed(value) => value.type_of(scope),
+            DeclaredVar::Pattern(value) => value.type_of(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
@@ -59,6 +63,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        Ok(None)
     }
 }

@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError};
 
 use super::Error;
 

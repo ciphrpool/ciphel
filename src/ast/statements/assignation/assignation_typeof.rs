@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
 use super::{AssignValue, Assignation, Assignee};
 
@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Assignation {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        Ok(None)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue {
@@ -29,7 +29,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            AssignValue::Scope(value) => value.type_of(scope),
+            AssignValue::Expr(value) => value.type_of(scope),
+        }
     }
 }
 
@@ -45,6 +48,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Assignee {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Assignee::Variable(value) => value.type_of(scope),
+            Assignee::PtrAccess(value) => value.type_of(scope),
+        }
     }
 }

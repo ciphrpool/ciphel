@@ -1,4 +1,7 @@
-use crate::semantic::{CompatibleWith, EitherType, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{
+    scope::{type_traits::OperandMerging, ScopeApi},
+    CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+};
 
 use super::{
     Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Expression, HighOrdMath, LogicalAnd,
@@ -13,14 +16,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation {
         Self: Sized,
         Scope: ScopeApi,
     {
-        // TODO : check if type is compatible with the unary operation
         match self {
             UnaryOperation::Minus(value) => {
                 let _ = value.resolve(scope, context)?;
+                let value_type = value.type_of(scope)?;
+                let _ = value_type.can_minus()?;
                 Ok(())
             }
             UnaryOperation::Not(value) => {
                 let _ = value.resolve(scope, context)?;
+                let value_type = value.type_of(scope)?;
+                let _ = value_type.can_negate()?;
                 Ok(())
             }
         }
@@ -34,33 +40,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath {
         Self: Sized,
         Scope: ScopeApi,
     {
-        // TODO : Check if type is compatible with the operation
-        match self {
-            HighOrdMath::Mult { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let (left, right) = match self {
+            HighOrdMath::Mult { left, right } => (left, right),
+            HighOrdMath::Div { left, right } => (left, right),
+            HighOrdMath::Mod { left, right } => (left, right),
+        };
+        let _ = left.resolve(scope, context)?;
+        let left_type = left.type_of(scope)?;
+        let _ = left_type.can_high_ord_math()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            HighOrdMath::Div { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let _ = right.resolve(scope, context)?;
+        let right_type = right.type_of(scope)?;
+        let _ = right_type.can_high_ord_math()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            HighOrdMath::Mod { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-        }
+        let _ = left_type.compatible_with(right, scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath {
@@ -71,16 +65,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            LowOrdMath::Add { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let (left, right) = match self {
+            LowOrdMath::Add { left, right } => (left, right),
+        };
+        let _ = left.resolve(scope, context)?;
+        let left_type = left.type_of(scope)?;
+        let _ = left_type.can_low_ord_math()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-        }
+        let _ = right.resolve(scope, context)?;
+        let right_type = right.type_of(scope)?;
+        let _ = right_type.can_low_ord_math()?;
+
+        let _ = left_type.compatible_with(right, scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Shift {
@@ -91,24 +88,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Shift::Left { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let (left, right) = match self {
+            Shift::Left { left, right } => (left, right),
+            Shift::Right { left, right } => (left, right),
+        };
+        let _ = left.resolve(scope, context)?;
+        let left_type = left.type_of(scope)?;
+        let _ = left_type.can_shift()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Shift::Right { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let _ = right.resolve(scope, context)?;
+        let right_type = right.type_of(scope)?;
+        let _ = right_type.can_shift()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-        }
+        let _ = left_type.compatible_with(right, scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd {
@@ -120,9 +113,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let _ = self.right.resolve(scope, context)?;
-
         let left_type = self.left.type_of(scope)?;
+        let _ = left_type.can_bitwise_and()?;
+
+        let _ = self.right.resolve(scope, context)?;
+        let right_type = self.right.type_of(scope)?;
+        let _ = right_type.can_bitwise_and()?;
+
         let _ = left_type.compatible_with(&self.right, scope)?;
         Ok(())
     }
@@ -136,9 +133,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let _ = self.right.resolve(scope, context)?;
-
         let left_type = self.left.type_of(scope)?;
+        let _ = left_type.can_bitwise_xor()?;
+
+        let _ = self.right.resolve(scope, context)?;
+        let right_type = self.right.type_of(scope)?;
+        let _ = right_type.can_bitwise_xor()?;
+
         let _ = left_type.compatible_with(&self.right, scope)?;
         Ok(())
     }
@@ -152,9 +153,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let _ = self.right.resolve(scope, context)?;
-
         let left_type = self.left.type_of(scope)?;
+        let _ = left_type.can_bitwise_or()?;
+
+        let _ = self.right.resolve(scope, context)?;
+        let right_type = self.right.type_of(scope)?;
+        let _ = right_type.can_bitwise_or()?;
+
         let _ = left_type.compatible_with(&self.right, scope)?;
         Ok(())
     }
@@ -167,64 +172,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for Comparaison {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Comparaison::Less { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let (left, right) = match self {
+            Comparaison::Less { left, right } => (left, right),
+            Comparaison::LessEqual { left, right } => (left, right),
+            Comparaison::Greater { left, right } => (left, right),
+            Comparaison::GreaterEqual { left, right } => (left, right),
+            Comparaison::Equal { left, right } => (left, right),
+            Comparaison::NotEqual { left, right } => (left, right),
+            Comparaison::In { left, right } => (left, right),
+        };
+        let _ = left.resolve(scope, context)?;
+        let left_type = left.type_of(scope)?;
+        let _ = left_type.can_comparaison()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::LessEqual { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
+        let _ = right.resolve(scope, context)?;
+        let right_type = right.type_of(scope)?;
+        let _ = right_type.can_comparaison()?;
 
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::Greater { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::GreaterEqual { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::Equal { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::NotEqual { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-            Comparaison::In { left, right } => {
-                let _ = left.resolve(scope, context)?;
-                let _ = right.resolve(scope, context)?;
-
-                let left_type = left.type_of(scope)?;
-                let _ = left_type.compatible_with(right, scope)?;
-                Ok(())
-            }
-        }
+        let _ = left_type.compatible_with(right, scope)?;
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd {
@@ -236,9 +202,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let _ = self.right.resolve(scope, context)?;
-
         let left_type = self.left.type_of(scope)?;
+        let _ = left_type.can_logical_and()?;
+
+        let _ = self.right.resolve(scope, context)?;
+        let right_type = self.right.type_of(scope)?;
+        let _ = right_type.can_logical_and()?;
+
         let _ = left_type.compatible_with(&self.right, scope)?;
         Ok(())
     }
@@ -252,9 +222,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let _ = self.right.resolve(scope, context)?;
-
         let left_type = self.left.type_of(scope)?;
+        let _ = left_type.can_logical_or()?;
+
+        let _ = self.right.resolve(scope, context)?;
+        let right_type = self.right.type_of(scope)?;
+        let _ = right_type.can_logical_or()?;
+
         let _ = left_type.compatible_with(&self.right, scope)?;
         Ok(())
     }

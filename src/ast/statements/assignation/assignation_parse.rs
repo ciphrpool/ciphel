@@ -20,7 +20,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{CompatibleWith, EitherType, Resolve, ScopeApi, SemanticError},
+    semantic::{scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError},
 };
 
 use super::{AssignValue, Assignation, Assignee};

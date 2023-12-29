@@ -14,7 +14,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf},
+    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
 };
 
 use self::operation::operation_parse::TryParseOperation;

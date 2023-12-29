@@ -1,6 +1,7 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
+use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 use crate::semantic::{BuildVar, EitherType};
-use crate::semantic::{Resolve, RetrieveTypeInfo, ScopeApi, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();
@@ -73,7 +74,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         let item_type = self.iterator.type_of(scope)?;
         let item_type = <Option<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        > as RetrieveTypeInfo<Scope>>::get_item(&item_type);
+        > as GetSubTypes<Scope>>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type)?;
         // attach the item to the scope
@@ -95,7 +96,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
         let _ = self.condition.resolve(scope, &None)?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
-        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as RetrieveTypeInfo<Scope>>::is_boolean(&condition_type) {
+        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectBoolean);
         }
         let _ = self.scope.resolve(scope, &None)?;

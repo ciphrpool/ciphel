@@ -15,7 +15,7 @@ use crate::{
             strings::{parse_id, wst, ID},
         },
     },
-    semantic::{EitherType, Resolve, ScopeApi, SemanticError},
+    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};

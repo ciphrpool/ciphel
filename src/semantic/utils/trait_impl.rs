@@ -1,0 +1,706 @@
+use crate::{
+    ast::utils::strings::ID,
+    semantic::{
+        scope::{
+            type_traits::{GetSubTypes, OperandMerging, TypeChecking},
+            ScopeApi,
+        },
+        CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf,
+    },
+};
+
+impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for Option<EitherType<User, Static>>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+        Scope: ScopeApi,
+    {
+        match self {
+            Some(inner) => inner.compatible_with(other, scope),
+            None => Ok(()), // TODO : Verify because maybe Err(SemanticError::CantInferType),
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for EitherType<User, Static>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+        Scope: ScopeApi,
+        Self: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(static_type) => static_type.compatible_with(other, scope),
+            EitherType::User(user_type) => user_type.compatible_with(other, scope),
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> TypeOf<Scope> for EitherType<User, Static>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            EitherType::Static(static_type) => static_type.type_of(scope),
+            EitherType::User(user_type) => user_type.type_of(scope),
+        }
+    }
+}
+impl<User, Static, Scope: ScopeApi> TypeOf<Scope> for Option<EitherType<User, Static>>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Some(inner) => inner.type_of(scope),
+            None => Ok(None),
+        }
+    }
+}
+impl<User, Static, Scope: ScopeApi> Resolve<Scope> for Option<EitherType<User, Static>>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    type Output = ();
+
+    type Context = ();
+
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        match self {
+            Some(inner) => inner.resolve(scope, context),
+            None => Ok(()),
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> Resolve<Scope> for EitherType<User, Static>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    type Output = ();
+
+    type Context = ();
+
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        match self {
+            EitherType::Static(value) => {
+                let _ = value.resolve(scope, &<Static as Resolve<Scope>>::Context::default())?;
+                Ok(())
+            }
+            EitherType::User(value) => {
+                let _ = value.resolve(scope, &<User as Resolve<Scope>>::Context::default())?;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> MergeType<Scope> for EitherType<User, Static>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope> + Resolve<Scope>,
+    {
+        match self {
+            EitherType::Static(static_type) => static_type.type_of(scope),
+            EitherType::User(user_type) => user_type.type_of(scope),
+        }
+    }
+}
+impl<User, Static, Scope: ScopeApi> MergeType<Scope> for Option<EitherType<User, Static>>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+{
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope> + Resolve<Scope>,
+    {
+        match self {
+            Some(inner) => {
+                let other_type = other.type_of(scope)?;
+                match other_type {
+                    Some(other) => inner.merge(&other, scope),
+                    None => Err(SemanticError::IncompatibleTypes),
+                }
+            }
+            None => {
+                let other_type = other.type_of(scope)?;
+                match other_type {
+                    Some(_) => Err(SemanticError::IncompatibleTypes),
+                    None => Ok(None),
+                }
+            }
+        }
+    }
+}
+
+impl<Scope: ScopeApi, T: GetSubTypes<Scope>> GetSubTypes<Scope> for Option<T> {
+    fn get_variant(
+        &self,
+        variant: &ID,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_variant(variant),
+            None => None,
+        }
+    }
+    fn get_field(
+        &self,
+        field_id: &ID,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_field(field_id),
+            None => None,
+        }
+    }
+    fn get_fields(
+        &self,
+    ) -> Option<
+        Vec<(
+            Option<String>,
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        )>,
+    > {
+        match self {
+            Some(value) => value.get_fields(),
+            None => None,
+        }
+    }
+    fn get_nth(
+        &self,
+        n: &usize,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_nth(n),
+            None => None,
+        }
+    }
+}
+impl<Scope: ScopeApi, T: TypeChecking<Scope>> TypeChecking<Scope> for Option<T> {
+    fn is_boolean(&self) -> bool {
+        match self {
+            Some(value) => value.is_boolean(),
+            None => false,
+        }
+    }
+    fn is_iterable(&self) -> bool {
+        match self {
+            Some(value) => value.is_iterable(),
+            None => false,
+        }
+    }
+    fn is_enum_variant(&self) -> bool {
+        match self {
+            Some(value) => value.is_enum_variant(),
+            None => false,
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
+    fn is_iterable(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_iterable(),
+            EitherType::User(_) => false,
+        }
+    }
+
+    fn is_boolean(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_boolean(),
+            EitherType::User(_) => false,
+        }
+    }
+    fn is_enum_variant(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_enum_variant(),
+            EitherType::User(user_type) => user_type.is_enum_variant(),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
+    fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_nth(n),
+            EitherType::User(user_type) => user_type.get_nth(n),
+        }
+    }
+
+    fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(_) => None,
+            EitherType::User(user_type) => user_type.get_field(field_id),
+        }
+    }
+    fn get_variant(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(_) => None,
+            EitherType::User(user_type) => user_type.get_field(field_id),
+        }
+    }
+    fn get_item(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_item(),
+            EitherType::User(_) => None,
+        }
+    }
+    fn get_fields(
+        &self,
+    ) -> Option<
+        Vec<(
+            Option<String>,
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        )>,
+    > {
+        match self {
+            EitherType::Static(static_type) => static_type.get_fields(),
+            EitherType::User(user_type) => user_type.get_fields(),
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> OperandMerging<Scope> for EitherType<User, Static>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+{
+    fn can_minus(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_minus(),
+            EitherType::User(value) => value.can_minus(),
+        }
+    }
+    fn can_negate(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_negate(),
+            EitherType::User(value) => value.can_negate(),
+        }
+    }
+
+    fn can_high_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_high_ord_math(),
+            EitherType::User(value) => value.can_high_ord_math(),
+        }
+    }
+    fn merge_high_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_high_ord_math(other, scope),
+            EitherType::User(value) => value.merge_high_ord_math(other, scope),
+        }
+    }
+
+    fn can_low_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_low_ord_math(),
+            EitherType::User(value) => value.can_low_ord_math(),
+        }
+    }
+    fn merge_low_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_low_ord_math(other, scope),
+            EitherType::User(value) => value.merge_low_ord_math(other, scope),
+        }
+    }
+
+    fn can_shift(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_shift(),
+            EitherType::User(value) => value.can_shift(),
+        }
+    }
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_shift(other, scope),
+            EitherType::User(value) => value.merge_shift(other, scope),
+        }
+    }
+
+    fn can_bitwise_and(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_bitwise_and(),
+            EitherType::User(value) => value.can_bitwise_and(),
+        }
+    }
+    fn merge_bitwise_and<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_bitwise_and(other, scope),
+            EitherType::User(value) => value.merge_bitwise_and(other, scope),
+        }
+    }
+
+    fn can_bitwise_xor(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_bitwise_xor(),
+            EitherType::User(value) => value.can_bitwise_xor(),
+        }
+    }
+    fn merge_bitwise_xor<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_bitwise_xor(other, scope),
+            EitherType::User(value) => value.merge_bitwise_xor(other, scope),
+        }
+    }
+
+    fn can_bitwise_or(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_bitwise_or(),
+            EitherType::User(value) => value.can_bitwise_or(),
+        }
+    }
+    fn merge_bitwise_or<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_bitwise_or(other, scope),
+            EitherType::User(value) => value.merge_bitwise_or(other, scope),
+        }
+    }
+
+    fn can_comparaison(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_comparaison(),
+            EitherType::User(value) => value.can_comparaison(),
+        }
+    }
+    fn merge_comparaison<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_comparaison(other, scope),
+            EitherType::User(value) => value.merge_comparaison(other, scope),
+        }
+    }
+
+    fn can_logical_and(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_logical_and(),
+            EitherType::User(value) => value.can_logical_and(),
+        }
+    }
+    fn merge_logical_and<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_logical_and(other, scope),
+            EitherType::User(value) => value.merge_logical_and(other, scope),
+        }
+    }
+
+    fn can_logical_or(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_logical_or(),
+            EitherType::User(value) => value.can_logical_or(),
+        }
+    }
+    fn merge_logical_or<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_logical_or(other, scope),
+            EitherType::User(value) => value.merge_logical_or(other, scope),
+        }
+    }
+}
+
+impl<User, Static, Scope: ScopeApi> OperandMerging<Scope> for Option<EitherType<User, Static>>
+where
+    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+{
+    fn can_minus(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_minus(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn can_negate(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_negate(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+
+    fn can_high_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_high_ord_math(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_high_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_high_ord_math(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_low_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_low_ord_math(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_low_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_low_ord_math(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_shift(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_shift(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_shift(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_and(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_bitwise_and(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_and<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_bitwise_and(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_xor(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_bitwise_xor(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_xor<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_bitwise_xor(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_or(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_bitwise_or(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_or<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_bitwise_or(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_comparaison(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_comparaison(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_comparaison<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_comparaison(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_logical_and(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_logical_and(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_logical_and<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_logical_and(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_logical_or(&self) -> Result<(), SemanticError> {
+        match self {
+            Some(_) => self.can_logical_or(),
+            None => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_logical_or<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            Some(_) => self.merge_logical_or(other, scope),
+            None => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+}

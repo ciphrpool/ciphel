@@ -1,6 +1,6 @@
 use crate::{
     ast::statements::scope::Scope,
-    semantic::{ScopeApi, SemanticError, TypeOf},
+    semantic::{scope::ScopeApi, SemanticError, TypeOf},
 };
 
 use super::{

@@ -1,4 +1,4 @@
-use crate::semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf};
 
 use super::Error;
 
@@ -8,7 +8,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Error {
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
-        Scope: crate::semantic::ScopeApi,
+        Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         todo!()

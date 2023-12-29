@@ -1,11 +1,15 @@
 use crate::{
     ast::expressions::Expression,
-    semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf},
+    semantic::{
+        scope::{type_traits::GetSubTypes, ScopeApi},
+        EitherType, Resolve, SemanticError, TypeOf,
+    },
 };
 
 use super::{
-    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map, MultiData,
-    Primitive, PtrAccess, Slice, Struct, Tuple, Union, Variable, Vector,
+    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
+    Vector,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Data {
@@ -17,7 +21,22 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Data::Primitive(value) => value.type_of(scope),
+            Data::Slice(value) => value.type_of(scope),
+            Data::Vec(value) => value.type_of(scope),
+            Data::Closure(value) => value.type_of(scope),
+            Data::Chan(value) => value.type_of(scope),
+            Data::Tuple(value) => value.type_of(scope),
+            Data::Address(value) => value.type_of(scope),
+            Data::PtrAccess(value) => value.type_of(scope),
+            Data::Variable(value) => value.type_of(scope),
+            Data::Unit => todo!(),
+            Data::Map(value) => value.type_of(scope),
+            Data::Struct(value) => value.type_of(scope),
+            Data::Union(value) => value.type_of(scope),
+            Data::Enum(value) => value.type_of(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
@@ -29,9 +48,57 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Variable::Var(value) => value.type_of(scope),
+            Variable::FieldAccess(value) => value.type_of(scope),
+            Variable::ListAccess(value) => value.type_of(scope),
+        }
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for VarID {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let var = scope.find_var(&self.0)?;
+        var.type_of(scope)
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        self.field.type_of(scope)
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let var_type = self.var.type_of(scope)?;
+        Ok(<Option<
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        > as GetSubTypes<Scope>>::get_item(&var_type))
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for String {
     fn type_of(
         &self,
@@ -178,6 +245,18 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
         todo!()
     }
 }
+impl<Scope: ScopeApi> TypeOf<Scope> for Address {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
 impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
     fn type_of(
         &self,
@@ -214,6 +293,19 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Struct {
         todo!()
     }
 }
+impl<Scope: ScopeApi> TypeOf<Scope> for Union {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Enum {
     fn type_of(
         &self,

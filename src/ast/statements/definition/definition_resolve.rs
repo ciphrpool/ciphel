@@ -5,10 +5,8 @@ use super::{
 use crate::semantic::BuildFn;
 use crate::semantic::BuildType;
 use crate::semantic::BuildVar;
-use crate::semantic::EitherType;
-use crate::semantic::RetrieveTypeInfo;
 
-use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     type Output = ();

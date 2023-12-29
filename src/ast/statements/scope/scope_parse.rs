@@ -10,7 +10,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{EitherType, Resolve, ScopeApi, SemanticError},
+    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::Scope;

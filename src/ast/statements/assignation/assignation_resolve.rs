@@ -1,4 +1,6 @@
-use crate::semantic::{CompatibleWith, EitherType, Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{
+    scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+};
 
 use super::{AssignValue, Assignation, Assignee};
 

@@ -1,4 +1,4 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
 
@@ -14,7 +14,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Loop {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Loop::For(value) => value.type_of(scope),
+            Loop::While(value) => value.type_of(scope),
+            Loop::Loop(value) => value.type_of(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
@@ -29,7 +33,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            ForIterator::Id(value) => {
+                let var = scope.find_var(value)?;
+                var.type_of(scope)
+            }
+            ForIterator::Vec(value) => value.type_of(scope),
+            ForIterator::Slice(value) => value.type_of(scope),
+            ForIterator::Tuple(value) => value.type_of(scope),
+            ForIterator::Receive { addr, timeout } => addr.type_of(scope),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop {
@@ -44,7 +57,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        self.scope.type_of(scope)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop {
@@ -59,6 +72,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        self.scope.type_of(scope)
     }
 }

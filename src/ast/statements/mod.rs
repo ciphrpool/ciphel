@@ -2,7 +2,7 @@ use nom::{branch::alt, combinator::map};
 
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{EitherType, Resolve, ScopeApi, SemanticError},
+    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
 };
 
 use super::TryParse;
@@ -39,9 +39,6 @@ impl TryParse for Statement {
                 Statement::Definition(value)
             }),
             map(loops::Loop::parse, |value| Statement::Loops(value)),
-            // map(TryStat::parse, |value| Statement::Try(value)),
-            // map(CallStat::parse, |value| Statement::Call(value)),
-            // map(Return::parse, |value| Statement::Return(value)),
         ))(input)
     }
 }
@@ -53,6 +50,36 @@ impl<Scope: ScopeApi> Resolve<Scope> for Statement {
         Self: Sized,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Statement::Scope(value) => value.resolve(scope, &None),
+            Statement::Flow(value) => value.resolve(scope, context),
+            Statement::Assignation(value) => value.resolve(scope, context),
+            Statement::Declaration(value) => value.resolve(scope, context),
+            Statement::Definition(value) => value.resolve(scope, context),
+            Statement::Loops(value) => value.resolve(scope, context),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<
+        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>,
+        SemanticError,
+    >
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Statement::Scope(value) => value.type_of(scope),
+            Statement::Flow(value) => value.type_of(scope),
+            Statement::Assignation(value) => value.type_of(scope),
+            Statement::Declaration(value) => value.type_of(scope),
+            Statement::Definition(value) => value.type_of(scope),
+            Statement::Loops(value) => value.type_of(scope),
+        }
     }
 }
