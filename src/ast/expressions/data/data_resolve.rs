@@ -1,6 +1,7 @@
 use super::{
-    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map, MultiData,
-    Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
+    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
+    Vector,
 };
 use crate::semantic::BuildVar;
 use crate::semantic::{
@@ -33,6 +34,40 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data {
         }
     }
 }
+
+impl Variable {
+    fn resolve_based<Scope>(
+        &self,
+        context: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match self {
+            Variable::Var(VarID(value)) => <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as RetrieveTypeInfo<Scope>>::get_field(
+                context, value
+            )
+            .ok_or(SemanticError::UnknownField),
+            Variable::FieldAccess(FieldAccess { var, field }) => {
+                let var_type = var.resolve_based::<Scope>(context)?;
+                field.resolve_based::<Scope>(&var_type)
+            }
+            Variable::ListAccess(ListAccess { var, .. }) => {
+                let var_type = var.resolve_based::<Scope>(context)?;
+                if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as RetrieveTypeInfo<Scope>>::is_iterable(&var_type) {
+                    Err(SemanticError::ExpectIterable)
+                } else {
+                    Ok(var_type)
+                }
+            }
+        }
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for Variable {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
@@ -47,8 +82,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable {
 
                 Ok(())
             }
-            Variable::FieldAccess(_) => todo!(),
-            Variable::ListAccess(_) => todo!(),
+            Variable::FieldAccess(FieldAccess { var, field }) => {
+                let _ = var.resolve(scope, context)?;
+                let var_type = var.type_of(scope)?;
+                let Some(var_type) = var_type else {
+                    return Err(SemanticError::CantInferType);
+                };
+                let _ = field.resolve_based::<Scope>(&var_type)?;
+                Ok(())
+            }
+            Variable::ListAccess(ListAccess { var, .. }) => {
+                let _ = var.resolve(scope, context)?;
+                let var_type = var.type_of(scope)?;
+                if !<Option<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                > as RetrieveTypeInfo<Scope>>::is_iterable(&var_type)
+                {
+                    Err(SemanticError::ExpectIterable)
+                } else {
+                    Ok(())
+                }
+            }
         }
     }
 }
@@ -60,7 +114,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         Self: Sized,
         Scope: ScopeApi,
     {
-        Ok(())
+        match context {
+            Some(context_type) => {
+                let _ = context_type.compatible_with(self, scope)?;
+                Ok(())
+            }
+            None => Ok(()),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Slice {
@@ -73,10 +133,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
     {
         match self {
             Slice::String(value) => Ok(()),
-            Slice::List(value) => match value
-                .iter()
-                .find_map(|expr| expr.resolve(scope, context).err())
-            {
+            Slice::List(value) => match value.iter().find_map(|expr| {
+                let param_context = <Option<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                > as RetrieveTypeInfo<Scope>>::get_item(context);
+
+                expr.resolve(scope, &param_context).err()
+            }) {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
@@ -92,10 +155,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init(value) => match value
-                .iter()
-                .find_map(|expr| expr.resolve(scope, context).err())
-            {
+            Vector::Init(value) => match value.iter().find_map(|expr| {
+                let param_context = <Option<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                > as RetrieveTypeInfo<Scope>>::get_item(context);
+
+                expr.resolve(scope, &param_context).err()
+            }) {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
@@ -122,10 +188,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self
-            .iter()
-            .find_map(|expr| expr.resolve(scope, context).err())
-        {
+        match self.iter().enumerate().find_map(|(index, expr)| {
+            let param_context = <Option<
+                EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+            > as RetrieveTypeInfo<Scope>>::get_nth(context, &index);
+
+            expr.resolve(scope, &param_context).err()
+        }) {
             Some(err) => Err(err),
             None => Ok(()),
         }
@@ -163,10 +232,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
                 > as RetrieveTypeInfo<Scope>>::get_nth(context, &index),
             };
             let id = match param {
-                ClosureParam::Full { id, signature } => id,
+                ClosureParam::Full { id, .. } => id,
                 ClosureParam::Minimal(id) => id,
             };
-            Scope::Var::build_from(id, param_type.unwrap())
+            Scope::Var::build_from(id, &param_type.unwrap())
         }));
         let _ = self.scope.resolve(&inner_scope, context)?;
 
@@ -257,17 +326,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
         match self {
             Struct::Inline { id, data } => {
                 let user_type = scope.find_type(id)?;
-                let _ = data.resolve(scope, context)?;
+                let user_type = user_type.type_of(scope)?;
+                let _ = data.resolve(scope, &user_type)?;
                 let _ = user_type.compatible_with(data, scope)?;
                 Ok(())
             }
             Struct::Field { id, fields } => {
                 let user_type = scope.find_type(id)?;
+                let user_type = user_type.type_of(scope)?;
                 let _ = {
-                    match fields
-                        .iter()
-                        .find_map(|(_, expr)| expr.resolve(scope, context).err())
-                    {
+                    match fields.iter().find_map(|(field_name, expr)| {
+                        let field_context = <Option<
+                            EitherType<
+                                <Scope as ScopeApi>::UserType,
+                                <Scope as ScopeApi>::StaticType,
+                            >,
+                        > as RetrieveTypeInfo<Scope>>::get_field(
+                            context, &field_name
+                        );
+
+                        expr.resolve(scope, &field_context).err()
+                    }) {
                         Some(e) => Err(e),
                         None => Ok(()),
                     }
@@ -293,7 +372,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                 data,
             } => {
                 let user_type = scope.find_type(typename)?;
-                let _ = data.resolve(scope, context)?;
+                let variant_type = user_type.get_variant(variant);
+                let _ = data.resolve(scope, &variant_type)?;
 
                 let _ = user_type.compatible_with(&(variant, data), scope)?;
                 Ok(())
@@ -304,11 +384,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                 fields,
             } => {
                 let user_type = scope.find_type(typename)?;
+                let variant_type = user_type.get_variant(variant);
                 let _ = {
-                    match fields
-                        .iter()
-                        .find_map(|(_, expr)| expr.resolve(scope, context).err())
-                    {
+                    match fields.iter().find_map(|(field_name, expr)| {
+                        let field_context = <Option<
+                            EitherType<
+                                <Scope as ScopeApi>::UserType,
+                                <Scope as ScopeApi>::StaticType,
+                            >,
+                        > as RetrieveTypeInfo<Scope>>::get_field(
+                            &variant_type, &field_name
+                        );
+
+                        expr.resolve(scope, &field_context).err()
+                    }) {
                         Some(e) => Err(e),
                         None => Ok(()),
                     }
@@ -328,9 +417,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         Scope: ScopeApi,
     {
         let user_type = scope.find_type(&self.typename)?;
-        user_type.compatible_with(&(&self.typename, &self.value), scope)?;
-
-        Ok(())
+        let variant_type = user_type.get_variant(&self.value);
+        match variant_type {
+            Some(variant_type) => {
+                if <EitherType<<Scope as ScopeApi>::UserType, 
+                    <Scope as ScopeApi>::StaticType> as RetrieveTypeInfo<Scope>>
+                    ::is_enum_variant(&variant_type) {
+                    Ok(())
+                } else {
+                    Err(SemanticError::IncorrectVariant)
+                }
+            }
+            None => Err(SemanticError::IncorrectVariant),
+        }
+        // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
+        // Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Map {
@@ -341,12 +442,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
         Self: Sized,
         Scope: ScopeApi,
     {
+
         match self {
             Map::Init { fields } => {
+                let item_type = <Option<EitherType<<Scope as ScopeApi>::UserType,
+                 <Scope as ScopeApi>::StaticType>> as RetrieveTypeInfo<Scope>>::get_item(context);
+
                 match fields
                     .iter()
                     .find_map(|(key, value)| match key.resolve(scope, context) {
-                        Ok(_) => value.resolve(scope, context).err(),
+                        Ok(_) => value.resolve(scope, &item_type).err(),
                         Err(e) => Some(e),
                     }) {
                     Some(e) => Err(e),

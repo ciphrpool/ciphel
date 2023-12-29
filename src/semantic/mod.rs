@@ -7,6 +7,9 @@ pub enum SemanticError {
     CantInferType,
     ExpectBoolean,
     ExpectIterable,
+    UnknownField,
+    IncorrectVariant,
+    InvalidPattern,
 }
 
 pub trait Resolve<Scope: ScopeApi> {
@@ -47,7 +50,10 @@ where
         Other: TypeOf<Scope>,
         Scope: ScopeApi,
     {
-        todo!()
+        match self {
+            Some(inner) => inner.compatible_with(other, scope),
+            None => Ok(()), // TODO : Verify because maybe Err(SemanticError::CantInferType),
+        }
     }
 }
 
@@ -114,10 +120,12 @@ pub trait BuildType<Scope: ScopeApi> {
 }
 
 pub trait BuildVar<Scope: ScopeApi> {
-    fn build_from(id: &ID, type_sig: EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+    fn build_from(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
+        -> Scope::Var;
 }
 pub trait BuildChan<Scope: ScopeApi> {
-    fn build_from(id: &ID, type_sig: EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+    fn build_from(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
+        -> Scope::Var;
 }
 
 pub trait BuildEvent<Scope: ScopeApi> {
@@ -131,17 +139,42 @@ pub trait RetrieveTypeInfo<Scope: ScopeApi> {
     fn is_boolean(&self) -> bool {
         false
     }
+    fn is_enum_variant(&self) -> bool {
+        false
+    }
     fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         None
     }
     fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         None
     }
+    fn get_variant(&self, variant: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
     fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
+    fn iter_on_fields(
+        &self,
+    ) -> Option<
+        Vec<(
+            Option<String>,
+            EitherType<Scope::UserType, Scope::StaticType>,
+        )>,
+    > {
         None
     }
 }
 impl<Scope: ScopeApi, T: RetrieveTypeInfo<Scope>> RetrieveTypeInfo<Scope> for Option<T> {
+    fn get_variant(
+        &self,
+        variant: &ID,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_variant(variant),
+            None => None,
+        }
+    }
     fn get_field(
         &self,
         field_id: &ID,
@@ -160,6 +193,21 @@ impl<Scope: ScopeApi, T: RetrieveTypeInfo<Scope>> RetrieveTypeInfo<Scope> for Op
             None => None,
         }
     }
+
+    fn iter_on_fields(
+        &self,
+    ) -> Option<
+        Vec<(
+            Option<String>,
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        )>,
+    > {
+        match self {
+            Some(value) => value.iter_on_fields(),
+            None => None,
+        }
+    }
+
     fn get_item(
         &self,
     ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
@@ -180,6 +228,12 @@ impl<Scope: ScopeApi, T: RetrieveTypeInfo<Scope>> RetrieveTypeInfo<Scope> for Op
             None => false,
         }
     }
+    fn is_enum_variant(&self) -> bool {
+        match self {
+            Some(value) => value.is_enum_variant(),
+            None => false,
+        }
+    }
 }
 impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
     fn is_iterable(&self) -> bool {
@@ -195,6 +249,12 @@ impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Sc
             EitherType::User(_) => false,
         }
     }
+    fn is_enum_variant(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_enum_variant(),
+            EitherType::User(user_type) => user_type.is_enum_variant(),
+        }
+    }
 
     fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
@@ -205,7 +265,13 @@ impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Sc
 
     fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
-            EitherType::Static(static_type) => static_type.get_field(field_id),
+            EitherType::Static(static_type) => None,
+            EitherType::User(user_type) => user_type.get_field(field_id),
+        }
+    }
+    fn get_variant(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => None,
             EitherType::User(user_type) => user_type.get_field(field_id),
         }
     }
@@ -215,6 +281,19 @@ impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Sc
         match self {
             EitherType::Static(static_type) => static_type.get_item(),
             EitherType::User(user_type) => None,
+        }
+    }
+    fn iter_on_fields(
+        &self,
+    ) -> Option<
+        Vec<(
+            Option<String>,
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        )>,
+    > {
+        match self {
+            EitherType::Static(static_type) => static_type.iter_on_fields(),
+            EitherType::User(user_type) => user_type.iter_on_fields(),
         }
     }
 }

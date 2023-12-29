@@ -32,6 +32,18 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
         todo!()
     }
 }
+impl<Scope: ScopeApi> TypeOf<Scope> for String {
+    fn type_of(
+        &self,
+        scope: &Scope,
+    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        todo!()
+    }
+}
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
     fn type_of(
         &self,
@@ -105,18 +117,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vec<(String, Expression)> {
         todo!()
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for (&String, &String) {
-    fn type_of(
-        &self,
-        scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        todo!()
-    }
-}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for (&String, &Vec<Expression>) {
     fn type_of(
         &self,

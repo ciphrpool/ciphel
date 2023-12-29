@@ -76,7 +76,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         let mut inner_scope = scope.child_scope()?;
 
         let items: Vec<Scope::Var> = match &self.item {
-            ForItem::Id(id) => vec![Scope::Var::build_from(id, item_type)],
+            ForItem::Id(id) => vec![Scope::Var::build_from(id, &item_type)],
             ForItem::Pattern(pattern) => todo!(),
         };
         inner_scope.attach(items.into_iter());
@@ -94,7 +94,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
         Scope: ScopeApi,
     {
         let _ = self.condition.resolve(scope, &None)?;
-        // TODO check that the condition is a boolean
+        // check that the condition is a boolean
+        let condition_type = self.condition.type_of(scope)?;
+        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as RetrieveTypeInfo<Scope>>::is_boolean(&condition_type) {
+            return Err(SemanticError::ExpectBoolean);
+        }
         let _ = self.scope.resolve(scope, &None)?;
         Ok(())
     }

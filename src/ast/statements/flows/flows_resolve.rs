@@ -1,4 +1,6 @@
-use crate::semantic::{EitherType, Resolve, RetrieveTypeInfo, ScopeApi, SemanticError, TypeOf};
+use crate::semantic::{
+    CompatibleWith, EitherType, Resolve, RetrieveTypeInfo, ScopeApi, SemanticError, TypeOf,
+};
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
 
@@ -113,6 +115,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
                 None => Ok(()),
             }
         }?;
+        let _ = func.compatible_with(&self.params, scope)?;
         Ok(())
     }
 }
