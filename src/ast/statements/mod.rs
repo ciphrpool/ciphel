@@ -47,7 +47,8 @@ impl TryParse for Statement {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Statement {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

@@ -1,30 +1,46 @@
 use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError, TypeOf};
 
 use super::{
-    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, UnionDef,
-    UnionVariant,
+    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
+    UnionDef, UnionVariant,
 };
 
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Definition::Struct(value) => value.resolve(scope),
-            Definition::Union(value) => value.resolve(scope),
-            Definition::Enum(value) => value.resolve(scope),
-            Definition::Fn(value) => value.resolve(scope),
-            Definition::Event(value) => value.resolve(scope),
+            Definition::Type(value) => value.resolve(scope, context),
+            Definition::Fn(value) => value.resolve(scope, context),
+            Definition::Event(value) => value.resolve(scope, context),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
+    type Output = ();
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match self {
+            TypeDef::Struct(value) => value.resolve(scope, context),
+            TypeDef::Union(value) => value.resolve(scope, context),
+            TypeDef::Enum(value) => value.resolve(scope, context),
         }
     }
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for StructVariant {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -32,24 +48,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructVariant {
         match self {
             StructVariant::Fields(fields) => match fields
                 .iter()
-                .find_map(|(_, field)| field.resolve(scope).err())
+                .find_map(|(_, field)| field.resolve(scope, context).err())
             {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
-            StructVariant::Inline(values) => values.resolve(scope),
+            StructVariant::Inline(values) => values.resolve(scope, context),
         }
     }
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.fields.resolve(scope)?;
+        let _ = self.fields.resolve(scope, context)?;
         let _ = scope.register_type(todo!())?;
         Ok(())
     }
@@ -57,7 +74,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
 
 impl<Scope: ScopeApi> Resolve<Scope> for UnionVariant {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -66,19 +84,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionVariant {
             UnionVariant::Id => Ok(()),
             UnionVariant::Fields(fields) => match fields
                 .iter()
-                .find_map(|(_, field)| field.resolve(scope).err())
+                .find_map(|(_, field)| field.resolve(scope, context).err())
             {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
-            UnionVariant::Inline(values) => values.resolve(scope),
+            UnionVariant::Inline(values) => values.resolve(scope, context),
         }
     }
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -87,7 +106,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
             match self
                 .variants
                 .iter()
-                .find_map(|(_, variant)| variant.resolve(scope).err())
+                .find_map(|(_, variant)| variant.resolve(scope, context).err())
             {
                 Some(err) => Err(err),
                 None => Ok(()),
@@ -100,7 +119,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
 
 impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -112,7 +132,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
 
 impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -121,14 +142,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
             match self
                 .params
                 .iter()
-                .find_map(|value| value.resolve(scope).err())
+                .find_map(|value| value.resolve(scope, context).err())
             {
                 Some(err) => Err(err),
                 None => Ok(()),
             }
         }?;
-        let _ = self.ret.resolve(scope)?;
-        let _ = self.scope.resolve(scope)?;
+        let _ = self.ret.resolve(scope, context)?;
+        let _ = self.scope.resolve(scope, &None)?;
 
         let return_type = self.ret.type_of(scope)?;
         let _ = return_type.compatible_with(&self.scope, scope)?;
@@ -139,7 +160,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
 
 impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -150,7 +172,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
 
 impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = ();
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

@@ -1,38 +1,42 @@
-use crate::semantic::{CompatibleWith, Resolve, ScopeApi, SemanticError};
-
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, KeyData, Map, MultiData,
     Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
+use crate::semantic::BuildVar;
+use crate::semantic::{
+    CompatibleWith, EitherType, Resolve, RetrieveTypeInfo, ScopeApi, SemanticError, TypeOf,
+};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Data {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Data::Primitive(value) => value.resolve(scope),
-            Data::Slice(value) => value.resolve(scope),
-            Data::Vec(value) => value.resolve(scope),
-            Data::Closure(value) => value.resolve(scope),
-            Data::Chan(value) => value.resolve(scope),
-            Data::Tuple(value) => value.resolve(scope),
-            Data::Address(value) => value.resolve(scope),
-            Data::PtrAccess(value) => value.resolve(scope),
-            Data::Variable(value) => value.resolve(scope),
+            Data::Primitive(value) => value.resolve(scope, context),
+            Data::Slice(value) => value.resolve(scope, context),
+            Data::Vec(value) => value.resolve(scope, context),
+            Data::Closure(value) => value.resolve(scope, context),
+            Data::Chan(value) => value.resolve(scope, context),
+            Data::Tuple(value) => value.resolve(scope, context),
+            Data::Address(value) => value.resolve(scope, context),
+            Data::PtrAccess(value) => value.resolve(scope, context),
+            Data::Variable(value) => value.resolve(scope, context),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve(scope),
-            Data::Struct(value) => value.resolve(scope),
-            Data::Union(value) => value.resolve(scope),
-            Data::Enum(value) => value.resolve(scope),
+            Data::Map(value) => value.resolve(scope, context),
+            Data::Struct(value) => value.resolve(scope, context),
+            Data::Union(value) => value.resolve(scope, context),
+            Data::Enum(value) => value.resolve(scope, context),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Variable {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -50,7 +54,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -60,14 +65,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Slice {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
             Slice::String(value) => Ok(()),
-            Slice::List(value) => match value.iter().find_map(|expr| expr.resolve(scope).err()) {
+            Slice::List(value) => match value
+                .iter()
+                .find_map(|expr| expr.resolve(scope, context).err())
+            {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
@@ -76,13 +85,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Vector {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init(value) => match value.iter().find_map(|expr| expr.resolve(scope).err()) {
+            Vector::Init(value) => match value
+                .iter()
+                .find_map(|expr| expr.resolve(scope, context).err())
+            {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
@@ -92,22 +105,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope)
+        self.0.resolve(scope, context)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self.iter().find_map(|expr| expr.resolve(scope).err()) {
+        match self
+            .iter()
+            .find_map(|expr| expr.resolve(scope, context).err())
+        {
             Some(err) => Err(err),
             None => Ok(()),
         }
@@ -115,84 +133,113 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Closure {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         let _ = {
-            match self
-                .params
-                .iter()
-                .find_map(|expr| expr.resolve(scope).err())
-            {
+            match self.params.iter().enumerate().find_map(|(index, expr)| {
+                let param_context =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as RetrieveTypeInfo<Scope>>::get_nth(context, &index);
+
+                expr.resolve(scope, &param_context).err()
+            }) {
                 Some(err) => Err(err),
                 None => Ok(()),
             }
         }?;
-        let _ = self.scope.resolve(scope)?;
+
+        let mut inner_scope = scope.child_scope()?;
+        inner_scope.attach(self.params.iter().enumerate().map(|(index, param)| {
+            let param_type = param.type_of(scope).unwrap_or(None);
+            let param_type = match param_type {
+                Some(param_type) => Some(param_type),
+                None => <Option<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                > as RetrieveTypeInfo<Scope>>::get_nth(context, &index),
+            };
+            let id = match param {
+                ClosureParam::Full { id, signature } => id,
+                ClosureParam::Minimal(id) => id,
+            };
+            Scope::Var::build_from(id, param_type.unwrap())
+        }));
+        let _ = self.scope.resolve(&inner_scope, context)?;
 
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ClosureScope::Scope(value) => value.resolve(scope),
-            ClosureScope::Expr(value) => value.resolve(scope),
+            ClosureScope::Scope(value) => value.resolve(scope, context),
+            ClosureScope::Expr(value) => value.resolve(scope, context),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context =
+        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ClosureParam::Full { id, signature } => signature.resolve(scope),
-            ClosureParam::Minimal(value) => Ok(()),
+            ClosureParam::Full { id, signature } => signature.resolve(scope, &()),
+            ClosureParam::Minimal(value) => match context {
+                Some(_) => Ok(()),
+                None => Err(SemanticError::CantInferType),
+            },
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Address {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope)
+        self.0.resolve(scope, context)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope)
+        self.0.resolve(scope, context)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Channel {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Channel::Receive { addr, .. } => addr.resolve(scope),
+            Channel::Receive { addr, .. } => addr.resolve(scope, context),
             Channel::Send { addr, msg } => {
-                let _ = addr.resolve(scope)?;
-                let _ = msg.resolve(scope)?;
+                let _ = addr.resolve(scope, context)?;
+                let _ = msg.resolve(scope, context)?;
                 Ok(())
             }
             Channel::Init(id) => scope.register_chan(id),
@@ -201,7 +248,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Struct {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -209,7 +257,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
         match self {
             Struct::Inline { id, data } => {
                 let user_type = scope.find_type(id)?;
-                let _ = data.resolve(scope)?;
+                let _ = data.resolve(scope, context)?;
                 let _ = user_type.compatible_with(data, scope)?;
                 Ok(())
             }
@@ -218,7 +266,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
                 let _ = {
                     match fields
                         .iter()
-                        .find_map(|(_, expr)| expr.resolve(scope).err())
+                        .find_map(|(_, expr)| expr.resolve(scope, context).err())
                     {
                         Some(e) => Err(e),
                         None => Ok(()),
@@ -232,7 +280,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -244,7 +293,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                 data,
             } => {
                 let user_type = scope.find_type(typename)?;
-                let _ = data.resolve(scope)?;
+                let _ = data.resolve(scope, context)?;
 
                 let _ = user_type.compatible_with(&(variant, data), scope)?;
                 Ok(())
@@ -258,7 +307,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                 let _ = {
                     match fields
                         .iter()
-                        .find_map(|(_, expr)| expr.resolve(scope).err())
+                        .find_map(|(_, expr)| expr.resolve(scope, context).err())
                     {
                         Some(e) => Err(e),
                         None => Ok(()),
@@ -272,7 +321,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -285,7 +335,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Map {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -294,8 +345,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
             Map::Init { fields } => {
                 match fields
                     .iter()
-                    .find_map(|(key, value)| match key.resolve(scope) {
-                        Ok(_) => value.resolve(scope).err(),
+                    .find_map(|(key, value)| match key.resolve(scope, context) {
+                        Ok(_) => value.resolve(scope, context).err(),
                         Err(e) => Some(e),
                     }) {
                     Some(e) => Err(e),
@@ -308,7 +359,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -318,8 +370,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
             KeyData::Bool(_) => Ok(()),
             KeyData::Char(_) => Ok(()),
             KeyData::String(_) => Ok(()),
-            KeyData::Address(value) => value.resolve(scope),
-            KeyData::Enum(value) => value.resolve(scope),
+            KeyData::Address(value) => value.resolve(scope, context),
+            KeyData::Enum(value) => value.resolve(scope, context),
         }
     }
 }

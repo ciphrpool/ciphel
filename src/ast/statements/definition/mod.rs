@@ -11,11 +11,16 @@ pub mod definition_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Definition {
+    Type(TypeDef),
+    Fn(FnDef),
+    Event(EventDef),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeDef {
     Struct(StructDef),
     Union(UnionDef),
     Enum(EnumDef),
-    Fn(FnDef),
-    Event(EventDef),
 }
 
 #[derive(Debug, Clone, PartialEq)]

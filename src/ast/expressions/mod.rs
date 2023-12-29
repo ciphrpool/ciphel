@@ -14,7 +14,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{Resolve, ScopeApi, SemanticError, TypeOf},
+    semantic::{EitherType, Resolve, ScopeApi, SemanticError, TypeOf},
 };
 
 use self::operation::operation_parse::TryParseOperation;
@@ -79,17 +79,18 @@ impl TryParse for Atomic {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Atomic {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Atomic::Data(value) => value.resolve(scope),
-            Atomic::UnaryOperation(value) => value.resolve(scope),
-            Atomic::Paren(value) => value.resolve(scope),
-            Atomic::ExprFlow(value) => value.resolve(scope),
-            Atomic::Error(value) => value.resolve(scope),
+            Atomic::Data(value) => value.resolve(scope, context),
+            Atomic::UnaryOperation(value) => value.resolve(scope, context),
+            Atomic::Paren(value) => value.resolve(scope, context),
+            Atomic::ExprFlow(value) => value.resolve(scope, context),
+            Atomic::Error(value) => value.resolve(scope, &()),
         }
     }
 }
@@ -138,22 +139,23 @@ impl TryParse for Expression {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Expression {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Expression::HighOrdMath(value) => value.resolve(scope),
-            Expression::LowOrdMath(value) => value.resolve(scope),
-            Expression::Shift(value) => value.resolve(scope),
-            Expression::BitwiseAnd(value) => value.resolve(scope),
-            Expression::BitwiseXOR(value) => value.resolve(scope),
-            Expression::BitwiseOR(value) => value.resolve(scope),
-            Expression::Comparaison(value) => value.resolve(scope),
-            Expression::LogicalAnd(value) => value.resolve(scope),
-            Expression::LogicalOr(value) => value.resolve(scope),
-            Expression::Atomic(value) => value.resolve(scope),
+            Expression::HighOrdMath(value) => value.resolve(scope, context),
+            Expression::LowOrdMath(value) => value.resolve(scope, context),
+            Expression::Shift(value) => value.resolve(scope, context),
+            Expression::BitwiseAnd(value) => value.resolve(scope, context),
+            Expression::BitwiseXOR(value) => value.resolve(scope, context),
+            Expression::BitwiseOR(value) => value.resolve(scope, context),
+            Expression::Comparaison(value) => value.resolve(scope, context),
+            Expression::LogicalAnd(value) => value.resolve(scope, context),
+            Expression::LogicalOr(value) => value.resolve(scope, context),
+            Expression::Atomic(value) => value.resolve(scope, context),
         }
     }
 }
@@ -203,12 +205,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression> {
     type Output = ();
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        (self.as_ref()).resolve(scope)
+        (self.as_ref()).resolve(scope, context)
     }
 }
 

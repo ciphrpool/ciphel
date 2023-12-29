@@ -1,13 +1,22 @@
 use std::rc::Rc;
 
-use crate::ast::utils::strings::ID;
+use crate::ast::{statements::definition, utils::strings::ID};
 
 #[derive(Debug, Clone)]
-pub enum SemanticError {}
+pub enum SemanticError {
+    CantInferType,
+    ExpectBoolean,
+    ExpectIterable,
+}
 
 pub trait Resolve<Scope: ScopeApi> {
     type Output;
-    fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
+    type Context;
+    fn resolve(
+        &self,
+        scope: &Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized;
 }
@@ -86,35 +95,155 @@ where
     }
 }
 
-// impl<User, Static> Resolve for EitherType<User, Static>
-// where
-//     User: CompatibleWith + TypeOf + Resolve,
-//     Static: CompatibleWith + TypeOf + Resolve,
-// {
-//     type Output = ();
-//     fn resolve(&self, scope: &Scope) -> Result<Self::Output, SemanticError>
-//     where
-//         Self: Sized,
-//         Scope: ScopeApi,
-//     {
-//         match self {
-//             EitherType::Static(static_type) => static_type.resolve(scope),
-//             EitherType::User(user_type) => user_type.resolve(scope),
-//         }
-//     }
-// }
+pub trait MergeType<Scope: ScopeApi> {
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &Scope,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>;
+}
+
+pub trait BuildFn<Scope: ScopeApi> {
+    fn build_from(func: &definition::FnDef) -> Scope::Fn;
+}
+
+pub trait BuildType<Scope: ScopeApi> {
+    fn build_from(type_sig: &definition::TypeDef) -> Scope::UserType;
+}
+
+pub trait BuildVar<Scope: ScopeApi> {
+    fn build_from(id: &ID, type_sig: EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+}
+pub trait BuildChan<Scope: ScopeApi> {
+    fn build_from(id: &ID, type_sig: EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+}
+
+pub trait BuildEvent<Scope: ScopeApi> {
+    fn build_from(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
+}
+
+pub trait RetrieveTypeInfo<Scope: ScopeApi> {
+    fn is_iterable(&self) -> bool {
+        false
+    }
+    fn is_boolean(&self) -> bool {
+        false
+    }
+    fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
+    fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
+    fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
+}
+impl<Scope: ScopeApi, T: RetrieveTypeInfo<Scope>> RetrieveTypeInfo<Scope> for Option<T> {
+    fn get_field(
+        &self,
+        field_id: &ID,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_field(field_id),
+            None => None,
+        }
+    }
+    fn get_nth(
+        &self,
+        n: &usize,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_nth(n),
+            None => None,
+        }
+    }
+    fn get_item(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_item(),
+            None => None,
+        }
+    }
+    fn is_boolean(&self) -> bool {
+        match self {
+            Some(value) => value.is_boolean(),
+            None => false,
+        }
+    }
+    fn is_iterable(&self) -> bool {
+        match self {
+            Some(value) => value.is_iterable(),
+            None => false,
+        }
+    }
+}
+impl<Scope: ScopeApi> RetrieveTypeInfo<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
+    fn is_iterable(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_iterable(),
+            EitherType::User(_) => false,
+        }
+    }
+
+    fn is_boolean(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_boolean(),
+            EitherType::User(_) => false,
+        }
+    }
+
+    fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_nth(n),
+            EitherType::User(user_type) => user_type.get_nth(n),
+        }
+    }
+
+    fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_field(field_id),
+            EitherType::User(user_type) => user_type.get_field(field_id),
+        }
+    }
+    fn get_item(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_item(),
+            EitherType::User(user_type) => None,
+        }
+    }
+}
+
 pub trait ScopeApi
 where
     Self: Sized,
 {
-    type UserType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type StaticType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type Fn: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type Var: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type Chan: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self>;
-    type Event: Resolve<Self>;
+    type UserType: CompatibleWith<Self>
+        + TypeOf<Self>
+        + Resolve<Self>
+        + BuildType<Self>
+        + RetrieveTypeInfo<Self>;
+    type StaticType: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self> + RetrieveTypeInfo<Self>;
+    type Fn: CompatibleWith<Self>
+        + TypeOf<Self>
+        + Resolve<Self>
+        + BuildFn<Self>
+        + RetrieveTypeInfo<Self>;
+    type Var: CompatibleWith<Self>
+        + TypeOf<Self>
+        + Resolve<Self>
+        + BuildVar<Self>
+        + RetrieveTypeInfo<Self>;
+    type Chan: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self> + BuildChan<Self>;
+    type Event: Resolve<Self> + BuildEvent<Self>;
 
     fn child_scope(&self) -> Result<Self, SemanticError>;
+    fn attach(&mut self, vars: impl Iterator<Item = Self::Var>);
 
     fn register_type(&self, reg: Self::UserType) -> Result<(), SemanticError>;
     fn register_fn(&self, reg: Self::Fn) -> Result<(), SemanticError>;

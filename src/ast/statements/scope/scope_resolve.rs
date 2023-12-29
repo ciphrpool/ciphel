@@ -1,10 +1,11 @@
-use crate::semantic::{Resolve, ScopeApi, SemanticError};
+use crate::semantic::{EitherType, Resolve, ScopeApi, SemanticError};
 
 use super::Scope;
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope {
     type Output = ();
-    fn resolve(&self, scope: &OuterScope) -> Result<(), SemanticError>
+    type Context = Option<EitherType<OuterScope::UserType, OuterScope::StaticType>>;
+    fn resolve(&self, scope: &OuterScope, context: &Self::Context) -> Result<(), SemanticError>
     where
         Self: Sized,
         OuterScope: ScopeApi,
@@ -12,7 +13,7 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope {
         match self
             .instructions
             .iter()
-            .find_map(|instruction| instruction.resolve(scope).err())
+            .find_map(|instruction| instruction.resolve(scope, &()).err())
         {
             Some(err) => Err(err),
             None => Ok(()),

@@ -19,21 +19,30 @@ use crate::ast::{
 };
 
 use super::{
-    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, UnionDef,
-    UnionVariant,
+    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
+    UnionDef, UnionVariant,
 };
 
 impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(StructDef::parse, |value| Definition::Struct(value)),
-            map(UnionDef::parse, |value| Definition::Union(value)),
-            map(EnumDef::parse, |value| Definition::Enum(value)),
+            map(TypeDef::parse, |value| Definition::Type(value)),
             map(FnDef::parse, |value| Definition::Fn(value)),
             map(EventDef::parse, |value| Definition::Event(value)),
         ))(input)
     }
 }
+
+impl TryParse for TypeDef {
+    fn parse(input: Span) -> PResult<Self> {
+        alt((
+            map(StructDef::parse, |value| TypeDef::Struct(value)),
+            map(UnionDef::parse, |value| TypeDef::Union(value)),
+            map(EnumDef::parse, |value| TypeDef::Enum(value)),
+        ))(input)
+    }
+}
+
 impl TryParse for StructVariant {
     /*
      * @desc Parse struct variant
