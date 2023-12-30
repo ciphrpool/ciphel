@@ -2,10 +2,10 @@ use super::{
     Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
     UnionDef, UnionVariant,
 };
-use crate::semantic::BuildFn;
-use crate::semantic::BuildType;
-use crate::semantic::BuildVar;
-
+use crate::ast::types::FnType;
+use crate::ast::types::Types;
+use crate::semantic::scope::BuildUserType;
+use crate::semantic::scope::BuildVar;
 use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
@@ -37,7 +37,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
             TypeDef::Union(value) => value.resolve(scope, context),
             TypeDef::Enum(value) => value.resolve(scope, context),
         }?;
-        let _ = scope.register_type(Scope::UserType::build_type(self))?;
+        let _ = scope.register_type(Scope::UserType::build_usertype(self))?;
         Ok(())
     }
 }
@@ -151,6 +151,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
             }
         }?;
         let _ = self.ret.resolve(scope, context)?;
+        let return_type = self.ret.type_of(scope)?;
 
         let mut inner_scope = scope.child_scope()?;
         inner_scope.attach(self.params.iter().map(|param| {
@@ -158,12 +159,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
             let id = &param.id;
             Scope::Var::build_var(id, &param_type.unwrap())
         }));
-        let _ = self.scope.resolve(&inner_scope, &None)?;
 
-        let return_type = self.ret.type_of(scope)?;
+        let _ = self.scope.resolve(&inner_scope, &return_type)?;
+
         let _ = return_type.compatible_with(&self.scope, scope)?;
 
-        let _ = scope.register_fn(Scope::Fn::build_fn(self))?;
+        // convert to FnType -> GOAL : Retrieve function type signature
+        let params = self
+            .params
+            .iter()
+            .map(|type_var| type_var.signature.clone())
+            .collect::<Types>();
+
+        let ret = self.ret.clone();
+        let fn_type = FnType { params, ret };
+
+        let Some(fn_type_sig) = fn_type.type_of(scope)? else {
+            return Err(SemanticError::CantInferType);
+        };
+        let var = Scope::Var::build_var(&self.id, &fn_type_sig);
+        let _ = scope.register_var(var)?;
         Ok(())
     }
 }

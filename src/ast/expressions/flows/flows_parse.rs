@@ -7,7 +7,10 @@ use nom::{
 
 use crate::{
     ast::{
-        expressions::{data::Primitive, Expression},
+        expressions::{
+            data::{Primitive, Variable},
+            Expression,
+        },
         utils::{
             io::{PResult, Span},
             lexem,
@@ -251,14 +254,14 @@ impl TryParse for FnCall {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                parse_id,
+                Variable::parse,
                 delimited(
                     wst(lexem::PAR_O),
                     separated_list0(wst(lexem::COMA), Expression::parse),
                     wst(lexem::PAR_C),
                 ),
             ),
-            |(fn_id, params)| FnCall { fn_id, params },
+            |(fn_var, params)| FnCall { fn_var, params },
         )(input)
     }
 }
@@ -418,7 +421,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnCall {
-                fn_id: "f".into(),
+                fn_var: Variable::Var(VarID("f".into())),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
                         "x".into()

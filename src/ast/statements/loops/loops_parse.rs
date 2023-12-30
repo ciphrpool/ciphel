@@ -126,7 +126,8 @@ impl TryParse for WhileLoop {
 mod tests {
     use crate::ast::{
         expressions::{
-            data::{Data, Primitive},
+            data::{Data, Primitive, VarID, Variable},
+            flows::FnCall,
             Atomic,
         },
         statements::{
@@ -155,10 +156,12 @@ mod tests {
                 iterator: ForIterator::Id("x".into()),
                 scope: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 })
             },
@@ -185,10 +188,12 @@ mod tests {
                 )))),
                 scope: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 })
             },
@@ -211,10 +216,12 @@ mod tests {
         assert_eq!(
             Loop::Loop(Box::new(Scope {
                 instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                    fn_id: "f".into(),
-                    params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(10)
-                    )))]
+                    call: FnCall {
+                        fn_var: Variable::Var(VarID("f".into())),
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(10)
+                        )))]
+                    }
                 }))]
             })),
             value

@@ -18,6 +18,9 @@ pub trait GetSubTypes<Scope: ScopeApi> {
     fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         None
     }
+    fn get_return(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
     fn get_fields(
         &self,
     ) -> Option<
@@ -30,6 +33,11 @@ pub trait GetSubTypes<Scope: ScopeApi> {
     }
 }
 
+pub trait IsEnum {
+    fn is_enum(&self) -> bool {
+        false
+    }
+}
 pub trait TypeChecking<Scope: ScopeApi> {
     fn is_iterable(&self) -> bool {
         false
@@ -38,6 +46,10 @@ pub trait TypeChecking<Scope: ScopeApi> {
         false
     }
     fn is_enum_variant(&self) -> bool {
+        false
+    }
+
+    fn is_callable(&self) -> bool {
         false
     }
 }

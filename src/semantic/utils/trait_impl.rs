@@ -220,6 +220,24 @@ impl<Scope: ScopeApi, T: GetSubTypes<Scope>> GetSubTypes<Scope> for Option<T> {
             None => None,
         }
     }
+
+    fn get_item(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_item(),
+            None => None,
+        }
+    }
+
+    fn get_return(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            Some(value) => value.get_return(),
+            None => None,
+        }
+    }
 }
 impl<Scope: ScopeApi, T: TypeChecking<Scope>> TypeChecking<Scope> for Option<T> {
     fn is_boolean(&self) -> bool {
@@ -237,6 +255,12 @@ impl<Scope: ScopeApi, T: TypeChecking<Scope>> TypeChecking<Scope> for Option<T> 
     fn is_enum_variant(&self) -> bool {
         match self {
             Some(value) => value.is_enum_variant(),
+            None => false,
+        }
+    }
+    fn is_callable(&self) -> bool {
+        match self {
+            Some(value) => value.is_callable(),
             None => false,
         }
     }
@@ -260,6 +284,12 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
         match self {
             EitherType::Static(static_type) => static_type.is_enum_variant(),
             EitherType::User(user_type) => user_type.is_enum_variant(),
+        }
+    }
+    fn is_callable(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_callable(),
+            EitherType::User(user_type) => user_type.is_callable(),
         }
     }
 }
@@ -292,6 +322,15 @@ impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::
             EitherType::User(_) => None,
         }
     }
+    fn get_return(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_return(),
+            EitherType::User(_) => None,
+        }
+    }
+
     fn get_fields(
         &self,
     ) -> Option<

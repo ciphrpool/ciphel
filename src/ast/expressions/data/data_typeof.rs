@@ -1,15 +1,16 @@
-use crate::{
-    ast::expressions::Expression,
-    semantic::{
-        scope::{type_traits::GetSubTypes, ScopeApi},
-        EitherType, Resolve, SemanticError, TypeOf,
-    },
-};
-
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
+};
+use crate::ast::types::PrimitiveType;
+use crate::semantic::scope::BuildStaticType;
+use crate::{
+    ast::{expressions::Expression, types::SliceType},
+    semantic::{
+        scope::{type_traits::GetSubTypes, ScopeApi},
+        EitherType, Resolve, SemanticError, TypeOf,
+    },
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Data {
@@ -108,7 +109,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for String {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        let static_type: Scope::StaticType = Scope::StaticType::build_slice(&SliceType::String);
+        let static_type = static_type.type_of(scope)?;
+        Ok(static_type)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
@@ -120,7 +123,32 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        todo!()
+        match self {
+            Primitive::Number(_) => {
+                let static_type: Scope::StaticType =
+                    Scope::StaticType::build_primitive(&PrimitiveType::Number);
+                let static_type = static_type.type_of(scope)?;
+                Ok(static_type)
+            }
+            Primitive::Float(_) => {
+                let static_type: Scope::StaticType =
+                    Scope::StaticType::build_primitive(&PrimitiveType::Float);
+                let static_type = static_type.type_of(scope)?;
+                Ok(static_type)
+            }
+            Primitive::Bool(_) => {
+                let static_type: Scope::StaticType =
+                    Scope::StaticType::build_primitive(&PrimitiveType::Bool);
+                let static_type = static_type.type_of(scope)?;
+                Ok(static_type)
+            }
+            Primitive::Char(_) => {
+                let static_type: Scope::StaticType =
+                    Scope::StaticType::build_primitive(&PrimitiveType::Char);
+                let static_type = static_type.type_of(scope)?;
+                Ok(static_type)
+            }
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Slice {

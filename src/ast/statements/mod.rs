@@ -78,7 +78,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
             Statement::Flow(value) => value.type_of(scope),
             Statement::Assignation(value) => value.type_of(scope),
             Statement::Declaration(value) => value.type_of(scope),
-            Statement::Definition(value) => value.type_of(scope),
+            Statement::Definition(value) => Ok(None),
             Statement::Loops(value) => value.type_of(scope),
         }
     }

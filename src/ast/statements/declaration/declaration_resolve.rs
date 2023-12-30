@@ -1,7 +1,8 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::type_traits::GetSubTypes;
+use crate::semantic::scope::BuildVar;
+use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
-use crate::semantic::{BuildVar, EitherType};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();

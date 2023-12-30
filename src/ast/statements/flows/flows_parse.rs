@@ -1,4 +1,4 @@
-use crate::ast::{statements::scope::Scope, TryParse};
+use crate::ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse};
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -141,20 +141,9 @@ impl TryParse for CallStat {
      * FnCallStat := ID \(  Fn_Args \) ;
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(
-            terminated(
-                pair(
-                    parse_id,
-                    delimited(
-                        wst(lexem::PAR_O),
-                        separated_list0(wst(lexem::COMA), Expression::parse),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                wst(lexem::SEMI_COLON),
-            ),
-            |(fn_id, params)| CallStat { fn_id, params },
-        )(input)
+        map(terminated(FnCall::parse, wst(lexem::SEMI_COLON)), |call| {
+            CallStat { call }
+        })(input)
     }
 }
 
@@ -187,7 +176,7 @@ impl TryParse for Return {
 mod tests {
     use crate::ast::{
         expressions::{
-            data::{Data, Primitive},
+            data::{Data, Primitive, VarID, Variable},
             Atomic, Expression,
         },
         statements::{
@@ -220,18 +209,22 @@ mod tests {
                 )))),
                 main_branch: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 }),
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 }))
             },
@@ -257,18 +250,22 @@ mod tests {
             TryStat {
                 try_branch: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 }),
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        fn_id: "f".into(),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
-                        )))]
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID("f".into())),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(10)
+                            )))]
+                        }
                     }))]
                 }))
             },

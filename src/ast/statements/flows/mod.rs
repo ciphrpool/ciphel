@@ -1,5 +1,8 @@
 use crate::ast::{
-    expressions::{flows::Pattern, Expression},
+    expressions::{
+        flows::{FnCall, Pattern},
+        Expression,
+    },
     utils::strings::ID,
 };
 
@@ -46,8 +49,7 @@ pub struct TryStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
-    pub fn_id: ID,
-    pub params: Vec<Expression>,
+    pub call: FnCall,
 }
 
 #[derive(Debug, Clone, PartialEq)]

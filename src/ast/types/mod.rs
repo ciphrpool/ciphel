@@ -36,8 +36,8 @@ pub struct VecType(SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType {
-    params: Types,
-    ret: SubType,
+    pub params: Types,
+    pub ret: SubType,
 }
 pub type Types = Vec<Type>;
 

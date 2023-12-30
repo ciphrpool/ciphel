@@ -3,7 +3,10 @@ pub mod flows_resolve;
 pub mod flows_typeof;
 use crate::ast::utils::strings::ID;
 
-use super::{data::Primitive, Expression};
+use super::{
+    data::{Primitive, Variable},
+    Expression,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprFlow {
@@ -70,6 +73,6 @@ pub struct TryExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnCall {
-    fn_id: ID,
-    params: Vec<Expression>,
+    pub fn_var: Variable,
+    pub params: Vec<Expression>,
 }

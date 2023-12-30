@@ -1,7 +1,8 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::BuildVar;
+use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
-use crate::semantic::{BuildVar, EitherType};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();

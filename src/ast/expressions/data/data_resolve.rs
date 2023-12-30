@@ -3,7 +3,7 @@ use super::{
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
-use crate::semantic::BuildVar;
+use crate::semantic::scope::BuildVar;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::{
     CompatibleWith, EitherType, Resolve, scope::ScopeApi, SemanticError, TypeOf,

@@ -12,6 +12,8 @@ pub enum SemanticError {
     CantInferType,
     ExpectBoolean,
     ExpectIterable,
+    ExpectCallable,
+    ExpectEnum,
     UnknownField,
     IncorrectVariant,
     InvalidPattern,
@@ -61,24 +63,4 @@ pub trait MergeType<Scope: ScopeApi> {
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Other: TypeOf<Scope> + Resolve<Scope>;
-}
-
-pub trait BuildFn<Scope: ScopeApi> {
-    fn build_fn(func: &definition::FnDef) -> Scope::Fn;
-}
-
-pub trait BuildType<Scope: ScopeApi> {
-    fn build_type(type_sig: &definition::TypeDef) -> Scope::UserType;
-}
-
-pub trait BuildVar<Scope: ScopeApi> {
-    fn build_var(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
-}
-pub trait BuildChan<Scope: ScopeApi> {
-    fn build_chan(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
-        -> Scope::Var;
-}
-
-pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_event(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
 }

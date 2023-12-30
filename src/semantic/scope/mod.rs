@@ -1,13 +1,38 @@
-use crate::ast::utils::strings::ID;
+use crate::ast::{expressions::error, statements::definition, types, utils::strings::ID};
 
-use self::type_traits::{GetSubTypes, OperandMerging, TypeChecking};
+use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
-use super::{
-    BuildChan, BuildEvent, BuildFn, BuildType, BuildVar, CompatibleWith, MergeType, Resolve,
-    SemanticError, TypeOf,
-};
+use super::{CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf};
 
 pub mod type_traits;
+
+pub trait BuildStaticType<Scope: ScopeApi> {
+    fn build_primitive(type_sig: &types::PrimitiveType) -> Scope::StaticType;
+    fn build_slice(type_sig: &types::SliceType) -> Scope::StaticType;
+    fn build_tuple(type_sig: &types::TupleType) -> Scope::StaticType;
+    fn build_vec(type_sig: &types::VecType) -> Scope::StaticType;
+    fn build_error(type_sig: &error::Error) -> Scope::StaticType;
+    fn build_fn(type_sig: &types::FnType) -> Scope::StaticType;
+    fn build_chan(type_sig: &types::ChanType) -> Scope::StaticType;
+    fn build_unit() -> Scope::StaticType;
+    fn build_addr(type_sig: &types::AddrType) -> Scope::StaticType;
+    fn build_map(type_sig: &types::MapType) -> Scope::StaticType;
+}
+
+pub trait BuildUserType<Scope: ScopeApi> {
+    fn build_usertype(type_sig: &definition::TypeDef) -> Scope::UserType;
+}
+
+pub trait BuildVar<Scope: ScopeApi> {
+    fn build_var(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+}
+pub trait BuildChan<Scope: ScopeApi> {
+    fn build_chan(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
+        -> Scope::Var;
+}
+pub trait BuildEvent<Scope: ScopeApi> {
+    fn build_event(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
+}
 
 pub trait ScopeApi
 where
@@ -16,24 +41,21 @@ where
     type UserType: CompatibleWith<Self>
         + TypeOf<Self>
         + Resolve<Self>
-        + BuildType<Self>
+        + BuildUserType<Self>
         + GetSubTypes<Self>
         + TypeChecking<Self>
         + OperandMerging<Self>
+        + IsEnum
         + MergeType<Self>;
     type StaticType: CompatibleWith<Self>
         + TypeOf<Self>
+        + BuildStaticType<Self>
         + Resolve<Self>
         + GetSubTypes<Self>
         + TypeChecking<Self>
         + OperandMerging<Self>
         + MergeType<Self>;
-    type Fn: CompatibleWith<Self>
-        + TypeOf<Self>
-        + Resolve<Self>
-        + BuildFn<Self>
-        + GetSubTypes<Self>
-        + TypeChecking<Self>;
+
     type Var: CompatibleWith<Self>
         + TypeOf<Self>
         + Resolve<Self>
@@ -47,13 +69,11 @@ where
     fn attach(&mut self, vars: impl Iterator<Item = Self::Var>);
 
     fn register_type(&self, reg: Self::UserType) -> Result<(), SemanticError>;
-    fn register_fn(&self, reg: Self::Fn) -> Result<(), SemanticError>;
     fn register_chan(&self, reg: &ID) -> Result<(), SemanticError>;
     fn register_var(&self, reg: Self::Var) -> Result<(), SemanticError>;
     fn register_event(&self, reg: Self::Event) -> Result<(), SemanticError>;
 
     fn find_var(&self, id: &ID) -> Result<&Self::Var, SemanticError>;
-    fn find_fn(&self, id: &ID) -> Result<&Self::Fn, SemanticError>;
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<&Self::UserType, SemanticError>;
     fn find_event(&self) -> Result<&Self::Event, SemanticError>;

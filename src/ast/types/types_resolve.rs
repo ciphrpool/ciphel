@@ -1,6 +1,9 @@
 use crate::{
     ast::statements::scope::Scope,
-    semantic::{scope::ScopeApi, Resolve, SemanticError},
+    semantic::{
+        scope::{type_traits::IsEnum, ScopeApi},
+        Resolve, SemanticError,
+    },
 };
 
 use super::{
@@ -16,7 +19,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
     where
         Self: Sized,
     {
-        todo!()
+        match self {
+            Type::Primitive(value) => value.resolve(scope, context),
+            Type::Slice(value) => value.resolve(scope, context),
+            Type::UserType(value) => {
+                let _ = scope.find_type(value)?;
+                Ok(())
+            }
+            Type::Vec(value) => value.resolve(scope, context),
+            Type::Fn(value) => value.resolve(scope, context),
+            Type::Chan(value) => value.resolve(scope, context),
+            Type::Tuple(value) => value.resolve(scope, context),
+            Type::Unit => Ok(()),
+            Type::Address(value) => value.resolve(scope, context),
+            Type::Map(value) => value.resolve(scope, context),
+        }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
@@ -27,7 +44,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
     where
         Self: Sized,
     {
-        todo!()
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
@@ -38,7 +55,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     where
         Self: Sized,
     {
-        todo!()
+        match self {
+            SliceType::String => Ok(()),
+            SliceType::List(_, subtype) => subtype.resolve(scope, context),
+        }
     }
 }
 
@@ -50,7 +70,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.resolve(scope, context)
     }
 }
 
@@ -62,7 +82,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnType {
     where
         Self: Sized,
     {
-        todo!()
+        for param in &self.params {
+            let _ = param.resolve(scope, context)?;
+        }
+        self.ret.resolve(scope, context)
     }
 }
 
@@ -74,7 +97,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Types {
     where
         Self: Sized,
     {
-        todo!()
+        for item in self {
+            let _ = item.resolve(scope, context)?;
+        }
+        Ok(())
     }
 }
 
@@ -86,7 +112,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.resolve(scope, context)
     }
 }
 
@@ -98,7 +124,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.resolve(scope, context)
     }
 }
 
@@ -110,7 +136,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.resolve(scope, context)
     }
 }
 
@@ -122,7 +148,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     where
         Self: Sized,
     {
-        todo!()
+        let _ = self.keys_type.resolve(scope, context)?;
+        self.values_type.resolve(scope, context)
     }
 }
 
@@ -134,6 +161,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
     where
         Self: Sized,
     {
-        todo!()
+        match self {
+            KeyType::Primitive(value) => value.resolve(scope, context),
+            KeyType::Address(value) => value.resolve(scope, context),
+            KeyType::Slice(value) => value.resolve(scope, context),
+            KeyType::EnumID(value) => {
+                let enum_type = scope.find_type(value)?;
+                if enum_type.is_enum() {
+                    return Err(SemanticError::ExpectEnum);
+                }
+                Ok(())
+            }
+        }
     }
 }

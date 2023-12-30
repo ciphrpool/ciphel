@@ -1,6 +1,6 @@
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
-use crate::semantic::BuildVar;
+use crate::semantic::scope::BuildVar;
 use crate::semantic::{
     scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
@@ -286,18 +286,29 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let function = scope.find_fn(&self.fn_id)?;
+        let _ = self.fn_var.resolve(scope, context)?;
+        let fn_var_type = self.fn_var.type_of(scope)?;
+        if !<Option<EitherType<<Scope as ScopeApi>::UserType,
+             <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>
+             ::is_callable(&fn_var_type) {
+            return Err(SemanticError::ExpectCallable);
+        }
+
         let _ = self.params.resolve(scope, context)?;
+
         let _ = {
             match self.params.iter().enumerate().find_map(|(index, expr)| {
-                let param_context = function.get_nth(&index);
+                let param_context =
+                    <Option<
+                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                    > as GetSubTypes<Scope>>::get_nth(&fn_var_type, &index);
                 expr.resolve(scope, &param_context).err()
             }) {
                 Some(err) => Err(err),
                 None => Ok(()),
             }
         }?;
-        let _ = function.compatible_with(&self.params, scope)?;
+        let _ = fn_var_type.compatible_with(&self.params, scope)?;
 
         Ok(())
     }

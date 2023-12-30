@@ -112,18 +112,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let func = scope.find_fn(&self.fn_id)?;
-        let _ = {
-            match self.params.iter().enumerate().find_map(|(index, expr)| {
-                let param_context = func.get_nth(&index);
-                expr.resolve(scope, &param_context).err()
-            }) {
-                Some(err) => Err(err),
-                None => Ok(()),
-            }
-        }?;
-        let _ = func.compatible_with(&self.params, scope)?;
-        Ok(())
+        self.call.resolve(scope, &None)
+        // let func = scope.find_fn(&self.fn_id)?;
+        // let _ = {
+        //     match self.params.iter().enumerate().find_map(|(index, expr)| {
+        //         let param_context = func.get_nth(&index);
+        //         expr.resolve(scope, &param_context).err()
+        //     }) {
+        //         Some(err) => Err(err),
+        //         None => Ok(()),
+        //     }
+        // }?;
+        // let _ = func.compatible_with(&self.params, scope)?;
+        // Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Return {

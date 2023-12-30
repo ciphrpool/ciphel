@@ -1,4 +1,7 @@
-use crate::semantic::{scope::ScopeApi, MergeType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{
+    scope::{type_traits::GetSubTypes, ScopeApi},
+    EitherType, MergeType, Resolve, SemanticError, TypeOf,
+};
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
@@ -113,7 +116,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let function = scope.find_fn(&self.fn_id)?;
-        function.type_of(scope)
+        let fn_var_type = self.fn_var.type_of(scope)?;
+        Ok(<Option<
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        > as GetSubTypes<Scope>>::get_return(&fn_var_type))
     }
 }
