@@ -18,7 +18,6 @@ pub enum Flow {
     Match(MatchStat),
     Try(TryStat),
     Call(CallStat),
-    Return(Return),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,10 +49,4 @@ pub struct TryStat {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
     pub call: FnCall,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Return {
-    Unit,
-    Expr(Box<Expression>),
 }

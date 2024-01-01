@@ -33,7 +33,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
         // Check if condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
         if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
-            return Err(SemanticError::ExpectBoolean);
+            return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.main_branch.resolve(scope, context)?;
         let _ = self.else_branch.resolve(scope, context)?;
@@ -227,16 +227,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
     {
         let _ = self.expr.resolve(scope, context)?;
         let expr_type = self.expr.type_of(scope)?;
-        let _ = {
-            match self
-                .patterns
-                .iter()
-                .find_map(|pattern| pattern.resolve(scope, &expr_type).err())
-            {
-                Some(e) => Err(e),
-                None => Ok(()),
-            }
-        }?;
+
+        for pattern in &self.patterns {
+            let _ = pattern.resolve(scope, &expr_type)?;
+        }
+
         let _ = self.else_branch.resolve(scope, &expr_type)?;
 
         let else_branch_type = self.else_branch.type_of(scope)?;
@@ -291,24 +286,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
         if !<Option<EitherType<<Scope as ScopeApi>::UserType,
              <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>
              ::is_callable(&fn_var_type) {
-            return Err(SemanticError::ExpectCallable);
+            return Err(SemanticError::ExpectedCallable);
         }
 
-        let _ = self.params.resolve(scope, context)?;
+        for (index, expr) in self.params.iter().enumerate() {
+            let param_context = <Option<
+                EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+            > as GetSubTypes<Scope>>::get_nth(&fn_var_type, &index);
+            let _ = expr.resolve(scope, &param_context)?;
+        }
 
-        let _ = {
-            match self.params.iter().enumerate().find_map(|(index, expr)| {
-                let param_context =
-                    <Option<
-                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-                    > as GetSubTypes<Scope>>::get_nth(&fn_var_type, &index);
-                expr.resolve(scope, &param_context).err()
-            }) {
-                Some(err) => Err(err),
-                None => Ok(()),
-            }
-        }?;
-        let _ = fn_var_type.compatible_with(&self.params, scope)?;
+        let Some(fields) = <Option<
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        > as GetSubTypes<Scope>>::get_fields(&fn_var_type) else {
+            return Err(SemanticError::ExpectedCallable);
+        };
+        if self.params.len() != fields.len() {
+            return Err(SemanticError::IncorrectStruct);
+        }
+        for (index, (_, field_type)) in fields.iter().enumerate() {
+            let _ = field_type.compatible_with(&self.params[index], scope)?;
+        }
 
         Ok(())
     }

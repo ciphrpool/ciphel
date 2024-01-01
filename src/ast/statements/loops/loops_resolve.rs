@@ -6,7 +6,7 @@ use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -32,7 +32,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
                 let var = scope.find_var(value)?;
                 // check that the variable is iterable
                 if !var.is_iterable() {
-                    return Err(SemanticError::ExpectIterable);
+                    return Err(SemanticError::ExpectedIterable);
                 }
                 Ok(())
             }
@@ -65,13 +65,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.iterator.resolve(scope, context)?;
+        let _ = self.iterator.resolve(scope, &())?;
         let item_type = self.iterator.type_of(scope)?;
         let item_type = <Option<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
@@ -82,13 +82,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         let mut inner_scope = scope.child_scope()?;
         inner_scope.attach(item_vars.into_iter());
 
-        let _ = self.scope.resolve(&inner_scope, &None)?;
+        let _ = self.scope.resolve(&inner_scope, context)?;
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -98,9 +98,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
         if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
-            return Err(SemanticError::ExpectBoolean);
+            return Err(SemanticError::ExpectedBoolean);
         }
-        let _ = self.scope.resolve(scope, &None)?;
+        let _ = self.scope.resolve(scope, context)?;
         Ok(())
     }
 }

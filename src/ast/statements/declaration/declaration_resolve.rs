@@ -6,7 +6,7 @@ use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, T
 
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve(scope, context)?;
+                let _ = value.resolve(scope, &())?;
                 let Some(var_type) = value.signature.type_of(scope)? else {
                     return Err(SemanticError::CantInferType);
                 };
@@ -26,7 +26,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve(scope, context)?;
+                let _ = value.resolve(scope, &())?;
                 let Some(var_type) = value.signature.type_of(scope)? else {
                     return Err(SemanticError::CantInferType);
                 };

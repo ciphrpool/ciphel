@@ -6,11 +6,11 @@ use crate::semantic::{
     CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
 
-use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
+use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Flow {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -20,14 +20,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow {
             Flow::If(value) => value.resolve(scope, context),
             Flow::Match(value) => value.resolve(scope, context),
             Flow::Try(value) => value.resolve(scope, context),
-            Flow::Call(value) => value.resolve(scope, context),
-            Flow::Return(value) => value.resolve(scope, context),
+            Flow::Call(value) => value.resolve(scope, &()),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -37,7 +36,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
         // check that condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
         if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
-            return Err(SemanticError::ExpectBoolean);
+            return Err(SemanticError::ExpectedBoolean);
         }
 
         let _ = self.main_branch.resolve(scope, &None)?;
@@ -49,7 +48,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -57,16 +56,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
     {
         let _ = self.expr.resolve(scope, &None)?;
         let expr_type = self.expr.type_of(scope)?;
-        let _ = {
-            match self
-                .patterns
-                .iter()
-                .find_map(|value| value.resolve(scope, &expr_type).err())
-            {
-                Some(err) => Err(err),
-                None => Ok(()),
-            }
-        }?;
+
+        for value in &self.patterns {
+            let _ = value.resolve(scope, &expr_type)?;
+        }
         if let Some(else_branch) = &self.else_branch {
             let _ = else_branch.resolve(scope, &None)?;
         }
@@ -91,7 +84,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -125,19 +118,5 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
         // }?;
         // let _ = func.compatible_with(&self.params, scope)?;
         // Ok(())
-    }
-}
-impl<Scope: ScopeApi> Resolve<Scope> for Return {
-    type Output = ();
-    type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            Return::Unit => Ok(()),
-            Return::Expr(value) => value.resolve(scope, &None),
-        }
     }
 }

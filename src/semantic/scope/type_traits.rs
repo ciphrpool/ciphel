@@ -42,6 +42,9 @@ pub trait TypeChecking<Scope: ScopeApi> {
     fn is_iterable(&self) -> bool {
         false
     }
+    fn is_channel(&self) -> bool {
+        false
+    }
     fn is_boolean(&self) -> bool {
         false
     }
@@ -50,6 +53,9 @@ pub trait TypeChecking<Scope: ScopeApi> {
     }
 
     fn is_callable(&self) -> bool {
+        false
+    }
+    fn is_any(&self) -> bool {
         false
     }
 }

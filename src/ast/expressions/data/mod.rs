@@ -107,10 +107,10 @@ pub enum ClosureParam {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Address(pub Box<Expression>);
+pub struct Address(pub Variable);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PtrAccess(pub Box<Expression>);
+pub struct PtrAccess(pub Variable);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Channel {

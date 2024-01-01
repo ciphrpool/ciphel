@@ -6,20 +6,21 @@ use crate::ast::types::FnType;
 use crate::ast::types::Types;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
+use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Definition::Type(value) => value.resolve(scope, context),
-            Definition::Fn(value) => value.resolve(scope, context),
-            Definition::Event(value) => value.resolve(scope, context),
+            Definition::Type(value) => value.resolve(scope, &()),
+            Definition::Fn(value) => value.resolve(scope, &()),
+            Definition::Event(value) => value.resolve(scope, &()),
         }
     }
 }
@@ -106,16 +107,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = {
-            match self
-                .variants
-                .iter()
-                .find_map(|(_, variant)| variant.resolve(scope, context).err())
-            {
-                Some(err) => Err(err),
-                None => Ok(()),
-            }
-        }?;
+        for (_, variant) in &self.variants {
+            let _ = variant.resolve(scope, context)?;
+        }
+
         Ok(())
     }
 }
@@ -140,16 +135,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = {
-            match self
-                .params
-                .iter()
-                .find_map(|value| value.resolve(scope, context).err())
-            {
-                Some(err) => Err(err),
-                None => Ok(()),
-            }
-        }?;
+        for value in &self.params {
+            let _ = value.resolve(scope, context)?;
+        }
+
         let _ = self.ret.resolve(scope, context)?;
         let return_type = self.ret.type_of(scope)?;
 

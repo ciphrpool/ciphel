@@ -10,13 +10,20 @@ pub mod utils;
 #[derive(Debug, Clone)]
 pub enum SemanticError {
     CantInferType,
-    ExpectBoolean,
-    ExpectIterable,
-    ExpectCallable,
-    ExpectEnum,
+
+    ExpectedBoolean,
+    ExpectedIterable,
+    ExpectedCallable,
+    ExpectedEnum,
+    ExpectedStruct,
+    ExpectedChannel,
+
     UnknownField,
+
+    IncorrectStruct,
     IncorrectVariant,
     InvalidPattern,
+
     IncompatibleTypes,
     IncompatibleOperation,
     IncompatibleOperands,

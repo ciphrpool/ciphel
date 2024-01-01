@@ -168,7 +168,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
             KeyType::EnumID(value) => {
                 let enum_type = scope.find_type(value)?;
                 if enum_type.is_enum() {
-                    return Err(SemanticError::ExpectEnum);
+                    return Err(SemanticError::ExpectedEnum);
                 }
                 Ok(())
             }

@@ -264,8 +264,8 @@ impl TryParse for Address {
      * Addr := &DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ADDR), Expression::parse), |value| {
-            Address(Box::new(value))
+        map(preceded(wst(lexem::ADDR), Variable::parse), |value| {
+            Address(value)
         })(input)
     }
 }
@@ -278,8 +278,8 @@ impl TryParse for PtrAccess {
      * Addr := -DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ACCESS), Expression::parse), |value| {
-            PtrAccess(Box::new(value))
+        map(preceded(wst(lexem::ACCESS), Variable::parse), |value| {
+            PtrAccess(value)
         })(input)
     }
 }
@@ -601,9 +601,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Receive {
-                addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var(VarID("chan1".into()))
-                ))))),
+                addr: Address(Variable::Var(VarID("chan1".into()))),
                 timeout: 10
             },
             value
@@ -614,9 +612,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Send {
-                addr: Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var(VarID("chan1".into()))
-                ))))),
+                addr: Address(Variable::Var(VarID("chan1".into()))),
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
                 ))))
@@ -649,12 +645,7 @@ mod tests {
         let res = Address::parse("&x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(
-            Address(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                Variable::Var(VarID("x".into()))
-            ))))),
-            value
-        );
+        assert_eq!(Address(Variable::Var(VarID("x".into()))), value);
     }
 
     #[test]
@@ -662,12 +653,7 @@ mod tests {
         let res = PtrAccess::parse("*x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(
-            PtrAccess(Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                Variable::Var(VarID("x".into()))
-            ))))),
-            value
-        );
+        assert_eq!(PtrAccess(Variable::Var(VarID("x".into()))), value);
     }
 
     #[test]

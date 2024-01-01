@@ -1,4 +1,9 @@
-use crate::ast::{expressions::error, statements::definition, types, utils::strings::ID};
+use crate::ast::{
+    expressions::{error, Expression},
+    statements::definition,
+    types,
+    utils::strings::ID,
+};
 
 use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
@@ -8,15 +13,53 @@ pub mod type_traits;
 
 pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_primitive(type_sig: &types::PrimitiveType) -> Scope::StaticType;
+
     fn build_slice(type_sig: &types::SliceType) -> Scope::StaticType;
+    fn build_slice_from(
+        type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
+    ) -> Scope::StaticType;
+
     fn build_tuple(type_sig: &types::TupleType) -> Scope::StaticType;
+    fn build_tuple_from(
+        type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
+    ) -> Scope::StaticType;
+
     fn build_vec(type_sig: &types::VecType) -> Scope::StaticType;
+    fn build_vec_from(
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
+
     fn build_error(type_sig: &error::Error) -> Scope::StaticType;
+
     fn build_fn(type_sig: &types::FnType) -> Scope::StaticType;
+    fn build_fn_from(
+        params: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
+        ret: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
+
     fn build_chan(type_sig: &types::ChanType) -> Scope::StaticType;
+    fn build_chan_from(
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
+
     fn build_unit() -> Scope::StaticType;
+
+    fn build_any() -> Scope::StaticType;
+
     fn build_addr(type_sig: &types::AddrType) -> Scope::StaticType;
+    fn build_addr_from(
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
+
+    fn build_ptr_access_from(
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
+
     fn build_map(type_sig: &types::MapType) -> Scope::StaticType;
+    fn build_map_from(
+        key: &EitherType<Scope::UserType, Scope::StaticType>,
+        value: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::StaticType;
 }
 
 pub trait BuildUserType<Scope: ScopeApi> {

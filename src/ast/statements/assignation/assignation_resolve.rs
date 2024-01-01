@@ -6,13 +6,13 @@ use super::{AssignValue, Assignation, Assignee};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Assignation {
     type Output = ();
-    type Context = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context)?;
+        let _ = self.left.resolve(scope, &())?;
         let left_type = self.left.type_of(scope)?;
         let _ = self.right.resolve(scope, &left_type)?;
 

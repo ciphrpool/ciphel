@@ -236,8 +236,8 @@ mod tests {
             Atomic, Expression,
         },
         statements::{
-            flows::{CallStat, Flow, Return},
-            Statement,
+            flows::{CallStat, Flow},
+            Return, Statement,
         },
         types::PrimitiveType,
     };
@@ -373,9 +373,9 @@ mod tests {
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number)),
                 scope: Scope {
-                    instructions: vec![Statement::Flow(Flow::Return(Return::Expr(Box::new(
+                    instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
-                    ))))]
+                    )))]
                 }
             },
             value

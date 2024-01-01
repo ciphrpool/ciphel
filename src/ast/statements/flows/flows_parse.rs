@@ -18,7 +18,7 @@ use crate::{
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
-use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
+use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
 impl TryParse for Flow {
     fn parse(input: Span) -> PResult<Self> {
@@ -27,7 +27,6 @@ impl TryParse for Flow {
             map(MatchStat::parse, |value| Flow::Match(value)),
             map(TryStat::parse, |value| Flow::Try(value)),
             map(CallStat::parse, |value| Flow::Call(value)),
-            map(Return::parse, |value| Flow::Return(value)),
         ))(input)
     }
 }
@@ -147,31 +146,6 @@ impl TryParse for CallStat {
     }
 }
 
-impl TryParse for Return {
-    /*
-     * @desc Parse return statements
-     *
-     * @grammar
-     * Return := return
-     *      | ID
-     *      | Expr
-     *      | Λ
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            delimited(
-                wst(lexem::RETURN),
-                opt(Expression::parse),
-                wst(lexem::SEMI_COLON),
-            ),
-            |value| match value {
-                Some(expr) => Return::Expr(Box::new(expr)),
-                None => Return::Unit,
-            },
-        )(input)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::ast::{
@@ -180,7 +154,7 @@ mod tests {
             Atomic, Expression,
         },
         statements::{
-            flows::{CallStat, Flow, IfStat, Return, TryStat},
+            flows::{CallStat, Flow, IfStat, TryStat},
             scope::Scope,
             Statement,
         },
@@ -271,18 +245,5 @@ mod tests {
             },
             value
         );
-    }
-
-    #[test]
-    fn valid_return() {
-        let res = Return::parse(
-            r#"
-            return ;
-        "#
-            .into(),
-        );
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(Return::Unit, value);
     }
 }

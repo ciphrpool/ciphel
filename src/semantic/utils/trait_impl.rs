@@ -264,6 +264,20 @@ impl<Scope: ScopeApi, T: TypeChecking<Scope>> TypeChecking<Scope> for Option<T> 
             None => false,
         }
     }
+
+    fn is_channel(&self) -> bool {
+        match self {
+            Some(value) => value.is_channel(),
+            None => false,
+        }
+    }
+
+    fn is_any(&self) -> bool {
+        match self {
+            Some(value) => value.is_any(),
+            None => false,
+        }
+    }
 }
 
 impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
@@ -290,6 +304,20 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
         match self {
             EitherType::Static(static_type) => static_type.is_callable(),
             EitherType::User(user_type) => user_type.is_callable(),
+        }
+    }
+
+    fn is_channel(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_channel(),
+            EitherType::User(user_type) => false,
+        }
+    }
+
+    fn is_any(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_any(),
+            EitherType::User(user_type) => user_type.is_any(),
         }
     }
 }

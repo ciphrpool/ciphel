@@ -1,6 +1,6 @@
 use crate::semantic::{scope::ScopeApi, MergeType, Resolve, SemanticError, TypeOf};
 
-use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, Return, TryStat};
+use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
     fn type_of(
@@ -19,7 +19,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
             Flow::Match(value) => value.type_of(scope),
             Flow::Try(value) => value.type_of(scope),
             Flow::Call(value) => value.type_of(scope),
-            Flow::Return(value) => value.type_of(scope),
         }
     }
 }
@@ -130,23 +129,5 @@ impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
         Self: Sized + Resolve<Scope>,
     {
         Ok(None)
-    }
-}
-impl<Scope: ScopeApi> TypeOf<Scope> for Return {
-    fn type_of(
-        &self,
-        scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        match self {
-            Return::Unit => Ok(None),
-            Return::Expr(expr) => expr.type_of(scope),
-        }
     }
 }

@@ -109,9 +109,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::PtrAccess(PtrAccess(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Variable(Variable::Var(VarID("x".into())))
-                ))))),
+                left: Assignee::PtrAccess(PtrAccess(Variable::Var(VarID("x".into())))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(10))
                 ))))
