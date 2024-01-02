@@ -7,7 +7,11 @@ use super::{AssignValue, Assignation, Assignee};
 impl<Scope: ScopeApi> Resolve<Scope> for Assignation {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -23,7 +27,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation {
 impl<Scope: ScopeApi> Resolve<Scope> for AssignValue {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -38,7 +46,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue {
 impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

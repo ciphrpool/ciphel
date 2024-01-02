@@ -11,8 +11,8 @@ use crate::{
 
 impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for Option<EitherType<User, Static>>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
@@ -28,8 +28,8 @@ where
 
 impl<User, Static, Scope: ScopeApi> CompatibleWith<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
@@ -46,8 +46,8 @@ where
 
 impl<User, Static, Scope: ScopeApi> TypeOf<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn type_of(
         &self,
@@ -55,7 +55,7 @@ where
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized,
     {
         match self {
             EitherType::Static(static_type) => static_type.type_of(scope),
@@ -65,8 +65,8 @@ where
 }
 impl<User, Static, Scope: ScopeApi> TypeOf<Scope> for Option<EitherType<User, Static>>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn type_of(
         &self,
@@ -74,7 +74,7 @@ where
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized,
     {
         match self {
             Some(inner) => inner.type_of(scope),
@@ -91,7 +91,11 @@ where
 
     type Context = ();
 
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
@@ -111,7 +115,11 @@ where
 
     type Context = ();
 
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
@@ -130,8 +138,8 @@ where
 
 impl<User, Static, Scope: ScopeApi> MergeType<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn merge<Other>(
         &self,
@@ -139,7 +147,7 @@ where
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
-        Other: TypeOf<Scope> + Resolve<Scope>,
+        Other: TypeOf<Scope>,
     {
         match self {
             EitherType::Static(static_type) => static_type.type_of(scope),
@@ -149,8 +157,8 @@ where
 }
 impl<User, Static, Scope: ScopeApi> MergeType<Scope> for Option<EitherType<User, Static>>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope>,
 {
     fn merge<Other>(
         &self,
@@ -158,7 +166,7 @@ where
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
-        Other: TypeOf<Scope> + Resolve<Scope>,
+        Other: TypeOf<Scope>,
     {
         match self {
             Some(inner) => {
@@ -376,8 +384,8 @@ impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::
 
 impl<User, Static, Scope: ScopeApi> OperandMerging<Scope> for EitherType<User, Static>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
 {
     fn can_minus(&self) -> Result<(), SemanticError> {
         match self {
@@ -575,8 +583,8 @@ where
 
 impl<User, Static, Scope: ScopeApi> OperandMerging<Scope> for Option<EitherType<User, Static>>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + Resolve<Scope> + OperandMerging<Scope>,
+    User: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
+    Static: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
 {
     fn can_minus(&self) -> Result<(), SemanticError> {
         match self {

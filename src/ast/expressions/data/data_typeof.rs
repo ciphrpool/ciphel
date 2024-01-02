@@ -111,7 +111,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for String {
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized,
     {
         let result_type: Scope::StaticType = Scope::StaticType::build_slice(&SliceType::String);
         let result_type = result_type.type_of(scope)?;

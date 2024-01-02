@@ -11,7 +11,11 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 impl<Scope: ScopeApi> Resolve<Scope> for Flow {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -27,7 +31,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow {
 impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -49,7 +57,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
 impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -69,7 +81,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
 impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -78,14 +94,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
         // create a scope and assign the pattern variable to it before resolving the expression
         let mut inner_scope = scope.child_scope()?;
         inner_scope.attach(vars.into_iter());
-        let _ = self.scope.resolve(&inner_scope, context)?;
+        let _ = self.scope.resolve(&mut inner_scope, context)?;
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -100,7 +120,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
 impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

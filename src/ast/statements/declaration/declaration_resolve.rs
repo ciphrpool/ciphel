@@ -7,7 +7,11 @@ use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, T
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -51,7 +55,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
 impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -62,7 +70,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
 impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -87,7 +99,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
 impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -212,5 +228,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 Ok(scope_vars)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ast::TryParse, semantic::scope::scope_impl::Scope};
+
+    use super::*;
+
+    #[test]
+    fn valid_declaration() {
+        let decl = Declaration::parse("let x:number = 1;".into());
+        assert!(decl.is_ok());
+        let decl = decl.unwrap().1;
+
+        dbg!(&decl);
+
+        let mut scope = Scope::default();
+
+        let res = decl.resolve(&mut scope, &None);
+        assert!(res.is_ok());
+        dbg!(scope);
     }
 }

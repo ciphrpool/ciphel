@@ -12,7 +12,7 @@ use crate::semantic::{
 impl<Scope: ScopeApi> Resolve<Scope> for Data {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -72,7 +72,7 @@ impl Variable {
 impl<Scope: ScopeApi> Resolve<Scope> for Variable {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -91,7 +91,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
 
     fn resolve(
         &self,
-        scope: &Scope,
+        scope: &mut Scope,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -109,7 +109,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess {
 
     fn resolve(
         &self,
-        scope: &Scope,
+        scope: &mut Scope,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -132,7 +132,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 
     fn resolve(
         &self,
-        scope: &Scope,
+        scope: &mut Scope,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -154,7 +154,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -171,7 +171,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
 impl<Scope: ScopeApi> Resolve<Scope> for Slice {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -194,7 +194,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
 impl<Scope: ScopeApi> Resolve<Scope> for Vector {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -217,7 +217,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -228,7 +228,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -245,7 +245,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
 impl<Scope: ScopeApi> Resolve<Scope> for Closure {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -273,7 +273,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
             };
             Scope::Var::build_var(id, &param_type.unwrap())
         }));
-        let _ = self.scope.resolve(&inner_scope, context)?;
+        let _ = self.scope.resolve(&mut inner_scope, context)?;
 
         Ok(())
     }
@@ -281,7 +281,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -296,7 +296,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
     type Context =
         Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -313,7 +313,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
 impl<Scope: ScopeApi> Resolve<Scope> for Address {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -324,7 +324,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address {
 impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -335,7 +335,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
 impl<Scope: ScopeApi> Resolve<Scope> for Channel {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -365,7 +365,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
 impl<Scope: ScopeApi> Resolve<Scope> for Struct {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -431,7 +431,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -505,7 +505,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -531,7 +531,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
 impl<Scope: ScopeApi> Resolve<Scope> for Map {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -559,7 +559,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

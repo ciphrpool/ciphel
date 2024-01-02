@@ -7,7 +7,11 @@ use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -22,7 +26,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Loop {
 impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -31,7 +39,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
             ForIterator::Id(value) => {
                 let var = scope.find_var(value)?;
                 // check that the variable is iterable
-                if !var.is_iterable() {
+                let var_type = var.type_of(scope)?;
+                if !<Option<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                > as TypeChecking<Scope>>::is_iterable(&var_type)
+                {
                     return Err(SemanticError::ExpectedIterable);
                 }
                 Ok(())
@@ -47,7 +59,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
 impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -66,7 +82,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
 impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -82,14 +102,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
         let mut inner_scope = scope.child_scope()?;
         inner_scope.attach(item_vars.into_iter());
 
-        let _ = self.scope.resolve(&inner_scope, context)?;
+        let _ = self.scope.resolve(&mut inner_scope, context)?;
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

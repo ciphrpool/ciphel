@@ -8,8 +8,13 @@ use crate::ast::{
 use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
 use super::{CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf};
-
+pub mod chan_impl;
+pub mod event_impl;
+pub mod scope_impl;
+pub mod static_type_impl;
 pub mod type_traits;
+pub mod user_type_impl;
+pub mod var_impl;
 
 pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_primitive(type_sig: &types::PrimitiveType) -> Scope::StaticType;
@@ -70,11 +75,13 @@ pub trait BuildVar<Scope: ScopeApi> {
     fn build_var(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
 }
 pub trait BuildChan<Scope: ScopeApi> {
-    fn build_chan(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>)
-        -> Scope::Var;
+    fn build_chan(
+        id: &ID,
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Scope::Chan;
 }
 pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_event(scope: &Scope, event: &definition::FnDef) -> Scope::Var;
+    fn build_event(scope: &Scope, event: &definition::EventDef) -> Scope::Event;
 }
 
 pub trait ScopeApi
@@ -83,7 +90,6 @@ where
 {
     type UserType: CompatibleWith<Self>
         + TypeOf<Self>
-        + Resolve<Self>
         + BuildUserType<Self>
         + GetSubTypes<Self>
         + TypeChecking<Self>
@@ -93,28 +99,22 @@ where
     type StaticType: CompatibleWith<Self>
         + TypeOf<Self>
         + BuildStaticType<Self>
-        + Resolve<Self>
         + GetSubTypes<Self>
         + TypeChecking<Self>
         + OperandMerging<Self>
         + MergeType<Self>;
 
-    type Var: CompatibleWith<Self>
-        + TypeOf<Self>
-        + Resolve<Self>
-        + BuildVar<Self>
-        + GetSubTypes<Self>
-        + TypeChecking<Self>;
-    type Chan: CompatibleWith<Self> + TypeOf<Self> + Resolve<Self> + BuildChan<Self>;
-    type Event: Resolve<Self> + BuildEvent<Self>;
+    type Var: CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
+    type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
+    type Event: BuildEvent<Self>;
 
     fn child_scope(&self) -> Result<Self, SemanticError>;
     fn attach(&mut self, vars: impl Iterator<Item = Self::Var>);
 
-    fn register_type(&self, reg: Self::UserType) -> Result<(), SemanticError>;
-    fn register_chan(&self, reg: &ID) -> Result<(), SemanticError>;
-    fn register_var(&self, reg: Self::Var) -> Result<(), SemanticError>;
-    fn register_event(&self, reg: Self::Event) -> Result<(), SemanticError>;
+    fn register_type(&mut self, reg: Self::UserType) -> Result<(), SemanticError>;
+    fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;
+    fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError>;
+    fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError>;
 
     fn find_var(&self, id: &ID) -> Result<&Self::Var, SemanticError>;
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;

@@ -8,7 +8,11 @@ use crate::semantic::{
 impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -24,7 +28,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow {
 impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -47,7 +55,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
 impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -204,7 +216,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
 impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -213,14 +229,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr {
         // create a scope and assign the pattern variable to it before resolving the expression
         let mut inner_scope = scope.child_scope()?;
         inner_scope.attach(vars.into_iter());
-        let _ = self.expr.resolve(&inner_scope, context)?;
+        let _ = self.expr.resolve(&mut inner_scope, context)?;
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -259,7 +279,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
 impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -276,7 +300,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
 impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

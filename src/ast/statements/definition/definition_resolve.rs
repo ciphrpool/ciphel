@@ -12,7 +12,11 @@ use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, T
 impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -28,7 +32,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition {
 impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -46,7 +54,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
 impl<Scope: ScopeApi> Resolve<Scope> for StructVariant {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -67,7 +79,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructVariant {
 impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -80,7 +96,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
 impl<Scope: ScopeApi> Resolve<Scope> for UnionVariant {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -102,7 +122,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionVariant {
 impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -118,7 +142,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
 impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -130,7 +158,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
 impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -149,7 +181,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
             Scope::Var::build_var(id, &param_type.unwrap())
         }));
 
-        let _ = self.scope.resolve(&inner_scope, &return_type)?;
+        let _ = self.scope.resolve(&mut inner_scope, &return_type)?;
 
         let _ = return_type.compatible_with(&self.scope, scope)?;
 
@@ -175,7 +207,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
 impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -187,7 +223,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
 impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Output = ();
     type Context = ();
-    fn resolve(&self, scope: &Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &mut Scope,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

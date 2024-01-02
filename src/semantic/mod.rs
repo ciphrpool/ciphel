@@ -39,7 +39,7 @@ pub trait Resolve<Scope: ScopeApi> {
     type Context: Default;
     fn resolve(
         &self,
-        scope: &Scope,
+        scope: &mut Scope,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -59,7 +59,7 @@ pub trait TypeOf<Scope: ScopeApi> {
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>;
+        Self: Sized;
 }
 
 pub trait MergeType<Scope: ScopeApi> {
@@ -69,5 +69,5 @@ pub trait MergeType<Scope: ScopeApi> {
         scope: &Scope,
     ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
     where
-        Other: TypeOf<Scope> + Resolve<Scope>;
+        Other: TypeOf<Scope>;
 }
