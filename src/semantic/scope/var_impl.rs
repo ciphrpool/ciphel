@@ -16,46 +16,35 @@ pub struct Var {
     pub type_sig: EitherType<UserType, StaticType>,
 }
 
-impl<Scope: ScopeApi<Var = Self>> CompatibleWith<Scope> for Var {
+impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>>
+    CompatibleWith<Scope> for Var
+{
     fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        todo!()
+        self.type_sig.compatible_with(other, scope)
     }
 }
 
-impl<Scope: ScopeApi<Var = Self>> TypeOf<Scope> for Var {
+impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> TypeOf<Scope>
+    for Var
+{
     fn type_of(
         &self,
         scope: &Scope,
     ) -> Result<
-        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>,
+        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
     >
     where
         Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        todo!()
-    }
-}
-impl<Scope: ScopeApi<Var = Self>> Resolve<Scope> for Var {
-    type Output = ();
-
-    type Context = ();
-
-    fn resolve(
-        &self,
-        scope: &mut Scope,
-        context: &Self::Context,
-    ) -> Result<Self::Output, SemanticError>
-    where
         Self: Sized,
     {
-        todo!()
+        self.type_sig.type_of(scope)
     }
 }
+
 impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> BuildVar<Scope>
     for Var
 {
@@ -69,5 +58,42 @@ impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> 
         }
     }
 }
-impl<Scope: ScopeApi<Var = Self>> GetSubTypes<Scope> for Var {}
-impl<Scope: ScopeApi<Var = Self>> TypeChecking<Scope> for Var {}
+impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> GetSubTypes<Scope>
+    for Var
+{
+    fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_nth(&self.type_sig, n)
+    }
+    fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_field(
+            &self.type_sig,
+            field_id,
+        )
+    }
+    fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_item(&self.type_sig)
+    }
+}
+impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> TypeChecking<Scope>
+    for Var
+{
+    fn is_iterable(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_iterable(&self.type_sig)
+    }
+    fn is_channel(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_channel(&self.type_sig)
+    }
+    fn is_boolean(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_boolean(&self.type_sig)
+    }
+    fn is_enum_variant(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_enum_variant(&self.type_sig)
+    }
+
+    fn is_callable(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_callable(&self.type_sig)
+    }
+    fn is_any(&self) -> bool {
+        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_any(&self.type_sig)
+    }
+}

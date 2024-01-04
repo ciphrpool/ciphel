@@ -43,7 +43,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
         let _ = self.condition.resolve(scope, &None)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
-        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
@@ -67,7 +67,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
         Scope: ScopeApi,
     {
         let _ = self.expr.resolve(scope, &None)?;
-        let expr_type = self.expr.type_of(scope)?;
+        let expr_type = Some(self.expr.type_of(scope)?);
 
         for value in &self.patterns {
             let _ = value.resolve(scope, &expr_type)?;
@@ -130,17 +130,5 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
         Scope: ScopeApi,
     {
         self.call.resolve(scope, &None)
-        // let func = scope.find_fn(&self.fn_id)?;
-        // let _ = {
-        //     match self.params.iter().enumerate().find_map(|(index, expr)| {
-        //         let param_context = func.get_nth(&index);
-        //         expr.resolve(scope, &param_context).err()
-        //     }) {
-        //         Some(err) => Err(err),
-        //         None => Ok(()),
-        //     }
-        // }?;
-        // let _ = func.compatible_with(&self.params, scope)?;
-        // Ok(())
     }
 }

@@ -103,10 +103,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Atomic {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -172,10 +169,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -199,10 +193,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

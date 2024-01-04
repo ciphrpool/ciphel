@@ -26,13 +26,14 @@ pub enum PrimitiveType {
     Char,
     Bool,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SliceType {
     String,
     List(usize, SubType),
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct VecType(SubType);
+pub struct VecType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnType {
@@ -42,18 +43,18 @@ pub struct FnType {
 pub type Types = Vec<Type>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ChanType(SubType);
+pub struct ChanType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TupleType(Types);
+pub struct TupleType(pub Types);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct AddrType(SubType);
+pub struct AddrType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapType {
-    keys_type: KeyType,
-    values_type: SubType,
+    pub keys_type: KeyType,
+    pub values_type: SubType,
 }
 
 #[derive(Debug, Clone, PartialEq)]

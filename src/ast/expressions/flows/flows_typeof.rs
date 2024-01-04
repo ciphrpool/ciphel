@@ -9,10 +9,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -29,10 +26,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -46,10 +40,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -61,10 +52,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -78,12 +66,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr {
                         res = res.merge(&pattern_type, scope)?;
                     }
                 }
-                res
+                Some(res)
             } else {
                 None
             }
         };
-
+        let Some(pattern_type) = pattern_type else {
+            return Err(SemanticError::CantInferType);
+        };
         let else_type = self.else_branch.type_of(scope)?;
         pattern_type.merge(&else_type, scope)
     }
@@ -92,10 +82,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -108,17 +95,19 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         let fn_var_type = self.fn_var.type_of(scope)?;
-        Ok(<Option<
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        > as GetSubTypes<Scope>>::get_return(&fn_var_type))
+        let Some(return_type) = <EitherType<
+            <Scope as ScopeApi>::UserType,
+            <Scope as ScopeApi>::StaticType,
+        > as GetSubTypes<Scope>>::get_return(&fn_var_type) else {
+            return Err(SemanticError::CantInferType);
+        };
+
+        Ok(return_type)
     }
 }

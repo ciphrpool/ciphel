@@ -17,7 +17,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, &())?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = Some(self.left.type_of(scope)?);
         let _ = self.right.resolve(scope, &left_type)?;
 
         let _ = left_type.compatible_with(&self.right, scope)?;

@@ -58,6 +58,9 @@ pub trait TypeChecking<Scope: ScopeApi> {
     fn is_any(&self) -> bool {
         false
     }
+    fn is_unit(&self) -> bool {
+        false
+    }
 }
 
 pub trait OperandMerging<Scope: ScopeApi> {
@@ -74,7 +77,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -88,7 +91,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -102,7 +105,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -116,7 +119,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -130,7 +133,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -144,7 +147,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -158,7 +161,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -172,7 +175,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -186,7 +189,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {

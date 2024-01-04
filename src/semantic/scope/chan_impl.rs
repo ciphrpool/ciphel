@@ -24,10 +24,7 @@ impl<Scope: ScopeApi<Chan = Self>> TypeOf<Scope> for Chan {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,

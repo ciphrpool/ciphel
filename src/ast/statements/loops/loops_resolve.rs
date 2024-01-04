@@ -40,9 +40,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
                 let var = scope.find_var(value)?;
                 // check that the variable is iterable
                 let var_type = var.type_of(scope)?;
-                if !<Option<
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-                > as TypeChecking<Scope>>::is_iterable(&var_type)
+                if !<
+                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+                 as TypeChecking<Scope>>::is_iterable(&var_type)
                 {
                     return Err(SemanticError::ExpectedIterable);
                 }
@@ -93,9 +93,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
     {
         let _ = self.iterator.resolve(scope, &())?;
         let item_type = self.iterator.type_of(scope)?;
-        let item_type = <Option<
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        > as GetSubTypes<Scope>>::get_item(&item_type);
+        let item_type = <
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+        as GetSubTypes<Scope>>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type)?;
         // attach the item to the scope
@@ -121,7 +121,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
         let _ = self.condition.resolve(scope, &None)?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(scope)?;
-        if !<Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.scope.resolve(scope, context)?;

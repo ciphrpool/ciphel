@@ -1,15 +1,12 @@
-use crate::semantic::{scope::ScopeApi, MergeType, Resolve, SemanticError, TypeOf};
-
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
+use crate::semantic::scope::BuildStaticType;
+use crate::semantic::{scope::ScopeApi, EitherType, MergeType, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -26,10 +23,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -40,7 +34,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
                 let else_type = else_branch.type_of(scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(main_type),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
         }
     }
 }
@@ -48,10 +42,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -65,17 +56,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
                         res = res.merge(&pattern_type, scope)?;
                     }
                 }
-                res
+                Some(res)
             } else {
                 None
             }
+        };
+        let Some(pattern_type) = pattern_type else {
+            return Err(SemanticError::CantInferType);
         };
         match &self.else_branch {
             Some(else_branch) => {
                 let else_type = else_branch.type_of(scope)?;
                 pattern_type.merge(&else_type, scope)
             }
-            None => Ok(pattern_type),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
         }
     }
 }
@@ -83,10 +77,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternStat {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -98,10 +89,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -112,22 +100,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
                 let else_type = else_branch.type_of(scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(main_type),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
         }
     }
 }
+
 impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(None)
+        Ok(EitherType::Static(Scope::StaticType::build_unit()))
     }
 }

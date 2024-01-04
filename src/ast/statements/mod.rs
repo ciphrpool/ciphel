@@ -4,15 +4,15 @@ use nom::{
     sequence::delimited,
 };
 
-use crate::{
-    ast::utils::io::{PResult, Span},
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
-};
-
 use super::{
     expressions::Expression,
     utils::{lexem, strings::wst},
     TryParse,
+};
+use crate::semantic::scope::BuildStaticType;
+use crate::{
+    ast::utils::io::{PResult, Span},
+    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
 };
 
 pub mod assignation;
@@ -80,10 +80,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -93,7 +90,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
             Statement::Flow(value) => value.type_of(scope),
             Statement::Assignation(value) => value.type_of(scope),
             Statement::Declaration(value) => value.type_of(scope),
-            Statement::Definition(value) => Ok(None),
+            Statement::Definition(value) => Ok(EitherType::Static(Scope::StaticType::build_unit())),
             Statement::Loops(value) => value.type_of(scope),
             Statement::Return(value) => value.type_of(scope),
         }
@@ -153,16 +150,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Return::Unit => Ok(None),
+            Return::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit())),
             Return::Expr(expr) => expr.type_of(scope),
         }
     }

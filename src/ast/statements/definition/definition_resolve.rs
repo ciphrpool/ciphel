@@ -175,15 +175,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
         let return_type = self.ret.type_of(scope)?;
 
         let mut inner_scope = scope.child_scope()?;
-        inner_scope.attach(self.params.iter().map(|param| {
-            let param_type = param.type_of(scope).unwrap_or(None);
-            let id = &param.id;
-            Scope::Var::build_var(id, &param_type.unwrap())
-        }));
-
-        let _ = self.scope.resolve(&mut inner_scope, &return_type)?;
+        inner_scope.attach(
+            self.params
+                .iter()
+                .filter_map(|param| param.type_of(scope).ok().map(|p| (param.id.clone(), p)))
+                .map(|(id, param)| Scope::Var::build_var(&id, &param)),
+        );
 
         let _ = return_type.compatible_with(&self.scope, scope)?;
+        let _ = self.scope.resolve(&mut inner_scope, &Some(return_type))?;
 
         // convert to FnType -> GOAL : Retrieve function type signature
         let params = self
@@ -195,9 +195,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
         let ret = self.ret.clone();
         let fn_type = FnType { params, ret };
 
-        let Some(fn_type_sig) = fn_type.type_of(scope)? else {
-            return Err(SemanticError::CantInferType);
-        };
+        let fn_type_sig = fn_type.type_of(scope)?;
         let var = Scope::Var::build_var(&self.id, &fn_type_sig);
         let _ = scope.register_var(var)?;
         Ok(())

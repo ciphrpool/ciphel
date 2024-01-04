@@ -17,54 +17,87 @@ pub mod user_type_impl;
 pub mod var_impl;
 
 pub trait BuildStaticType<Scope: ScopeApi> {
-    fn build_primitive(type_sig: &types::PrimitiveType) -> Scope::StaticType;
+    fn build_primitive(
+        type_sig: &types::PrimitiveType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_slice(type_sig: &types::SliceType) -> Scope::StaticType;
+    fn build_slice(
+        type_sig: &types::SliceType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_slice_from(
-        type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
-    ) -> Scope::StaticType;
+        size: &usize,
+        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_tuple(type_sig: &types::TupleType) -> Scope::StaticType;
+    fn build_tuple(
+        type_sig: &types::TupleType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_tuple_from(
         type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_vec(type_sig: &types::VecType) -> Scope::StaticType;
+    fn build_vec(
+        type_sig: &types::VecType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_vec_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_error(type_sig: &error::Error) -> Scope::StaticType;
+    fn build_error() -> Scope::StaticType;
 
-    fn build_fn(type_sig: &types::FnType) -> Scope::StaticType;
+    fn build_fn(
+        type_sig: &types::FnType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_fn_from(
         params: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
         ret: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_chan(type_sig: &types::ChanType) -> Scope::StaticType;
+    fn build_chan(
+        type_sig: &types::ChanType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_chan_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_unit() -> Scope::StaticType;
 
     fn build_any() -> Scope::StaticType;
 
-    fn build_addr(type_sig: &types::AddrType) -> Scope::StaticType;
+    fn build_addr(
+        type_sig: &types::AddrType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_addr_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_ptr_access_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_map(type_sig: &types::MapType) -> Scope::StaticType;
+    fn build_map(
+        type_sig: &types::MapType,
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
     fn build_map_from(
         key: &EitherType<Scope::UserType, Scope::StaticType>,
         value: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::StaticType;
+        scope: &Scope,
+    ) -> Result<Scope::StaticType, SemanticError>;
 }
 
 pub trait BuildUserType<Scope: ScopeApi> {
@@ -88,7 +121,8 @@ pub trait ScopeApi
 where
     Self: Sized,
 {
-    type UserType: CompatibleWith<Self>
+    type UserType: Clone
+        + CompatibleWith<Self>
         + TypeOf<Self>
         + BuildUserType<Self>
         + GetSubTypes<Self>
@@ -96,7 +130,8 @@ where
         + OperandMerging<Self>
         + IsEnum
         + MergeType<Self>;
-    type StaticType: CompatibleWith<Self>
+    type StaticType: Clone
+        + CompatibleWith<Self>
         + TypeOf<Self>
         + BuildStaticType<Self>
         + GetSubTypes<Self>

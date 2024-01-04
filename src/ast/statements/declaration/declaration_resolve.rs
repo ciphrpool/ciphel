@@ -19,9 +19,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
         match self {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, &())?;
-                let Some(var_type) = value.signature.type_of(scope)? else {
-                    return Err(SemanticError::CantInferType);
-                };
+                let var_type = value.signature.type_of(scope)?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
                 let _ = scope.register_var(var)?;
                 Ok(())
@@ -31,9 +29,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
                 right,
             } => {
                 let _ = value.resolve(scope, &())?;
-                let Some(var_type) = value.signature.type_of(scope)? else {
-                    return Err(SemanticError::CantInferType);
-                };
+                let var_type = value.signature.type_of(scope)?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
                 let _ = right.resolve(scope, &Some(var_type))?;
                 let _ = scope.register_var(var)?;
@@ -43,7 +39,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
                 let _ = right.resolve(scope, &None)?;
                 let right_type = right.type_of(scope)?;
 
-                let vars = left.resolve(scope, &right_type)?;
+                let vars = left.resolve(scope, &Some(right_type))?;
                 for var in vars {
                     let _ = scope.register_var(var)?;
                 }
@@ -117,12 +113,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
+                let Some(variant_type) = variant_type else {
+                    return Err(SemanticError::CantInferType);
+                };
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) =
-                    <Option<
-                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-                    > as GetSubTypes<Scope>>::get_fields(&variant_type)
-                else {
+                let Some(fields) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_fields(
+                    &variant_type
+                ) else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if vars.len() != fields.len() {
@@ -142,12 +142,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
+                let Some(variant_type) = variant_type else {
+                    return Err(SemanticError::CantInferType);
+                };
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) =
-                    <Option<
-                        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-                    > as GetSubTypes<Scope>>::get_fields(&variant_type)
-                else {
+                let Some(fields) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_fields(
+                    &variant_type
+                ) else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if vars.len() != fields.len() {
@@ -171,8 +175,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
                 let user_type = user_type.type_of(scope)?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <Option<
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                let Some(fields) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_fields(&user_type) else {
                     return Err(SemanticError::InvalidPattern);
                 };
@@ -189,8 +194,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
                 let user_type = user_type.type_of(scope)?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <Option<
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+                let Some(fields) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_fields(&user_type) else {
                     return Err(SemanticError::InvalidPattern);
                 };
@@ -213,9 +219,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
             }
             PatternVar::Tuple(value) => {
                 let mut scope_vars = Vec::with_capacity(value.len());
-                let Some(fields) = <Option<
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-                > as GetSubTypes<Scope>>::get_fields(&context) else {
+                let Some(user_type) = context else {
+                    return Err(SemanticError::CantInferType);
+                };
+                let Some(fields) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_fields(user_type) else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if value.len() != fields.len() {

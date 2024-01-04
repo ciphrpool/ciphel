@@ -19,6 +19,7 @@ pub enum SemanticError {
     ExpectedChannel,
 
     UnknownField,
+    UndeterministType,
 
     IncorrectStruct,
     IncorrectVariant,
@@ -56,7 +57,7 @@ pub trait TypeOf<Scope: ScopeApi> {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized;
@@ -67,7 +68,7 @@ pub trait MergeType<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Scope,
-    ) -> Result<Option<EitherType<Scope::UserType, Scope::StaticType>>, SemanticError>
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>;
 }

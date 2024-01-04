@@ -9,10 +9,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for EventDef {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -25,10 +22,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for EventCondition {
     fn type_of(
         &self,
         scope: &Scope,
-    ) -> Result<
-        Option<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>>,
-        SemanticError,
-    >
+    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
