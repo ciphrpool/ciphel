@@ -1,5 +1,4 @@
 use crate::{
-    ast::statements::scope::Scope,
     semantic::{
         scope::{type_traits::IsEnum, ScopeApi},
         Resolve, SemanticError,
@@ -46,8 +45,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
-        context: &Self::Context,
+        _scope: &mut Scope,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

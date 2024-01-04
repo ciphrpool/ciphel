@@ -4,7 +4,7 @@ use crate::semantic::{
 };
 
 use super::{
-    Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Expression, HighOrdMath, LogicalAnd,
+    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, HighOrdMath, LogicalAnd,
     LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 

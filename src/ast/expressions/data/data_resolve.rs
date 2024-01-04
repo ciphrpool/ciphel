@@ -1,4 +1,4 @@
-use std::task::Context;
+
 
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
@@ -94,7 +94,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized 
@@ -177,7 +177,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
         Scope: ScopeApi,
     {
         match self {
-            Slice::String(value) => Ok(()),
+            Slice::String(_value) => Ok(()),
             Slice::List(value) => match value.iter().find_map(|expr| {
 
                 let param_context = match context {
@@ -217,7 +217,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
-            Vector::Def { length, capacity } => Ok(()),
+            Vector::Def { length: _, capacity: _ } => Ok(()),
         }
     }
 }
@@ -240,7 +240,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
         Self: Sized,
         Scope: ScopeApi,
     {
-        for (index, expr) in self.iter().enumerate() {
+        for (_index, expr) in self.iter().enumerate() {
             let param_context = match context {
                 Some(context) => <
                 EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
@@ -281,7 +281,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
         })
 
         .map(|(index, id,param)| {
-            let param_type = param.type_of(scope);
+            let _param_type = param.type_of(scope);
             let param_type = <
                     EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
                  as GetSubTypes<Scope>>::get_nth(context, &index)
@@ -326,8 +326,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         Scope: ScopeApi,
     {
         match self {
-            ClosureParam::Full { id, signature } => signature.resolve(scope, &()),
-            ClosureParam::Minimal(value) => match context {
+            ClosureParam::Full { id: _, signature } => signature.resolve(scope, &()),
+            ClosureParam::Minimal(_value) => match context {
                 Some(_) => Ok(()),
                 None => Err(SemanticError::CantInferType),
             },
@@ -389,7 +389,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
 impl<Scope: ScopeApi> Resolve<Scope> for Struct {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -456,7 +456,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -536,7 +536,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -587,7 +587,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
                     None => Ok(()),
                 }
             }
-            Map::Def { length, capacity } => Ok(()),
+            Map::Def { length: _, capacity: _ } => Ok(()),
         }
     }
 }

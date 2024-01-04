@@ -1,13 +1,13 @@
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
+    ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
-use crate::ast::types::{PrimitiveType, Type};
+use crate::ast::types::{PrimitiveType};
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
 use crate::{
-    ast::{expressions::Expression, types::SliceType},
+    ast::{types::SliceType},
     semantic::{
         scope::{type_traits::GetSubTypes, ScopeApi},
         EitherType, Resolve, SemanticError, TypeOf,
@@ -259,7 +259,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            ClosureParam::Full { id, signature } => signature.type_of(scope),
+            ClosureParam::Full { id: _, signature } => signature.type_of(scope),
             ClosureParam::Minimal(_) => Ok(EitherType::Static(Scope::StaticType::build_any())),
         }
     }
@@ -302,7 +302,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Channel::Receive { addr, timeout } => {
+            Channel::Receive { addr, timeout: _ } => {
                 let addr_type = addr.type_of(scope)?;
                 let msg_type = <EitherType<
                     <Scope as ScopeApi>::UserType,
@@ -314,7 +314,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
                 let result_type = msg_type.type_of(scope)?;
                 Ok(result_type)
             }
-            Channel::Send { addr, msg } => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            Channel::Send { addr: _, msg: _ } => Ok(EitherType::Static(Scope::StaticType::build_unit())),
             Channel::Init(_) => {
                 let any_type: Scope::StaticType = Scope::StaticType::build_any();
 
@@ -392,7 +392,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map {
                 Scope::StaticType::build_map_from(&key_type, &value_type, scope)
                     .map(|value| EitherType::Static(value))
             }
-            Map::Def { length, capacity } => Ok(EitherType::Static(Scope::StaticType::build_any())),
+            Map::Def { length: _, capacity: _ } => Ok(EitherType::Static(Scope::StaticType::build_any())),
         }
     }
 }

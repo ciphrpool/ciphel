@@ -2,7 +2,7 @@ use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();
@@ -10,7 +10,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

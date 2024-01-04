@@ -1,8 +1,7 @@
 use super::Scope;
-use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{CompatibleWith, MergeType, TypeOf};
+
+use crate::semantic::{CompatibleWith, TypeOf};
 use crate::{
-    ast::statements::Statement,
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 

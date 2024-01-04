@@ -108,7 +108,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
 impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
     fn type_of(
         &self,
-        scope: &Scope,
+        _scope: &Scope,
     ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,

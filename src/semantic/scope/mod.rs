@@ -1,5 +1,4 @@
 use crate::ast::{
-    expressions::{error, Expression},
     statements::definition,
     types,
     utils::strings::ID,
@@ -7,7 +6,7 @@ use crate::ast::{
 
 use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
-use super::{CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf};
+use super::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;

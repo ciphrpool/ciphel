@@ -12,11 +12,10 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst, ID},
+            strings::{parse_id, wst},
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};

@@ -1,18 +1,16 @@
 use crate::{
-    ast::utils::strings::ID,
-    semantic::{CompatibleWith, EitherType, Resolve, SemanticError, TypeOf},
+    semantic::{CompatibleWith, EitherType, SemanticError, TypeOf},
 };
 
 use super::{
-    type_traits::{GetSubTypes, TypeChecking},
-    BuildEvent, BuildVar, ScopeApi,
+    BuildEvent, ScopeApi,
 };
 
 #[derive(Debug, Clone)]
 pub struct Event {}
 
 impl<Scope: ScopeApi<Event = Self>> CompatibleWith<Scope> for Event {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, _other: &Other, _scope: &Scope) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -23,7 +21,7 @@ impl<Scope: ScopeApi<Event = Self>> CompatibleWith<Scope> for Event {
 impl<Scope: ScopeApi<Event = Self>> TypeOf<Scope> for Event {
     fn type_of(
         &self,
-        scope: &Scope,
+        _scope: &Scope,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
@@ -34,7 +32,7 @@ impl<Scope: ScopeApi<Event = Self>> TypeOf<Scope> for Event {
 }
 
 impl<Scope: ScopeApi<Event = Self>> BuildEvent<Scope> for Event {
-    fn build_event(scope: &Scope, event: &crate::ast::statements::definition::EventDef) -> Self {
+    fn build_event(_scope: &Scope, _event: &crate::ast::statements::definition::EventDef) -> Self {
         todo!()
     }
 }

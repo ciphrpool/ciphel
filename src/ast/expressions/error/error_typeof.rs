@@ -5,7 +5,7 @@ use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeO
 impl<Scope: ScopeApi> TypeOf<Scope> for Error {
     fn type_of(
         &self,
-        scope: &Scope,
+        _scope: &Scope,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,

@@ -15,7 +15,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -144,8 +144,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
-        context: &Self::Context,
+        _scope: &mut Scope,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -207,8 +207,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
-        context: &Self::Context,
+        _scope: &mut Scope,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -223,8 +223,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
-        context: &Self::Context,
+        _scope: &mut Scope,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

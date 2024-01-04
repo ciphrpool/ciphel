@@ -1,4 +1,4 @@
-use crate::semantic::{CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf};
 
 use super::{
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
@@ -22,7 +22,7 @@ pub struct Enum();
 pub struct Union();
 
 impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {
-    fn type_of(&self, scope: &Scope) -> Result<EitherType<Self, Scope::StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Scope) -> Result<EitherType<Self, Scope::StaticType>, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
@@ -32,7 +32,7 @@ impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {
 }
 
 impl<Scope: ScopeApi<UserType = Self>> CompatibleWith<Scope> for UserType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, _other: &Other, _scope: &Scope) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -41,7 +41,7 @@ impl<Scope: ScopeApi<UserType = Self>> CompatibleWith<Scope> for UserType {
 }
 
 impl<Scope: ScopeApi<UserType = Self>> BuildUserType<Scope> for UserType {
-    fn build_usertype(type_sig: &crate::ast::statements::definition::TypeDef) -> Self {
+    fn build_usertype(_type_sig: &crate::ast::statements::definition::TypeDef) -> Self {
         todo!()
     }
 }
@@ -57,8 +57,8 @@ impl IsEnum for UserType {}
 impl<Scope: ScopeApi<UserType = UserType>> MergeType<Scope> for UserType {
     fn merge<Other>(
         &self,
-        other: &Other,
-        scope: &Scope,
+        _other: &Other,
+        _scope: &Scope,
     ) -> Result<EitherType<UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -68,7 +68,7 @@ impl<Scope: ScopeApi<UserType = UserType>> MergeType<Scope> for UserType {
 }
 
 impl<Scope: ScopeApi<UserType = UserType>> CompatibleWith<Scope> for Enum {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, _other: &Other, _scope: &Scope) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -77,7 +77,7 @@ impl<Scope: ScopeApi<UserType = UserType>> CompatibleWith<Scope> for Enum {
 }
 
 impl Enum {
-    pub fn merge(&self, other: &Enum) -> Result<Enum, SemanticError> {
+    pub fn merge(&self, _other: &Enum) -> Result<Enum, SemanticError> {
         todo!()
     }
 }

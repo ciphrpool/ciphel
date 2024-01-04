@@ -11,18 +11,17 @@ use crate::{
             Expression,
         },
         statements::{
-            declaration::{DeclaredVar, PatternVar},
+            declaration::{PatternVar},
             scope::Scope,
         },
         utils::{
             io::{PResult, Span},
             lexem,
             numbers::parse_number,
-            strings::{parse_id, wst, ID},
+            strings::{parse_id, wst},
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};

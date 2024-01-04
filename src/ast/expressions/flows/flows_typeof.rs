@@ -3,7 +3,7 @@ use crate::semantic::{
     EitherType, MergeType, Resolve, SemanticError, TypeOf,
 };
 
-use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow {
     fn type_of(

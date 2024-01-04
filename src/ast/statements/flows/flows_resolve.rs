@@ -1,9 +1,8 @@
 use crate::semantic::{
     scope::{
-        type_traits::{GetSubTypes, TypeChecking},
+        type_traits::{TypeChecking},
         ScopeApi,
-    },
-    CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+    }, EitherType, Resolve, SemanticError, TypeOf,
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
@@ -34,7 +33,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -60,7 +59,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -104,7 +103,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -123,7 +122,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

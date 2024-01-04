@@ -3,7 +3,6 @@ use crate::ast::{
         flows::{FnCall, Pattern},
         Expression,
     },
-    utils::strings::ID,
 };
 
 use super::scope::Scope;

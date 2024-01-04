@@ -1,7 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{cut, map, opt},
-    multi::fold_many0,
+    combinator::{map},
     sequence::delimited,
 };
 

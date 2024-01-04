@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+
 
 use nom::{
     branch::alt,
     combinator::map,
-    multi::{fold_many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    multi::{separated_list0, separated_list1},
+    sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
 use crate::ast::{
@@ -13,7 +13,7 @@ use crate::ast::{
     utils::{
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst, ID},
+        strings::{parse_id, wst},
     },
     TryParse,
 };
@@ -222,7 +222,7 @@ impl TryParse for EventDef {
 }
 
 impl TryParse for EventCondition {
-    fn parse(input: Span) -> PResult<Self> {
+    fn parse(_input: Span) -> PResult<Self> {
         todo!()
     }
 }
@@ -236,7 +236,6 @@ mod tests {
             Atomic, Expression,
         },
         statements::{
-            flows::{CallStat, Flow},
             Return, Statement,
         },
         types::PrimitiveType,

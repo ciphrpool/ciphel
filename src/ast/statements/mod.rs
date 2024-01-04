@@ -90,7 +90,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
             Statement::Flow(value) => value.type_of(scope),
             Statement::Assignation(value) => value.type_of(scope),
             Statement::Declaration(value) => value.type_of(scope),
-            Statement::Definition(value) => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            Statement::Definition(_value) => Ok(EitherType::Static(Scope::StaticType::build_unit())),
             Statement::Loops(value) => value.type_of(scope),
             Statement::Return(value) => value.type_of(scope),
         }
@@ -133,7 +133,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

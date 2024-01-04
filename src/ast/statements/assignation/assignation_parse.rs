@@ -1,26 +1,21 @@
 use nom::{
     branch::alt,
     combinator::map,
-    multi::separated_list1,
     sequence::{separated_pair, terminated},
 };
 
-use crate::{
-    ast::{
-        expressions::{
-            data::{PtrAccess, Variable},
-            Expression,
-        },
-        statements::scope::Scope,
-        types::Type,
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{parse_id, wst, ID},
-        },
-        TryParse,
+use crate::ast::{
+    expressions::{
+        data::{PtrAccess, Variable},
+        Expression,
     },
-    semantic::{scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError},
+    statements::scope::Scope,
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::wst,
+    },
+    TryParse,
 };
 
 use super::{AssignValue, Assignation, Assignee};

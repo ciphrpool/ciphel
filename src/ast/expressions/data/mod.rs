@@ -1,20 +1,13 @@
 use crate::{
     ast::{
         self,
-        types::Type,
         utils::{
-            io::{PResult, Span},
-            lexem,
-            numbers::{parse_float, parse_number, Number},
+            numbers::{Number},
             strings::{
-                eater, parse_id,
-                string_parser::{parse_char, parse_string},
-                wst, ID,
+                ID,
             },
         },
-        TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::Expression;

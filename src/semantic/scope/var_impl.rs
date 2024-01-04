@@ -1,6 +1,6 @@
 use crate::{
     ast::utils::strings::ID,
-    semantic::{CompatibleWith, EitherType, Resolve, SemanticError, TypeOf},
+    semantic::{CompatibleWith, EitherType, SemanticError, TypeOf},
 };
 
 use super::{

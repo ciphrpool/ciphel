@@ -2,7 +2,7 @@ use crate::ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse}
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{separated_list0, separated_list1},
+    multi::{separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
@@ -12,10 +12,9 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst, ID},
+            strings::{wst},
         },
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};

@@ -1,14 +1,4 @@
-use crate::{
-    ast::{
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::wst,
-        },
-        TryParse,
-    },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
-};
+
 
 use super::{Atomic, Expression};
 pub mod operation_parse;

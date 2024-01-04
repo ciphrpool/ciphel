@@ -3,7 +3,6 @@ use crate::ast::{
         data::{PtrAccess, Variable},
         Expression,
     },
-    utils::strings::ID,
 };
 
 use super::scope::Scope;

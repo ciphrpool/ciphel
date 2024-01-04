@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     combinator::{map, opt, value},
-    sequence::{preceded, separated_pair, tuple},
+    sequence::{preceded},
 };
 
 use crate::{
@@ -13,7 +13,6 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{
@@ -95,7 +94,7 @@ impl TryParseOperation for LowOrdMath {
         let (remainder, left) = HighOrdMath::parse(input)?;
         let (remainder, op) = opt(wst(lexem::ADD))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = HighOrdMath::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
@@ -156,7 +155,7 @@ impl TryParseOperation for BitwiseAnd {
         let (remainder, left) = Shift::parse(input)?;
         let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = Shift::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
@@ -181,7 +180,7 @@ impl TryParseOperation for BitwiseXOR {
         let (remainder, left) = BitwiseAnd::parse(input)?;
         let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = BitwiseAnd::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
@@ -206,7 +205,7 @@ impl TryParseOperation for BitwiseOR {
         let (remainder, left) = BitwiseXOR::parse(input)?;
         let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = BitwiseXOR::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
@@ -279,7 +278,7 @@ impl TryParseOperation for LogicalAnd {
         let (remainder, left) = Comparaison::parse(input)?;
         let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = Comparaison::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
@@ -304,7 +303,7 @@ impl TryParseOperation for LogicalOr {
         let (remainder, left) = LogicalAnd::parse(input)?;
         let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
 
-        if let Some(op) = op {
+        if let Some(_op) = op {
             let (remainder, right) = LogicalAnd::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);

@@ -3,16 +3,13 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            numbers::parse_number,
-            strings::{eater, wst},
+            strings::{wst},
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 use nom::{
-    combinator::{map, value},
-    sequence::{delimited, preceded},
+    combinator::{value},
 };
 
 use super::Error;
@@ -24,7 +21,7 @@ impl TryParse for Error {
 }
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::Expression;
+    
 
     use super::*;
 

@@ -29,7 +29,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
     fn resolve(
         &self,
         scope: &mut Scope,
-        context: &Self::Context,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

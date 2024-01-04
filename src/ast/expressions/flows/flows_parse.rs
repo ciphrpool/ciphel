@@ -14,11 +14,10 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{eater, parse_id, string_parser::parse_string, wst, ID},
+            strings::{parse_id, string_parser::parse_string, wst},
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};

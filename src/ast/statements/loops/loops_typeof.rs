@@ -35,7 +35,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
             ForIterator::Vec(value) => value.type_of(scope),
             ForIterator::Slice(value) => value.type_of(scope),
             ForIterator::Tuple(value) => value.type_of(scope),
-            ForIterator::Receive { addr, timeout } => addr.type_of(scope),
+            ForIterator::Receive { addr, timeout: _ } => addr.type_of(scope),
         }
     }
 }

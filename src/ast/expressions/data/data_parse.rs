@@ -2,25 +2,23 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            numbers::{parse_float, parse_number, Number},
+            numbers::{parse_float, parse_number},
             strings::{
-                eater, parse_id,
+                parse_id,
                 string_parser::{parse_char, parse_string},
-                wst, ID,
+                wst,
             },
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError},
 };
 use nom::{
     branch::alt,
-    combinator::{cut, map, opt, value},
-    multi::{fold_many0, separated_list0, separated_list1},
+    combinator::{map, opt, value},
+    multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
@@ -84,7 +82,7 @@ impl FieldAccess {
         let (remainder, var) = ListAccess::parse(input)?;
         let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
 
-        if let Some(index) = index {
+        if let Some(_index) = index {
             let (remainder, right) = FieldAccess::parse(remainder)?;
             Ok((
                 remainder,

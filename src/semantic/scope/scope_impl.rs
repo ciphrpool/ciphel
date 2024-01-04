@@ -59,15 +59,15 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn attach(&mut self, vars: impl Iterator<Item = Self::Var>) {
+    fn attach(&mut self, _vars: impl Iterator<Item = Self::Var>) {
         todo!()
     }
 
-    fn register_type(&mut self, reg: Self::UserType) -> Result<(), crate::semantic::SemanticError> {
+    fn register_type(&mut self, _reg: Self::UserType) -> Result<(), crate::semantic::SemanticError> {
         todo!()
     }
 
-    fn register_chan(&mut self, reg: &ID) -> Result<(), crate::semantic::SemanticError> {
+    fn register_chan(&mut self, _reg: &ID) -> Result<(), crate::semantic::SemanticError> {
         todo!()
     }
 
@@ -84,11 +84,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_event(&mut self, reg: Self::Event) -> Result<(), crate::semantic::SemanticError> {
+    fn register_event(&mut self, _reg: Self::Event) -> Result<(), crate::semantic::SemanticError> {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<&Self::Var, crate::semantic::SemanticError> {
+    fn find_var(&self, _id: &ID) -> Result<&Self::Var, crate::semantic::SemanticError> {
         todo!()
     }
 
@@ -96,7 +96,7 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<&Self::UserType, crate::semantic::SemanticError> {
+    fn find_type(&self, _id: &ID) -> Result<&Self::UserType, crate::semantic::SemanticError> {
         todo!()
     }
 

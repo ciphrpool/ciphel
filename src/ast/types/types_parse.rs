@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     combinator::{map, value},
-    multi::{many1, separated_list1},
+    multi::{separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
@@ -9,7 +9,7 @@ use crate::ast::utils::{
     io::{PResult, Span},
     lexem,
     numbers::parse_number,
-    strings::{parse_id, wst, ID},
+    strings::{parse_id, wst},
 };
 
 use crate::ast::TryParse;

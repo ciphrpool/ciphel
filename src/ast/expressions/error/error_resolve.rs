@@ -7,8 +7,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Error {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
-        context: &Self::Context,
+        _scope: &mut Scope,
+        _context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

@@ -5,7 +5,7 @@ use crate::{
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
             ScopeApi,
         },
-        CompatibleWith, EitherType, MergeType, Resolve, SemanticError, TypeOf,
+        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
     },
 };
 
@@ -107,7 +107,7 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
     fn is_channel(&self) -> bool {
         match self {
             EitherType::Static(static_type) => static_type.is_channel(),
-            EitherType::User(user_type) => false,
+            EitherType::User(_user_type) => false,
         }
     }
 
@@ -120,7 +120,7 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
     fn is_unit(&self) -> bool {
         match self {
             EitherType::Static(static_type) => static_type.is_unit(),
-            EitherType::User(user_type) => false,
+            EitherType::User(_user_type) => false,
         }
     }
 }

@@ -7,7 +7,7 @@ use crate::ast::{
 };
 
 use super::{
-    declaration::{DeclaredVar, PatternVar},
+    declaration::{PatternVar},
     scope::Scope,
 };
 

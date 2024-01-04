@@ -3,10 +3,10 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, one_of},
-    combinator::{map, map_res, opt, recognize},
+    combinator::{map_res, opt, recognize},
     multi::{many0, many1},
     sequence::{preceded, terminated, tuple},
-    IResult, Parser,
+    IResult,
 };
 use nom_supreme::error::ErrorTree;
 use num_traits::Num;

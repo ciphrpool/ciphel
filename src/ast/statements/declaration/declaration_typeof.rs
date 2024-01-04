@@ -6,7 +6,7 @@ use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 impl<Scope: ScopeApi> TypeOf<Scope> for Declaration {
     fn type_of(
         &self,
-        scope: &Scope,
+        _scope: &Scope,
     ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
@@ -46,7 +46,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
     fn type_of(
         &self,
-        scope: &Scope,
+        _scope: &Scope,
     ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,

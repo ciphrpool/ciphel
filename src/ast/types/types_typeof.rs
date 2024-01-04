@@ -1,15 +1,14 @@
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, TupleType, Type, Types,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, TupleType, Type,
     VecType,
 };
 use crate::semantic::scope::static_type_impl::{self, StaticType};
-use crate::semantic::scope::type_traits::IsEnum;
+
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::CompatibleWith;
 use crate::{
-    ast::statements::scope::Scope,
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
+    semantic::{scope::ScopeApi, EitherType, SemanticError, TypeOf},
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Type {
