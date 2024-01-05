@@ -1,7 +1,4 @@
-use super::{
-    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
-    UnionDef, UnionVariant,
-};
+use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 use crate::ast::types::FnType;
 use crate::ast::types::Types;
 use crate::semantic::scope::BuildUserType;
@@ -51,31 +48,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StructVariant {
-    type Output = ();
-    type Context = ();
-    fn resolve(
-        &self,
-        scope: &mut Scope,
-        context: &Self::Context,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            StructVariant::Fields(fields) => match fields
-                .iter()
-                .find_map(|(_, field)| field.resolve(scope, context).err())
-            {
-                Some(err) => Err(err),
-                None => Ok(()),
-            },
-            StructVariant::Inline(values) => values.resolve(scope, context),
-        }
-    }
-}
-
 impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Output = ();
     type Context = ();
@@ -88,34 +60,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.fields.resolve(scope, context)?;
-        Ok(())
-    }
-}
-
-impl<Scope: ScopeApi> Resolve<Scope> for UnionVariant {
-    type Output = ();
-    type Context = ();
-    fn resolve(
-        &self,
-        scope: &mut Scope,
-        context: &Self::Context,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            UnionVariant::Id => Ok(()),
-            UnionVariant::Fields(fields) => match fields
-                .iter()
-                .find_map(|(_, field)| field.resolve(scope, context).err())
-            {
-                Some(err) => Err(err),
-                None => Ok(()),
-            },
-            UnionVariant::Inline(values) => values.resolve(scope, context),
+        for (_, type_siq) in &self.fields {
+            let _ = type_siq.resolve(scope, context)?;
         }
+        Ok(())
     }
 }
 
@@ -132,7 +80,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
         Scope: ScopeApi,
     {
         for (_, variant) in &self.variants {
-            let _ = variant.resolve(scope, context)?;
+            for (_, type_sig) in variant {
+                let _ = type_sig.resolve(scope, context);
+            }
         }
 
         Ok(())

@@ -1,19 +1,17 @@
-use crate::{
-    ast::{
-        self,
-        expressions::Expression,
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            numbers::{parse_float, parse_number},
-            strings::{
-                parse_id,
-                string_parser::{parse_char, parse_string},
-                wst,
-            },
+use crate::ast::{
+    self,
+    expressions::Expression,
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        numbers::{parse_float, parse_number},
+        strings::{
+            parse_id,
+            string_parser::{parse_char, parse_string},
+            wst,
         },
-        TryParse,
     },
+    TryParse,
 };
 use nom::{
     branch::alt,
@@ -334,29 +332,20 @@ impl TryParse for Struct {
      * ObjField := ID | ID : Expr
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                pair(
-                    parse_id,
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(
-                            wst(lexem::COMA),
-                            separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                        ),
-                        wst(lexem::BRA_C),
+        map(
+            pair(
+                parse_id,
+                delimited(
+                    wst(lexem::BRA_O),
+                    separated_list1(
+                        wst(lexem::COMA),
+                        separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
+                    wst(lexem::BRA_C),
                 ),
-                |(id, value)| Struct::Field { id, fields: value },
             ),
-            map(
-                pair(
-                    parse_id,
-                    delimited(wst(lexem::PAR_O), MultiData::parse, wst(lexem::PAR_C)),
-                ),
-                |(id, data)| Struct::Inline { id, data },
-            ),
-        ))(input)
+            |(id, value)| Struct { id, fields: value },
+        )(input)
     }
 }
 
@@ -370,37 +359,24 @@ impl TryParse for Union {
      * ObjField := ID | ID : Expr
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(
-                            wst(lexem::COMA),
-                            separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                        ),
-                        wst(lexem::BRA_C),
+        map(
+            pair(
+                separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                delimited(
+                    wst(lexem::BRA_O),
+                    separated_list1(
+                        wst(lexem::COMA),
+                        separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
+                    wst(lexem::BRA_C),
                 ),
-                |((typename, name), value)| Union::Field {
-                    variant: name,
-                    typename: typename,
-                    fields: value,
-                },
             ),
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(wst(lexem::PAR_O), MultiData::parse, wst(lexem::PAR_C)),
-                ),
-                |((typename, name), data)| Union::Inline {
-                    variant: name,
-                    typename,
-                    data,
-                },
-            ),
-        ))(input)
+            |((typename, name), value)| Union {
+                variant: name,
+                typename: typename,
+                fields: value,
+            },
+        )(input)
     }
 }
 
@@ -693,7 +669,7 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Struct::Field {
+            Struct {
                 id: "Point".into(),
                 fields: vec![
                     (
@@ -708,20 +684,6 @@ mod tests {
             },
             value
         );
-
-        let res = Struct::parse(r#"Point (2, 8)"#.into());
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(
-            Struct::Inline {
-                id: "Point".into(),
-                data: vec![
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
-                ]
-            },
-            value
-        )
     }
 
     #[test]
@@ -730,7 +692,7 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Union::Field {
+            Union {
                 typename: "Geo".into(),
                 variant: "Point".into(),
                 fields: vec![
@@ -746,21 +708,6 @@ mod tests {
             },
             value
         );
-
-        let res = Union::parse(r#"Geo::Point (2, 8)"#.into());
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(
-            Union::Inline {
-                typename: "Geo".into(),
-                variant: "Point".into(),
-                data: vec![
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
-                ]
-            },
-            value
-        )
     }
 
     #[test]

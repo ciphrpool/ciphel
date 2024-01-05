@@ -5,19 +5,17 @@ use nom::{
     sequence::{delimited, pair, preceded, separated_pair},
 };
 
-use crate::{
-    ast::{
-        expressions::{
-            data::{Primitive, Variable},
-            Expression,
-        },
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{parse_id, string_parser::parse_string, wst},
-        },
-        TryParse,
+use crate::ast::{
+    expressions::{
+        data::{Primitive, Variable},
+        Expression,
     },
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::{parse_id, string_parser::parse_string, wst},
+    },
+    TryParse,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
@@ -90,27 +88,12 @@ impl TryParse for Pattern {
                 pair(
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
                     delimited(
-                        wst(lexem::PAR_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                |((typename, variant), vars)| Pattern::UnionInline {
-                    typename,
-                    variant,
-                    vars,
-                },
-            ),
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
                         wst(lexem::BRA_O),
                         separated_list1(wst(lexem::COMA), parse_id),
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |((typename, variant), vars)| Pattern::UnionFields {
+                |((typename, variant), vars)| Pattern::Union {
                     typename,
                     variant,
                     vars,
@@ -124,23 +107,12 @@ impl TryParse for Pattern {
                 pair(
                     parse_id,
                     delimited(
-                        wst(lexem::PAR_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                |(typename, vars)| Pattern::StructInline { typename, vars },
-            ),
-            map(
-                pair(
-                    parse_id,
-                    delimited(
                         wst(lexem::BRA_O),
                         separated_list1(wst(lexem::COMA), parse_id),
                         wst(lexem::BRA_C),
                     ),
                 ),
-                |(typename, vars)| Pattern::StructFields { typename, vars },
+                |(typename, vars)| Pattern::Struct { typename, vars },
             ),
             map(
                 delimited(
@@ -304,9 +276,7 @@ mod tests {
             case 10 => true,
             case "Hello world" => true,
             case Geo::Point => true,
-            case Geo::Point(y) => true,
             case Geo::Point{y} => true,
-            case Point(y) => true,
             case Point{y} => true,
             case (y,z) => true,
             else => true
@@ -343,7 +313,7 @@ mod tests {
                         ))))
                     },
                     PatternExpr {
-                        pattern: Pattern::UnionInline {
+                        pattern: Pattern::Union {
                             typename: "Geo".into(),
                             variant: "Point".into(),
                             vars: vec!["y".into()]
@@ -353,26 +323,7 @@ mod tests {
                         ))))
                     },
                     PatternExpr {
-                        pattern: Pattern::UnionFields {
-                            typename: "Geo".into(),
-                            variant: "Point".into(),
-                            vars: vec!["y".into()]
-                        },
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
-                    },
-                    PatternExpr {
-                        pattern: Pattern::StructInline {
-                            typename: "Point".into(),
-                            vars: vec!["y".into()]
-                        },
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
-                    },
-                    PatternExpr {
-                        pattern: Pattern::StructFields {
+                        pattern: Pattern::Struct {
                             typename: "Point".into(),
                             vars: vec!["y".into()]
                         },

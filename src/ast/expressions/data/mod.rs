@@ -1,13 +1,6 @@
-use crate::{
-    ast::{
-        self,
-        utils::{
-            numbers::{Number},
-            strings::{
-                ID,
-            },
-        },
-    },
+use crate::ast::{
+    self,
+    utils::{numbers::Number, strings::ID},
 };
 
 use super::Expression;
@@ -113,29 +106,16 @@ pub enum Channel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Struct {
-    Inline {
-        id: ID,
-        data: MultiData,
-    },
-    Field {
-        id: ID,
-        fields: Vec<(String, Expression)>,
-    },
+pub struct Struct {
+    id: ID,
+    fields: Vec<(String, Expression)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Union {
-    Inline {
-        typename: ID,
-        variant: ID,
-        data: MultiData,
-    },
-    Field {
-        typename: ID,
-        variant: ID,
-        fields: Vec<(String, Expression)>,
-    },
+pub struct Union {
+    typename: ID,
+    variant: ID,
+    fields: Vec<(ID, Expression)>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]

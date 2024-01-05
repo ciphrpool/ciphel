@@ -26,26 +26,13 @@ pub enum TypeDef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
     id: ID,
-    fields: StructVariant,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum StructVariant {
-    Fields(Vec<(ID, Type)>),
-    Inline(Types),
+    fields: Vec<(ID, Type)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDef {
     id: ID,
-    variants: Vec<(ID, UnionVariant)>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum UnionVariant {
-    Id,
-    Fields(Vec<(ID, Type)>),
-    Inline(Types),
+    variants: Vec<(ID, Vec<(ID, Type)>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

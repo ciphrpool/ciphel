@@ -93,36 +93,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     None => Err(SemanticError::IncorrectVariant),
                 }
             }
-            Pattern::UnionInline {
-                typename,
-                variant,
-                vars,
-            } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
-                let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
-                    user_type.get_variant(variant);
-                let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(
-                    &variant_type
-                ) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &vars[index];
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
-            Pattern::UnionFields {
+            Pattern::Union {
                 typename,
                 variant,
                 vars,
@@ -159,26 +130,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 }
                 Ok(scope_vars)
             }
-            Pattern::StructInline { typename, vars } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
-                let user_type = user_type.type_of(scope)?;
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(&user_type) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &vars[index];
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
-            Pattern::StructFields { typename, vars } => {
+            Pattern::Struct { typename, vars } => {
                 let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
                 let user_type = user_type.type_of(scope)?;
                 let mut scope_vars = Vec::with_capacity(vars.len());

@@ -1,5 +1,3 @@
-
-
 use nom::{
     branch::alt,
     combinator::map,
@@ -18,10 +16,7 @@ use crate::ast::{
     TryParse,
 };
 
-use super::{
-    Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, StructVariant, TypeDef,
-    UnionDef, UnionVariant,
-};
+use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
 impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
@@ -43,33 +38,6 @@ impl TryParse for TypeDef {
     }
 }
 
-impl TryParse for StructVariant {
-    /*
-     * @desc Parse struct variant
-     *
-     * @grammar
-     * { Struct_fields } | struct ID \( Types \)
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(
-                    wst(lexem::BRA_O),
-                    separated_list1(
-                        wst(lexem::COMA),
-                        separated_pair(parse_id, wst(lexem::COLON), Type::parse),
-                    ),
-                    wst(lexem::BRA_C),
-                ),
-                |value| StructVariant::Fields(value),
-            ),
-            map(
-                delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
-                |value| StructVariant::Inline(value),
-            ),
-        ))(input)
-    }
-}
 impl TryParse for StructDef {
     /*
      * @desc Parse struct definition
@@ -81,21 +49,8 @@ impl TryParse for StructDef {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            pair(preceded(wst(lexem::STRUCT), parse_id), StructVariant::parse),
-            |(id, fields)| StructDef { id, fields },
-        )(input)
-    }
-}
-impl TryParse for UnionVariant {
-    /*
-     * @desc Parse struct variant
-     *
-     * @grammar
-     * Union_field := ID | ID { Struct_fields } | ID \(  Types \)
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
+            pair(
+                preceded(wst(lexem::STRUCT), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
@@ -104,13 +59,9 @@ impl TryParse for UnionVariant {
                     ),
                     wst(lexem::BRA_C),
                 ),
-                |value| UnionVariant::Fields(value),
             ),
-            map(
-                delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
-                |value| UnionVariant::Inline(value),
-            ),
-        ))(input)
+            |(id, fields)| StructDef { id, fields },
+        )(input)
     }
 }
 
@@ -131,10 +82,17 @@ impl TryParse for UnionDef {
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
-                        alt((
-                            pair(parse_id, UnionVariant::parse),
-                            map(parse_id, |value| (value, UnionVariant::Id)),
-                        )),
+                        pair(
+                            parse_id,
+                            delimited(
+                                wst(lexem::BRA_O),
+                                separated_list1(
+                                    wst(lexem::COMA),
+                                    separated_pair(parse_id, wst(lexem::COLON), Type::parse),
+                                ),
+                                wst(lexem::BRA_C),
+                            ),
+                        ),
                     ),
                     wst(lexem::BRA_C),
                 ),
@@ -235,9 +193,7 @@ mod tests {
             data::{Data, Primitive},
             Atomic, Expression,
         },
-        statements::{
-            Return, Statement,
-        },
+        statements::{Return, Statement},
         types::PrimitiveType,
     };
 
@@ -259,29 +215,10 @@ mod tests {
         assert_eq!(
             StructDef {
                 id: "Point".into(),
-                fields: StructVariant::Fields(vec![
+                fields: vec![
                     ("x".into(), Type::Primitive(PrimitiveType::Number)),
                     ("y".into(), Type::Primitive(PrimitiveType::Number))
-                ])
-            },
-            value
-        );
-
-        let res = StructDef::parse(
-            r#"
-        struct Point(number,number)
-        "#
-            .into(),
-        );
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(
-            StructDef {
-                id: "Point".into(),
-                fields: StructVariant::Inline(vec![
-                    Type::Primitive(PrimitiveType::Number),
-                    Type::Primitive(PrimitiveType::Number)
-                ])
+                ]
             },
             value
         );
@@ -295,9 +232,7 @@ mod tests {
             Point {
                 x : number,
                 y : number
-            },
-            Axe(number,number),
-            Plan
+            }
         }
         "#
             .into(),
@@ -307,23 +242,13 @@ mod tests {
         assert_eq!(
             UnionDef {
                 id: "Geo".into(),
-                variants: vec![
-                    (
-                        "Point".into(),
-                        UnionVariant::Fields(vec![
-                            ("x".into(), Type::Primitive(PrimitiveType::Number)),
-                            ("y".into(), Type::Primitive(PrimitiveType::Number))
-                        ])
-                    ),
-                    (
-                        "Axe".into(),
-                        UnionVariant::Inline(vec![
-                            Type::Primitive(PrimitiveType::Number),
-                            Type::Primitive(PrimitiveType::Number)
-                        ])
-                    ),
-                    ("Plan".into(), UnionVariant::Id),
-                ]
+                variants: vec![(
+                    "Point".into(),
+                    vec![
+                        ("x".into(), Type::Primitive(PrimitiveType::Number)),
+                        ("y".into(), Type::Primitive(PrimitiveType::Number))
+                    ]
+                ),]
             },
             value
         );

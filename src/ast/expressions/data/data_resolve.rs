@@ -394,31 +394,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Struct::Inline { id, data } => {
-                let user_type = scope.find_type(id)?;
+                let user_type = scope.find_type(&self.id)?;
                 let user_type = user_type.type_of(scope)?;
-            
-                let Some(fields) = <EitherType<<Scope as ScopeApi>::UserType, 
-                <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>
-                ::get_fields(&user_type) else {
-                    return Err(SemanticError::ExpectedStruct)
-                };
-
-                let _ = data.resolve(scope, &Some(user_type))?;
-                if data.len() != fields.len() {
-                    return Err(SemanticError::IncorrectStruct)
-                }
-                for (index,(_,field_type)) in fields.iter().enumerate() {
-                    let _ = field_type.compatible_with(&data[index], scope)?;
-                }
-
-                Ok(())
-            }
-            Struct::Field { id, fields } => {
-                let user_type = scope.find_type(id)?;
-                let user_type = user_type.type_of(scope)?;
-                for (field_name, expr) in fields {
+                for (field_name, expr) in &self.fields {
                     let field_context = <
                         EitherType<
                             <Scope as ScopeApi>::UserType,
@@ -436,21 +414,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
                     ::get_fields(&user_type) else {
                     return Err(SemanticError::ExpectedStruct)
                 };
-                if fields.len() != fields_type.len() {
+                if self.fields.len() != fields_type.len() {
                     return Err(SemanticError::IncorrectStruct)
                 }
                 for (field_name,field_type) in fields_type {
                     let Some(field_name) = field_name else {
                         return Err(SemanticError::IncorrectStruct)
                     };
-                    let Some(expr_field) = fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
+                    let Some(expr_field) = self.fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
                         return Err(SemanticError::IncorrectStruct)
                     };
                     let _ = field_type.compatible_with(expr_field, scope)?;
                 }
                 Ok(())
-            }
-        }
+            
+        
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
@@ -461,44 +439,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Union::Inline {
-                typename,
-                variant,
-                data,
-            } => {
-                let user_type = scope.find_type(typename)?;
-                let variant_type = user_type.get_variant(variant);
+                let user_type = scope.find_type(&self.typename)?;
+                let variant_type = user_type.get_variant(&self.variant);
                 let Some(variant_type) = variant_type else {
                     return Err(SemanticError::CantInferType);
                 };
-                let Some(fields) = <EitherType<<Scope as ScopeApi>::UserType, 
-                <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>
-                ::get_fields(&variant_type) else {
-                    return Err(SemanticError::ExpectedStruct)
-                };
-
-                let _ = data.resolve(scope, &Some(variant_type))?;
-                if data.len() != fields.len() {
-                    return Err(SemanticError::IncorrectStruct)
-                }
-                for (index,(_,field_type)) in fields.iter().enumerate() {
-                    let _ = field_type.compatible_with(&data[index], scope)?;
-                }
-
-                Ok(())
-            }
-            Union::Field {
-                typename,
-                variant,
-                fields,
-            } => {
-                let user_type = scope.find_type(typename)?;
-                let variant_type = user_type.get_variant(variant);
-                let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                for (field_name, expr) in fields {
+                for (field_name, expr) in &self.fields {
                     let field_context = <
                         EitherType<
                             <Scope as ScopeApi>::UserType,
@@ -516,21 +462,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                     ::get_fields(&variant_type) else {
                     return Err(SemanticError::ExpectedStruct)
                 };
-                if fields.len() != fields_type.len() {
+                if self.fields.len() != fields_type.len() {
                     return Err(SemanticError::IncorrectStruct)
                 }
                 for (field_name,field_type) in fields_type {
                     let Some(field_name) = field_name else {
                         return Err(SemanticError::IncorrectStruct)
                     };
-                    let Some(expr_field) = fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
+                    let Some(expr_field) = self.fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
                         return Err(SemanticError::IncorrectStruct)
                     };
                     let _ = field_type.compatible_with(expr_field, scope)?;
                 }
                 Ok(())
-            }
-        }
+            
+        
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {

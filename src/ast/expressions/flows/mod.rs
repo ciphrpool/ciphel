@@ -38,21 +38,12 @@ pub enum Pattern {
         typename: ID,
         value: ID,
     },
-    UnionInline {
+    Union {
         typename: ID,
         variant: ID,
         vars: Vec<ID>,
     },
-    UnionFields {
-        typename: ID,
-        variant: ID,
-        vars: Vec<ID>,
-    },
-    StructInline {
-        typename: ID,
-        vars: Vec<ID>,
-    },
-    StructFields {
+    Struct {
         typename: ID,
         vars: Vec<ID>,
     },

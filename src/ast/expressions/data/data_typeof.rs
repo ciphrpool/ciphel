@@ -1,13 +1,12 @@
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
-    ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
-    Vector,
+    ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
-use crate::ast::types::{PrimitiveType};
+use crate::ast::types::PrimitiveType;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
 use crate::{
-    ast::{types::SliceType},
+    ast::types::SliceType,
     semantic::{
         scope::{type_traits::GetSubTypes, ScopeApi},
         EitherType, Resolve, SemanticError, TypeOf,
@@ -314,7 +313,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
                 let result_type = msg_type.type_of(scope)?;
                 Ok(result_type)
             }
-            Channel::Send { addr: _, msg: _ } => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            Channel::Send { addr: _, msg: _ } => {
+                Ok(EitherType::Static(Scope::StaticType::build_unit()))
+            }
             Channel::Init(_) => {
                 let any_type: Scope::StaticType = Scope::StaticType::build_any();
 
@@ -333,11 +334,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Struct {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let id = match self {
-            Struct::Inline { id, .. } => id,
-            Struct::Field { id, .. } => id,
-        };
-        let user_type = scope.find_type(id)?;
+        let user_type = scope.find_type(&self.id)?;
         user_type.type_of(scope)
     }
 }
@@ -350,11 +347,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Union {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let typename = match self {
-            Union::Inline { typename, .. } => typename,
-            Union::Field { typename, .. } => typename,
-        };
-        let user_type = scope.find_type(typename)?;
+        let user_type = scope.find_type(&self.typename)?;
         user_type.type_of(scope)
     }
 }
@@ -392,7 +385,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map {
                 Scope::StaticType::build_map_from(&key_type, &value_type, scope)
                     .map(|value| EitherType::Static(value))
             }
-            Map::Def { length: _, capacity: _ } => Ok(EitherType::Static(Scope::StaticType::build_any())),
+            Map::Def {
+                length: _,
+                capacity: _,
+            } => Ok(EitherType::Static(Scope::StaticType::build_any())),
         }
     }
 }
