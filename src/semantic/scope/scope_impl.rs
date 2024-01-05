@@ -1,6 +1,11 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
-use crate::ast::utils::strings::ID;
+use crate::{ast::utils::strings::ID, semantic::SemanticError};
 
 use super::{
     chan_impl::Chan, event_impl::Event, static_type_impl::StaticType, user_type_impl::UserType,
@@ -10,13 +15,14 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct ScopeData {
     vars: HashMap<ID, Var>,
+    types: HashMap<ID, UserType>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Scope {
     Inner {
-        parent: Option<Rc<Scope>>,
-        general: Rc<Scope>,
+        parent: Option<Weak<RefCell<Scope>>>,
+        general: Rc<RefCell<Scope>>,
         data: ScopeData,
     },
     General {
@@ -30,17 +36,18 @@ impl ScopeData {
     pub fn new() -> Self {
         Self {
             vars: HashMap::new(),
+            types: HashMap::new(),
         }
     }
 }
 
-impl Default for Scope {
-    fn default() -> Self {
-        Self::General {
+impl Scope {
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::General {
             data: ScopeData::new(),
             events: HashMap::new(),
             channels: HashMap::new(),
-        }
+        }))
     }
 }
 
@@ -55,16 +62,61 @@ impl ScopeApi for Scope {
 
     type Event = Event;
 
-    fn child_scope(&self) -> Result<Self, crate::semantic::SemanticError> {
-        todo!()
+    fn child_scope(parent: &Rc<RefCell<Self>>) -> Result<Rc<RefCell<Self>>, SemanticError> {
+        let borrowed_parent = parent.as_ref().borrow();
+        match &*borrowed_parent {
+            Scope::Inner { general, data, .. } => {
+                let child = Self::Inner {
+                    parent: Some(Rc::downgrade(parent)),
+                    general: general.clone(),
+                    data: ScopeData::new(),
+                };
+
+                Ok(Rc::new(RefCell::new(child)))
+            }
+            Scope::General {
+                data,
+                events,
+                channels,
+            } => {
+                let child = Self::Inner {
+                    parent: None,
+                    general: parent.clone(),
+                    data: ScopeData::new(),
+                };
+
+                Ok(Rc::new(RefCell::new(child)))
+            }
+        }
     }
 
     fn attach(&mut self, _vars: impl Iterator<Item = Self::Var>) {
         todo!()
     }
 
-    fn register_type(&mut self, _reg: Self::UserType) -> Result<(), crate::semantic::SemanticError> {
-        todo!()
+    fn register_type(
+        &mut self,
+        id: &ID,
+        reg: Self::UserType,
+    ) -> Result<(), crate::semantic::SemanticError> {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                data,
+            } => {
+                data.types.insert(id.clone(), reg);
+                Ok(())
+            }
+            Scope::General {
+                data,
+                events,
+                channels,
+            } => {
+                data.types.insert(id.clone(), reg);
+                Ok(())
+            }
+        }
     }
 
     fn register_chan(&mut self, _reg: &ID) -> Result<(), crate::semantic::SemanticError> {
@@ -88,16 +140,50 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn find_var(&self, _id: &ID) -> Result<&Self::Var, crate::semantic::SemanticError> {
-        todo!()
+    fn find_var(&self, id: &ID) -> Result<Self::Var, crate::semantic::SemanticError> {
+        match self {
+            Scope::Inner { data, parent, .. } => data
+                .vars
+                .get(id)
+                .cloned()
+                .or_else(|| {
+                    parent.as_ref()?.upgrade().and_then(|p| {
+                        let borrowed_scope =
+                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = borrowed_scope.borrow();
+                        borrowed_scope.find_var(id).ok()
+                    })
+                })
+                .ok_or(SemanticError::UnknownVar),
+            Scope::General { data, .. } => {
+                data.vars.get(id).cloned().ok_or(SemanticError::UnknownVar)
+            }
+        }
     }
 
     fn find_chan(&self) -> Result<&Self::Chan, crate::semantic::SemanticError> {
         todo!()
     }
 
-    fn find_type(&self, _id: &ID) -> Result<&Self::UserType, crate::semantic::SemanticError> {
-        todo!()
+    fn find_type(&self, id: &ID) -> Result<Self::UserType, crate::semantic::SemanticError> {
+        match self {
+            Scope::Inner { data, parent, .. } => data
+                .types
+                .get(id)
+                .cloned()
+                .or_else(|| {
+                    parent.as_ref()?.upgrade().and_then(|p| {
+                        let borrowed_scope =
+                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = borrowed_scope.borrow();
+                        borrowed_scope.find_type(id).ok()
+                    })
+                })
+                .ok_or(SemanticError::UnknownVar),
+            Scope::General { data, .. } => {
+                data.types.get(id).cloned().ok_or(SemanticError::UnknownVar)
+            }
+        }
     }
 
     fn find_event(&self) -> Result<&Self::Event, crate::semantic::SemanticError> {

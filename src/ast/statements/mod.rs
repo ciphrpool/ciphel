@@ -1,3 +1,8 @@
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
+
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -57,7 +62,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Statement {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -79,20 +84,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for Statement {
 impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Statement::Scope(value) => value.type_of(scope),
-            Statement::Flow(value) => value.type_of(scope),
-            Statement::Assignation(value) => value.type_of(scope),
-            Statement::Declaration(value) => value.type_of(scope),
-            Statement::Definition(_value) => Ok(EitherType::Static(Scope::StaticType::build_unit())),
-            Statement::Loops(value) => value.type_of(scope),
-            Statement::Return(value) => value.type_of(scope),
+            Statement::Scope(value) => value.type_of(&scope),
+            Statement::Flow(value) => value.type_of(&scope),
+            Statement::Assignation(value) => value.type_of(&scope),
+            Statement::Declaration(value) => value.type_of(&scope),
+            Statement::Definition(_value) => {
+                Ok(EitherType::Static(Scope::StaticType::build_unit()))
+            }
+            Statement::Loops(value) => value.type_of(&scope),
+            Statement::Return(value) => value.type_of(&scope),
         }
     }
 }
@@ -132,8 +139,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
-        _context: &Self::Context,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -149,7 +156,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return {
 impl<Scope: ScopeApi> TypeOf<Scope> for Return {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
@@ -157,7 +164,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return {
     {
         match self {
             Return::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit())),
-            Return::Expr(expr) => expr.type_of(scope),
+            Return::Expr(expr) => expr.type_of(&scope),
         }
     }
 }

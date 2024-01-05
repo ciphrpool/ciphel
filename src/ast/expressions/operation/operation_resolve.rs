@@ -1,19 +1,19 @@
+use super::{
+    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, HighOrdMath, LogicalAnd, LogicalOr, LowOrdMath,
+    Shift, UnaryOperation,
+};
 use crate::semantic::{
     scope::{type_traits::OperandMerging, ScopeApi},
     CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
-
-use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, HighOrdMath, LogicalAnd,
-    LogicalOr, LowOrdMath, Shift, UnaryOperation,
-};
+use std::{cell::RefCell, rc::Rc};
 
 impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -23,13 +23,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation {
         match self {
             UnaryOperation::Minus(value) => {
                 let _ = value.resolve(scope, context)?;
-                let value_type = value.type_of(scope)?;
+                let value_type = value.type_of(&scope.borrow())?;
                 let _ = value_type.can_minus()?;
                 Ok(())
             }
             UnaryOperation::Not(value) => {
                 let _ = value.resolve(scope, context)?;
-                let value_type = value.type_of(scope)?;
+                let value_type = value.type_of(&scope.borrow())?;
                 let _ = value_type.can_negate()?;
                 Ok(())
             }
@@ -41,7 +41,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -54,14 +54,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath {
             HighOrdMath::Mod { left, right } => (left, right),
         };
         let _ = left.resolve(scope, context)?;
-        let left_type = left.type_of(scope)?;
+        let left_type = left.type_of(&scope.borrow())?;
         let _ = left_type.can_high_ord_math()?;
 
         let _ = right.resolve(scope, context)?;
-        let right_type = right.type_of(scope)?;
+        let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_high_ord_math()?;
 
-        let _ = left_type.compatible_with(right, scope)?;
+        let _ = left_type.compatible_with(right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -70,7 +70,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -81,14 +81,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath {
             LowOrdMath::Add { left, right } => (left, right),
         };
         let _ = left.resolve(scope, context)?;
-        let left_type = left.type_of(scope)?;
+        let left_type = left.type_of(&scope.borrow())?;
         let _ = left_type.can_low_ord_math()?;
 
         let _ = right.resolve(scope, context)?;
-        let right_type = right.type_of(scope)?;
+        let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_low_ord_math()?;
 
-        let _ = left_type.compatible_with(right, scope)?;
+        let _ = left_type.compatible_with(right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -97,7 +97,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -109,14 +109,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift {
             Shift::Right { left, right } => (left, right),
         };
         let _ = left.resolve(scope, context)?;
-        let left_type = left.type_of(scope)?;
+        let left_type = left.type_of(&scope.borrow())?;
         let _ = left_type.can_shift()?;
 
         let _ = right.resolve(scope, context)?;
-        let right_type = right.type_of(scope)?;
+        let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_shift()?;
 
-        let _ = left_type.compatible_with(right, scope)?;
+        let _ = left_type.compatible_with(right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -125,7 +125,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -133,14 +133,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
         let _ = left_type.can_bitwise_and()?;
 
         let _ = self.right.resolve(scope, context)?;
-        let right_type = self.right.type_of(scope)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_and()?;
 
-        let _ = left_type.compatible_with(&self.right, scope)?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -149,7 +149,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -157,14 +157,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
         let _ = left_type.can_bitwise_xor()?;
 
         let _ = self.right.resolve(scope, context)?;
-        let right_type = self.right.type_of(scope)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_xor()?;
 
-        let _ = left_type.compatible_with(&self.right, scope)?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -173,7 +173,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -181,14 +181,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
         let _ = left_type.can_bitwise_or()?;
 
         let _ = self.right.resolve(scope, context)?;
-        let right_type = self.right.type_of(scope)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_or()?;
 
-        let _ = left_type.compatible_with(&self.right, scope)?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -197,7 +197,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Comparaison {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -214,14 +214,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for Comparaison {
             Comparaison::In { left, right } => (left, right),
         };
         let _ = left.resolve(scope, context)?;
-        let left_type = left.type_of(scope)?;
+        let left_type = left.type_of(&scope.borrow())?;
         let _ = left_type.can_comparaison()?;
 
         let _ = right.resolve(scope, context)?;
-        let right_type = right.type_of(scope)?;
+        let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_comparaison()?;
 
-        let _ = left_type.compatible_with(right, scope)?;
+        let _ = left_type.compatible_with(right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -230,7 +230,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -238,14 +238,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
         let _ = left_type.can_logical_and()?;
 
         let _ = self.right.resolve(scope, context)?;
-        let right_type = self.right.type_of(scope)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_logical_and()?;
 
-        let _ = left_type.compatible_with(&self.right, scope)?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }
@@ -254,7 +254,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -262,14 +262,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context)?;
-        let left_type = self.left.type_of(scope)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
         let _ = left_type.can_logical_or()?;
 
         let _ = self.right.resolve(scope, context)?;
-        let right_type = self.right.type_of(scope)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_logical_or()?;
 
-        let _ = left_type.compatible_with(&self.right, scope)?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }

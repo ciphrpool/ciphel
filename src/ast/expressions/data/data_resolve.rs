@@ -1,20 +1,22 @@
-
-
 use super::{
     Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
-use crate::semantic::scope::BuildVar;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::BuildVar;
 use crate::semantic::{
-    CompatibleWith, EitherType, Resolve, scope::ScopeApi, SemanticError, TypeOf,
+    scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
-
+use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Data {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -74,7 +76,11 @@ impl Variable {
 impl<Scope: ScopeApi> Resolve<Scope> for Variable {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -93,13 +99,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
-        _context: &Self::Context,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
-        Self: Sized 
+        Self: Sized,
     {
-        let _ = scope.find_var(&self.0)?;
+        let _ = scope.borrow().find_var(&self.0)?;
 
         Ok(())
     }
@@ -111,14 +117,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
-        Self: Sized 
+        Self: Sized,
     {
         let _ = self.var.resolve(scope, context)?;
-        let var_type = self.var.type_of(scope)?;
+        let var_type = self.var.type_of(&scope.borrow())?;
         let var_type = var_type;
         let _ = self.field.resolve_based::<Scope>(&var_type)?;
         Ok(())
@@ -132,17 +138,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
-        Self: Sized 
+        Self: Sized,
     {
         let _ = self.var.resolve(scope, context)?;
-        let var_type = self.var.type_of(scope)?;
+        let var_type = self.var.type_of(&scope.borrow())?;
         if !<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-         as TypeChecking<Scope>>::is_iterable(&var_type)
+         as TypeChecking<Scope>>::is_indexable(&var_type)
         {
             Err(SemanticError::ExpectedIterable)
         } else {
@@ -154,14 +160,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match context {
             Some(context_type) => {
-                let _ = context_type.compatible_with(self, scope)?;
+                let _ = context_type.compatible_with(self, &scope.borrow())?;
                 Ok(())
             }
             None => Ok(()),
@@ -171,7 +181,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
 impl<Scope: ScopeApi> Resolve<Scope> for Slice {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -179,12 +193,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
         match self {
             Slice::String(_value) => Ok(()),
             Slice::List(value) => match value.iter().find_map(|expr| {
-
                 let param_context = match context {
-                    Some(context) => <
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                 as GetSubTypes<Scope>>::get_item(context),
-                  None => None,
+                    Some(context) => <EitherType<
+                        <Scope as ScopeApi>::UserType,
+                        <Scope as ScopeApi>::StaticType,
+                    > as GetSubTypes<Scope>>::get_item(context),
+                    None => None,
                 };
 
                 expr.resolve(scope, &param_context).err()
@@ -198,7 +212,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
 impl<Scope: ScopeApi> Resolve<Scope> for Vector {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -206,10 +224,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
         match self {
             Vector::Init(value) => match value.iter().find_map(|expr| {
                 let param_context = match context {
-                    Some(context) => <
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                 as GetSubTypes<Scope>>::get_item(context),
-                  None => None,
+                    Some(context) => <EitherType<
+                        <Scope as ScopeApi>::UserType,
+                        <Scope as ScopeApi>::StaticType,
+                    > as GetSubTypes<Scope>>::get_item(context),
+                    None => None,
                 };
 
                 expr.resolve(scope, &param_context).err()
@@ -217,14 +236,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
                 Some(err) => Err(err),
                 None => Ok(()),
             },
-            Vector::Def { length: _, capacity: _ } => Ok(()),
+            Vector::Def {
+                length: _,
+                capacity: _,
+            } => Ok(()),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -235,19 +261,24 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         for (_index, expr) in self.iter().enumerate() {
             let param_context = match context {
-                Some(context) => <
-                EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-             as GetSubTypes<Scope>>::get_item(context),
-              None => None,
+                Some(context) => <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_item(context),
+                None => None,
             };
-            let _ = expr.resolve(scope, &param_context)?;  
+            let _ = expr.resolve(scope, &param_context)?;
         }
         Ok(())
     }
@@ -255,49 +286,68 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
 impl<Scope: ScopeApi> Resolve<Scope> for Closure {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
+        let mut inner_scope = Scope::child_scope(scope)?;
+
         let Some(context) = context else {
             return Err(SemanticError::CantInferType);
         };
         for (index, expr) in self.params.iter().enumerate() {
-            let param_context =
-            <
-                EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-            as GetSubTypes<Scope>>::get_nth(context, &index);
+            let param_context = <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_nth(context, &index);
             let _ = expr.resolve(scope, &param_context)?;
         }
 
-        let mut inner_scope = scope.child_scope()?;
-        inner_scope.attach(self.params.iter().enumerate()
-        .filter_map(|(idx,param)| {
-            param.type_of(scope).ok().map(|p| (idx,match param {
-                ClosureParam::Full { id, .. } => id,
-                ClosureParam::Minimal(id) => id,
-            }, p))
-        })
+        inner_scope.borrow_mut().attach(
+            self.params
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, param)| {
+                    param.type_of(&scope.borrow()).ok().map(|p| {
+                        (
+                            idx,
+                            match param {
+                                ClosureParam::Full { id, .. } => id,
+                                ClosureParam::Minimal(id) => id,
+                            },
+                            p,
+                        )
+                    })
+                })
+                .map(|(index, id, param)| {
+                    let _param_type = param.type_of(&scope.borrow());
+                    let param_type = <EitherType<
+                        <Scope as ScopeApi>::UserType,
+                        <Scope as ScopeApi>::StaticType,
+                    > as GetSubTypes<Scope>>::get_nth(
+                        context, &index
+                    );
+                    Scope::Var::build_var(id, &param_type.unwrap())
+                }),
+        );
 
-        .map(|(index, id,param)| {
-            let _param_type = param.type_of(scope);
-            let param_type = <
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                 as GetSubTypes<Scope>>::get_nth(context, &index)
-            ;
-            Scope::Var::build_var(id, &param_type.unwrap())
-        }));
-
-        let Some(context_return) = <EitherType<<Scope as ScopeApi>::UserType,
-         <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>::get_return(context) else {
+        let Some(context_return) = <EitherType<
+            <Scope as ScopeApi>::UserType,
+            <Scope as ScopeApi>::StaticType,
+        > as GetSubTypes<Scope>>::get_return(context) else {
             return Err(SemanticError::CantInferType);
         };
 
-        
-        let scope_type = self.scope.type_of(scope)?;
-        let _ = context_return.compatible_with(&scope_type, scope)?;
-        let _ = self.scope.resolve(&mut inner_scope, &Some(context_return))?;
+        let scope_type = self.scope.type_of(&scope.borrow())?;
+        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
+        let _ = self
+            .scope
+            .resolve(&mut inner_scope, &Some(context_return))?;
 
         Ok(())
     }
@@ -305,7 +355,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -320,7 +374,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
     type Context =
         Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -337,7 +395,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
 impl<Scope: ScopeApi> Resolve<Scope> for Address {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -348,7 +410,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address {
 impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -359,7 +425,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
 impl<Scope: ScopeApi> Resolve<Scope> for Channel {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -367,140 +437,150 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
         match self {
             Channel::Receive { addr, .. } => {
                 let _ = addr.resolve(scope, context)?;
-                let addr_type = addr.type_of(scope)?;
+                let addr_type = addr.type_of(&scope.borrow())?;
                 if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 Ok(())
-            },
+            }
             Channel::Send { addr, msg } => {
                 let _ = addr.resolve(scope, context)?;
-                let addr_type = addr.type_of(scope)?;
+                let addr_type = addr.type_of(&scope.borrow())?;
                 if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 let _ = msg.resolve(scope, context)?;
                 Ok(())
             }
-            Channel::Init(id) => scope.register_chan(id),
+            Channel::Init(id) => scope.borrow_mut().register_chan(id),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Struct {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-                let user_type = scope.find_type(&self.id)?;
-                let user_type = user_type.type_of(scope)?;
-                for (field_name, expr) in &self.fields {
-                    let field_context = <
-                        EitherType<
-                            <Scope as ScopeApi>::UserType,
-                            <Scope as ScopeApi>::StaticType,
-                        >
-                     as GetSubTypes<Scope>>::get_field(
-                        &user_type, &field_name
-                    );
+        let borrowed_scope = scope.borrow();
+        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.id)?;
+        let user_type = user_type.type_of(&scope.borrow())?;
+        for (field_name, expr) in &self.fields {
+            let field_context = <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_field(
+                &user_type, &field_name
+            );
 
-                    let _ = expr.resolve(scope, &field_context)?;
-                }
+            let _ = expr.resolve(scope, &field_context)?;
+        }
 
-                let Some(fields_type) = <EitherType<<Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>
-                    ::get_fields(&user_type) else {
-                    return Err(SemanticError::ExpectedStruct)
-                };
-                if self.fields.len() != fields_type.len() {
-                    return Err(SemanticError::IncorrectStruct)
-                }
-                for (field_name,field_type) in fields_type {
-                    let Some(field_name) = field_name else {
-                        return Err(SemanticError::IncorrectStruct)
-                    };
-                    let Some(expr_field) = self.fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
-                        return Err(SemanticError::IncorrectStruct)
-                    };
-                    let _ = field_type.compatible_with(expr_field, scope)?;
-                }
-                Ok(())
-            
-        
+        let Some(fields_type) = <EitherType<
+            <Scope as ScopeApi>::UserType,
+            <Scope as ScopeApi>::StaticType,
+        > as GetSubTypes<Scope>>::get_fields(&user_type) else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+        if self.fields.len() != fields_type.len() {
+            return Err(SemanticError::IncorrectStruct);
+        }
+        for (field_name, field_type) in fields_type {
+            let Some(field_name) = field_name else {
+                return Err(SemanticError::IncorrectStruct);
+            };
+            let Some(expr_field) = self
+                .fields
+                .iter()
+                .find(|(name, _)| name == &field_name)
+                .map(|(_, expr)| expr)
+            else {
+                return Err(SemanticError::IncorrectStruct);
+            };
+            let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Union {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-                let user_type = scope.find_type(&self.typename)?;
-                let variant_type = user_type.get_variant(&self.variant);
-                let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                for (field_name, expr) in &self.fields {
-                    let field_context = <
-                        EitherType<
-                            <Scope as ScopeApi>::UserType,
-                            <Scope as ScopeApi>::StaticType,
-                        >
-                     as GetSubTypes<Scope>>::get_field(
-                        &variant_type, &field_name
-                    );
+        let borrowed_scope = scope.borrow();
+        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.typename)?;
+        let variant_type = user_type.get_variant(&self.variant);
+        let Some(variant_type) = variant_type else {
+            return Err(SemanticError::CantInferType);
+        };
+        for (field_name, expr) in &self.fields {
+            let field_context = <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_field(
+                &variant_type, &field_name
+            );
 
-                    let _ = expr.resolve(scope, &field_context)?;
-                }
+            let _ = expr.resolve(scope, &field_context)?;
+        }
 
-                let Some(fields_type) = <EitherType<<Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>
-                    ::get_fields(&variant_type) else {
-                    return Err(SemanticError::ExpectedStruct)
-                };
-                if self.fields.len() != fields_type.len() {
-                    return Err(SemanticError::IncorrectStruct)
-                }
-                for (field_name,field_type) in fields_type {
-                    let Some(field_name) = field_name else {
-                        return Err(SemanticError::IncorrectStruct)
-                    };
-                    let Some(expr_field) = self.fields.iter().find(|(name,_)| name == &field_name).map(|(_,expr)| expr) else {
-                        return Err(SemanticError::IncorrectStruct)
-                    };
-                    let _ = field_type.compatible_with(expr_field, scope)?;
-                }
-                Ok(())
-            
-        
+        let Some(fields_type) = <EitherType<
+            <Scope as ScopeApi>::UserType,
+            <Scope as ScopeApi>::StaticType,
+        > as GetSubTypes<Scope>>::get_fields(&variant_type) else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+        if self.fields.len() != fields_type.len() {
+            return Err(SemanticError::IncorrectStruct);
+        }
+        for (field_name, field_type) in fields_type {
+            let Some(field_name) = field_name else {
+                return Err(SemanticError::IncorrectStruct);
+            };
+            let Some(expr_field) = self
+                .fields
+                .iter()
+                .find(|(name, _)| name == &field_name)
+                .map(|(_, expr)| expr)
+            else {
+                return Err(SemanticError::IncorrectStruct);
+            };
+            let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, _context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let user_type = scope.find_type(&self.typename)?;
-        let variant_type = user_type.get_variant(&self.value);
-        match variant_type {
-            Some(variant_type) => {
-                if <EitherType<<Scope as ScopeApi>::UserType, 
-                    <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
-                    ::is_enum_variant(&variant_type) {
-                    Ok(())
-                } else {
-                    Err(SemanticError::IncorrectVariant)
-                }
-            }
-            None => Err(SemanticError::IncorrectVariant),
-        }
+        let borrowed_scope = scope.borrow();
+        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.typename)?;
+        let Some(_) = user_type.get_variant(&self.value) else {
+            return Err(SemanticError::IncorrectVariant);
+        };
+        Ok(())
         // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
         // Ok(())
     }
@@ -508,19 +588,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
 impl<Scope: ScopeApi> Resolve<Scope> for Map {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-
         match self {
             Map::Init { fields } => {
-
                 let item_type = match context {
-                    Some(context) => <EitherType<<Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType> as GetSubTypes<Scope>>::get_item(context),
-                    None => None
+                    Some(context) => <EitherType<
+                        <Scope as ScopeApi>::UserType,
+                        <Scope as ScopeApi>::StaticType,
+                    > as GetSubTypes<Scope>>::get_item(context),
+                    None => None,
                 };
 
                 match fields
@@ -533,14 +617,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
                     None => Ok(()),
                 }
             }
-            Map::Def { length: _, capacity: _ } => Ok(()),
+            Map::Def {
+                length: _,
+                capacity: _,
+            } => Ok(()),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(&self, scope: &mut Scope, context: &Self::Context) -> Result<Self::Output, SemanticError>
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+    ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,

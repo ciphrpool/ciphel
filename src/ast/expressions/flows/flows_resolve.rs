@@ -5,13 +5,13 @@ use crate::semantic::scope::BuildVar;
 use crate::semantic::{
     scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
-
+use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -31,7 +31,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -40,15 +40,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
     {
         let _ = self.condition.resolve(scope, context)?;
         // Check if condition is a boolean
-        let condition_type = self.condition.type_of(scope)?;
+        let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.main_branch.resolve(scope, context)?;
         let _ = self.else_branch.resolve(scope, context)?;
 
-        let main_branch_type = self.main_branch.type_of(scope)?;
-        let _ = main_branch_type.compatible_with(&self.else_branch, scope)?;
+        let main_branch_type = self.main_branch.type_of(&scope.borrow())?;
+        let _ = main_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
 
         Ok(())
     }
@@ -58,7 +58,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -71,34 +71,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 Ok(Vec::default())
             }
             Pattern::String(value) => {
-                let _ = context.compatible_with(value, scope)?;
+                let _ = context.compatible_with(value, &scope.borrow())?;
                 Ok(Vec::default())
             }
             Pattern::Enum { typename, value } => {
-                let user_type = scope.find_type(typename)?;
-                let variant_type = user_type.get_variant(value);
-                match variant_type {
-                    Some(variant_type) => {
-                        if <EitherType<
-                            <Scope as ScopeApi>::UserType,
-                            <Scope as ScopeApi>::StaticType,
-                        > as TypeChecking<Scope>>::is_enum_variant(
-                            &variant_type
-                        ) {
-                            Ok(Vec::default())
-                        } else {
-                            Err(SemanticError::IncorrectVariant)
-                        }
-                    }
-                    None => Err(SemanticError::IncorrectVariant),
-                }
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
+                let Some(_) = user_type.get_variant(value) else {
+                    return Err(SemanticError::IncorrectVariant);
+                };
+                Ok(Vec::default())
             }
             Pattern::Union {
                 typename,
                 variant,
                 vars,
             } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
@@ -131,8 +123,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 Ok(scope_vars)
             }
             Pattern::Struct { typename, vars } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
-                let user_type = user_type.type_of(scope)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
+                let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EitherType<
                     <Scope as ScopeApi>::UserType,
@@ -185,17 +179,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
+        let mut inner_scope = Scope::child_scope(scope)?;
         let vars = self.pattern.resolve(scope, context)?;
         // create a scope and assign the pattern variable to it before resolving the expression
-        let mut inner_scope = scope.child_scope()?;
-        inner_scope.attach(vars.into_iter());
+        inner_scope.borrow_mut().attach(vars.into_iter());
         let _ = self.expr.resolve(&mut inner_scope, context)?;
         Ok(())
     }
@@ -205,7 +199,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -213,24 +207,24 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
         Scope: ScopeApi,
     {
         let _ = self.expr.resolve(scope, context)?;
-        let expr_type = Some(self.expr.type_of(scope)?);
+        let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         let _ = self.else_branch.resolve(scope, &expr_type)?;
 
         for pattern in &self.patterns {
             let _ = pattern.resolve(scope, &expr_type)?;
         }
-        let else_branch_type = self.else_branch.type_of(scope)?;
+        let else_branch_type = self.else_branch.type_of(&scope.borrow())?;
 
         let (maybe_err, _) =
             self.patterns
                 .iter()
                 .fold((None, else_branch_type), |mut previous, pattern| {
-                    if let Err(e) = previous.1.compatible_with(pattern, scope) {
+                    if let Err(e) = previous.1.compatible_with(pattern, &scope.borrow()) {
                         previous.0 = Some(e);
                         previous
                     } else {
-                        match pattern.type_of(scope) {
+                        match pattern.type_of(&scope.borrow()) {
                             Ok(pattern_type) => (None, pattern_type),
                             Err(err) => (
                                 Some(err),
@@ -250,7 +244,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -260,8 +254,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
         let _ = self.try_branch.resolve(scope, context)?;
         let _ = self.else_branch.resolve(scope, context)?;
 
-        let try_branch_type = self.try_branch.type_of(scope)?;
-        let _ = try_branch_type.compatible_with(&self.else_branch, scope)?;
+        let try_branch_type = self.try_branch.type_of(&scope.borrow())?;
+        let _ = try_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
 
         Ok(())
     }
@@ -271,7 +265,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -279,7 +273,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
         Scope: ScopeApi,
     {
         let _ = self.fn_var.resolve(scope, context)?;
-        let fn_var_type = self.fn_var.type_of(scope)?;
+        let fn_var_type = self.fn_var.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType,
              <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
              ::is_callable(&fn_var_type) {
@@ -304,7 +298,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
             return Err(SemanticError::IncorrectStruct);
         }
         for (index, (_, field_type)) in fields.iter().enumerate() {
-            let _ = field_type.compatible_with(&self.params[index], scope)?;
+            let _ = field_type.compatible_with(&self.params[index], &scope.borrow())?;
         }
 
         Ok(())

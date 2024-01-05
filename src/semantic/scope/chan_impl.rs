@@ -1,17 +1,21 @@
+use std::cell::Ref;
+
 use crate::{
     ast::utils::strings::ID,
     semantic::{CompatibleWith, EitherType, SemanticError, TypeOf},
 };
 
-use super::{
-    BuildChan, ScopeApi,
-};
+use super::{BuildChan, ScopeApi};
 
 #[derive(Debug, Clone)]
 pub struct Chan {}
 
 impl<Scope: ScopeApi<Chan = Self>> CompatibleWith<Scope> for Chan {
-    fn compatible_with<Other>(&self, _other: &Other, _scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -22,7 +26,7 @@ impl<Scope: ScopeApi<Chan = Self>> CompatibleWith<Scope> for Chan {
 impl<Scope: ScopeApi<Chan = Self>> TypeOf<Scope> for Chan {
     fn type_of(
         &self,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,

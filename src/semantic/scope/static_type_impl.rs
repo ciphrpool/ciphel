@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use crate::semantic::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf};
 
 use crate::ast;
@@ -74,7 +76,7 @@ pub enum KeyType {
 impl<Scope: ScopeApi<StaticType = Self>> TypeOf<Scope> for StaticType {
     fn type_of(
         &self,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<<Scope as ScopeApi>::UserType, Self>, SemanticError>
     where
         Scope: ScopeApi,
@@ -85,7 +87,7 @@ impl<Scope: ScopeApi<StaticType = Self>> TypeOf<Scope> for StaticType {
 }
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> CompatibleWith<Scope> for StaticType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -97,7 +99,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> CompatibleWith<Sco
             StaticType::Chan(value) => value.compatible_with(other, scope),
             StaticType::Tuple(value) => value.compatible_with(other, scope),
             StaticType::Unit => {
-                let other_type = other.type_of(scope)?;
+                let other_type = other.type_of(&scope)?;
                 if let EitherType::Static(StaticType::Unit) = other_type {
                     return Ok(());
                 } else {
@@ -117,7 +119,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
 {
     fn build_primitive(
         type_sig: &ast::types::PrimitiveType,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Primitive(match type_sig {
             ast::types::PrimitiveType::Number => PrimitiveType::Number,
@@ -127,11 +129,14 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         }))
     }
 
-    fn build_slice(type_sig: &ast::types::SliceType, scope: &Scope) -> Result<Self, SemanticError> {
+    fn build_slice(
+        type_sig: &ast::types::SliceType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
         match type_sig {
             ast::types::SliceType::String => Ok(Self::Slice(SliceType::String)),
             ast::types::SliceType::List(size, inner) => {
-                let inner = inner.type_of(scope)?;
+                let inner = inner.type_of(&scope)?;
                 Ok(Self::Slice(SliceType::List(size.clone(), Box::new(inner))))
             }
         }
@@ -140,7 +145,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     fn build_slice_from(
         size: &usize,
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Slice(SliceType::List(
             size.clone(),
@@ -148,10 +153,13 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         )))
     }
 
-    fn build_tuple(type_sig: &ast::types::TupleType, scope: &Scope) -> Result<Self, SemanticError> {
+    fn build_tuple(
+        type_sig: &ast::types::TupleType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.0.len());
         for subtype in &type_sig.0 {
-            let subtype = subtype.type_of(scope)?;
+            let subtype = subtype.type_of(&scope)?;
             vec.push(subtype);
         }
         Ok(Self::Tuple(TupleType(vec)))
@@ -159,26 +167,29 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
 
     fn build_tuple_from(
         type_sig: &Vec<EitherType<<Scope as ScopeApi>::UserType, Self>>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.len());
         for subtype in type_sig {
-            let subtype = subtype.type_of(scope)?;
+            let subtype = subtype.type_of(&scope)?;
             vec.push(subtype);
         }
         Ok(Self::Tuple(TupleType(vec)))
     }
 
-    fn build_vec(type_sig: &ast::types::VecType, scope: &Scope) -> Result<Self, SemanticError> {
-        let subtype = type_sig.0.type_of(scope)?;
+    fn build_vec(
+        type_sig: &ast::types::VecType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        let subtype = type_sig.0.type_of(&scope)?;
         Ok(Self::Vec(VecType(Box::new(subtype))))
     }
 
     fn build_vec_from(
         type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let subtype = type_sig.type_of(scope)?;
+        let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Vec(VecType(Box::new(subtype))))
     }
 
@@ -186,13 +197,13 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         Self::Error
     }
 
-    fn build_fn(type_sig: &ast::types::FnType, scope: &Scope) -> Result<Self, SemanticError> {
+    fn build_fn(type_sig: &ast::types::FnType, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
         let mut params = Vec::with_capacity(type_sig.params.len());
         for subtype in &type_sig.params {
-            let subtype = subtype.type_of(scope)?;
+            let subtype = subtype.type_of(&scope)?;
             params.push(subtype);
         }
-        let ret_type = type_sig.ret.type_of(scope)?;
+        let ret_type = type_sig.ret.type_of(&scope)?;
         Ok(Self::Fn(FnType {
             params,
             ret: Box::new(ret_type),
@@ -202,30 +213,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     fn build_fn_from(
         params: &Vec<EitherType<<Scope as ScopeApi>::UserType, Self>>,
         ret: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut out_params = Vec::with_capacity(params.len());
         for subtype in params {
-            let subtype = subtype.type_of(scope)?;
+            let subtype = subtype.type_of(&scope)?;
             out_params.push(subtype);
         }
-        let ret_type = ret.type_of(scope)?;
+        let ret_type = ret.type_of(&scope)?;
         Ok(Self::Fn(FnType {
             params: out_params,
             ret: Box::new(ret_type),
         }))
     }
 
-    fn build_chan(type_sig: &ast::types::ChanType, scope: &Scope) -> Result<Self, SemanticError> {
-        let subtype = type_sig.0.type_of(scope)?;
+    fn build_chan(
+        type_sig: &ast::types::ChanType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        let subtype = type_sig.0.type_of(&scope)?;
         Ok(Self::Chan(ChanType(Box::new(subtype))))
     }
 
     fn build_chan_from(
         type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let subtype = type_sig.type_of(scope)?;
+        let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Chan(ChanType(Box::new(subtype))))
     }
 
@@ -237,27 +251,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         Self::Any
     }
 
-    fn build_addr(type_sig: &ast::types::AddrType, scope: &Scope) -> Result<Self, SemanticError> {
-        let subtype = type_sig.0.type_of(scope)?;
+    fn build_addr(
+        type_sig: &ast::types::AddrType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        let subtype = type_sig.0.type_of(&scope)?;
         Ok(Self::Address(AddrType(Box::new(subtype))))
     }
 
     fn build_addr_from(
         type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let subtype = type_sig.type_of(scope)?;
+        let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Address(AddrType(Box::new(subtype))))
     }
 
     fn build_ptr_access_from(
         _type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         todo!()
     }
 
-    fn build_map(type_sig: &ast::types::MapType, scope: &Scope) -> Result<Self, SemanticError> {
+    fn build_map(
+        type_sig: &ast::types::MapType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
         let key_type = {
             match &type_sig.keys_type {
                 ast::types::KeyType::Primitive(value) => KeyType::Primitive(match value {
@@ -267,13 +287,13 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
                     ast::types::PrimitiveType::Bool => PrimitiveType::Bool,
                 }),
                 ast::types::KeyType::Address(value) => {
-                    let subtype = value.0.type_of(scope)?;
+                    let subtype = value.0.type_of(&scope)?;
                     KeyType::Address(AddrType(Box::new(subtype)))
                 }
                 ast::types::KeyType::Slice(value) => match value {
                     ast::types::SliceType::String => KeyType::Slice(SliceType::String),
                     ast::types::SliceType::List(size, inner) => {
-                        let inner = inner.type_of(scope)?;
+                        let inner = inner.type_of(&scope)?;
                         KeyType::Slice(SliceType::List(size.clone(), Box::new(inner)))
                     }
                 },
@@ -286,7 +306,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
             }
         };
 
-        let subtype = type_sig.type_of(scope)?;
+        let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Map(MapType {
             keys_type: key_type,
             values_type: Box::new(subtype),
@@ -296,7 +316,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     fn build_map_from(
         key: &EitherType<<Scope as ScopeApi>::UserType, Self>,
         value: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let key_type = {
             match key {
@@ -313,7 +333,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
             }
         };
 
-        let subtype = value.type_of(scope)?;
+        let subtype = value.type_of(&scope)?;
         Ok(Self::Map(MapType {
             keys_type: key_type,
             values_type: Box::new(subtype),
@@ -417,6 +437,21 @@ impl<Scope: ScopeApi<StaticType = Self>> TypeChecking<Scope> for StaticType {
             StaticType::Map(_) => true,
         }
     }
+    fn is_indexable(&self) -> bool {
+        match self {
+            StaticType::Primitive(_) => false,
+            StaticType::Slice(_) => true,
+            StaticType::Vec(_) => true,
+            StaticType::Fn(_) => false,
+            StaticType::Chan(_) => true,
+            StaticType::Tuple(_) => true,
+            StaticType::Unit => false,
+            StaticType::Any => false,
+            StaticType::Error => false,
+            StaticType::Address(_) => false,
+            StaticType::Map(_) => false,
+        }
+    }
     fn is_channel(&self) -> bool {
         if let StaticType::Chan(_) = self {
             true
@@ -495,12 +530,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_high_ord_math<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -558,12 +593,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_low_ord_math<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -619,12 +654,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_shift<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -680,12 +715,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_bitwise_and<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -741,12 +776,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_bitwise_xor<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -802,12 +837,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_bitwise_or<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -865,7 +900,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_comparaison<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -891,7 +926,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_logical_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -917,7 +952,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn merge_logical_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -932,12 +967,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<<Scope as ScopeApi>::UserType, Self>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(static_other_type) = &other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -968,7 +1003,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -976,7 +1011,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Primitive(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1016,7 +1051,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1024,7 +1059,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Slice(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1055,7 +1090,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1063,7 +1098,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Vec(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1078,7 +1113,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1086,7 +1121,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Fn(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1110,7 +1145,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1118,7 +1153,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Chan(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1133,7 +1168,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1141,7 +1176,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Tuple(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1163,7 +1198,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1171,7 +1206,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Address(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1186,7 +1221,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -1194,7 +1229,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(StaticType::Map(other_type)) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1215,7 +1250,7 @@ impl KeyType {
     fn merge_key<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
         &self,
         other: &KeyType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<KeyType, SemanticError> {
         match (self, other) {
             (KeyType::Primitive(value), KeyType::Primitive(other_value)) => {

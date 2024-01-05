@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use crate::{
     ast::utils::strings::ID,
     semantic::{EitherType, SemanticError, TypeOf},
@@ -42,16 +44,15 @@ pub trait TypeChecking<Scope: ScopeApi> {
     fn is_iterable(&self) -> bool {
         false
     }
+    fn is_indexable(&self) -> bool {
+        false
+    }
     fn is_channel(&self) -> bool {
         false
     }
     fn is_boolean(&self) -> bool {
         false
     }
-    fn is_enum_variant(&self) -> bool {
-        false
-    }
-
     fn is_callable(&self) -> bool {
         false
     }
@@ -76,7 +77,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_high_ord_math<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -90,7 +91,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_low_ord_math<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -104,7 +105,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_shift<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -118,7 +119,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_bitwise_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -132,7 +133,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_bitwise_xor<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -146,7 +147,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_bitwise_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -160,7 +161,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_comparaison<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -174,7 +175,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_logical_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -188,7 +189,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
     fn merge_logical_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Scope,
+        _scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,

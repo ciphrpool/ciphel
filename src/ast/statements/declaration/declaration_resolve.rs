@@ -3,14 +3,14 @@ use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
-
+use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
-        _context: &Self::Context,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -19,9 +19,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
         match self {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, &())?;
-                let var_type = value.signature.type_of(scope)?;
+                let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
-                let _ = scope.register_var(var)?;
+                let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
             }
             Declaration::Assigned {
@@ -29,19 +29,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
                 right,
             } => {
                 let _ = value.resolve(scope, &())?;
-                let var_type = value.signature.type_of(scope)?;
+                let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
                 let _ = right.resolve(scope, &Some(var_type))?;
-                let _ = scope.register_var(var)?;
+                let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
                 let _ = right.resolve(scope, &None)?;
-                let right_type = right.type_of(scope)?;
+                let right_type = right.type_of(&scope.borrow())?;
 
                 let vars = left.resolve(scope, &Some(right_type))?;
                 for var in vars {
-                    let _ = scope.register_var(var)?;
+                    let _ = scope.borrow_mut().register_var(var)?;
                 }
                 Ok(())
             }
@@ -53,7 +53,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -68,7 +68,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -97,7 +97,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -110,7 +110,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 variant,
                 vars,
             } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
@@ -139,7 +141,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 variant,
                 vars,
             } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
@@ -172,8 +176,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 Ok(scope_vars)
             }
             PatternVar::StructInline { typename, vars } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
-                let user_type = user_type.type_of(scope)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
+                let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EitherType<
                     <Scope as ScopeApi>::UserType,
@@ -191,8 +197,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 Ok(scope_vars)
             }
             PatternVar::StructFields { typename, vars } => {
-                let user_type: &<Scope as ScopeApi>::UserType = scope.find_type(typename)?;
-                let user_type = user_type.type_of(scope)?;
+                let borrowed_scope = scope.borrow();
+                let user_type: <Scope as ScopeApi>::UserType =
+                    borrowed_scope.find_type(typename)?;
+                let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EitherType<
                     <Scope as ScopeApi>::UserType,
@@ -255,7 +263,7 @@ mod tests {
 
         dbg!(&decl);
 
-        let mut scope = Scope::default();
+        let mut scope = Scope::new();
 
         let res = decl.resolve(&mut scope, &None);
         assert!(res.is_ok());

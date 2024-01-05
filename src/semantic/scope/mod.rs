@@ -1,8 +1,9 @@
-use crate::ast::{
-    statements::definition,
-    types,
-    utils::strings::ID,
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
 };
+
+use crate::ast::{statements::definition, types, utils::strings::ID};
 
 use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
@@ -18,56 +19,56 @@ pub mod var_impl;
 pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_primitive(
         type_sig: &types::PrimitiveType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_slice(
         type_sig: &types::SliceType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_slice_from(
         size: &usize,
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_tuple(
         type_sig: &types::TupleType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_tuple_from(
         type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_vec(
         type_sig: &types::VecType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_vec_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_error() -> Scope::StaticType;
 
     fn build_fn(
         type_sig: &types::FnType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_fn_from(
         params: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
         ret: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_chan(
         type_sig: &types::ChanType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_chan_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_unit() -> Scope::StaticType;
@@ -76,31 +77,34 @@ pub trait BuildStaticType<Scope: ScopeApi> {
 
     fn build_addr(
         type_sig: &types::AddrType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_addr_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_ptr_access_from(
         type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
     fn build_map(
         type_sig: &types::MapType,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_map_from(
         key: &EitherType<Scope::UserType, Scope::StaticType>,
         value: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 }
 
 pub trait BuildUserType<Scope: ScopeApi> {
-    fn build_usertype(type_sig: &definition::TypeDef) -> Scope::UserType;
+    fn build_usertype(
+        type_sig: &definition::TypeDef,
+        scope: &Ref<Scope>,
+    ) -> Result<Scope::UserType, SemanticError>;
 }
 
 pub trait BuildVar<Scope: ScopeApi> {
@@ -113,7 +117,7 @@ pub trait BuildChan<Scope: ScopeApi> {
     ) -> Scope::Chan;
 }
 pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_event(scope: &Scope, event: &definition::EventDef) -> Scope::Event;
+    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef) -> Scope::Event;
 }
 
 pub trait ScopeApi
@@ -142,16 +146,16 @@ where
     type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
     type Event: BuildEvent<Self>;
 
-    fn child_scope(&self) -> Result<Self, SemanticError>;
+    fn child_scope(parent: &Rc<RefCell<Self>>) -> Result<Rc<RefCell<Self>>, SemanticError>;
     fn attach(&mut self, vars: impl Iterator<Item = Self::Var>);
 
-    fn register_type(&mut self, reg: Self::UserType) -> Result<(), SemanticError>;
+    fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError>;
     fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;
     fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError>;
     fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<&Self::Var, SemanticError>;
+    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError>;
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;
-    fn find_type(&self, id: &ID) -> Result<&Self::UserType, SemanticError>;
+    fn find_type(&self, id: &ID) -> Result<Self::UserType, SemanticError>;
     fn find_event(&self) -> Result<&Self::Event, SemanticError>;
 }

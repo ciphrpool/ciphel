@@ -1,6 +1,7 @@
-
-
-
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
 
 use self::scope::ScopeApi;
 
@@ -10,6 +11,8 @@ pub mod utils;
 #[derive(Debug, Clone)]
 pub enum SemanticError {
     CantInferType,
+    CantRegisterType,
+    CantRegisterVar,
 
     ExpectedBoolean,
     ExpectedIterable,
@@ -18,8 +21,9 @@ pub enum SemanticError {
     ExpectedStruct,
     ExpectedChannel,
 
+    UnknownVar,
+    UnknownType,
     UnknownField,
-    UndeterministType,
 
     IncorrectStruct,
     IncorrectVariant,
@@ -40,7 +44,7 @@ pub trait Resolve<Scope: ScopeApi> {
     type Context: Default;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -48,7 +52,11 @@ pub trait Resolve<Scope: ScopeApi> {
 }
 
 pub trait CompatibleWith<Scope: ScopeApi> {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>;
 }
@@ -56,7 +64,7 @@ pub trait CompatibleWith<Scope: ScopeApi> {
 pub trait TypeOf<Scope: ScopeApi> {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
@@ -67,7 +75,7 @@ pub trait MergeType<Scope: ScopeApi> {
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>;

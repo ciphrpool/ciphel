@@ -1,8 +1,9 @@
-use nom::{
-    branch::alt,
-    combinator::{map},
-    sequence::delimited,
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
 };
+
+use nom::{branch::alt, combinator::map, sequence::delimited};
 
 use crate::{
     ast::{
@@ -81,7 +82,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -101,18 +102,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic {
 impl<Scope: ScopeApi> TypeOf<Scope> for Atomic {
     fn type_of(
         &self,
-        scope: &Scope,
-    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Atomic::Data(value) => value.type_of(scope),
-            Atomic::UnaryOperation(value) => value.type_of(scope),
-            Atomic::Paren(value) => value.type_of(scope),
-            Atomic::ExprFlow(value) => value.type_of(scope),
-            Atomic::Error(value) => value.type_of(scope),
+            Atomic::Data(value) => value.type_of(&scope),
+            Atomic::UnaryOperation(value) => value.type_of(&scope),
+            Atomic::Paren(value) => value.type_of(&scope),
+            Atomic::ExprFlow(value) => value.type_of(&scope),
+            Atomic::Error(value) => value.type_of(&scope),
         }
     }
 }
@@ -142,7 +143,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -167,23 +168,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression {
 impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
     fn type_of(
         &self,
-        scope: &Scope,
-    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Expression::HighOrdMath(value) => value.type_of(scope),
-            Expression::LowOrdMath(value) => value.type_of(scope),
-            Expression::Shift(value) => value.type_of(scope),
-            Expression::BitwiseAnd(value) => value.type_of(scope),
-            Expression::BitwiseXOR(value) => value.type_of(scope),
-            Expression::BitwiseOR(value) => value.type_of(scope),
-            Expression::Comparaison(value) => value.type_of(scope),
-            Expression::LogicalAnd(value) => value.type_of(scope),
-            Expression::LogicalOr(value) => value.type_of(scope),
-            Expression::Atomic(value) => value.type_of(scope),
+            Expression::HighOrdMath(value) => value.type_of(&scope),
+            Expression::LowOrdMath(value) => value.type_of(&scope),
+            Expression::Shift(value) => value.type_of(&scope),
+            Expression::BitwiseAnd(value) => value.type_of(&scope),
+            Expression::BitwiseXOR(value) => value.type_of(&scope),
+            Expression::BitwiseOR(value) => value.type_of(&scope),
+            Expression::Comparaison(value) => value.type_of(&scope),
+            Expression::LogicalAnd(value) => value.type_of(&scope),
+            Expression::LogicalOr(value) => value.type_of(&scope),
+            Expression::Atomic(value) => value.type_of(&scope),
         }
     }
 }
@@ -191,13 +192,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
 impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
     fn type_of(
         &self,
-        scope: &Scope,
-    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        (self.as_ref()).type_of(scope)
+        (self.as_ref()).type_of(&scope)
     }
 }
 
@@ -206,7 +207,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression> {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where

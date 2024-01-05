@@ -1,58 +1,57 @@
+use std::cell::Ref;
+
 use super::{
-    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, TupleType, Type,
-    VecType,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, TupleType, Type, VecType,
 };
 use crate::semantic::scope::static_type_impl::{self, StaticType};
 
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::CompatibleWith;
-use crate::{
-    semantic::{scope::ScopeApi, EitherType, SemanticError, TypeOf},
-};
+use crate::semantic::{scope::ScopeApi, EitherType, SemanticError, TypeOf};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Type {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         match self {
-            Type::Primitive(value) => value.type_of(scope),
-            Type::Slice(value) => value.type_of(scope),
+            Type::Primitive(value) => value.type_of(&scope),
+            Type::Slice(value) => value.type_of(&scope),
             Type::UserType(value) => {
                 let user_type = scope.find_type(value)?;
-                let user_type = user_type.type_of(scope)?;
+                let user_type = user_type.type_of(&scope)?;
                 Ok(user_type)
             }
-            Type::Vec(value) => value.type_of(scope),
-            Type::Fn(value) => value.type_of(scope),
-            Type::Chan(value) => value.type_of(scope),
-            Type::Tuple(value) => value.type_of(scope),
+            Type::Vec(value) => value.type_of(&scope),
+            Type::Fn(value) => value.type_of(&scope),
+            Type::Chan(value) => value.type_of(&scope),
+            Type::Tuple(value) => value.type_of(&scope),
             Type::Unit => {
                 let static_type: Scope::StaticType = Scope::StaticType::build_unit();
-                let static_type = static_type.type_of(scope)?;
+                let static_type = static_type.type_of(&scope)?;
                 Ok(static_type)
             }
-            Type::Address(value) => value.type_of(scope),
-            Type::Map(value) => value.type_of(scope),
+            Type::Address(value) => value.type_of(&scope),
+            Type::Map(value) => value.type_of(&scope),
         }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PrimitiveType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_primitive(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -60,11 +59,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PrimitiveType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::PrimitiveType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -98,14 +97,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_slice(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -113,13 +112,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::SliceType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         match self {
             static_type_impl::SliceType::String => {
-                let other_type = other.type_of(scope)?;
+                let other_type = other.type_of(&scope)?;
                 if let EitherType::Static(StaticType::Slice(static_type_impl::SliceType::String)) =
                     other_type
                 {
@@ -129,7 +128,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
                 }
             }
             static_type_impl::SliceType::List(size, subtype) => {
-                let other_type = other.type_of(scope)?;
+                let other_type = other.type_of(&scope)?;
                 if let EitherType::Static(StaticType::Slice(static_type_impl::SliceType::List(
                     other_size,
                     other_subtype,
@@ -138,8 +137,8 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
                     if &other_size != size {
                         return Err(SemanticError::IncompatibleTypes);
                     }
-                    let subtype = subtype.type_of(scope)?;
-                    let other_subtype = other_subtype.type_of(scope)?;
+                    let subtype = subtype.type_of(&scope)?;
+                    let other_subtype = other_subtype.type_of(&scope)?;
                     return subtype.compatible_with(&other_subtype, scope);
                 } else {
                     return Err(SemanticError::IncompatibleTypes);
@@ -152,14 +151,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for VecType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_vec(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -167,16 +166,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for VecType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::VecType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Vec(static_type_impl::VecType(other_subtype))) =
             other_type
         {
-            let subtype = self.0.type_of(scope)?;
-            let other_subtype = other_subtype.type_of(scope)?;
+            let subtype = self.0.type_of(&scope)?;
+            let other_subtype = other_subtype.type_of(&scope)?;
             return subtype.compatible_with(&other_subtype, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -187,14 +186,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for FnType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_fn(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -202,11 +201,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::FnType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Fn(static_type_impl::FnType {
             params: other_params,
             ret: other_ret,
@@ -216,12 +215,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
                 return Err(SemanticError::IncompatibleTypes);
             }
             for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
-                let self_param = self_param.type_of(scope)?;
-                let other_param = other_param.type_of(scope)?;
+                let self_param = self_param.type_of(&scope)?;
+                let other_param = other_param.type_of(&scope)?;
                 let _ = self_param.compatible_with(&other_param, scope)?;
             }
-            let ret = self.ret.type_of(scope)?;
-            let other_ret = other_ret.type_of(scope)?;
+            let ret = self.ret.type_of(&scope)?;
+            let other_ret = other_ret.type_of(&scope)?;
             return ret.compatible_with(&other_ret, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -232,14 +231,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for ChanType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_chan(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -247,16 +246,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ChanType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::ChanType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Chan(static_type_impl::ChanType(other_subtype))) =
             other_type
         {
-            let subtype = self.0.type_of(scope)?;
-            let other_subtype = other_subtype.type_of(scope)?;
+            let subtype = self.0.type_of(&scope)?;
+            let other_subtype = other_subtype.type_of(&scope)?;
             return subtype.compatible_with(&other_subtype, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -267,14 +266,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for TupleType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_tuple(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -282,11 +281,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TupleType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::TupleType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Tuple(static_type_impl::TupleType(other_type))) =
             other_type
         {
@@ -294,8 +293,8 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
                 return Err(SemanticError::IncompatibleTypes);
             }
             for (self_param, other_param) in self.0.iter().zip(other_type.iter()) {
-                let self_param = self_param.type_of(scope)?;
-                let other_param = other_param.type_of(scope)?;
+                let self_param = self_param.type_of(&scope)?;
+                let other_param = other_param.type_of(&scope)?;
                 let _ = self_param.compatible_with(&other_param, scope)?;
             }
             return Ok(());
@@ -308,14 +307,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for AddrType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_addr(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -323,16 +322,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AddrType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::AddrType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Address(static_type_impl::AddrType(other_subtype))) =
             other_type
         {
-            let subtype = self.0.type_of(scope)?;
-            let other_subtype = other_subtype.type_of(scope)?;
+            let subtype = self.0.type_of(&scope)?;
+            let other_subtype = other_subtype.type_of(&scope)?;
             return subtype.compatible_with(&other_subtype, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -343,14 +342,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi> TypeOf<Scope> for MapType {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         let static_type: Scope::StaticType = Scope::StaticType::build_map(&self, scope)?;
-        let static_type = static_type.type_of(scope)?;
+        let static_type = static_type.type_of(&scope)?;
         Ok(static_type)
     }
 }
@@ -358,11 +357,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MapType {
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::MapType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
-        let other_type = other.type_of(scope)?;
+        let other_type = other.type_of(&scope)?;
         if let EitherType::Static(StaticType::Map(static_type_impl::MapType {
             keys_type: other_key,
             values_type: other_value,
@@ -383,8 +382,8 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 
             let _ = self.keys_type.compatible_with(&other_key, scope)?;
 
-            let subtype = self.values_type.type_of(scope)?;
-            let other_subtype = other_value.type_of(scope)?;
+            let subtype = self.values_type.type_of(&scope)?;
+            let other_subtype = other_value.type_of(&scope)?;
             return subtype.compatible_with(&other_subtype, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -394,7 +393,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for static_type_impl::KeyType
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {

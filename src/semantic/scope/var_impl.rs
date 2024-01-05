@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use crate::{
     ast::utils::strings::ID,
     semantic::{CompatibleWith, EitherType, SemanticError, TypeOf},
@@ -19,7 +21,7 @@ pub struct Var {
 impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>>
     CompatibleWith<Scope> for Var
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -32,7 +34,7 @@ impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> 
 {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<
         EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
         SemanticError,
@@ -41,7 +43,7 @@ impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> 
         Scope: ScopeApi,
         Self: Sized,
     {
-        self.type_sig.type_of(scope)
+        self.type_sig.type_of(&scope)
     }
 }
 
@@ -86,10 +88,6 @@ impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> 
     fn is_boolean(&self) -> bool {
         <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_boolean(&self.type_sig)
     }
-    fn is_enum_variant(&self) -> bool {
-        <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_enum_variant(&self.type_sig)
-    }
-
     fn is_callable(&self) -> bool {
         <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_callable(&self.type_sig)
     }

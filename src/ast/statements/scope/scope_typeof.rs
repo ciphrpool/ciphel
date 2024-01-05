@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use super::Scope;
 use crate::ast::statements::Statement;
 use crate::semantic::scope::BuildStaticType;
@@ -7,7 +9,7 @@ use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeO
 impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope {
     fn type_of(
         &self,
-        scope: &OuterScope,
+        scope: &Ref<OuterScope>,
     ) -> Result<EitherType<OuterScope::UserType, OuterScope::StaticType>, SemanticError>
     where
         OuterScope: ScopeApi,
@@ -18,15 +20,15 @@ impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope {
         for instruction in &self.instructions {
             match instruction {
                 Statement::Flow(value) => {
-                    let value_type = value.type_of(scope)?;
+                    let value_type = value.type_of(&scope)?;
                     return_type = return_type.merge(&value_type, scope)?;
                 }
                 Statement::Loops(value) => {
-                    let value_type = value.type_of(scope)?;
+                    let value_type = value.type_of(&scope)?;
                     return_type = return_type.merge(&value_type, scope)?;
                 }
                 Statement::Return(value) => {
-                    let value_type = value.type_of(scope)?;
+                    let value_type = value.type_of(&scope)?;
                     return_type = return_type.merge(&value_type, scope)?;
                 }
                 _ => {}

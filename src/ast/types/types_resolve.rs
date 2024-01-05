@@ -1,13 +1,12 @@
-use crate::{
-    semantic::{
-        scope::{type_traits::IsEnum, ScopeApi},
-        Resolve, SemanticError,
-    },
-};
+use std::{cell::RefCell, rc::Rc};
 
 use super::{
     AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, TupleType, Type, Types,
     VecType,
+};
+use crate::semantic::{
+    scope::{type_traits::IsEnum, ScopeApi},
+    Resolve, SemanticError,
 };
 
 impl<Scope: ScopeApi> Resolve<Scope> for Type {
@@ -16,7 +15,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -26,7 +25,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
             Type::Primitive(value) => value.resolve(scope, context),
             Type::Slice(value) => value.resolve(scope, context),
             Type::UserType(value) => {
-                let _ = scope.find_type(value)?;
+                let _ = scope.borrow().find_type(value)?;
                 Ok(())
             }
             Type::Vec(value) => value.resolve(scope, context),
@@ -45,8 +44,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
 
     fn resolve(
         &self,
-        _scope: &mut Scope,
-        _context: &Self::Context,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -60,7 +59,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -79,7 +78,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -95,7 +94,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -114,7 +113,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Types {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -133,7 +132,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -149,7 +148,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -165,7 +164,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -181,7 +180,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MapType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -198,7 +197,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
 
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -209,7 +208,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
             KeyType::Address(value) => value.resolve(scope, context),
             KeyType::Slice(value) => value.resolve(scope, context),
             KeyType::EnumID(value) => {
-                let enum_type = scope.find_type(value)?;
+                let borrowed_scope = scope.borrow();
+                let enum_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(value)?;
                 if enum_type.is_enum() {
                     return Err(SemanticError::ExpectedEnum);
                 }

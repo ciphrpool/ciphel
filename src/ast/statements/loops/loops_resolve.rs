@@ -3,13 +3,13 @@ use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
-
+use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Loop {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -28,8 +28,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
     type Context = ();
     fn resolve(
         &self,
-        scope: &mut Scope,
-        _context: &Self::Context,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -37,9 +37,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator {
     {
         match self {
             ForIterator::Id(value) => {
-                let var = scope.find_var(value)?;
+                let borrowed_scope = scope.borrow();
+                let var = borrowed_scope.find_var(value)?;
                 // check that the variable is iterable
-                let var_type = var.type_of(scope)?;
+                let var_type = var.type_of(&scope.borrow())?;
                 if !<
                     EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
                  as TypeChecking<Scope>>::is_iterable(&var_type)
@@ -61,7 +62,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -84,23 +85,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
+        let mut inner_scope = Scope::child_scope(scope)?;
         let _ = self.iterator.resolve(scope, &())?;
-        let item_type = self.iterator.type_of(scope)?;
+        let item_type = self.iterator.type_of(&scope.borrow())?;
         let item_type = <
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
         as GetSubTypes<Scope>>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type)?;
         // attach the item to the scope
-        let mut inner_scope = scope.child_scope()?;
-        inner_scope.attach(item_vars.into_iter());
+        inner_scope.borrow_mut().attach(item_vars.into_iter());
 
         let _ = self.scope.resolve(&mut inner_scope, context)?;
         Ok(())
@@ -111,7 +112,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
-        scope: &mut Scope,
+        scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -120,7 +121,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop {
     {
         let _ = self.condition.resolve(scope, &None)?;
         // check that the condition is a boolean
-        let condition_type = self.condition.type_of(scope)?;
+        let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }

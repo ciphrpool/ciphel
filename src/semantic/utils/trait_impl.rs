@@ -1,3 +1,5 @@
+use std::cell::Ref;
+
 use crate::{
     ast::utils::strings::ID,
     semantic::{
@@ -13,14 +15,14 @@ impl<T, Scope: ScopeApi> CompatibleWith<Scope> for Option<T>
 where
     T: CompatibleWith<Scope>,
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         match self {
             Some(value) => value.compatible_with(other, scope),
             None => {
-                let other_type = other.type_of(scope)?;
+                let other_type = other.type_of(&scope)?;
                 if <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_unit(&other_type) {
                     Ok(())
                 } else {
@@ -32,7 +34,7 @@ where
 }
 
 impl<Scope: ScopeApi> CompatibleWith<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Scope) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
         Scope: ScopeApi,
@@ -48,15 +50,15 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for EitherType<Scope::UserType, Scop
 impl<Scope: ScopeApi> TypeOf<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
     fn type_of(
         &self,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
         match self {
-            EitherType::Static(static_type) => static_type.type_of(scope),
-            EitherType::User(user_type) => user_type.type_of(scope),
+            EitherType::Static(static_type) => static_type.type_of(&scope),
+            EitherType::User(user_type) => user_type.type_of(&scope),
         }
     }
 }
@@ -65,7 +67,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for EitherType<Scope::UserType, Scope::St
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -89,12 +91,6 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
         match self {
             EitherType::Static(static_type) => static_type.is_boolean(),
             EitherType::User(_) => false,
-        }
-    }
-    fn is_enum_variant(&self) -> bool {
-        match self {
-            EitherType::Static(static_type) => static_type.is_enum_variant(),
-            EitherType::User(user_type) => user_type.is_enum_variant(),
         }
     }
     fn is_callable(&self) -> bool {
@@ -142,7 +138,7 @@ impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::
     fn get_variant(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
             EitherType::Static(_) => None,
-            EitherType::User(user_type) => user_type.get_field(field_id),
+            EitherType::User(user_type) => user_type.get_variant(field_id),
         }
     }
     fn get_item(
@@ -204,7 +200,7 @@ where
     fn merge_high_ord_math<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -224,7 +220,7 @@ where
     fn merge_low_ord_math<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -244,7 +240,7 @@ where
     fn merge_shift<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -264,7 +260,7 @@ where
     fn merge_bitwise_and<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -284,7 +280,7 @@ where
     fn merge_bitwise_xor<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -304,7 +300,7 @@ where
     fn merge_bitwise_or<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -324,7 +320,7 @@ where
     fn merge_comparaison<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -344,7 +340,7 @@ where
     fn merge_logical_and<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -364,7 +360,7 @@ where
     fn merge_logical_or<Other>(
         &self,
         other: &Other,
-        scope: &Scope,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
