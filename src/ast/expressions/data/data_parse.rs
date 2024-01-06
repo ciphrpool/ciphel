@@ -450,16 +450,8 @@ impl TryParse for KeyData {
         alt((
             map(Address::parse, |value| KeyData::Address(value)),
             map(Enum::parse, |value| KeyData::Enum(value)),
-            map(parse_string, |value| KeyData::String(value)),
-            map(parse_number, |value| KeyData::Number(value)),
-            map(
-                alt((
-                    value(true, wst(lexem::TRUE)),
-                    value(false, wst(lexem::FALSE)),
-                )),
-                |value| KeyData::Bool(value),
-            ),
-            map(parse_char, |value| KeyData::Char(value)),
+            map(Slice::parse, |value| KeyData::Slice(value)),
+            map(Primitive::parse, |value| KeyData::Primitive(value)),
         ))(input)
     }
 }
@@ -639,11 +631,11 @@ mod tests {
             Map::Init {
                 fields: vec![
                     (
-                        KeyData::String("x".into()),
+                        KeyData::Slice(Slice::String("x".into())),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
                     ),
                     (
-                        KeyData::String("y".into()),
+                        KeyData::Slice(Slice::String("y".into())),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
                     )
                 ]

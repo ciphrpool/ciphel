@@ -267,13 +267,6 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         Ok(Self::Address(AddrType(Box::new(subtype))))
     }
 
-    fn build_ptr_access_from(
-        _type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        _scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
-        todo!()
-    }
-
     fn build_map(
         type_sig: &ast::types::MapType,
         scope: &Ref<Scope>,
@@ -353,7 +346,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(_) => None,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_nth(value, n)
+            }
             StaticType::Map(_) => None,
         }
     }
@@ -372,15 +367,41 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(_) => None,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_item(value)
+            }
             StaticType::Map(value) => Some(value.values_type.as_ref().clone()),
         }
     }
+
+    fn get_key(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            StaticType::Map(value) => match &value.keys_type {
+                KeyType::Primitive(value) => {
+                    Some(EitherType::Static(StaticType::Primitive(value.clone())))
+                }
+                KeyType::Address(value) => {
+                    Some(EitherType::Static(StaticType::Address(value.clone())))
+                }
+                KeyType::Slice(value) => Some(EitherType::Static(StaticType::Slice(value.clone()))),
+                KeyType::Enum(value) => Some(EitherType::User(UserType::Enum(value.clone()))),
+            },
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_key(value)
+            }
+            _ => None,
+        }
+    }
+
     fn get_return(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
-        if let StaticType::Fn(value) = self {
-            Some(value.ret.as_ref().clone())
-        } else {
-            None
+        match self {
+            StaticType::Fn(value) => Some(value.ret.as_ref().clone()),
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_return(value)
+            }
+            _ => None,
         }
     }
     fn get_fields(
@@ -415,13 +436,36 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(_) => None,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_fields(value)
+            }
+            StaticType::Map(_) => None,
+        }
+    }
+
+    fn get_length(&self) -> Option<usize> {
+        match self {
+            StaticType::Primitive(_) => None,
+            StaticType::Slice(value) => match value {
+                SliceType::String => None,
+                SliceType::List(size, _) => Some(size.clone()),
+            },
+            StaticType::Vec(_) => None,
+            StaticType::Fn(_) => None,
+            StaticType::Chan(_) => None,
+            StaticType::Tuple(value) => Some(value.0.len()),
+            StaticType::Unit => None,
+            StaticType::Any => None,
+            StaticType::Error => None,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_length(value)
+            }
             StaticType::Map(_) => None,
         }
     }
 }
 
-impl<Scope: ScopeApi<StaticType = Self>> TypeChecking<Scope> for StaticType {
+impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope> for StaticType {
     fn is_iterable(&self) -> bool {
         match self {
             StaticType::Primitive(_) => false,
@@ -433,7 +477,9 @@ impl<Scope: ScopeApi<StaticType = Self>> TypeChecking<Scope> for StaticType {
             StaticType::Unit => false,
             StaticType::Any => false,
             StaticType::Error => false,
-            StaticType::Address(_) => false,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_iterable(value)
+            }
             StaticType::Map(_) => true,
         }
     }
@@ -448,37 +494,47 @@ impl<Scope: ScopeApi<StaticType = Self>> TypeChecking<Scope> for StaticType {
             StaticType::Unit => false,
             StaticType::Any => false,
             StaticType::Error => false,
-            StaticType::Address(_) => false,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_indexable(value)
+            }
             StaticType::Map(_) => false,
         }
     }
     fn is_channel(&self) -> bool {
-        if let StaticType::Chan(_) = self {
-            true
-        } else {
-            false
+        match self {
+            StaticType::Chan(_) => true,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_channel(value)
+            }
+            _ => false,
         }
     }
     fn is_boolean(&self) -> bool {
-        if let StaticType::Primitive(PrimitiveType::Bool) = self {
-            true
-        } else {
-            false
+        match self {
+            StaticType::Primitive(PrimitiveType::Bool) => true,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_boolean(value)
+            }
+            _ => false,
         }
     }
 
     fn is_callable(&self) -> bool {
-        if let StaticType::Fn(_) = self {
-            true
-        } else {
-            false
+        match self {
+            StaticType::Fn(_) => true,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_callable(value)
+            }
+            _ => false,
         }
     }
     fn is_any(&self) -> bool {
-        if let StaticType::Any = self {
-            true
-        } else {
-            false
+        match self {
+            StaticType::Any => true,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_any(value)
+            }
+            _ => false,
         }
     }
 }

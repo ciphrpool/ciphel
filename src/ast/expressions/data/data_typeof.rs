@@ -289,8 +289,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
         Self: Sized + Resolve<Scope>,
     {
         let addr_type = self.0.type_of(&scope)?;
-        Scope::StaticType::build_ptr_access_from(&addr_type, scope)
-            .map(|value| EitherType::Static(value))
+        Ok(EitherType::Static(Scope::StaticType::build_any()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
@@ -404,16 +403,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for KeyData {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            KeyData::Number(_) => Scope::StaticType::build_primitive(&PrimitiveType::Number, scope)
-                .map(|value| (EitherType::Static(value))),
-            KeyData::Bool(_) => Scope::StaticType::build_primitive(&PrimitiveType::Bool, scope)
-                .map(|value| (EitherType::Static(value))),
-            KeyData::Char(_) => Scope::StaticType::build_primitive(&PrimitiveType::Char, scope)
-                .map(|value| (EitherType::Static(value))),
-            KeyData::String(_) => Scope::StaticType::build_slice(&SliceType::String, scope)
-                .map(|value| (EitherType::Static(value))),
             KeyData::Address(value) => value.type_of(&scope),
             KeyData::Enum(value) => value.type_of(&scope),
+            KeyData::Primitive(value) => value.type_of(&scope),
+            KeyData::Slice(value) => value.type_of(&scope),
         }
     }
 }

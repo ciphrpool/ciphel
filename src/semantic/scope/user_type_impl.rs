@@ -26,20 +26,20 @@ pub enum UserType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
-    id: ID,
-    fields: HashMap<ID, EitherType<UserType, StaticType>>,
+    pub id: ID,
+    pub fields: HashMap<ID, EitherType<UserType, StaticType>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
-    id: ID,
-    values: HashSet<ID>,
+    pub id: ID,
+    pub values: HashSet<ID>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union {
-    id: ID,
-    variants: HashMap<ID, Struct>,
+    pub id: ID,
+    pub variants: HashMap<ID, Struct>,
 }
 
 impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {

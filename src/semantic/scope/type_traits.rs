@@ -20,6 +20,12 @@ pub trait GetSubTypes<Scope: ScopeApi> {
     fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         None
     }
+    fn get_key(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+        None
+    }
+    fn get_length(&self) -> Option<usize> {
+        None
+    }
     fn get_return(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         None
     }

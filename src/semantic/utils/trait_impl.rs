@@ -149,6 +149,16 @@ impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::
             EitherType::User(_) => None,
         }
     }
+
+    fn get_key(
+        &self,
+    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_key(),
+            EitherType::User(_) => None,
+        }
+    }
+
     fn get_return(
         &self,
     ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
@@ -169,6 +179,13 @@ impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::
         match self {
             EitherType::Static(static_type) => static_type.get_fields(),
             EitherType::User(user_type) => user_type.get_fields(),
+        }
+    }
+
+    fn get_length(&self) -> Option<usize> {
+        match self {
+            EitherType::Static(static_type) => static_type.get_length(),
+            EitherType::User(user_type) => user_type.get_length(),
         }
     }
 }

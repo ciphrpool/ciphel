@@ -191,21 +191,43 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
         Scope: ScopeApi,
     {
         match self {
-            Slice::String(_value) => Ok(()),
-            Slice::List(value) => match value.iter().find_map(|expr| {
-                let param_context = match context {
-                    Some(context) => <EitherType<
-                        <Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType,
-                    > as GetSubTypes<Scope>>::get_item(context),
-                    None => None,
-                };
-
-                expr.resolve(scope, &param_context).err()
-            }) {
-                Some(err) => Err(err),
+            Slice::String(_) => match context {
+                Some(context_type) => {
+                    let _ = context_type.compatible_with(self, &scope.borrow())?;
+                    Ok(())
+                }
                 None => Ok(()),
             },
+            Slice::List(value) => {
+                let (param_context, maybe_length) =
+                    match context {
+                        Some(context) => (
+                            <EitherType<
+                                <Scope as ScopeApi>::UserType,
+                                <Scope as ScopeApi>::StaticType,
+                            > as GetSubTypes<Scope>>::get_item(context),
+                            <EitherType<
+                                <Scope as ScopeApi>::UserType,
+                                <Scope as ScopeApi>::StaticType,
+                            > as GetSubTypes<Scope>>::get_length(
+                                context
+                            ),
+                        ),
+                        None => (None, None),
+                    };
+                match maybe_length {
+                    Some(length) => {
+                        if length != value.len() {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                    }
+                    None => {}
+                }
+                for expr in value {
+                    let _ = expr.resolve(scope, &param_context)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -222,7 +244,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init(value) => match value.iter().find_map(|expr| {
+            Vector::Init(value) => {
                 let param_context = match context {
                     Some(context) => <EitherType<
                         <Scope as ScopeApi>::UserType,
@@ -231,11 +253,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
                     None => None,
                 };
 
-                expr.resolve(scope, &param_context).err()
-            }) {
-                Some(err) => Err(err),
-                None => Ok(()),
-            },
+                for expr in value {
+                    let _ = expr.resolve(scope, &param_context)?;
+                }
+                Ok(())
+            }
             Vector::Def {
                 length: _,
                 capacity: _,
@@ -270,12 +292,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
         Self: Sized,
         Scope: ScopeApi,
     {
-        for (_index, expr) in self.iter().enumerate() {
+        let maybe_length = match context {
+            Some(context) => <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_length(context),
+            None => None,
+        };
+        match maybe_length {
+            Some(length) => {
+                if length != self.len() {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+            }
+            None => {}
+        }
+        for (index, expr) in self.iter().enumerate() {
             let param_context = match context {
                 Some(context) => <EitherType<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_item(context),
+                > as GetSubTypes<Scope>>::get_nth(context, &index),
                 None => None,
             };
             let _ = expr.resolve(scope, &param_context)?;
@@ -607,15 +644,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
                     None => None,
                 };
 
-                match fields
-                    .iter()
-                    .find_map(|(key, value)| match key.resolve(scope, context) {
-                        Ok(_) => value.resolve(scope, &item_type).err(),
-                        Err(e) => Some(e),
-                    }) {
-                    Some(e) => Err(e),
-                    None => Ok(()),
+                let key_type = match context {
+                    Some(context) => <EitherType<
+                        <Scope as ScopeApi>::UserType,
+                        <Scope as ScopeApi>::StaticType,
+                    > as GetSubTypes<Scope>>::get_key(context),
+                    None => None,
+                };
+                for (key, value) in fields {
+                    let _ = key.resolve(scope, &key_type)?;
+                    let _ = value.resolve(scope, &item_type)?;
                 }
+
+                Ok(())
             }
             Map::Def {
                 length: _,
@@ -637,12 +678,556 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
         Scope: ScopeApi,
     {
         match self {
-            KeyData::Number(_) => Ok(()),
-            KeyData::Bool(_) => Ok(()),
-            KeyData::Char(_) => Ok(()),
-            KeyData::String(_) => Ok(()),
             KeyData::Address(value) => value.resolve(scope, context),
             KeyData::Enum(value) => value.resolve(scope, context),
+            KeyData::Primitive(value) => value.resolve(scope, context),
+            KeyData::Slice(value) => value.resolve(scope, context),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl::Scope,
+            static_type_impl::{
+                AddrType, ChanType, KeyType, MapType, PrimitiveType, SliceType, StaticType,
+                TupleType, VecType,
+            },
+            user_type_impl::{self, UserType},
+            var_impl::Var,
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_primitive() {
+        let primitive = Primitive::parse("1".into());
+        assert!(primitive.is_ok());
+        let primitive = primitive.unwrap().1;
+
+        let scope = Scope::new();
+        let res = primitive.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = primitive.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Primitive(
+                PrimitiveType::Number,
+            ))),
+        );
+        assert!(res.is_ok());
+    }
+    #[test]
+    fn robustness_primitive() {
+        let primitive = Primitive::parse("1".into()).unwrap().1;
+        let scope = Scope::new();
+
+        let res = primitive.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Primitive(
+                PrimitiveType::Bool,
+            ))),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_slice() {
+        let string = Slice::parse(r##""Hello World""##.into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = string.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = string.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Slice(SliceType::String))),
+        );
+        assert!(res.is_ok());
+
+        let slice = Slice::parse("[1,2]".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = slice.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = slice.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
+                2,
+                Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Number,
+                ))),
+            )))),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_slice() {
+        let string = Slice::parse(r##""Hello World""##.into()).unwrap().1;
+        let scope = Scope::new();
+
+        let res = string.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Primitive(
+                PrimitiveType::Bool,
+            ))),
+        );
+        assert!(res.is_err());
+
+        let slice = Slice::parse("[1,2]".into()).unwrap().1;
+
+        let res = slice.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
+                2,
+                Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Bool,
+                ))),
+            )))),
+        );
+        assert!(res.is_err());
+
+        let slice = Slice::parse("[1,2]".into()).unwrap().1;
+
+        let res = slice.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
+                4,
+                Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Number,
+                ))),
+            )))),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_vector() {
+        let vector = Vector::parse("vec(2,8)".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = vector.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = vector.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = vector.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            ))))),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_vector() {
+        let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
+        let scope = Scope::new();
+
+        let res = vector.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+            ))))),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_address() {
+        let address = Address::parse("&x".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = address.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let address_type = address.type_of(&scope.borrow());
+        assert!(address_type.is_ok());
+        let address_type = address_type.unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Address(AddrType(Box::new(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number)
+            ))))),
+            address_type
+        )
+    }
+
+    #[test]
+    fn valid_channel() {
+        let channel = Channel::parse("receive[&chan1](10)".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "chan1".into(),
+                type_sig: EitherType::Static(StaticType::Chan(ChanType(Box::new(
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                )))),
+            })
+            .unwrap();
+
+        let res = channel.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
+        let res = channel.resolve(&scope, &None);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_channel() {
+        let channel = Channel::parse("receive[&chan1](10)".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "chan1".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+
+        let res = channel.resolve(&scope, &None);
+        assert!(res.is_err());
+
+        let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
+        let res = channel.resolve(&scope, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_tuple() {
+        let tuple = Tuple::parse("(1,'a')".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = tuple.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = tuple.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+            ])))),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_tuple() {
+        let tuple = Tuple::parse("(1,2)".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = tuple.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+            ])))),
+        );
+        assert!(res.is_err());
+
+        let res = tuple.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            ])))),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_map() {
+        let map = Map::parse(r##"map{"x":2,"y":6}"##.into()).unwrap().1;
+        let scope = Scope::new();
+        let res = map.resolve(&scope, &None);
+        assert!(res.is_ok());
+
+        let res = map.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Map(MapType {
+                keys_type: KeyType::Slice(SliceType::String),
+                values_type: Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Number,
+                ))),
+            }))),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_map() {
+        let map = Map::parse(r##"map{"x":2,"y":6}"##.into()).unwrap().1;
+        let scope = Scope::new();
+
+        let res = map.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Map(MapType {
+                keys_type: KeyType::Slice(SliceType::String),
+                values_type: Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Bool,
+                ))),
+            }))),
+        );
+        assert!(res.is_err());
+
+        let res = map.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Map(MapType {
+                keys_type: KeyType::Primitive(PrimitiveType::Number),
+                values_type: Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Number,
+                ))),
+            }))),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_struct() {
+        let object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Point".into(),
+                UserType::Struct(user_type_impl::Struct {
+                    id: "Point".into(),
+                    fields: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "x".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res.insert(
+                            "y".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_struct() {
+        let object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let scope = Scope::new();
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Point".into(),
+                UserType::Struct(user_type_impl::Struct {
+                    id: "Point".into(),
+                    fields: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "x".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res.insert(
+                            "y".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_union() {
+        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Geo".into(),
+                UserType::Union(user_type_impl::Union {
+                    id: "Geo".into(),
+                    variants: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "Point".into(),
+                            user_type_impl::Struct {
+                                id: "Point".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res.insert(
+                                        "y".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res.insert(
+                            "Axe".into(),
+                            user_type_impl::Struct {
+                                id: "Axe".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_union() {
+        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let scope = Scope::new();
+
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
+
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Geo".into(),
+                UserType::Union(user_type_impl::Union {
+                    id: "Geo".into(),
+                    variants: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "Point".into(),
+                            user_type_impl::Struct {
+                                id: "Point".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res.insert(
+                                        "y".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Bool,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
+
+        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .unwrap()
+            .1;
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_enum() {
+        let object = Enum::parse(r##"Geo::Point"##.into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Geo".into(),
+                UserType::Enum(user_type_impl::Enum {
+                    id: "Geo".into(),
+                    values: {
+                        let mut res = HashSet::new();
+                        res.insert("Point".into());
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_enum() {
+        let object = Enum::parse(r##"Geo::Point"##.into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Geo".into(),
+                UserType::Enum(user_type_impl::Enum {
+                    id: "Geo".into(),
+                    values: {
+                        let mut res = HashSet::new();
+                        res.insert("Axe".into());
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let res = object.resolve(&scope, &None);
+        assert!(res.is_err());
     }
 }

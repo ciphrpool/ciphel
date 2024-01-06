@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell},
+    fmt::Debug,
     rc::Rc,
 };
 
@@ -84,11 +85,6 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
-    fn build_ptr_access_from(
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-        scope: &Ref<Scope>,
-    ) -> Result<Scope::StaticType, SemanticError>;
-
     fn build_map(
         type_sig: &types::MapType,
         scope: &Ref<Scope>,
@@ -125,6 +121,7 @@ where
     Self: Sized,
 {
     type UserType: Clone
+        + Debug
         + CompatibleWith<Self>
         + TypeOf<Self>
         + BuildUserType<Self>
@@ -134,6 +131,7 @@ where
         + IsEnum
         + MergeType<Self>;
     type StaticType: Clone
+        + Debug
         + CompatibleWith<Self>
         + TypeOf<Self>
         + BuildStaticType<Self>

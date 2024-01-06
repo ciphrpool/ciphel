@@ -263,9 +263,9 @@ mod tests {
 
         dbg!(&decl);
 
-        let mut scope = Scope::new();
+        let scope = Scope::new();
 
-        let res = decl.resolve(&mut scope, &None);
+        let res = decl.resolve(&scope, &None);
         assert!(res.is_ok());
         dbg!(scope);
     }

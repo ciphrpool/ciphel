@@ -132,10 +132,8 @@ pub enum Map {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeyData {
-    Number(Number),
-    Bool(bool),
-    Char(char),
-    String(String),
+    Primitive(Primitive),
+    Slice(Slice),
     Address(Address),
     Enum(Enum),
 }
