@@ -143,7 +143,11 @@ impl<Scope: ScopeApi> TryParse for Slice<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(
-                delimited(wst(lexem::SQ_BRA_O), MultiData::parse, wst(lexem::SQ_BRA_C)),
+                delimited(
+                    wst(lexem::SQ_BRA_O),
+                    MultiData::parse,
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
+                ),
                 |value| Slice::List(value),
             ),
             map(parse_string, |value| Slice::String(value)),
@@ -164,7 +168,11 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
             map(
                 preceded(
                     wst(lexem::platform::VEC),
-                    delimited(wst(lexem::SQ_BRA_O), MultiData::parse, wst(lexem::SQ_BRA_C)),
+                    delimited(
+                        wst(lexem::SQ_BRA_O),
+                        MultiData::parse,
+                        preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
+                    ),
                 ),
                 |value| Vector::Init(value),
             ),
@@ -189,7 +197,11 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
 impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
-            delimited(wst(lexem::PAR_O), MultiData::parse, wst(lexem::PAR_C)),
+            delimited(
+                wst(lexem::PAR_O),
+                MultiData::parse,
+                preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C)),
+            ),
             |value| Tuple(value),
         )(input)
     }
@@ -344,7 +356,7 @@ impl<Scope: ScopeApi> TryParse for Struct<Scope> {
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
-                    wst(lexem::BRA_C),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
             |(id, value)| Struct { id, fields: value },
@@ -371,7 +383,7 @@ impl<Scope: ScopeApi> TryParse for Union<Scope> {
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
-                    wst(lexem::BRA_C),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
             |((typename, name), value)| Union {
@@ -419,7 +431,7 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
                             wst(lexem::COMA),
                             separated_pair(KeyData::parse, wst(lexem::COLON), Expression::parse),
                         ),
-                        wst(lexem::BRA_C),
+                        preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                     ),
                 ),
                 |value| Map::Init { fields: value },

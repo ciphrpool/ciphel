@@ -86,3 +86,65 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl::Scope,
+            static_type_impl::{PrimitiveType, StaticType},
+            var_impl::Var,
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_assignation() {
+        let assignation = Assignation::parse("x = 1;".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = assignation.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let assignation = Assignation::parse(
+            r##"
+            x = { 
+                let y = 10;
+                return y;
+            };
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = assignation.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_assignation() {
+        let assignation = Assignation::parse("x = 1;".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = assignation.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+}

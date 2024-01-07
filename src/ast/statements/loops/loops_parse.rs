@@ -51,7 +51,6 @@ impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
             map(parse_id, |value| ForIterator::Id(value)),
             map(Vector::parse, |value| ForIterator::Vec(value)),
             map(Slice::parse, |value| ForIterator::Slice(value)),
-            map(Tuple::parse, |value| ForIterator::Tuple(value)),
             map(
                 tuple((
                     wst(lexem::platform::RECEIVE),

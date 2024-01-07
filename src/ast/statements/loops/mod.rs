@@ -6,7 +6,7 @@ use crate::{
         },
         utils::strings::ID,
     },
-    semantic::{scope::ScopeApi},
+    semantic::scope::ScopeApi,
 };
 
 use super::{declaration::PatternVar, scope::Scope};
@@ -40,7 +40,6 @@ pub enum ForIterator<InnerScope: ScopeApi> {
     Id(ID),
     Vec(Vector<InnerScope>),
     Slice(Slice<InnerScope>),
-    Tuple(Tuple<InnerScope>),
     Receive { addr: Address, timeout: usize },
 }
 

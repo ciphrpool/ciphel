@@ -14,7 +14,10 @@ use super::{
     utils::{lexem, strings::wst},
     TryParse,
 };
-use crate::semantic::scope::BuildStaticType;
+use crate::semantic::{
+    scope::{type_traits::TypeChecking, BuildStaticType},
+    CompatibleWith,
+};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
@@ -146,7 +149,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        _context: &Self::Context,
+        context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -154,8 +157,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Return::Unit => Ok(()),
-            Return::Expr(value) => value.resolve(scope, &None, extra),
+            Return::Unit => {
+                match context {
+                    Some(context) => {
+                        if !<EitherType<
+                            <Scope as ScopeApi>::UserType,
+                            <Scope as ScopeApi>::StaticType,
+                        > as TypeChecking<Scope>>::is_unit(context)
+                        {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                    }
+                    None => {}
+                }
+                Ok(())
+            }
+            Return::Expr(value) => {
+                let _ = value.resolve(scope, &context, extra)?;
+                match context {
+                    Some(context) => {
+                        let return_type = value.type_of(&scope.borrow())?;
+                        let _ = context.compatible_with(&return_type, &scope.borrow())?;
+                        Ok(())
+                    }
+                    None => Ok(()),
+                }
+            }
         }
     }
 }
@@ -178,7 +205,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::scope::scope_impl::MockScope;
+    use crate::semantic::scope::{
+        scope_impl::{self, MockScope},
+        static_type_impl::{PrimitiveType, StaticType},
+    };
 
     use super::*;
 
@@ -193,5 +223,62 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Return::Unit, value);
+    }
+
+    #[test]
+    fn valid_resolved_return() {
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            return ;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = return_statement.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        assert_eq!(EitherType::Static(StaticType::Unit), return_type);
+
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            return 10;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = return_statement.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            return_type
+        );
+    }
+
+    #[test]
+    fn robustness_return() {
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            return 10;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = return_statement.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Primitive(
+                PrimitiveType::Char,
+            ))),
+            &(),
+        );
+        assert!(res.is_err());
     }
 }

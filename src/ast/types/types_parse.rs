@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     combinator::{map, value},
-    multi::{separated_list1},
+    multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
@@ -30,12 +30,12 @@ impl TryParse for Type {
         alt((
             map(PrimitiveType::parse, |value| Type::Primitive(value)),
             map(SliceType::parse, |value| Type::Slice(value)),
+            value(Type::Unit, wst(lexem::UUNIT)),
             map(parse_id, |value| Type::UserType(value)),
             map(VecType::parse, |value| Type::Vec(value)),
             map(FnType::parse, |value| Type::Fn(value)),
             map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
-            value(Type::Unit, wst(lexem::UUNIT)),
             map(AddrType::parse, |value| Type::Address(value)),
             map(MapType::parse, |value| Type::Map(value)),
         ))(input)

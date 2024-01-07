@@ -259,19 +259,115 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::TryParse, semantic::scope::scope_impl::Scope};
+    use std::collections::HashMap;
+
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl::Scope,
+            static_type_impl::{PrimitiveType, StaticType},
+            user_type_impl::{Struct, UserType},
+        },
+    };
 
     use super::*;
 
     #[test]
     fn valid_declaration() {
-        let decl = Declaration::parse("let x:number = 1;".into());
-        assert!(decl.is_ok());
-        let decl = decl.unwrap().1;
+        let decl = Declaration::parse("let x:number = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
+
+        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            x_type.type_sig
+        );
+
+        let decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = decl.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Float)),
+            x_type.type_sig
+        );
+    }
+
+    #[test]
+    fn robustness_declaration() {
+        let decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = decl.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_declaration_pattern() {
+        let decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let res = decl.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            x_type.type_sig
+        );
+        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+            y_type.type_sig
+        );
+    }
+
+    #[test]
+    fn valid_declaration_pattern_struct() {
+        let decl = Declaration::parse("let Point {x,y} = Point { x : 1 , y:2};".into())
+            .unwrap()
+            .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Point".into(),
+                UserType::Struct(Struct {
+                    id: "Point".into(),
+                    fields: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "x".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res.insert(
+                            "y".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let res = decl.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            x_type.type_sig
+        );
+        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            y_type.type_sig
+        );
     }
 }

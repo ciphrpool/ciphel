@@ -58,7 +58,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
             }
             ForIterator::Vec(value) => value.resolve(scope, &None, &()),
             ForIterator::Slice(value) => value.resolve(scope, &None, &()),
-            ForIterator::Tuple(value) => value.resolve(scope, &None, &()),
             ForIterator::Receive { addr, .. } => addr.resolve(scope, &None, &()),
         }
     }
@@ -159,6 +158,152 @@ mod tests {
             r##"
         for i in [1,2,3] {
             x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for (i,j) in [(1,1),(2,2),(3,3)] {
+            x = j;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_for_loop() {
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for i in y {
+            x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_err());
+
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for i in y {
+            x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "y".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_while_loop() {
+        let expr_loop = WhileLoop::<scope_impl::Scope>::parse(
+            r##"
+        while x > 10 {
+            x = x + 1;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_while() {
+        let expr_loop = WhileLoop::<scope_impl::Scope>::parse(
+            r##"
+        while x {
+            x = x + 1;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_loop() {
+        let expr_loop = Loop::<scope_impl::Scope>::parse(
+            r##"
+        loop {
+            x = x + 1;
         }
         "##
             .into(),

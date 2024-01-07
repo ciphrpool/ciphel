@@ -53,9 +53,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
             TypeDef::Enum(value) => &value.id,
         };
 
+        let type_def = Scope::UserType::build_usertype(self, &scope.borrow())?;
+
         let mut borrowed_scope = scope.borrow_mut();
-        let _ = borrowed_scope
-            .register_type(id, Scope::UserType::build_usertype(self, &scope.borrow())?)?;
+        let _ = borrowed_scope.register_type(id, type_def)?;
         Ok(())
     }
 }
@@ -144,18 +145,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         let _ = self.ret.resolve(scope, context, extra)?;
         let return_type = self.ret.type_of(&scope.borrow())?;
 
-        // inner_scope.borrow_mut().attach(
-        //     self.params
-        //         .iter()
-        //         .filter_map(|param| {
-        //             param
-        //                 .type_of(&scope.borrow())
-        //                 .ok()
-        //                 .map(|p| (param.id.clone(), p))
-        //         })
-        //         .map(|(id, param)| Scope::Var::build_var(&id, &param)),
-        // );
-
         let vars = self
             .params
             .iter()
@@ -168,8 +157,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             .map(|(id, param)| Scope::Var::build_var(&id, &param))
             .collect::<Vec<Scope::Var>>();
 
-        let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
+
+        //let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
 
         // convert to FnType -> GOAL : Retrieve function type signature
         let params = self
@@ -221,5 +211,379 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
         Scope: ScopeApi,
     {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl,
+            static_type_impl::{FnType, PrimitiveType, SliceType, StaticType},
+            user_type_impl::{Enum, Struct, Union, UserType},
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_struct() {
+        let type_def = TypeDef::parse(
+            r#"
+            struct Point {
+                x : number,
+                y : number
+            }
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = type_def.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let res_type = scope.borrow().find_type(&"Point".into()).unwrap();
+
+        assert_eq!(
+            UserType::Struct(Struct {
+                id: "Point".into(),
+                fields: {
+                    let mut res = HashMap::new();
+                    res.insert(
+                        "x".into(),
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                    );
+                    res.insert(
+                        "y".into(),
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                    );
+                    res
+                },
+            }),
+            res_type
+        )
+    }
+
+    #[test]
+    fn valid_advanced_struct() {
+        let type_def = TypeDef::parse(
+            r#"
+            struct Line {
+                start : Point,
+                end : Point
+            }
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Point".into(),
+                UserType::Struct(Struct {
+                    id: "Point".into(),
+                    fields: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "x".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res.insert(
+                            "y".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let res = type_def.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let res_type = scope.borrow().find_type(&"Line".into()).unwrap();
+
+        assert_eq!(
+            UserType::Struct(Struct {
+                id: "Line".into(),
+                fields: {
+                    let mut res = HashMap::new();
+                    res.insert(
+                        "start".into(),
+                        EitherType::User(UserType::Struct(Struct {
+                            id: "Point".into(),
+                            fields: {
+                                let mut res = HashMap::new();
+                                res.insert(
+                                    "x".into(),
+                                    EitherType::Static(StaticType::Primitive(
+                                        PrimitiveType::Number,
+                                    )),
+                                );
+                                res.insert(
+                                    "y".into(),
+                                    EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+                                );
+                                res
+                            },
+                        })),
+                    );
+                    res.insert(
+                        "end".into(),
+                        EitherType::User(UserType::Struct(Struct {
+                            id: "Point".into(),
+                            fields: {
+                                let mut res = HashMap::new();
+                                res.insert(
+                                    "x".into(),
+                                    EitherType::Static(StaticType::Primitive(
+                                        PrimitiveType::Number,
+                                    )),
+                                );
+                                res.insert(
+                                    "y".into(),
+                                    EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+                                );
+                                res
+                            },
+                        })),
+                    );
+                    res
+                },
+            }),
+            res_type
+        )
+    }
+
+    #[test]
+    fn valid_union() {
+        let type_def = TypeDef::parse(
+            r#"
+            union Geo {
+                Point {
+                    x : number,
+                    y : number,
+                },
+                Axe {
+                    x : number,
+                }
+            }
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = type_def.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
+
+        assert_eq!(
+            UserType::Union(Union {
+                id: "Geo".into(),
+                variants: {
+                    let mut res = HashMap::new();
+                    res.insert(
+                        "Point".into(),
+                        Struct {
+                            id: "Point".into(),
+                            fields: {
+                                let mut res = HashMap::new();
+                                res.insert(
+                                    "x".into(),
+                                    EitherType::Static(StaticType::Primitive(
+                                        PrimitiveType::Number,
+                                    )),
+                                );
+                                res.insert(
+                                    "y".into(),
+                                    EitherType::Static(StaticType::Primitive(
+                                        PrimitiveType::Number,
+                                    )),
+                                );
+                                res
+                            },
+                        },
+                    );
+                    res.insert(
+                        "Axe".into(),
+                        Struct {
+                            id: "Axe".into(),
+                            fields: {
+                                let mut res = HashMap::new();
+                                res.insert(
+                                    "x".into(),
+                                    EitherType::Static(StaticType::Primitive(
+                                        PrimitiveType::Number,
+                                    )),
+                                );
+                                res
+                            },
+                        },
+                    );
+                    res
+                },
+            }),
+            res_type
+        )
+    }
+
+    #[test]
+    fn valid_enum() {
+        let type_def = TypeDef::parse(
+            r#"
+            enum Geo {
+                Point
+            }
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = type_def.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
+
+        assert_eq!(
+            UserType::Enum(Enum {
+                id: "Geo".into(),
+                values: {
+                    let mut res = HashSet::new();
+                    res.insert("Point".into());
+                    res
+                },
+            }),
+            res_type
+        )
+    }
+
+    #[test]
+    fn valid_function_no_args_unit() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main() -> Unit {
+
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap();
+        let function_type = function_var.type_sig;
+
+        assert_eq!(
+            function_type,
+            EitherType::Static(StaticType::Fn(FnType {
+                params: vec![],
+                ret: Box::new(EitherType::Static(StaticType::Unit))
+            }))
+        )
+    }
+
+    #[test]
+    fn valid_function_args_unit() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main(x:number,text:string) -> Unit {
+
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap();
+        let function_type = function_var.type_sig;
+
+        assert_eq!(
+            function_type,
+            EitherType::Static(StaticType::Fn(FnType {
+                params: vec![
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                    EitherType::Static(StaticType::Slice(SliceType::String))
+                ],
+                ret: Box::new(EitherType::Static(StaticType::Unit))
+            }))
+        );
+
+        let function_scope = function.scope;
+        let x_type = function_scope
+            .inner_scope
+            .borrow()
+            .clone()
+            .unwrap()
+            .borrow()
+            .find_var(&"x".into())
+            .unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            x_type.type_sig
+        );
+        let text_type = function_scope
+            .inner_scope
+            .borrow()
+            .clone()
+            .unwrap()
+            .borrow()
+            .find_var(&"text".into())
+            .unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Slice(SliceType::String)),
+            text_type.type_sig
+        );
+    }
+
+    #[test]
+    fn valid_function_no_args_returns() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main() -> number {
+            let x = 10;
+            return x;
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap();
+        let function_type = function_var.type_sig;
+
+        assert_eq!(
+            function_type,
+            EitherType::Static(StaticType::Fn(FnType {
+                params: vec![],
+                ret: Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Number
+                )))
+            }))
+        )
     }
 }
