@@ -1,11 +1,10 @@
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::Scope;
 
-use crate::semantic::{CompatibleWith, TypeOf};
 use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError};
+use crate::semantic::{CompatibleWith, TypeOf};
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     //type Output = Rc<RefCell<OuterScope>>;
@@ -222,5 +221,33 @@ mod tests {
             EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
             res
         )
+    }
+
+    #[test]
+    fn robustness_scope() {
+        let expr_scope = Scope::parse(
+            r##"
+        {
+            let x = 10;
+            let y = x + 20;
+
+            if false {
+                return x;
+            }
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = expr_scope.resolve(
+            &scope,
+            &Some(EitherType::Static(StaticType::Primitive(
+                PrimitiveType::Number,
+            ))),
+            &Vec::default(),
+        );
+        assert!(res.is_err());
     }
 }

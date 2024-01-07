@@ -140,7 +140,7 @@ where
         + OperandMerging<Self>
         + MergeType<Self>;
 
-    type Var: Clone + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
+    type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
     type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
     type Event: BuildEvent<Self>;
 

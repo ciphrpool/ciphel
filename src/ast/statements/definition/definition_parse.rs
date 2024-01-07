@@ -8,7 +8,7 @@ use nom::{
 use crate::{
     ast::{
         statements::{declaration::TypedVar, scope::Scope},
-        types::{Type},
+        types::Type,
         utils::{
             io::{PResult, Span},
             lexem,

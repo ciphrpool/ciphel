@@ -68,7 +68,7 @@ impl ScopeApi for Scope {
     ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
-            Scope::Inner { general,  .. } => {
+            Scope::Inner { general, .. } => {
                 let mut child = Self::Inner {
                     parent: Some(Rc::downgrade(parent)),
                     general: general.clone(),
@@ -84,12 +84,14 @@ impl ScopeApi for Scope {
                 events: _,
                 channels: _,
             } => {
-                let child = Self::Inner {
+                let mut child = Self::Inner {
                     parent: None,
                     general: parent.clone(),
                     data: ScopeData::new(),
                 };
-
+                for variable in vars {
+                    let _ = child.register_var(variable);
+                }
                 Ok(Rc::new(RefCell::new(child)))
             }
         }
@@ -143,22 +145,35 @@ impl ScopeApi for Scope {
 
     fn find_var(&self, id: &ID) -> Result<Self::Var, crate::semantic::SemanticError> {
         match self {
-            Scope::Inner { data, parent, .. } => data
+            Scope::Inner {
+                data,
+                parent,
+                general,
+            } => data
                 .vars
                 .get(id)
                 .cloned()
-                .or_else(|| {
-                    parent.as_ref()?.upgrade().and_then(|p| {
+                .or_else(|| match parent {
+                    Some(parent) => parent.upgrade().and_then(|p| {
                         let borrowed_scope =
                             <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         borrowed_scope.find_var(id).ok()
-                    })
+                    }),
+                    None => {
+                        let borrowed_scope =
+                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&general);
+                        let borrowed_scope = borrowed_scope.borrow();
+
+                        borrowed_scope.find_var(id).ok()
+                    }
                 })
-                .ok_or(SemanticError::UnknownVar),
-            Scope::General { data, .. } => {
-                data.vars.get(id).cloned().ok_or(SemanticError::UnknownVar)
-            }
+                .ok_or(SemanticError::UnknownVar(id.clone())),
+            Scope::General { data, .. } => data
+                .vars
+                .get(id)
+                .cloned()
+                .ok_or(SemanticError::UnknownVar(id.clone())),
         }
     }
 
@@ -180,10 +195,12 @@ impl ScopeApi for Scope {
                         borrowed_scope.find_type(id).ok()
                     })
                 })
-                .ok_or(SemanticError::UnknownVar),
-            Scope::General { data, .. } => {
-                data.types.get(id).cloned().ok_or(SemanticError::UnknownVar)
-            }
+                .ok_or(SemanticError::UnknownType),
+            Scope::General { data, .. } => data
+                .types
+                .get(id)
+                .cloned()
+                .ok_or(SemanticError::UnknownType),
         }
     }
 
@@ -206,23 +223,30 @@ impl ScopeApi for MockScope {
 
     type Event = Event;
 
-    fn register_type(&mut self, _id: &ID, _reg: Self::UserType) -> Result<(), SemanticError> {
+    fn child_scope_with(
+        parent: &Rc<RefCell<Self>>,
+        vars: Vec<Self::Var>,
+    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         todo!()
     }
 
-    fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
+    fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn register_var(&mut self, _reg: Self::Var) -> Result<(), SemanticError> {
+    fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn register_event(&mut self, _reg: Self::Event) -> Result<(), SemanticError> {
+    fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn find_var(&self, _id: &ID) -> Result<Self::Var, SemanticError> {
+    fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError> {
+        todo!()
+    }
+
+    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError> {
         todo!()
     }
 
@@ -230,18 +254,11 @@ impl ScopeApi for MockScope {
         todo!()
     }
 
-    fn find_type(&self, _id: &ID) -> Result<Self::UserType, SemanticError> {
+    fn find_type(&self, id: &ID) -> Result<Self::UserType, SemanticError> {
         todo!()
     }
 
     fn find_event(&self) -> Result<&Self::Event, SemanticError> {
-        todo!()
-    }
-
-    fn child_scope_with(
-        _parent: &Rc<RefCell<Self>>,
-        _vars: Vec<Self::Var>,
-    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         todo!()
     }
 }

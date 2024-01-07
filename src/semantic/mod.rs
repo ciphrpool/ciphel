@@ -3,6 +3,8 @@ use std::{
     rc::Rc,
 };
 
+use crate::ast::utils::strings::ID;
+
 use self::scope::ScopeApi;
 
 pub mod scope;
@@ -24,7 +26,7 @@ pub enum SemanticError {
     ExpectedStruct,
     ExpectedChannel,
 
-    UnknownVar,
+    UnknownVar(ID),
     UnknownType,
     UnknownField,
 

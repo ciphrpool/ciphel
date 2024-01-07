@@ -111,7 +111,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
 
         let item_vars = self.item.resolve(scope, &item_type, &())?;
         // attach the item to the scope
-
         let _ = self.scope.resolve(scope, context, &item_vars)?;
         Ok(())
     }
@@ -138,5 +137,43 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
         }
         let _ = self.scope.resolve(scope, context, &Vec::default())?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl,
+            static_type_impl::{PrimitiveType, StaticType},
+            var_impl::Var,
+        },
+    };
+
+    use super::*;
+
+    #[test]
+    fn valid_for_loop() {
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for i in [1,2,3] {
+            x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok());
     }
 }

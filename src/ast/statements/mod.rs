@@ -14,7 +14,7 @@ use super::{
     utils::{lexem, strings::wst},
     TryParse,
 };
-use crate::semantic::{scope::BuildStaticType};
+use crate::semantic::scope::BuildStaticType;
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
@@ -178,7 +178,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::scope::scope_impl::{MockScope};
+    use crate::semantic::scope::scope_impl::MockScope;
 
     use super::*;
 
