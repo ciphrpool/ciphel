@@ -105,8 +105,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -174,7 +174,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -197,7 +197,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -252,7 +252,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -305,7 +305,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -347,7 +347,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -452,7 +452,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -544,8 +544,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -598,8 +598,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -655,8 +655,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -680,7 +680,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

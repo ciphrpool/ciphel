@@ -14,7 +14,7 @@ use super::{
     utils::{lexem, strings::wst},
     TryParse,
 };
-use crate::semantic::{self, scope::BuildStaticType};
+use crate::semantic::{scope::BuildStaticType};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
@@ -146,7 +146,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -178,7 +178,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::scope::scope_impl::{MockScope, Scope};
+    use crate::semantic::scope::scope_impl::{MockScope};
 
     use super::*;
 

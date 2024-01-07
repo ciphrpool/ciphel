@@ -8,9 +8,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Error {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _scope: &Rc<RefCell<Scope>>,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

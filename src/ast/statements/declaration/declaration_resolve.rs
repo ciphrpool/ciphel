@@ -11,7 +11,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -106,7 +106,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

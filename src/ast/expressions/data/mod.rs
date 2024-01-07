@@ -3,7 +3,7 @@ use crate::{
         self,
         utils::{numbers::Number, strings::ID},
     },
-    semantic::{self, scope::ScopeApi},
+    semantic::{scope::ScopeApi},
 };
 
 use super::Expression;

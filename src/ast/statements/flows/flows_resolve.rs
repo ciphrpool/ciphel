@@ -1,4 +1,4 @@
-use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
+use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::{
     scope::{type_traits::TypeChecking, ScopeApi},
     EitherType, Resolve, SemanticError, TypeOf,
@@ -92,7 +92,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -112,7 +112,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where

@@ -194,7 +194,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let vars = self.pattern.resolve(scope, context, extra)?;
+        let _vars = self.pattern.resolve(scope, context, extra)?;
         // create a scope and assign the pattern variable to it before resolving the expression
         let _ = self.expr.resolve(scope, context, &())?;
         Ok(())

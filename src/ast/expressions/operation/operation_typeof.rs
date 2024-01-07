@@ -68,7 +68,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath<Scope> {
                 let right_type = right.type_of(&scope)?;
                 left_type.merge_low_ord_math(&right_type, scope)
             }
-            LowOrdMath::Minus { left, right } => todo!(),
+            LowOrdMath::Minus { left: _, right: _ } => todo!(),
         }
     }
 }

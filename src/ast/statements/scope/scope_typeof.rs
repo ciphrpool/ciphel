@@ -9,7 +9,7 @@ use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeO
 impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
     fn type_of(
         &self,
-        scope: &Ref<OuterScope>,
+        _scope: &Ref<OuterScope>,
     ) -> Result<EitherType<OuterScope::UserType, OuterScope::StaticType>, SemanticError>
     where
         OuterScope: ScopeApi,

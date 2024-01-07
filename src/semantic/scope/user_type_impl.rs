@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     ast::{
-        statements::definition::{self, StructDef},
+        statements::definition::{self},
         utils::strings::ID,
     },
     semantic::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf},
@@ -312,7 +312,7 @@ impl Union {
 impl Enum {
     pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
         from: &definition::EnumDef,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut values = HashSet::new();
         for id in &from.values {

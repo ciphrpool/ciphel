@@ -35,8 +35,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -97,7 +97,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -124,7 +124,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

@@ -334,7 +334,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let addr_type = self.0.type_of(&scope)?;
+        let _addr_type = self.0.type_of(&scope)?;
         Ok(EitherType::Static(Scope::StaticType::build_any()))
     }
 }

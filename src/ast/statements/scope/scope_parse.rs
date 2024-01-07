@@ -12,7 +12,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{self, scope::ScopeApi},
+    semantic::{scope::ScopeApi},
 };
 
 use super::Scope;

@@ -6,7 +6,7 @@ use crate::{
         },
         utils::strings::ID,
     },
-    semantic::{self, scope::ScopeApi},
+    semantic::{scope::ScopeApi},
 };
 
 use super::{declaration::PatternVar, scope::Scope};

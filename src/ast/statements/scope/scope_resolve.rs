@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use super::Scope;
 
-use crate::semantic::{self, CompatibleWith, TypeOf};
+use crate::semantic::{CompatibleWith, TypeOf};
 use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError};
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {

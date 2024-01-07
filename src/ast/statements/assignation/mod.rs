@@ -3,7 +3,7 @@ use crate::{
         data::{PtrAccess, Variable},
         Expression,
     },
-    semantic::{self, scope::ScopeApi},
+    semantic::{scope::ScopeApi},
 };
 
 use super::scope::Scope;

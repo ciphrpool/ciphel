@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
+use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{scope::ScopeApi, EitherType, MergeType, Resolve, SemanticError, TypeOf};
 
