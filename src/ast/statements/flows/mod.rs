@@ -1,8 +1,9 @@
-use crate::ast::{
-    expressions::{
+use crate::{
+    ast::expressions::{
         flows::{FnCall, Pattern},
         Expression,
     },
+    semantic::{self, scope::ScopeApi},
 };
 
 use super::scope::Scope;
@@ -12,40 +13,40 @@ pub mod flows_resolve;
 pub mod flows_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Flow {
-    If(IfStat),
-    Match(MatchStat),
-    Try(TryStat),
-    Call(CallStat),
+pub enum Flow<InnerScope: ScopeApi> {
+    If(IfStat<InnerScope>),
+    Match(MatchStat<InnerScope>),
+    Try(TryStat<InnerScope>),
+    Call(CallStat<InnerScope>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfStat {
-    condition: Box<Expression>,
-    main_branch: Box<Scope>,
-    else_branch: Option<Box<Scope>>,
+pub struct IfStat<InnerScope: ScopeApi> {
+    condition: Box<Expression<InnerScope>>,
+    main_branch: Box<Scope<InnerScope>>,
+    else_branch: Option<Box<Scope<InnerScope>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchStat {
-    expr: Box<Expression>,
-    patterns: Vec<PatternStat>,
-    else_branch: Option<Box<Scope>>,
+pub struct MatchStat<InnerScope: ScopeApi> {
+    expr: Box<Expression<InnerScope>>,
+    patterns: Vec<PatternStat<InnerScope>>,
+    else_branch: Option<Box<Scope<InnerScope>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PatternStat {
+pub struct PatternStat<InnerScope: ScopeApi> {
     pattern: Pattern,
-    scope: Box<Scope>,
+    scope: Box<Scope<InnerScope>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TryStat {
-    try_branch: Box<Scope>,
-    else_branch: Option<Box<Scope>>,
+pub struct TryStat<InnerScope: ScopeApi> {
+    try_branch: Box<Scope<InnerScope>>,
+    else_branch: Option<Box<Scope<InnerScope>>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CallStat {
-    pub call: FnCall,
+pub struct CallStat<InnerScope: ScopeApi> {
+    pub call: FnCall<InnerScope>,
 }

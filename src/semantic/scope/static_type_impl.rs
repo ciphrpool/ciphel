@@ -366,7 +366,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
             StaticType::Any => None,
-            StaticType::Error => None,
+            StaticType::Error => Some(EitherType::Static(Self::Error)),
             StaticType::Address(AddrType(value)) => {
                 <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_item(value)
             }
@@ -533,6 +533,15 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
             StaticType::Any => true,
             StaticType::Address(AddrType(value)) => {
                 <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_any(value)
+            }
+            _ => false,
+        }
+    }
+    fn is_unit(&self) -> bool {
+        match self {
+            StaticType::Unit => true,
+            StaticType::Address(AddrType(value)) => {
+                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_unit(value)
             }
             _ => false,
         }
@@ -939,21 +948,66 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     fn can_comparaison(&self) -> Result<(), SemanticError> {
         match self {
             StaticType::Primitive(_) => Ok(()),
-            StaticType::Slice(_) => Ok(()),
-            StaticType::Vec(_) => Ok(()),
-            StaticType::Fn(_) => Err(SemanticError::IncompatibleOperation),
-            StaticType::Chan(_) => Err(SemanticError::IncompatibleOperation),
-            StaticType::Tuple(_) => Ok(()),
-            StaticType::Unit => Ok(()),
-            StaticType::Any => Err(SemanticError::IncompatibleOperation),
-            StaticType::Error => todo!(),
+            StaticType::Error => Ok(()),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::can_comparaison(&value.0),
-            StaticType::Map(_) => Ok(()),
+            _ => Err(SemanticError::IncompatibleOperation),
         }
     }
     fn merge_comparaison<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(StaticType::Primitive(
+            PrimitiveType::Bool,
+        )))
+    }
+
+    fn can_equate(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(_) => Ok(()),
+            StaticType::Slice(_) => Ok(()),
+            StaticType::Tuple(_) => Ok(()),
+            StaticType::Map(_) => Ok(()),
+            StaticType::Vec(_) => Ok(()),
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::can_equate(&value.0)
+            }
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_equation<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(StaticType::Primitive(
+            PrimitiveType::Bool,
+        )))
+    }
+
+    fn can_include_right(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Slice(_) => Ok(()),
+            StaticType::Map(_) => Ok(()),
+            StaticType::Vec(_) => Ok(()),
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_include_right(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_inclusion<Other>(
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,

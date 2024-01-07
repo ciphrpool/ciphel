@@ -6,7 +6,7 @@ use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
 use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf};
 
-impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope {
+impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
     fn type_of(
         &self,
         scope: &Ref<OuterScope>,
@@ -15,21 +15,27 @@ impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope {
         OuterScope: ScopeApi,
         Self: Sized + Resolve<OuterScope>,
     {
+        let binding = self.inner_scope.borrow();
+        let Some(binding) = binding.as_ref() else {
+            return Err(SemanticError::NotResolvedYet);
+        };
+        let inner_scope = binding.borrow();
         let mut return_type = EitherType::Static(OuterScope::StaticType::build_unit());
 
         for instruction in &self.instructions {
             match instruction {
                 Statement::Flow(value) => {
-                    let value_type = value.type_of(&scope)?;
-                    return_type = return_type.merge(&value_type, scope)?;
+                    let value_type = value.type_of(&inner_scope)?;
+                    return_type = return_type.merge(&value_type, &inner_scope)?;
                 }
                 Statement::Loops(value) => {
-                    let value_type = value.type_of(&scope)?;
-                    return_type = return_type.merge(&value_type, scope)?;
+                    let value_type = value.type_of(&inner_scope);
+                    let value_type = value_type?;
+                    return_type = return_type.merge(&value_type, &inner_scope)?;
                 }
                 Statement::Return(value) => {
-                    let value_type = value.type_of(&scope)?;
-                    return_type = return_type.merge(&value_type, scope)?;
+                    let value_type = value.type_of(&inner_scope)?;
+                    return_type = return_type.merge(&value_type, &inner_scope)?;
                 }
                 _ => {}
             }

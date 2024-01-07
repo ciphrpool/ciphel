@@ -6,22 +6,24 @@ use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Definition {
+impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Definition::Type(value) => value.resolve(scope, &()),
-            Definition::Fn(value) => value.resolve(scope, &()),
-            Definition::Event(value) => value.resolve(scope, &()),
+            Definition::Type(value) => value.resolve(scope, &(), &()),
+            Definition::Fn(value) => value.resolve(scope, &(), &()),
+            Definition::Event(value) => value.resolve(scope, &(), &()),
         }
     }
 }
@@ -29,19 +31,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition {
 impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         let _ = match self {
-            TypeDef::Struct(value) => value.resolve(scope, context),
-            TypeDef::Union(value) => value.resolve(scope, context),
-            TypeDef::Enum(value) => value.resolve(scope, context),
+            TypeDef::Struct(value) => value.resolve(scope, context, extra),
+            TypeDef::Union(value) => value.resolve(scope, context, extra),
+            TypeDef::Enum(value) => value.resolve(scope, context, extra),
         }?;
         let id = match &self {
             TypeDef::Struct(value) => &value.id,
@@ -59,17 +63,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
 impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         for (_, type_siq) in &self.fields {
-            let _ = type_siq.resolve(scope, context)?;
+            let _ = type_siq.resolve(scope, context, extra)?;
         }
         Ok(())
     }
@@ -78,10 +84,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
 impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -89,7 +97,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     {
         for (_, variant) in &self.variants {
             for (_, type_sig) in variant {
-                let _ = type_sig.resolve(scope, context);
+                let _ = type_sig.resolve(scope, context, extra);
             }
         }
 
@@ -100,10 +108,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
 impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -113,41 +123,53 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
+impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let mut inner_scope = Scope::child_scope(scope)?;
-
         for value in &self.params {
-            let _ = value.resolve(scope, context)?;
+            let _ = value.resolve(scope, context, extra)?;
         }
 
-        let _ = self.ret.resolve(scope, context)?;
+        let _ = self.ret.resolve(scope, context, extra)?;
         let return_type = self.ret.type_of(&scope.borrow())?;
 
-        inner_scope.borrow_mut().attach(
-            self.params
-                .iter()
-                .filter_map(|param| {
-                    param
-                        .type_of(&scope.borrow())
-                        .ok()
-                        .map(|p| (param.id.clone(), p))
-                })
-                .map(|(id, param)| Scope::Var::build_var(&id, &param)),
-        );
+        // inner_scope.borrow_mut().attach(
+        //     self.params
+        //         .iter()
+        //         .filter_map(|param| {
+        //             param
+        //                 .type_of(&scope.borrow())
+        //                 .ok()
+        //                 .map(|p| (param.id.clone(), p))
+        //         })
+        //         .map(|(id, param)| Scope::Var::build_var(&id, &param)),
+        // );
+
+        let vars = self
+            .params
+            .iter()
+            .filter_map(|param| {
+                param
+                    .type_of(&scope.borrow())
+                    .ok()
+                    .map(|p| (param.id.clone(), p))
+            })
+            .map(|(id, param)| Scope::Var::build_var(&id, &param))
+            .collect::<Vec<Scope::Var>>();
 
         let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
-        let _ = self.scope.resolve(&mut inner_scope, &Some(return_type))?;
+        let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
 
         // convert to FnType -> GOAL : Retrieve function type signature
         let params = self
@@ -166,13 +188,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
+impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -185,10 +209,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef {
 impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

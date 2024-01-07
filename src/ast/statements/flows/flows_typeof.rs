@@ -4,7 +4,7 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{scope::ScopeApi, EitherType, MergeType, Resolve, SemanticError, TypeOf};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
+impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -21,7 +21,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
+impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -40,7 +40,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -51,10 +51,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
     {
         let pattern_type = {
             if let Some(res) = self.patterns.first() {
-                let mut res = res.type_of(&scope)?;
+                let mut res = res.scope.type_of(&scope)?;
                 if self.patterns.len() > 1 {
                     for pattern in &self.patterns {
-                        let pattern_type = pattern.type_of(&scope)?;
+                        let pattern_type = pattern.scope.type_of(&scope)?;
                         res = res.merge(&pattern_type, scope)?;
                     }
                 }
@@ -75,19 +75,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for PatternStat {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        self.scope.type_of(&scope)
-    }
-}
-impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
+
+impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -107,7 +96,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for CallStat {
+impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,

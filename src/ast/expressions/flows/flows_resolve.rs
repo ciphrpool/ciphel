@@ -6,46 +6,50 @@ use crate::semantic::{
     scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow {
+impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ExprFlow::If(value) => value.resolve(scope, context),
-            ExprFlow::Match(value) => value.resolve(scope, context),
-            ExprFlow::Try(value) => value.resolve(scope, context),
-            ExprFlow::Call(value) => value.resolve(scope, context),
+            ExprFlow::If(value) => value.resolve(scope, context, extra),
+            ExprFlow::Match(value) => value.resolve(scope, context, extra),
+            ExprFlow::Try(value) => value.resolve(scope, context, extra),
+            ExprFlow::Call(value) => value.resolve(scope, context, extra),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
+impl<Scope: ScopeApi> Resolve<Scope> for IfExpr<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.condition.resolve(scope, context)?;
+        let _ = self.condition.resolve(scope, context, extra)?;
         // Check if condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
-        let _ = self.main_branch.resolve(scope, context)?;
-        let _ = self.else_branch.resolve(scope, context)?;
+        let _ = self.main_branch.resolve(scope, context, extra)?;
+        let _ = self.else_branch.resolve(scope, context, extra)?;
 
         let main_branch_type = self.main_branch.type_of(&scope.borrow())?;
         let _ = main_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
@@ -56,10 +60,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr {
 impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -67,7 +73,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     {
         match self {
             Pattern::Primitive(value) => {
-                let _ = value.resolve(scope, context)?;
+                let _ = value.resolve(scope, context, extra)?;
                 Ok(Vec::default())
             }
             Pattern::String(value) => {
@@ -174,45 +180,47 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr {
+impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let mut inner_scope = Scope::child_scope(scope)?;
-        let vars = self.pattern.resolve(scope, context)?;
+        let vars = self.pattern.resolve(scope, context, extra)?;
         // create a scope and assign the pattern variable to it before resolving the expression
-        inner_scope.borrow_mut().attach(vars.into_iter());
-        let _ = self.expr.resolve(&mut inner_scope, context)?;
+        let _ = self.expr.resolve(scope, context, &())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
+impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.expr.resolve(scope, context)?;
+        let _ = self.expr.resolve(scope, context, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
-        let _ = self.else_branch.resolve(scope, &expr_type)?;
+        let _ = self.else_branch.resolve(scope, &expr_type, &())?;
 
         for pattern in &self.patterns {
-            let _ = pattern.resolve(scope, &expr_type)?;
+            let _ = pattern.resolve(scope, &expr_type, &())?;
         }
         let else_branch_type = self.else_branch.type_of(&scope.borrow())?;
 
@@ -239,20 +247,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
+impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.try_branch.resolve(scope, context)?;
-        let _ = self.else_branch.resolve(scope, context)?;
+        let _ = self.try_branch.resolve(scope, context, extra)?;
+        let _ = self.else_branch.resolve(scope, context, extra)?;
 
         let try_branch_type = self.try_branch.type_of(&scope.borrow())?;
         let _ = try_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
@@ -260,19 +270,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
+impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.fn_var.resolve(scope, context)?;
+        let _ = self.fn_var.resolve(scope, context, extra)?;
         let fn_var_type = self.fn_var.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType,
              <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
@@ -285,7 +297,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
                 <Scope as ScopeApi>::UserType,
                 <Scope as ScopeApi>::StaticType,
             > as GetSubTypes<Scope>>::get_nth(&fn_var_type, &index);
-            let _ = expr.resolve(scope, &param_context)?;
+            let _ = expr.resolve(scope, &param_context, &())?;
         }
 
         let Some(fields) = <EitherType<
@@ -302,5 +314,33 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ast::TryParse, semantic::scope::scope_impl::Scope};
+
+    use super::*;
+
+    #[test]
+    fn valid_if() {
+        let expr = IfExpr::parse("if true {10} else {20}".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn robustness_if() {
+        let expr = IfExpr::parse("if 10 {10} else {20}".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
+
+        let expr = IfExpr::parse("if true {10} else {'a'}".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
     }
 }

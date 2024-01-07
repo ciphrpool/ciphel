@@ -7,7 +7,7 @@ use crate::semantic::{
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow {
+impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -24,7 +24,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr {
+impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -38,7 +38,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr {
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -50,7 +50,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr {
         self.expr.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr {
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -80,7 +80,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr {
         pattern_type.merge(&else_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr {
+impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -93,7 +93,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr {
         try_branch_type.merge(&self.else_branch, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for FnCall {
+impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

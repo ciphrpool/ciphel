@@ -5,6 +5,7 @@ use super::{
     ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 use crate::ast::types::PrimitiveType;
+use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
     },
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Data {
+impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -42,6 +43,40 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data {
         }
     }
 }
+
+impl Variable {
+    fn typeof_based<Scope>(
+        &self,
+        context: &EitherType<Scope::UserType, Scope::StaticType>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match self {
+            Variable::Var(VarID(value)) => <EitherType<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_field(
+                context, value
+            )
+            .ok_or(SemanticError::UnknownField),
+            Variable::FieldAccess(FieldAccess { var, field }) => {
+                let var_type = var.typeof_based::<Scope>(context)?;
+                field.typeof_based::<Scope>(&var_type)
+            }
+            Variable::ListAccess(ListAccess { var, .. }) => {
+                let var_type = var.typeof_based::<Scope>(context)?;
+                if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_indexable(&var_type) {
+                    Err(SemanticError::ExpectedIterable)
+                } else {
+                    Ok(var_type)
+                }
+            }
+        }
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
     fn type_of(
         &self,
@@ -82,7 +117,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        self.field.type_of(&scope)
+        let var_type = self.var.type_of(&scope)?;
+        self.field.typeof_based::<Scope>(&var_type)
     }
 }
 
@@ -96,13 +132,23 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess {
         Self: Sized + Resolve<Scope>,
     {
         let var_type = self.var.type_of(&scope)?;
-        let Some(res) = <EitherType<
+
+        match <EitherType<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_item(&var_type) else {
-            return Err(SemanticError::CantInferType);
-        };
-        Ok(res)
+        > as GetSubTypes<Scope>>::get_item(&var_type) {
+            Some(res) => Ok(res),
+            None => {
+                let Some(res) = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_nth(&var_type,&self.index) else {
+                    return Err(SemanticError::CantInferType);
+                };
+
+                Ok(res)
+            },
+        }
     }
 }
 
@@ -143,7 +189,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Slice {
+impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -168,7 +214,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Vector {
+impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -195,7 +241,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Tuple {
+impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -215,7 +261,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Tuple {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Closure {
+impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -235,7 +281,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure {
             .map(|value| EitherType::Static(value))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ClosureScope {
+impl<Scope: ScopeApi> TypeOf<Scope> for ClosureScope<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -292,7 +338,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
         Ok(EitherType::Static(Scope::StaticType::build_any()))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
+impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -326,7 +372,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Struct {
+impl<Scope: ScopeApi> TypeOf<Scope> for Struct<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -339,7 +385,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Struct {
         user_type.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Union {
+impl<Scope: ScopeApi> TypeOf<Scope> for Union<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -366,7 +412,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Enum {
         user_type.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Map {
+impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -393,7 +439,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for KeyData {
+impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

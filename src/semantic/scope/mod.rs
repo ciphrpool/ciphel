@@ -113,12 +113,12 @@ pub trait BuildChan<Scope: ScopeApi> {
     ) -> Scope::Chan;
 }
 pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef) -> Scope::Event;
+    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef<Scope>) -> Scope::Event;
 }
 
 pub trait ScopeApi
 where
-    Self: Sized,
+    Self: Sized + Clone + Debug,
 {
     type UserType: Clone
         + Debug
@@ -140,12 +140,14 @@ where
         + OperandMerging<Self>
         + MergeType<Self>;
 
-    type Var: CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
+    type Var: Clone + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
     type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
     type Event: BuildEvent<Self>;
 
-    fn child_scope(parent: &Rc<RefCell<Self>>) -> Result<Rc<RefCell<Self>>, SemanticError>;
-    fn attach(&mut self, vars: impl Iterator<Item = Self::Var>);
+    fn child_scope_with(
+        parent: &Rc<RefCell<Self>>,
+        vars: Vec<Self::Var>,
+    ) -> Result<Rc<RefCell<Self>>, SemanticError>;
 
     fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError>;
     fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;

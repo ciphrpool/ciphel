@@ -5,7 +5,7 @@ use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Declaration {
+impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,

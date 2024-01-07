@@ -6,11 +6,11 @@ use crate::semantic::{
 };
 
 use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, HighOrdMath, LogicalAnd, LogicalOr, LowOrdMath,
-    Shift, UnaryOperation,
+    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Equation, HighOrdMath, Inclusion, LogicalAnd,
+    LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation {
+impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -25,7 +25,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath {
+impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -53,7 +53,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath {
+impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -68,10 +68,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath {
                 let right_type = right.type_of(&scope)?;
                 left_type.merge_low_ord_math(&right_type, scope)
             }
+            LowOrdMath::Minus { left, right } => todo!(),
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Shift {
+impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -94,7 +95,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Shift {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd {
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -108,7 +109,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd {
         left_type.merge_bitwise_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR {
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -122,7 +123,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR {
         left_type.merge_bitwise_xor(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR {
+impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -136,7 +137,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR {
         left_type.merge_bitwise_or(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison {
+impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -166,25 +167,50 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison {
                 let right_type = right.type_of(&scope)?;
                 left_type.merge_comparaison(&right_type, scope)
             }
-            Comparaison::Equal { left, right } => {
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
+    fn type_of(
+        &self,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Equation::Equal { left, right } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
-                left_type.merge_comparaison(&right_type, scope)
+                left_type.merge_equation(&right_type, scope)
             }
-            Comparaison::NotEqual { left, right } => {
+            Equation::NotEqual { left, right } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
-                left_type.merge_comparaison(&right_type, scope)
-            }
-            Comparaison::In { left, right } => {
-                let left_type = left.type_of(&scope)?;
-                let right_type = right.type_of(&scope)?;
-                left_type.merge_comparaison(&right_type, scope)
+                left_type.merge_equation(&right_type, scope)
             }
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd {
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Inclusion<Scope> {
+    fn type_of(
+        &self,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let left_type = self.left.type_of(&scope)?;
+        let right_type = self.right.type_of(&scope)?;
+        left_type.merge_inclusion(&right_type, scope)
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -198,7 +224,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd {
         left_type.merge_logical_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalOr {
+impl<Scope: ScopeApi> TypeOf<Scope> for LogicalOr<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

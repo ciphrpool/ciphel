@@ -5,22 +5,25 @@ use nom::{
     sequence::{delimited, pair, preceded, separated_pair},
 };
 
-use crate::ast::{
-    expressions::{
-        data::{Primitive, Variable},
-        Expression,
+use crate::{
+    ast::{
+        expressions::{
+            data::{Primitive, Variable},
+            Expression,
+        },
+        utils::{
+            io::{PResult, Span},
+            lexem,
+            strings::{parse_id, string_parser::parse_string, wst},
+        },
+        TryParse,
     },
-    utils::{
-        io::{PResult, Span},
-        lexem,
-        strings::{parse_id, string_parser::parse_string, wst},
-    },
-    TryParse,
+    semantic::scope::ScopeApi,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl TryParse for ExprFlow {
+impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
     /*
      * @desc Parse expression statement
      *
@@ -37,7 +40,7 @@ impl TryParse for ExprFlow {
     }
 }
 
-impl TryParse for IfExpr {
+impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
     /*
      * @desc Parse If expression
      *
@@ -126,7 +129,7 @@ impl TryParse for Pattern {
     }
 }
 
-impl TryParse for PatternExpr {
+impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
@@ -142,7 +145,7 @@ impl TryParse for PatternExpr {
     }
 }
 
-impl TryParse for MatchExpr {
+impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
     /*
      * @desc Parse Match expression
      *
@@ -187,7 +190,7 @@ impl TryParse for MatchExpr {
     }
 }
 
-impl TryParse for TryExpr {
+impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     /*
      * @desc Parse try expression
      *
@@ -214,7 +217,7 @@ impl TryParse for TryExpr {
     }
 }
 
-impl TryParse for FnCall {
+impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
     /*
      * @desc Parse fn call
      *
@@ -239,17 +242,20 @@ impl TryParse for FnCall {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::{
-        data::{Data, Primitive, VarID, Variable},
-        flows::PatternExpr,
-        Atomic, Expression,
+    use crate::{
+        ast::expressions::{
+            data::{Data, Primitive, VarID, Variable},
+            flows::PatternExpr,
+            Atomic, Expression,
+        },
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_if() {
-        let res = IfExpr::parse("if true { 10 } else { 20 }".into());
+        let res = IfExpr::<MockScope>::parse("if true { 10 } else { 20 }".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -270,7 +276,7 @@ mod tests {
 
     #[test]
     fn valid_match() {
-        let res = MatchExpr::parse(
+        let res = MatchExpr::<MockScope>::parse(
             r#"
         match x { 
             case 10 => true,
@@ -348,7 +354,7 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let res = TryExpr::parse("try { 10 } else { 20 }".into());
+        let res = TryExpr::<MockScope>::parse("try { 10 } else { 20 }".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -366,7 +372,7 @@ mod tests {
 
     #[test]
     fn valid_fn_call() {
-        let res = FnCall::parse("f(x,10)".into());
+        let res = FnCall::<MockScope>::parse("f(x,10)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

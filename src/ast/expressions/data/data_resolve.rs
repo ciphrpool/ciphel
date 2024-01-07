@@ -9,33 +9,35 @@ use crate::semantic::{
     scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Data {
+impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Data::Primitive(value) => value.resolve(scope, context),
-            Data::Slice(value) => value.resolve(scope, context),
-            Data::Vec(value) => value.resolve(scope, context),
-            Data::Closure(value) => value.resolve(scope, context),
-            Data::Chan(value) => value.resolve(scope, context),
-            Data::Tuple(value) => value.resolve(scope, context),
-            Data::Address(value) => value.resolve(scope, context),
-            Data::PtrAccess(value) => value.resolve(scope, context),
-            Data::Variable(value) => value.resolve(scope, context),
+            Data::Primitive(value) => value.resolve(scope, context, extra),
+            Data::Slice(value) => value.resolve(scope, context, extra),
+            Data::Vec(value) => value.resolve(scope, context, extra),
+            Data::Closure(value) => value.resolve(scope, context, extra),
+            Data::Chan(value) => value.resolve(scope, context, extra),
+            Data::Tuple(value) => value.resolve(scope, context, extra),
+            Data::Address(value) => value.resolve(scope, context, extra),
+            Data::PtrAccess(value) => value.resolve(scope, context, extra),
+            Data::Variable(value) => value.resolve(scope, context, extra),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve(scope, context),
-            Data::Struct(value) => value.resolve(scope, context),
-            Data::Union(value) => value.resolve(scope, context),
-            Data::Enum(value) => value.resolve(scope, context),
+            Data::Map(value) => value.resolve(scope, context, extra),
+            Data::Struct(value) => value.resolve(scope, context, extra),
+            Data::Union(value) => value.resolve(scope, context, extra),
+            Data::Enum(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -63,7 +65,7 @@ impl Variable {
             }
             Variable::ListAccess(ListAccess { var, .. }) => {
                 let var_type = var.resolve_based::<Scope>(context)?;
-                if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_iterable(&var_type) {
+                if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_indexable(&var_type) {
                     Err(SemanticError::ExpectedIterable)
                 } else {
                     Ok(var_type)
@@ -76,19 +78,21 @@ impl Variable {
 impl<Scope: ScopeApi> Resolve<Scope> for Variable {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Variable::Var(value) => value.resolve(scope, context),
-            Variable::FieldAccess(value) => value.resolve(scope, context),
-            Variable::ListAccess(value) => value.resolve(scope, context),
+            Variable::Var(value) => value.resolve(scope, context, extra),
+            Variable::FieldAccess(value) => value.resolve(scope, context, extra),
+            Variable::ListAccess(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -97,10 +101,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
 
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
 
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -115,17 +121,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess {
 
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
 
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.var.resolve(scope, context)?;
+        let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
-        let var_type = var_type;
         let _ = self.field.resolve_based::<Scope>(&var_type)?;
         Ok(())
     }
@@ -136,21 +143,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
 
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.var.resolve(scope, context)?;
+        let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
         if !<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
          as TypeChecking<Scope>>::is_indexable(&var_type)
         {
-            Err(SemanticError::ExpectedIterable)
+            Err(SemanticError::ExpectedIndexable)
         } else {
             Ok(())
         }
@@ -160,10 +169,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
 impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -178,13 +189,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Slice {
+impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -224,20 +237,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice {
                     None => {}
                 }
                 for expr in value {
-                    let _ = expr.resolve(scope, &param_context)?;
+                    let _ = expr.resolve(scope, &param_context, &())?;
                 }
                 Ok(())
             }
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Vector {
+impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -254,7 +269,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
                 };
 
                 for expr in value {
-                    let _ = expr.resolve(scope, &param_context)?;
+                    let _ = expr.resolve(scope, &param_context, &())?;
                 }
                 Ok(())
             }
@@ -265,28 +280,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Tuple {
+impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context)
+        self.0.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
+impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -315,25 +334,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData {
                 > as GetSubTypes<Scope>>::get_nth(context, &index),
                 None => None,
             };
-            let _ = expr.resolve(scope, &param_context)?;
+            let _ = expr.resolve(scope, &param_context, &())?;
         }
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Closure {
+impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let mut inner_scope = Scope::child_scope(scope)?;
-
         let Some(context) = context else {
             return Err(SemanticError::CantInferType);
         };
@@ -342,36 +361,34 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
                 <Scope as ScopeApi>::UserType,
                 <Scope as ScopeApi>::StaticType,
             > as GetSubTypes<Scope>>::get_nth(context, &index);
-            let _ = expr.resolve(scope, &param_context)?;
+            let _ = expr.resolve(scope, &param_context, &())?;
         }
 
-        inner_scope.borrow_mut().attach(
-            self.params
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, param)| {
-                    param.type_of(&scope.borrow()).ok().map(|p| {
-                        (
-                            idx,
-                            match param {
-                                ClosureParam::Full { id, .. } => id,
-                                ClosureParam::Minimal(id) => id,
-                            },
-                            p,
-                        )
-                    })
+        let vars = self
+            .params
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, param)| {
+                param.type_of(&scope.borrow()).ok().map(|p| {
+                    (
+                        idx,
+                        match param {
+                            ClosureParam::Full { id, .. } => id,
+                            ClosureParam::Minimal(id) => id,
+                        },
+                        p,
+                    )
                 })
-                .map(|(index, id, param)| {
-                    let _param_type = param.type_of(&scope.borrow());
-                    let param_type = <EitherType<
-                        <Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType,
-                    > as GetSubTypes<Scope>>::get_nth(
-                        context, &index
-                    );
-                    Scope::Var::build_var(id, &param_type.unwrap())
-                }),
-        );
+            })
+            .map(|(index, id, param)| {
+                let _param_type = param.type_of(&scope.borrow());
+                let param_type = <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_nth(context, &index);
+                Scope::Var::build_var(id, &param_type.unwrap())
+            })
+            .collect::<Vec<Scope::Var>>();
 
         let Some(context_return) = <EitherType<
             <Scope as ScopeApi>::UserType,
@@ -380,30 +397,49 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure {
             return Err(SemanticError::CantInferType);
         };
 
-        let scope_type = self.scope.type_of(&scope.borrow())?;
-        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
-        let _ = self
-            .scope
-            .resolve(&mut inner_scope, &Some(context_return))?;
+        let _ = self.scope.resolve(scope, &Some(context_return), &vars)?;
 
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope {
+impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = Vec<Scope::Var>;
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ClosureScope::Scope(value) => value.resolve(scope, context),
-            ClosureScope::Expr(value) => value.resolve(scope, context),
+            ClosureScope::Scope(value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let scope_type = value.type_of(&scope.borrow())?;
+
+                match context {
+                    Some(context_return) => {
+                        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
+                    }
+                    None => {}
+                }
+                Ok(())
+            }
+            ClosureScope::Expr(value) => {
+                let _ = value.resolve(scope, context, &())?;
+                let scope_type = value.type_of(&scope.borrow())?;
+                match context {
+                    Some(context_return) => {
+                        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
+                    }
+                    None => {}
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -411,17 +447,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
     type Context =
         Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            ClosureParam::Full { id: _, signature } => signature.resolve(scope, &()),
+            ClosureParam::Full { id: _, signature } => signature.resolve(scope, &(), &()),
             ClosureParam::Minimal(_value) => match context {
                 Some(_) => Ok(()),
                 None => Err(SemanticError::CantInferType),
@@ -432,40 +470,46 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
 impl<Scope: ScopeApi> Resolve<Scope> for Address {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context)
+        self.0.resolve(scope, context, extra)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context)
+        self.0.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Channel {
+impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -473,7 +517,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
     {
         match self {
             Channel::Receive { addr, .. } => {
-                let _ = addr.resolve(scope, context)?;
+                let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
                 if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
@@ -481,25 +525,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel {
                 Ok(())
             }
             Channel::Send { addr, msg } => {
-                let _ = addr.resolve(scope, context)?;
+                let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
                 if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
-                let _ = msg.resolve(scope, context)?;
+                let _ = msg.resolve(scope, context, extra)?;
                 Ok(())
             }
             Channel::Init(id) => scope.borrow_mut().register_chan(id),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Struct {
+impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -516,7 +562,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
                 &user_type, &field_name
             );
 
-            let _ = expr.resolve(scope, &field_context)?;
+            let _ = expr.resolve(scope, &field_context, &())?;
         }
 
         let Some(fields_type) = <EitherType<
@@ -545,13 +591,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Union {
+impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -571,7 +619,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
                 &variant_type, &field_name
             );
 
-            let _ = expr.resolve(scope, &field_context)?;
+            let _ = expr.resolve(scope, &field_context, &())?;
         }
 
         let Some(fields_type) = <EitherType<
@@ -603,10 +651,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union {
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -622,13 +672,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         // Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Map {
+impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -652,8 +704,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
                     None => None,
                 };
                 for (key, value) in fields {
-                    let _ = key.resolve(scope, &key_type)?;
-                    let _ = value.resolve(scope, &item_type)?;
+                    let _ = key.resolve(scope, &key_type, &())?;
+                    let _ = value.resolve(scope, &item_type, &())?;
                 }
 
                 Ok(())
@@ -665,23 +717,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for KeyData {
+impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            KeyData::Address(value) => value.resolve(scope, context),
-            KeyData::Enum(value) => value.resolve(scope, context),
-            KeyData::Primitive(value) => value.resolve(scope, context),
-            KeyData::Slice(value) => value.resolve(scope, context),
+            KeyData::Address(value) => value.resolve(scope, context, extra),
+            KeyData::Enum(value) => value.resolve(scope, context, extra),
+            KeyData::Primitive(value) => value.resolve(scope, context, extra),
+            KeyData::Slice(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -712,7 +766,7 @@ mod tests {
         let primitive = primitive.unwrap().1;
 
         let scope = Scope::new();
-        let res = primitive.resolve(&scope, &None);
+        let res = primitive.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = primitive.resolve(
@@ -720,6 +774,7 @@ mod tests {
             &Some(EitherType::Static(StaticType::Primitive(
                 PrimitiveType::Number,
             ))),
+            &(),
         );
         assert!(res.is_ok());
     }
@@ -733,6 +788,7 @@ mod tests {
             &Some(EitherType::Static(StaticType::Primitive(
                 PrimitiveType::Bool,
             ))),
+            &(),
         );
         assert!(res.is_err());
     }
@@ -742,19 +798,20 @@ mod tests {
         let string = Slice::parse(r##""Hello World""##.into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = string.resolve(&scope, &None);
+        let res = string.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = string.resolve(
             &scope,
             &Some(EitherType::Static(StaticType::Slice(SliceType::String))),
+            &(),
         );
         assert!(res.is_ok());
 
         let slice = Slice::parse("[1,2]".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = slice.resolve(&scope, &None);
+        let res = slice.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = slice.resolve(
@@ -765,6 +822,7 @@ mod tests {
                     PrimitiveType::Number,
                 ))),
             )))),
+            &(),
         );
         assert!(res.is_ok());
     }
@@ -779,6 +837,7 @@ mod tests {
             &Some(EitherType::Static(StaticType::Primitive(
                 PrimitiveType::Bool,
             ))),
+            &(),
         );
         assert!(res.is_err());
 
@@ -792,6 +851,7 @@ mod tests {
                     PrimitiveType::Bool,
                 ))),
             )))),
+            &(),
         );
         assert!(res.is_err());
 
@@ -805,6 +865,7 @@ mod tests {
                     PrimitiveType::Number,
                 ))),
             )))),
+            &(),
         );
         assert!(res.is_err());
     }
@@ -814,13 +875,13 @@ mod tests {
         let vector = Vector::parse("vec(2,8)".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = vector.resolve(&scope, &None);
+        let res = vector.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = vector.resolve(&scope, &None);
+        let res = vector.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = vector.resolve(
@@ -828,6 +889,7 @@ mod tests {
             &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
             ))))),
+            &(),
         );
         assert!(res.is_ok());
     }
@@ -842,8 +904,88 @@ mod tests {
             &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
             ))))),
+            &(),
         );
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_variable() {
+        let variable = Variable::parse("x".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable_type = variable.type_of(&scope.borrow());
+        assert!(variable_type.is_ok());
+        let variable_type = variable_type.unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            variable_type
+        );
+
+        let variable = Variable::parse("x[10]".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Vec(VecType(Box::new(
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                )))),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable_type = variable.type_of(&scope.borrow());
+        assert!(variable_type.is_ok());
+        let variable_type = variable_type.unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            variable_type
+        );
+
+        let variable = Variable::parse("point.x".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "point".into(),
+                type_sig: EitherType::User(UserType::Struct(user_type_impl::Struct {
+                    id: "Point".into(),
+                    fields: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "x".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res.insert(
+                            "y".into(),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        );
+                        res
+                    },
+                })),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable_type = variable.type_of(&scope.borrow());
+        assert!(variable_type.is_ok());
+        let variable_type = variable_type.unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            variable_type
+        )
     }
 
     #[test]
@@ -857,7 +999,7 @@ mod tests {
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
             })
             .unwrap();
-        let res = address.resolve(&scope, &None);
+        let res = address.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let address_type = address.type_of(&scope.borrow());
@@ -885,11 +1027,11 @@ mod tests {
             })
             .unwrap();
 
-        let res = channel.resolve(&scope, &None);
+        let res = channel.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
-        let res = channel.resolve(&scope, &None);
+        let res = channel.resolve(&scope, &None, &());
         assert!(res.is_ok());
     }
 
@@ -905,11 +1047,11 @@ mod tests {
             })
             .unwrap();
 
-        let res = channel.resolve(&scope, &None);
+        let res = channel.resolve(&scope, &None, &());
         assert!(res.is_err());
 
         let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
-        let res = channel.resolve(&scope, &None);
+        let res = channel.resolve(&scope, &None, &());
         assert!(res.is_err());
     }
 
@@ -917,7 +1059,7 @@ mod tests {
     fn valid_tuple() {
         let tuple = Tuple::parse("(1,'a')".into()).unwrap().1;
         let scope = Scope::new();
-        let res = tuple.resolve(&scope, &None);
+        let res = tuple.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = tuple.resolve(
@@ -926,6 +1068,7 @@ mod tests {
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
             ])))),
+            &(),
         );
         assert!(res.is_ok());
     }
@@ -940,6 +1083,7 @@ mod tests {
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
             ])))),
+            &(),
         );
         assert!(res.is_err());
 
@@ -950,6 +1094,7 @@ mod tests {
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
                 EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
             ])))),
+            &(),
         );
         assert!(res.is_err());
     }
@@ -958,7 +1103,7 @@ mod tests {
     fn valid_map() {
         let map = Map::parse(r##"map{"x":2,"y":6}"##.into()).unwrap().1;
         let scope = Scope::new();
-        let res = map.resolve(&scope, &None);
+        let res = map.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
         let res = map.resolve(
@@ -969,6 +1114,7 @@ mod tests {
                     PrimitiveType::Number,
                 ))),
             }))),
+            &(),
         );
         assert!(res.is_ok());
     }
@@ -986,6 +1132,7 @@ mod tests {
                     PrimitiveType::Bool,
                 ))),
             }))),
+            &(),
         );
         assert!(res.is_err());
 
@@ -997,6 +1144,7 @@ mod tests {
                     PrimitiveType::Number,
                 ))),
             }))),
+            &(),
         );
         assert!(res.is_err());
     }
@@ -1029,7 +1177,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_ok());
     }
 
@@ -1039,7 +1187,7 @@ mod tests {
             .unwrap()
             .1;
         let scope = Scope::new();
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
         let _ = scope
             .borrow_mut()
@@ -1063,7 +1211,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
     }
 
@@ -1125,7 +1273,7 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_ok());
     }
 
@@ -1136,7 +1284,7 @@ mod tests {
             .1;
         let scope = Scope::new();
 
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
 
         let _ = scope
@@ -1177,13 +1325,13 @@ mod tests {
         let object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
             .unwrap()
             .1;
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
 
         let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .unwrap()
             .1;
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
     }
 
@@ -1205,7 +1353,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_ok());
     }
 
@@ -1227,7 +1375,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = object.resolve(&scope, &None);
+        let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
     }
 }

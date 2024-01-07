@@ -10,10 +10,7 @@ use crate::{
             data::{Address, Slice, Tuple, Vector},
             Expression,
         },
-        statements::{
-            declaration::{PatternVar},
-            scope::Scope,
-        },
+        statements::{declaration::PatternVar, scope::Scope},
         utils::{
             io::{PResult, Span},
             lexem,
@@ -22,11 +19,12 @@ use crate::{
         },
         TryParse,
     },
+    semantic::scope::ScopeApi,
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
-impl TryParse for Loop {
+impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
     /*
      * @desc Parse loop
      *
@@ -47,7 +45,7 @@ impl TryParse for Loop {
     }
 }
 
-impl TryParse for ForIterator {
+impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(parse_id, |value| ForIterator::Id(value)),
@@ -78,7 +76,7 @@ impl TryParse for ForItem {
     }
 }
 
-impl TryParse for ForLoop {
+impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
     /*
      * @desc Parse for loop
      *
@@ -103,7 +101,7 @@ impl TryParse for ForLoop {
     }
 }
 
-impl TryParse for WhileLoop {
+impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
     /*
      * @desc Parse while loop
      *
@@ -123,23 +121,28 @@ impl TryParse for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        expressions::{
-            data::{Data, Primitive, VarID, Variable},
-            flows::FnCall,
-            Atomic,
+    use std::cell::RefCell;
+
+    use crate::{
+        ast::{
+            expressions::{
+                data::{Data, Primitive, VarID, Variable},
+                flows::FnCall,
+                Atomic,
+            },
+            statements::{
+                flows::{CallStat, Flow},
+                Statement,
+            },
         },
-        statements::{
-            flows::{CallStat, Flow},
-            Statement,
-        },
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_for() {
-        let res = ForLoop::parse(
+        let res = ForLoop::<MockScope>::parse(
             r#"
         for i in x {
             f(10);
@@ -161,7 +164,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None)
                 })
             },
             value
@@ -170,7 +174,7 @@ mod tests {
 
     #[test]
     fn valid_while() {
-        let res = WhileLoop::parse(
+        let res = WhileLoop::<MockScope>::parse(
             r#"
         while true {
             f(10);
@@ -193,7 +197,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None)
                 })
             },
             value
@@ -202,7 +207,7 @@ mod tests {
 
     #[test]
     fn valid_loop() {
-        let res = Loop::parse(
+        let res = Loop::<MockScope>::parse(
             r#"
         loop {
             f(10);
@@ -221,7 +226,8 @@ mod tests {
                             Primitive::Number(10)
                         )))]
                     }
-                }))]
+                }))],
+                inner_scope: RefCell::new(None)
             })),
             value
         );

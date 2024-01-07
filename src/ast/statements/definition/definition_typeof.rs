@@ -4,7 +4,7 @@ use super::{EventCondition, EventDef};
 
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for EventDef {
+impl<Scope: ScopeApi> TypeOf<Scope> for EventDef<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,

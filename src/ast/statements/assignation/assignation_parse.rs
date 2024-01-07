@@ -4,23 +4,26 @@ use nom::{
     sequence::{separated_pair, terminated},
 };
 
-use crate::ast::{
-    expressions::{
-        data::{PtrAccess, Variable},
-        Expression,
+use crate::{
+    ast::{
+        expressions::{
+            data::{PtrAccess, Variable},
+            Expression,
+        },
+        statements::scope::Scope,
+        utils::{
+            io::{PResult, Span},
+            lexem,
+            strings::wst,
+        },
+        TryParse,
     },
-    statements::scope::Scope,
-    utils::{
-        io::{PResult, Span},
-        lexem,
-        strings::wst,
-    },
-    TryParse,
+    semantic::scope::ScopeApi,
 };
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl TryParse for Assignation {
+impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
     /*
      * @desc Parse assignation
      *
@@ -38,7 +41,7 @@ impl TryParse for Assignation {
     }
 }
 
-impl TryParse for AssignValue {
+impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     /*
      * @desc Parse assigned value
      *
@@ -77,16 +80,19 @@ impl TryParse for Assignee {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::{
-        data::{Data, FieldAccess, Primitive, VarID, Variable},
-        Atomic,
+    use crate::{
+        ast::expressions::{
+            data::{Data, FieldAccess, Primitive, VarID, Variable},
+            Atomic,
+        },
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_assignation() {
-        let res = Assignation::parse("x = 10;".into());
+        let res = Assignation::<MockScope>::parse("x = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -99,7 +105,7 @@ mod tests {
             value
         );
 
-        let res = Assignation::parse("*x = 10;".into());
+        let res = Assignation::<MockScope>::parse("*x = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -112,7 +118,7 @@ mod tests {
             value
         );
 
-        let res = Assignation::parse("x.y = 10;".into());
+        let res = Assignation::<MockScope>::parse("x.y = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

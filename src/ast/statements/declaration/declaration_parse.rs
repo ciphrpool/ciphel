@@ -16,11 +16,12 @@ use crate::{
         },
         TryParse,
     },
+    semantic::scope::ScopeApi,
 };
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl TryParse for Declaration {
+impl<Scope: ScopeApi> TryParse for Declaration<Scope> {
     /*
      * @desc Parse Declaration
      *
@@ -155,19 +156,22 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        expressions::{
-            data::{Data, Primitive, Tuple},
-            Atomic, Expression,
+    use crate::{
+        ast::{
+            expressions::{
+                data::{Data, Primitive, Tuple},
+                Atomic, Expression,
+            },
+            types::PrimitiveType,
         },
-        types::PrimitiveType,
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_declaration_declared() {
-        let res = Declaration::parse("let x:number;".into());
+        let res = Declaration::<MockScope>::parse("let x:number;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -181,7 +185,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_assigned() {
-        let res = Declaration::parse("let x:number = 10;".into());
+        let res = Declaration::<MockScope>::parse("let x:number = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -197,7 +201,7 @@ mod tests {
             value
         );
 
-        let res = Declaration::parse("let x = 10;".into());
+        let res = Declaration::<MockScope>::parse("let x = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -210,7 +214,7 @@ mod tests {
             value
         );
 
-        let res = Declaration::parse("let (x,y) = (10,10);".into());
+        let res = Declaration::<MockScope>::parse("let (x,y) = (10,10);".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

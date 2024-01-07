@@ -73,6 +73,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         match self {
             static_type_impl::PrimitiveType::Number => match other_type {
                 static_type_impl::PrimitiveType::Number => Ok(()),
+                static_type_impl::PrimitiveType::Float => Ok(()),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
 

@@ -4,7 +4,7 @@ use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeO
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Loop {
+impl<Scope: ScopeApi> TypeOf<Scope> for Loop<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -20,7 +20,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Loop {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
+impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -41,7 +41,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop {
+impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -53,7 +53,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop {
         self.scope.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop {
+impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

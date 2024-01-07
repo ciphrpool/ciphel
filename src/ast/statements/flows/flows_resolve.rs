@@ -5,127 +5,120 @@ use crate::semantic::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Flow {
+impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Flow::If(value) => value.resolve(scope, context),
-            Flow::Match(value) => value.resolve(scope, context),
-            Flow::Try(value) => value.resolve(scope, context),
-            Flow::Call(value) => value.resolve(scope, &()),
+            Flow::If(value) => value.resolve(scope, context, extra),
+            Flow::Match(value) => value.resolve(scope, context, extra),
+            Flow::Try(value) => value.resolve(scope, context, extra),
+            Flow::Call(value) => value.resolve(scope, &(), &()),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IfStat {
+impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.condition.resolve(scope, &None)?;
+        let _ = self.condition.resolve(scope, &None, extra)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
-        let _ = self.main_branch.resolve(scope, &None)?;
+        let _ = self.main_branch.resolve(scope, &context, &Vec::default())?;
         if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &None)?;
+            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
         }
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MatchStat {
+impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.expr.resolve(scope, &None)?;
+        let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         for value in &self.patterns {
-            let _ = value.resolve(scope, &expr_type)?;
+            let vars = value.pattern.resolve(scope, &expr_type, &())?;
+            // create a scope and Scope::child_scope())variable to it before resolving the expression
+            let _ = value.scope.resolve(scope, &context, &vars)?;
         }
         if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &None)?;
+            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
         }
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PatternStat {
+
+impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        let mut inner_scope = Scope::child_scope(scope)?;
-        let vars = self.pattern.resolve(scope, context)?;
-        // create a scope and Scope::child_scope())variable to it before resolving the expression
-        inner_scope.borrow_mut().attach(vars.into_iter());
-        let _ = self.scope.resolve(&mut inner_scope, context)?;
-        Ok(())
-    }
-}
-impl<Scope: ScopeApi> Resolve<Scope> for TryStat {
-    type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    fn resolve(
-        &self,
-        scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        let _ = self.try_branch.resolve(scope, &None)?;
+        let _ = self.try_branch.resolve(scope, &context, &Vec::default())?;
         if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &None)?;
+            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
         }
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for CallStat {
+impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.call.resolve(scope, &None)
+        self.call.resolve(scope, &None, extra)
     }
 }

@@ -1,4 +1,4 @@
-
+use crate::semantic::scope::ScopeApi;
 
 use super::{Atomic, Expression};
 pub mod operation_parse;
@@ -6,96 +6,107 @@ pub mod operation_resolve;
 pub mod operation_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnaryOperation {
-    Minus(Box<Expression>),
-    Not(Box<Expression>),
+pub enum UnaryOperation<InnerScope: ScopeApi> {
+    Minus(Box<Expression<InnerScope>>),
+    Not(Box<Expression<InnerScope>>),
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum HighOrdMath {
+pub enum HighOrdMath<InnerScope: ScopeApi> {
     Mult {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     Div {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     Mod {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum LowOrdMath {
+pub enum LowOrdMath<InnerScope: ScopeApi> {
     Add {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
+    },
+    Minus {
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum Shift {
+pub enum Shift<InnerScope: ScopeApi> {
     Left {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     Right {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct BitwiseAnd {
-    left: Box<Expression>,
-    right: Box<Expression>,
+pub struct BitwiseAnd<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct BitwiseXOR {
-    left: Box<Expression>,
-    right: Box<Expression>,
+pub struct BitwiseXOR<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct BitwiseOR {
-    left: Box<Expression>,
-    right: Box<Expression>,
+pub struct BitwiseOR<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum Comparaison {
+pub enum Comparaison<InnerScope: ScopeApi> {
     Less {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     LessEqual {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     Greater {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     GreaterEqual {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Equation<InnerScope: ScopeApi> {
     Equal {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
     NotEqual {
-        left: Box<Expression>,
-        right: Box<Expression>,
-    },
-    In {
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<Expression<InnerScope>>,
+        right: Box<Expression<InnerScope>>,
     },
 }
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct LogicalAnd {
-    left: Box<Expression>,
-    right: Box<Expression>,
+pub struct Inclusion<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LogicalAnd<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct LogicalOr {
-    left: Box<Expression>,
-    right: Box<Expression>,
+pub struct LogicalOr<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Box<Expression<InnerScope>>,
 }

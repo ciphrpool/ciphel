@@ -7,7 +7,7 @@ use crate::{
 
 use super::{BuildChan, ScopeApi};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Chan {}
 
 impl<Scope: ScopeApi<Chan = Self>> CompatibleWith<Scope> for Chan {

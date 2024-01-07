@@ -175,6 +175,38 @@ pub trait OperandMerging<Scope: ScopeApi> {
         Err(SemanticError::IncompatibleOperands)
     }
 
+    fn can_equate(&self) -> Result<(), SemanticError> {
+        Err(SemanticError::IncompatibleOperation)
+    }
+    fn merge_equation<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Err(SemanticError::IncompatibleOperands)
+    }
+
+    fn can_include_left(&self) -> Result<(), SemanticError> {
+        Ok(())
+    }
+    fn can_include_right(&self) -> Result<(), SemanticError> {
+        Err(SemanticError::IncompatibleOperation)
+    }
+
+    fn merge_inclusion<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Err(SemanticError::IncompatibleOperands)
+    }
+
     fn can_logical_and(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
     }

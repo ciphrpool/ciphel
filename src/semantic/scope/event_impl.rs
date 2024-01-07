@@ -4,7 +4,7 @@ use crate::semantic::{CompatibleWith, EitherType, SemanticError, TypeOf};
 
 use super::{BuildEvent, ScopeApi};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Event {}
 
 impl<Scope: ScopeApi<Event = Self>> CompatibleWith<Scope> for Event {
@@ -36,7 +36,7 @@ impl<Scope: ScopeApi<Event = Self>> TypeOf<Scope> for Event {
 impl<Scope: ScopeApi<Event = Self>> BuildEvent<Scope> for Event {
     fn build_event(
         _scope: &Ref<Scope>,
-        _event: &crate::ast::statements::definition::EventDef,
+        _event: &crate::ast::statements::definition::EventDef<Scope>,
     ) -> Self {
         todo!()
     }

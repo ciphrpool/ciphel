@@ -1,6 +1,9 @@
-use crate::ast::{
-    types::{Type, Types},
-    utils::strings::ID,
+use crate::{
+    ast::{
+        types::{Type, Types},
+        utils::strings::ID,
+    },
+    semantic::{self, scope::ScopeApi},
 };
 
 use super::{declaration::TypedVar, scope::Scope};
@@ -10,10 +13,10 @@ pub mod definition_resolve;
 pub mod definition_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition {
+pub enum Definition<InnerScope: ScopeApi> {
     Type(TypeDef),
-    Fn(FnDef),
-    Event(EventDef),
+    Fn(FnDef<InnerScope>),
+    Event(EventDef<InnerScope>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,18 +45,18 @@ pub struct EnumDef {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnDef {
+pub struct FnDef<InnerScope: ScopeApi> {
     id: ID,
     params: Vec<TypedVar>,
     ret: Box<Type>,
-    scope: Scope,
+    scope: Scope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct EventDef {
+pub struct EventDef<InnerScope: ScopeApi> {
     id: ID,
     condition: EventCondition,
-    scope: Scope,
+    scope: Scope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

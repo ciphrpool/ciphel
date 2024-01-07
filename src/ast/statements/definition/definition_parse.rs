@@ -5,20 +5,23 @@ use nom::{
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
 
-use crate::ast::{
-    statements::{declaration::TypedVar, scope::Scope},
-    types::{Type, Types},
-    utils::{
-        io::{PResult, Span},
-        lexem,
-        strings::{parse_id, wst},
+use crate::{
+    ast::{
+        statements::{declaration::TypedVar, scope::Scope},
+        types::{Type, Types},
+        utils::{
+            io::{PResult, Span},
+            lexem,
+            strings::{parse_id, wst},
+        },
+        TryParse,
     },
-    TryParse,
+    semantic::scope::ScopeApi,
 };
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
-impl TryParse for Definition {
+impl<Scope: ScopeApi> TryParse for Definition<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(TypeDef::parse, |value| Definition::Type(value)),
@@ -126,7 +129,7 @@ impl TryParse for EnumDef {
     }
 }
 
-impl TryParse for FnDef {
+impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
     /*
      * @desc Parse function definition
      *
@@ -155,7 +158,7 @@ impl TryParse for FnDef {
     }
 }
 
-impl TryParse for EventDef {
+impl<InnerScope: ScopeApi> TryParse for EventDef<InnerScope> {
     /*
      * @desc Parse event definition
      *
@@ -188,13 +191,18 @@ impl TryParse for EventCondition {
 #[cfg(test)]
 mod tests {
 
-    use crate::ast::{
-        expressions::{
-            data::{Data, Primitive},
-            Atomic, Expression,
+    use std::cell::RefCell;
+
+    use crate::{
+        ast::{
+            expressions::{
+                data::{Data, Primitive},
+                Atomic, Expression,
+            },
+            statements::{Return, Statement},
+            types::PrimitiveType,
         },
-        statements::{Return, Statement},
-        types::PrimitiveType,
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
@@ -278,7 +286,7 @@ mod tests {
 
     #[test]
     fn valid_fn_def() {
-        let res = FnDef::parse(
+        let res = FnDef::<MockScope>::parse(
             r#"
         fn f(x:number) -> number {
             return 10;
@@ -299,7 +307,8 @@ mod tests {
                 scope: Scope {
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
-                    )))]
+                    )))],
+                    inner_scope: RefCell::new(None),
                 }
             },
             value

@@ -1,25 +1,26 @@
-use crate::ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse};
+use crate::{
+    ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse},
+    semantic::scope::ScopeApi,
+};
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{separated_list1},
+    multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
-use crate::{
-    ast::{
-        expressions::{flows::Pattern, Expression},
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{wst},
-        },
+use crate::ast::{
+    expressions::{flows::Pattern, Expression},
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::wst,
     },
 };
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
-impl TryParse for Flow {
+impl<Scope: ScopeApi> TryParse for Flow<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(IfStat::parse, |value| Flow::If(value)),
@@ -30,7 +31,7 @@ impl TryParse for Flow {
     }
 }
 
-impl TryParse for IfStat {
+impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
     /*
      * @desc Parse If statement
      *
@@ -52,7 +53,7 @@ impl TryParse for IfStat {
     }
 }
 
-impl TryParse for MatchStat {
+impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
     /*
      * @desc Parse match statements
      *
@@ -88,7 +89,7 @@ impl TryParse for MatchStat {
     }
 }
 
-impl TryParse for PatternStat {
+impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
     /*
      * @desc Parse pattern statements
      *
@@ -110,7 +111,7 @@ impl TryParse for PatternStat {
     }
 }
 
-impl TryParse for TryStat {
+impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
     /*
      * @desc Parse try statements
      *
@@ -131,7 +132,7 @@ impl TryParse for TryStat {
     }
 }
 
-impl TryParse for CallStat {
+impl<Scope: ScopeApi> TryParse for CallStat<Scope> {
     /*
      * @desc Parse call statements
      *
@@ -147,23 +148,28 @@ impl TryParse for CallStat {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        expressions::{
-            data::{Data, Primitive, VarID, Variable},
-            Atomic, Expression,
+    use std::cell::RefCell;
+
+    use crate::{
+        ast::{
+            expressions::{
+                data::{Data, Primitive, VarID, Variable},
+                Atomic, Expression,
+            },
+            statements::{
+                flows::{CallStat, Flow, IfStat, TryStat},
+                scope::Scope,
+                Statement,
+            },
         },
-        statements::{
-            flows::{CallStat, Flow, IfStat, TryStat},
-            scope::Scope,
-            Statement,
-        },
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_if() {
-        let res = IfStat::parse(
+        let res = IfStat::<MockScope>::parse(
             r#"
         if true {
             f(10);
@@ -188,7 +194,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
@@ -198,7 +205,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None),
                 }))
             },
             value
@@ -207,7 +215,7 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let res = TryStat::parse(
+        let res = TryStat::<MockScope>::parse(
             r#"
         try {
             f(10);
@@ -229,7 +237,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
@@ -239,7 +248,8 @@ mod tests {
                                 Primitive::Number(10)
                             )))]
                         }
-                    }))]
+                    }))],
+                    inner_scope: RefCell::new(None),
                 }))
             },
             value

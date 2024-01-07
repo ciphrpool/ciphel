@@ -10,12 +10,15 @@ pub mod utils;
 
 #[derive(Debug, Clone)]
 pub enum SemanticError {
+    NotResolvedYet,
+
     CantInferType,
     CantRegisterType,
     CantRegisterVar,
 
     ExpectedBoolean,
     ExpectedIterable,
+    ExpectedIndexable,
     ExpectedCallable,
     ExpectedEnum,
     ExpectedStruct,
@@ -42,10 +45,12 @@ pub enum EitherType<User, Static> {
 pub trait Resolve<Scope: ScopeApi> {
     type Output;
     type Context: Default;
+    type Extra: Default;
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized;

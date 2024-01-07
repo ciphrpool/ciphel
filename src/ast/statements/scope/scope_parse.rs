@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use nom::{combinator::map, multi::many0, sequence::delimited};
 
 use crate::{
@@ -10,11 +12,12 @@ use crate::{
         },
         TryParse,
     },
+    semantic::{self, scope::ScopeApi},
 };
 
 use super::Scope;
 
-impl TryParse for Scope {
+impl<Inner: ScopeApi> TryParse for Scope<Inner> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(
@@ -24,6 +27,7 @@ impl TryParse for Scope {
             ),
             |value| Scope {
                 instructions: value,
+                inner_scope: RefCell::new(None),
             },
         )(input)
     }

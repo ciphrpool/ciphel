@@ -12,7 +12,7 @@ use super::{
     BuildVar, ScopeApi,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     pub id: ID,
     pub type_sig: EitherType<UserType, StaticType>,

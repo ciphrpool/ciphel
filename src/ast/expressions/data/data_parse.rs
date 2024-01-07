@@ -1,17 +1,20 @@
-use crate::ast::{
-    self,
-    expressions::Expression,
-    utils::{
-        io::{PResult, Span},
-        lexem,
-        numbers::{parse_float, parse_number},
-        strings::{
-            parse_id,
-            string_parser::{parse_char, parse_string},
-            wst,
+use crate::{
+    ast::{
+        self,
+        expressions::Expression,
+        utils::{
+            io::{PResult, Span},
+            lexem,
+            numbers::{parse_float, parse_number},
+            strings::{
+                parse_id,
+                string_parser::{parse_char, parse_string},
+                wst,
+            },
         },
+        TryParse,
     },
-    TryParse,
+    semantic::scope::ScopeApi,
 };
 use nom::{
     branch::alt,
@@ -25,7 +28,7 @@ use super::{
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
-impl TryParse for Data {
+impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
@@ -130,7 +133,7 @@ impl TryParse for Primitive {
     }
 }
 
-impl TryParse for Slice {
+impl<Scope: ScopeApi> TryParse for Slice<Scope> {
     /*
      * @desc Parse List or Static string
      *
@@ -148,7 +151,7 @@ impl TryParse for Slice {
     }
 }
 
-impl TryParse for Vector {
+impl<Scope: ScopeApi> TryParse for Vector<Scope> {
     /*
      * @desc Parse Vector
      *
@@ -183,7 +186,7 @@ impl TryParse for Vector {
     }
 }
 
-impl TryParse for Tuple {
+impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(wst(lexem::PAR_O), MultiData::parse, wst(lexem::PAR_C)),
@@ -192,7 +195,7 @@ impl TryParse for Tuple {
     }
 }
 
-impl TryParse for MultiData {
+impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
     /*
      * @desc Parse multiple data
      *
@@ -205,7 +208,7 @@ impl TryParse for MultiData {
     }
 }
 
-impl TryParse for Closure {
+impl<Scope: ScopeApi> TryParse for Closure<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
@@ -221,7 +224,7 @@ impl TryParse for Closure {
     }
 }
 
-impl TryParse for ClosureScope {
+impl<Scope: ScopeApi> TryParse for ClosureScope<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(ast::statements::scope::Scope::parse, |value| {
@@ -280,7 +283,7 @@ impl TryParse for PtrAccess {
     }
 }
 
-impl TryParse for Channel {
+impl<Scope: ScopeApi> TryParse for Channel<Scope> {
     /*
      * @desc Parse grammar
      *
@@ -322,7 +325,7 @@ impl TryParse for Channel {
     }
 }
 
-impl TryParse for Struct {
+impl<Scope: ScopeApi> TryParse for Struct<Scope> {
     /*
      * @desc Parse an object
      *
@@ -349,7 +352,7 @@ impl TryParse for Struct {
     }
 }
 
-impl TryParse for Union {
+impl<Scope: ScopeApi> TryParse for Union<Scope> {
     /*
      * @desc Parse an union
      *
@@ -395,7 +398,7 @@ impl TryParse for Enum {
     }
 }
 
-impl TryParse for Map {
+impl<Scope: ScopeApi> TryParse for Map<Scope> {
     /*
      * @desc Parse map
      *
@@ -439,7 +442,7 @@ impl TryParse for Map {
     }
 }
 
-impl TryParse for KeyData {
+impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
     /*
      * @desc Parse hashable data for key
      *
@@ -458,7 +461,7 @@ impl TryParse for KeyData {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::Atomic;
+    use crate::{ast::expressions::Atomic, semantic::scope::scope_impl::MockScope};
 
     use super::*;
 
@@ -497,7 +500,7 @@ mod tests {
 
     #[test]
     fn valid_slice() {
-        let res = Slice::parse("[2,5,6]".into());
+        let res = Slice::<MockScope>::parse("[2,5,6]".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -509,7 +512,7 @@ mod tests {
             value
         );
 
-        let res = Slice::parse("\"Hello World\"".into());
+        let res = Slice::<MockScope>::parse("\"Hello World\"".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Slice::String("Hello World".to_string()), value);
@@ -517,7 +520,7 @@ mod tests {
 
     #[test]
     fn valid_vector() {
-        let res = Vector::parse("vec[2,5,6]".into());
+        let res = Vector::<MockScope>::parse("vec[2,5,6]".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -529,7 +532,7 @@ mod tests {
             value,
         );
 
-        let res = Vector::parse("vec(2,8)".into());
+        let res = Vector::<MockScope>::parse("vec(2,8)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -543,7 +546,7 @@ mod tests {
 
     #[test]
     fn valid_closure() {
-        let res = Closure::parse("(x,y) -> x".into());
+        let res = Closure::<MockScope>::parse("(x,y) -> x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -562,7 +565,7 @@ mod tests {
 
     #[test]
     fn valid_chan() {
-        let res = Channel::parse("receive[&chan1](10)".into());
+        let res = Channel::<MockScope>::parse("receive[&chan1](10)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -573,7 +576,7 @@ mod tests {
             value
         );
 
-        let res = Channel::parse("send[&chan1](10)".into());
+        let res = Channel::<MockScope>::parse("send[&chan1](10)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -586,7 +589,7 @@ mod tests {
             value
         );
 
-        let res = Channel::parse("chan(\"ID_CHAN\")".into());
+        let res = Channel::<MockScope>::parse("chan(\"ID_CHAN\")".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Channel::Init("ID_CHAN".into()), value);
@@ -594,7 +597,7 @@ mod tests {
 
     #[test]
     fn valid_tuple() {
-        let res = Tuple::parse("(2,'a')".into());
+        let res = Tuple::<MockScope>::parse("(2,'a')".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -624,7 +627,7 @@ mod tests {
 
     #[test]
     fn valid_map() {
-        let res = Map::parse(r#"map{"x":2,"y":6}"#.into());
+        let res = Map::<MockScope>::parse(r#"map{"x":2,"y":6}"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -643,7 +646,7 @@ mod tests {
             value
         );
 
-        let res = Map::parse(r#"map(2,8)"#.into());
+        let res = Map::<MockScope>::parse(r#"map(2,8)"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -657,7 +660,7 @@ mod tests {
 
     #[test]
     fn valid_struct() {
-        let res = Struct::parse(r#"Point { x : 2, y : 8}"#.into());
+        let res = Struct::<MockScope>::parse(r#"Point { x : 2, y : 8}"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -680,7 +683,7 @@ mod tests {
 
     #[test]
     fn valid_union() {
-        let res = Union::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
+        let res = Union::<MockScope>::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

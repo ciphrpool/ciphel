@@ -12,7 +12,7 @@ use super::{
     var_impl::Var, ScopeApi,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
     vars: HashMap<ID, Var>,
     types: HashMap<ID, UserType>,
@@ -62,16 +62,21 @@ impl ScopeApi for Scope {
 
     type Event = Event;
 
-    fn child_scope(parent: &Rc<RefCell<Self>>) -> Result<Rc<RefCell<Self>>, SemanticError> {
+    fn child_scope_with(
+        parent: &Rc<RefCell<Self>>,
+        vars: Vec<Self::Var>,
+    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
             Scope::Inner { general, data, .. } => {
-                let child = Self::Inner {
+                let mut child = Self::Inner {
                     parent: Some(Rc::downgrade(parent)),
                     general: general.clone(),
                     data: ScopeData::new(),
                 };
-
+                for variable in vars {
+                    let _ = child.register_var(variable);
+                }
                 Ok(Rc::new(RefCell::new(child)))
             }
             Scope::General {
@@ -88,10 +93,6 @@ impl ScopeApi for Scope {
                 Ok(Rc::new(RefCell::new(child)))
             }
         }
-    }
-
-    fn attach(&mut self, _vars: impl Iterator<Item = Self::Var>) {
-        todo!()
     }
 
     fn register_type(
@@ -187,6 +188,60 @@ impl ScopeApi for Scope {
     }
 
     fn find_event(&self) -> Result<&Self::Event, crate::semantic::SemanticError> {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MockScope {}
+
+impl ScopeApi for MockScope {
+    type UserType = UserType;
+
+    type StaticType = StaticType;
+
+    type Var = Var;
+
+    type Chan = Chan;
+
+    type Event = Event;
+
+    fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError> {
+        todo!()
+    }
+
+    fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError> {
+        todo!()
+    }
+
+    fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError> {
+        todo!()
+    }
+
+    fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError> {
+        todo!()
+    }
+
+    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError> {
+        todo!()
+    }
+
+    fn find_chan(&self) -> Result<&Self::Chan, SemanticError> {
+        todo!()
+    }
+
+    fn find_type(&self, id: &ID) -> Result<Self::UserType, SemanticError> {
+        todo!()
+    }
+
+    fn find_event(&self) -> Result<&Self::Event, SemanticError> {
+        todo!()
+    }
+
+    fn child_scope_with(
+        parent: &Rc<RefCell<Self>>,
+        vars: Vec<Self::Var>,
+    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         todo!()
     }
 }

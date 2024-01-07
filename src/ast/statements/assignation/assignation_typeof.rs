@@ -5,7 +5,7 @@ use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Assignation {
+impl<Scope: ScopeApi> TypeOf<Scope> for Assignation<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
@@ -17,7 +17,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Assignation {
         Ok(EitherType::Static(Scope::StaticType::build_unit()))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue {
+impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

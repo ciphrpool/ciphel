@@ -27,29 +27,31 @@ pub mod flows;
 pub mod operation;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
-    HighOrdMath(operation::HighOrdMath),
-    LowOrdMath(operation::LowOrdMath),
-    Shift(operation::Shift),
-    BitwiseAnd(operation::BitwiseAnd),
-    BitwiseXOR(operation::BitwiseXOR),
-    BitwiseOR(operation::BitwiseOR),
-    Comparaison(operation::Comparaison),
-    LogicalAnd(operation::LogicalAnd),
-    LogicalOr(operation::LogicalOr),
-    Atomic(Atomic),
+pub enum Expression<InnerScope: ScopeApi> {
+    HighOrdMath(operation::HighOrdMath<InnerScope>),
+    LowOrdMath(operation::LowOrdMath<InnerScope>),
+    Shift(operation::Shift<InnerScope>),
+    BitwiseAnd(operation::BitwiseAnd<InnerScope>),
+    BitwiseXOR(operation::BitwiseXOR<InnerScope>),
+    BitwiseOR(operation::BitwiseOR<InnerScope>),
+    Comparaison(operation::Comparaison<InnerScope>),
+    Equation(operation::Equation<InnerScope>),
+    Inclusion(operation::Inclusion<InnerScope>),
+    LogicalAnd(operation::LogicalAnd<InnerScope>),
+    LogicalOr(operation::LogicalOr<InnerScope>),
+    Atomic(Atomic<InnerScope>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Atomic {
-    Data(data::Data),
-    UnaryOperation(operation::UnaryOperation),
-    Paren(Box<Expression>),
-    ExprFlow(flows::ExprFlow),
+pub enum Atomic<InnerScope: ScopeApi> {
+    Data(data::Data<InnerScope>),
+    UnaryOperation(operation::UnaryOperation<InnerScope>),
+    Paren(Box<Expression<InnerScope>>),
+    ExprFlow(flows::ExprFlow<InnerScope>),
     Error(error::Error),
 }
 
-impl TryParse for Atomic {
+impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
     /*
      * @desc Parse an atomic expression
      *
@@ -77,29 +79,31 @@ impl TryParse for Atomic {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Atomic {
+impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Atomic::Data(value) => value.resolve(scope, context),
-            Atomic::UnaryOperation(value) => value.resolve(scope, context),
-            Atomic::Paren(value) => value.resolve(scope, context),
-            Atomic::ExprFlow(value) => value.resolve(scope, context),
-            Atomic::Error(value) => value.resolve(scope, &()),
+            Atomic::Data(value) => value.resolve(scope, context, extra),
+            Atomic::UnaryOperation(value) => value.resolve(scope, context, extra),
+            Atomic::Paren(value) => value.resolve(scope, context, extra),
+            Atomic::ExprFlow(value) => value.resolve(scope, context, extra),
+            Atomic::Error(value) => value.resolve(scope, &(), &()),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Atomic {
+impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -118,14 +122,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Atomic {
     }
 }
 
-impl TryParse for Expression {
+impl<Scope: ScopeApi> TryParse for Expression<Scope> {
     /*
      * @desc Parse an expression
      *
      * @grammar
      * Expr := AndOp Or AndOp | AndOp
      * AndOp := CompOp And CompOp | CompOp
-     * CompOp := BOr (<|<=|>=|>|\=\=|\!\= | in ) BOr | BOr
+     * CompOp := BOr (< |<= | >= | >| == | != | in ) BOr | BOr
      * BOr := XOr \| XOr  | XOr
      * XOr := BAnd ^ BAnd | BAnd
      * BAnd := Shift & Shift | Shift
@@ -134,38 +138,42 @@ impl TryParse for Expression {
      * HighM := Atom (* | / | % ) Atom | Atom
      */
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws(LogicalOr::parse)(input)
+        eater::ws::<_, Expression<Scope>>(LogicalOr::<Scope>::parse)(input)
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Expression {
+impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Expression::HighOrdMath(value) => value.resolve(scope, context),
-            Expression::LowOrdMath(value) => value.resolve(scope, context),
-            Expression::Shift(value) => value.resolve(scope, context),
-            Expression::BitwiseAnd(value) => value.resolve(scope, context),
-            Expression::BitwiseXOR(value) => value.resolve(scope, context),
-            Expression::BitwiseOR(value) => value.resolve(scope, context),
-            Expression::Comparaison(value) => value.resolve(scope, context),
-            Expression::LogicalAnd(value) => value.resolve(scope, context),
-            Expression::LogicalOr(value) => value.resolve(scope, context),
-            Expression::Atomic(value) => value.resolve(scope, context),
+            Expression::HighOrdMath(value) => value.resolve(scope, context, extra),
+            Expression::LowOrdMath(value) => value.resolve(scope, context, extra),
+            Expression::Shift(value) => value.resolve(scope, context, extra),
+            Expression::BitwiseAnd(value) => value.resolve(scope, context, extra),
+            Expression::BitwiseXOR(value) => value.resolve(scope, context, extra),
+            Expression::BitwiseOR(value) => value.resolve(scope, context, extra),
+            Expression::Comparaison(value) => value.resolve(scope, context, extra),
+            Expression::LogicalAnd(value) => value.resolve(scope, context, extra),
+            Expression::Equation(value) => value.resolve(scope, context, extra),
+            Expression::Inclusion(value) => value.resolve(scope, context, extra),
+            Expression::LogicalOr(value) => value.resolve(scope, context, extra),
+            Expression::Atomic(value) => value.resolve(scope, context, extra),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
+impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -184,12 +192,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression {
             Expression::Comparaison(value) => value.type_of(&scope),
             Expression::LogicalAnd(value) => value.type_of(&scope),
             Expression::LogicalOr(value) => value.type_of(&scope),
+            Expression::Equation(value) => value.type_of(&scope),
+            Expression::Inclusion(value) => value.type_of(&scope),
             Expression::Atomic(value) => value.type_of(&scope),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
+impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression<Scope>> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -202,34 +212,39 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression> {
+impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression<Scope>> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        (self.as_ref()).resolve(scope, context)
+        (self.as_ref()).resolve(scope, context, extra)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::{
-        data::{Data, Primitive},
-        operation::LowOrdMath,
+    use crate::{
+        ast::expressions::{
+            data::{Data, Primitive},
+            operation::LowOrdMath,
+        },
+        semantic::scope::scope_impl::MockScope,
     };
 
     use super::*;
 
     #[test]
     fn valid_expression() {
-        let res = Expression::parse(" 1 + 2 * 4".into());
+        let res = Expression::<MockScope>::parse(" 1 + 2 * 4".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

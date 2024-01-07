@@ -4,13 +4,15 @@ use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
+impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -18,7 +20,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve(scope, &())?;
+                let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
                 let _ = scope.borrow_mut().register_var(var)?;
@@ -28,18 +30,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve(scope, &())?;
+                let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = Scope::Var::build_var(&value.id, &var_type);
-                let _ = right.resolve(scope, &Some(var_type))?;
+                let _ = right.resolve(scope, &Some(var_type), &())?;
                 let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
-                let _ = right.resolve(scope, &None)?;
+                let _ = right.resolve(scope, &None, extra)?;
                 let right_type = right.type_of(&scope.borrow())?;
 
-                let vars = left.resolve(scope, &Some(right_type))?;
+                let vars = left.resolve(scope, &Some(right_type), &())?;
                 for var in vars {
                     let _ = scope.borrow_mut().register_var(var)?;
                 }
@@ -51,25 +53,29 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration {
 impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     type Output = ();
     type Context = ();
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.signature.resolve(scope, context)
+        self.signature.resolve(scope, context, extra)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -88,17 +94,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
             DeclaredVar::Typed(_) => {
                 unreachable!("Path already covered in Declaration::resolve")
             }
-            DeclaredVar::Pattern(value) => value.resolve(scope, context),
+            DeclaredVar::Pattern(value) => value.resolve(scope, context, extra),
         }
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
     type Output = Vec<Scope::Var>;
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -261,12 +269,9 @@ mod tests {
         assert!(decl.is_ok());
         let decl = decl.unwrap().1;
 
-        dbg!(&decl);
-
         let scope = Scope::new();
 
-        let res = decl.resolve(&scope, &None);
+        let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
-        dbg!(scope);
     }
 }

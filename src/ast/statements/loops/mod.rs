@@ -1,32 +1,32 @@
-use crate::ast::{
-    expressions::{
-        data::{Address, Slice, Tuple, Vector},
-        Expression,
+use crate::{
+    ast::{
+        expressions::{
+            data::{Address, Slice, Tuple, Vector},
+            Expression,
+        },
+        utils::strings::ID,
     },
-    utils::strings::ID,
+    semantic::{self, scope::ScopeApi},
 };
 
-use super::{
-    declaration::{PatternVar},
-    scope::Scope,
-};
+use super::{declaration::PatternVar, scope::Scope};
 
 pub mod loops_parse;
 pub mod loops_resolve;
 pub mod loops_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Loop {
-    For(ForLoop),
-    While(WhileLoop),
-    Loop(Box<Scope>),
+pub enum Loop<InnerScope: ScopeApi> {
+    For(ForLoop<InnerScope>),
+    While(WhileLoop<InnerScope>),
+    Loop(Box<Scope<InnerScope>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ForLoop {
+pub struct ForLoop<InnerScope: ScopeApi> {
     item: ForItem,
-    iterator: ForIterator,
-    scope: Box<Scope>,
+    iterator: ForIterator<InnerScope>,
+    scope: Box<Scope<InnerScope>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,16 +36,16 @@ pub enum ForItem {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ForIterator {
+pub enum ForIterator<InnerScope: ScopeApi> {
     Id(ID),
-    Vec(Vector),
-    Slice(Slice),
-    Tuple(Tuple),
+    Vec(Vector<InnerScope>),
+    Slice(Slice<InnerScope>),
+    Tuple(Tuple<InnerScope>),
     Receive { addr: Address, timeout: usize },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct WhileLoop {
-    condition: Box<Expression>,
-    scope: Box<Scope>,
+pub struct WhileLoop<InnerScope: ScopeApi> {
+    condition: Box<Expression<InnerScope>>,
+    scope: Box<Scope<InnerScope>>,
 }

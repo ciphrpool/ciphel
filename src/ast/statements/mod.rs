@@ -14,7 +14,7 @@ use super::{
     utils::{lexem, strings::wst},
     TryParse,
 };
-use crate::semantic::scope::BuildStaticType;
+use crate::semantic::{self, scope::BuildStaticType};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
@@ -28,17 +28,17 @@ pub mod loops;
 pub mod scope;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Statement {
-    Scope(scope::Scope),
-    Flow(flows::Flow),
-    Assignation(assignation::Assignation),
-    Declaration(declaration::Declaration),
-    Definition(definition::Definition),
-    Loops(loops::Loop),
-    Return(Return),
+pub enum Statement<InnerScope: ScopeApi> {
+    Scope(scope::Scope<InnerScope>),
+    Flow(flows::Flow<InnerScope>),
+    Assignation(assignation::Assignation<InnerScope>),
+    Declaration(declaration::Declaration<InnerScope>),
+    Definition(definition::Definition<InnerScope>),
+    Loops(loops::Loop<InnerScope>),
+    Return(Return<InnerScope>),
 }
 
-impl TryParse for Statement {
+impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(scope::Scope::parse, |value| Statement::Scope(value)),
@@ -57,31 +57,36 @@ impl TryParse for Statement {
         ))(input)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Statement {
+impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
         match self {
-            Statement::Scope(value) => value.resolve(scope, context),
-            Statement::Flow(value) => value.resolve(scope, context),
-            Statement::Assignation(value) => value.resolve(scope, context),
-            Statement::Declaration(value) => value.resolve(scope, context),
-            Statement::Definition(value) => value.resolve(scope, context),
-            Statement::Loops(value) => value.resolve(scope, context),
-            Statement::Return(value) => value.resolve(scope, context),
+            Statement::Scope(value) => {
+                let _ = value.resolve(scope, context, &Vec::default())?;
+                Ok(())
+            }
+            Statement::Flow(value) => value.resolve(scope, context, extra),
+            Statement::Assignation(value) => value.resolve(scope, context, extra),
+            Statement::Declaration(value) => value.resolve(scope, context, extra),
+            Statement::Definition(value) => value.resolve(scope, context, extra),
+            Statement::Loops(value) => value.resolve(scope, context, extra),
+            Statement::Return(value) => value.resolve(scope, context, extra),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
+impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -105,12 +110,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Return {
+pub enum Return<InnerScope: ScopeApi> {
     Unit,
-    Expr(Box<Expression>),
+    Expr(Box<Expression<InnerScope>>),
 }
 
-impl TryParse for Return {
+impl<Scope: ScopeApi> TryParse for Return<Scope> {
     /*
      * @desc Parse return statements
      *
@@ -134,13 +139,15 @@ impl TryParse for Return {
         )(input)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Return {
+impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -148,12 +155,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return {
     {
         match self {
             Return::Unit => Ok(()),
-            Return::Expr(value) => value.resolve(scope, &None),
+            Return::Expr(value) => value.resolve(scope, &None, extra),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Return {
+impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -171,11 +178,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return {
 
 #[cfg(test)]
 mod tests {
+    use crate::semantic::scope::scope_impl::{MockScope, Scope};
+
     use super::*;
 
     #[test]
     fn valid_return() {
-        let res = Return::parse(
+        let res = Return::<MockScope>::parse(
             r#"
             return ;
         "#

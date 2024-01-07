@@ -1,8 +1,9 @@
-use crate::ast::{
-    expressions::{
+use crate::{
+    ast::expressions::{
         data::{PtrAccess, Variable},
         Expression,
     },
+    semantic::{self, scope::ScopeApi},
 };
 
 use super::scope::Scope;
@@ -11,14 +12,14 @@ pub mod assignation_resolve;
 pub mod assignation_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Assignation {
+pub struct Assignation<InnerScope: ScopeApi> {
     left: Assignee,
-    right: AssignValue,
+    right: AssignValue<InnerScope>,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum AssignValue {
-    Scope(Scope),
-    Expr(Box<Expression>),
+pub enum AssignValue<InnerScope: ScopeApi> {
+    Scope(Scope<InnerScope>),
+    Expr(Box<Expression<InnerScope>>),
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum Assignee {

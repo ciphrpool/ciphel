@@ -119,6 +119,13 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
             EitherType::User(_user_type) => false,
         }
     }
+
+    fn is_indexable(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_indexable(),
+            EitherType::User(_user_type) => false,
+        }
+    }
 }
 
 impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::StaticType> {
@@ -345,6 +352,46 @@ where
         match self {
             EitherType::Static(value) => value.merge_comparaison(other, scope),
             EitherType::User(value) => value.merge_comparaison(other, scope),
+        }
+    }
+
+    fn can_equate(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_equate(),
+            EitherType::User(value) => value.can_equate(),
+        }
+    }
+    fn merge_equation<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_equation(other, scope),
+            EitherType::User(value) => value.merge_equation(other, scope),
+        }
+    }
+
+    fn can_include_right(&self) -> Result<(), SemanticError> {
+        match self {
+            EitherType::Static(value) => value.can_include_right(),
+            EitherType::User(value) => value.can_include_right(),
+        }
+    }
+    fn merge_inclusion<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_inclusion(other, scope),
+            EitherType::User(value) => value.merge_inclusion(other, scope),
         }
     }
 
