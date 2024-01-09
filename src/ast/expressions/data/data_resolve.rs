@@ -1,5 +1,5 @@
 use super::{
-    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
@@ -402,7 +402,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope<Scope> {
+impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = Vec<Scope::Var>;
@@ -417,29 +417,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureScope<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            ClosureScope::Scope(value) => {
-                let _ = value.resolve(scope, context, extra)?;
-                let scope_type = value.type_of(&scope.borrow())?;
-
-                match context {
-                    Some(context_return) => {
-                        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
-                    }
-                    None => {}
-                }
-                Ok(())
-            }
-            ClosureScope::Expr(value) => {
-                let _ = value.resolve(scope, context, &())?;
-                let scope_type = value.type_of(&scope.borrow())?;
-                match context {
-                    Some(context_return) => {
-                        let _ = context_return.compatible_with(&scope_type, &scope.borrow())?;
-                    }
-                    None => {}
-                }
-                Ok(())
-            }
+            ExprScope::Scope(value) => value.resolve(scope, context, extra),
+            ExprScope::Expr(value) => value.resolve(scope, context, extra),
         }
     }
 }

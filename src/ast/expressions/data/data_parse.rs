@@ -1,7 +1,10 @@
+use std::cell::RefCell;
+
 use crate::{
     ast::{
         self,
         expressions::Expression,
+        statements::{Return, Statement},
         utils::{
             io::{PResult, Span},
             lexem,
@@ -24,7 +27,7 @@ use nom::{
 };
 
 use super::{
-    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
     ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
     Vector,
 };
@@ -229,21 +232,26 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
                     separated_list0(wst(lexem::COMA), ClosureParam::parse),
                     wst(lexem::PAR_C),
                 ),
-                preceded(wst(lexem::ARROW), ClosureScope::parse),
+                preceded(wst(lexem::ARROW), ExprScope::parse),
             ),
             |(params, scope)| Closure { params, scope },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for ClosureScope<Scope> {
+impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(ast::statements::scope::Scope::parse, |value| {
-                ClosureScope::Scope(value)
+                ExprScope::Scope(value)
             }),
             map(Expression::parse, |value| {
-                ClosureScope::Expr(Box::new(value))
+                ExprScope::Expr(ast::statements::scope::Scope {
+                    instructions: vec![Statement::Return(ast::statements::Return::Expr(Box::new(
+                        value,
+                    )))],
+                    inner_scope: RefCell::new(None),
+                })
             }),
         ))(input)
     }
@@ -561,15 +569,21 @@ mod tests {
         let res = Closure::<MockScope>::parse("(x,y) -> x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
+
         assert_eq!(
             Closure {
                 params: vec![
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
-                scope: ClosureScope::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Variable(Variable::Var(VarID("x".into())))
-                ))))
+                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                    instructions: vec![Statement::Return(Return::Expr(Box::new(
+                        Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
+                            "x".into(),
+                        )))))
+                    )))],
+                    inner_scope: RefCell::new(None)
+                })
             },
             value
         )

@@ -4,7 +4,7 @@ pub mod flows_typeof;
 use crate::{ast::utils::strings::ID, semantic::scope::ScopeApi};
 
 use super::{
-    data::{Primitive, Variable},
+    data::{ExprScope, Primitive, Variable},
     Expression,
 };
 
@@ -19,15 +19,15 @@ pub enum ExprFlow<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfExpr<InnerScope: ScopeApi> {
     condition: Box<Expression<InnerScope>>,
-    main_branch: Box<Expression<InnerScope>>,
-    else_branch: Box<Expression<InnerScope>>,
+    main_branch: ExprScope<InnerScope>,
+    else_branch: ExprScope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr<InnerScope: ScopeApi> {
     expr: Box<Expression<InnerScope>>,
     patterns: Vec<PatternExpr<InnerScope>>,
-    else_branch: Box<Expression<InnerScope>>,
+    else_branch: ExprScope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,13 +53,13 @@ pub enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PatternExpr<InnerScope: ScopeApi> {
     pattern: Pattern,
-    expr: Box<Expression<InnerScope>>,
+    expr: ExprScope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TryExpr<InnerScope: ScopeApi> {
-    try_branch: Box<Expression<InnerScope>>,
-    else_branch: Box<Expression<InnerScope>>,
+    try_branch: ExprScope<InnerScope>,
+    else_branch: ExprScope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

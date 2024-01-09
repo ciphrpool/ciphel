@@ -1083,6 +1083,10 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
+        if let StaticType::Unit = self {
+            return Ok(other_type);
+        }
+
         let EitherType::Static(static_other_type) = &other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };

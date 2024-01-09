@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::map,
+    combinator::{map, opt},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair},
 };
@@ -8,7 +8,7 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{Primitive, Variable},
+            data::{ExprScope, Primitive, Variable},
             Expression,
         },
         utils::{
@@ -51,18 +51,15 @@ impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
         map(
             pair(
                 pair(
-                    preceded(wst(lexem::IF), Expression::parse),
-                    delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
+                    delimited(wst(lexem::IF), Expression::parse, wst(lexem::THEN)),
+                    ExprScope::<Scope>::parse,
                 ),
-                preceded(
-                    wst(lexem::ELSE),
-                    delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
-                ),
+                preceded(wst(lexem::ELSE), ExprScope::<Scope>::parse),
             ),
             |((condition, main_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
-                main_branch: Box::new(main_branch),
-                else_branch: Box::new(else_branch),
+                main_branch,
+                else_branch,
             },
         )(input)
     }
@@ -135,12 +132,9 @@ impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
             separated_pair(
                 preceded(wst(lexem::CASE), Pattern::parse),
                 wst(lexem::BIGARROW),
-                Expression::parse,
+                ExprScope::<Scope>::parse,
             ),
-            |(pattern, expr)| PatternExpr {
-                pattern,
-                expr: Box::new(expr),
-            },
+            |(pattern, expr)| PatternExpr { pattern, expr },
         )(input)
     }
 }
@@ -174,17 +168,17 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
                             wst(lexem::COMA),
                             preceded(
                                 wst(lexem::ELSE),
-                                preceded(wst(lexem::BIGARROW), Expression::parse),
+                                preceded(wst(lexem::BIGARROW), ExprScope::<Scope>::parse),
                             ),
                         ),
                     ),
-                    wst(lexem::BRA_C),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
             |(expr, (patterns, else_branch))| MatchExpr {
                 expr: Box::new(expr),
                 patterns,
-                else_branch: Box::new(else_branch),
+                else_branch,
             },
         )(input)
     }
@@ -200,18 +194,12 @@ impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(
-                    wst(lexem::TRY),
-                    delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
-                ),
-                preceded(
-                    wst(lexem::ELSE),
-                    delimited(wst(lexem::BRA_O), Expression::parse, wst(lexem::BRA_C)),
-                ),
+                preceded(wst(lexem::TRY), ExprScope::<Scope>::parse),
+                preceded(wst(lexem::ELSE), ExprScope::<Scope>::parse),
             ),
             |(try_branch, else_branch)| TryExpr {
-                try_branch: Box::new(try_branch),
-                else_branch: Box::new(else_branch),
+                try_branch,
+                else_branch,
             },
         )(input)
     }
@@ -242,11 +230,16 @@ impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use crate::{
-        ast::expressions::{
-            data::{Data, Primitive, VarID, Variable},
-            flows::PatternExpr,
-            Atomic, Expression,
+        ast::{
+            expressions::{
+                data::{Data, Primitive, VarID, Variable},
+                flows::PatternExpr,
+                Atomic, Expression,
+            },
+            statements::{scope::Scope, Return, Statement},
         },
         semantic::scope::scope_impl::MockScope,
     };
@@ -255,7 +248,7 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let res = IfExpr::<MockScope>::parse("if true { 10 } else { 20 }".into());
+        let res = IfExpr::<MockScope>::parse("if true then 10 else 20".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -263,12 +256,22 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                main_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
-                )))),
-                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(20)
-                )))),
+                main_branch: ExprScope::Expr(Scope {
+                    instructions: vec![
+                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                            Atomic::Data(Data::Primitive(Primitive::Number(10)))
+                        )))))
+                    ],
+                    inner_scope: RefCell::new(None),
+                }),
+                else_branch: ExprScope::Expr(Scope {
+                    instructions: vec![
+                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                            Atomic::Data(Data::Primitive(Primitive::Number(20)))
+                        )))))
+                    ],
+                    inner_scope: RefCell::new(None),
+                }),
             },
             value
         );
@@ -299,24 +302,39 @@ mod tests {
                 patterns: vec![
                     PatternExpr {
                         pattern: Pattern::Primitive(Primitive::Number(10)),
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     },
                     PatternExpr {
                         pattern: Pattern::String("Hello world".into()),
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     },
                     PatternExpr {
                         pattern: Pattern::Enum {
                             typename: "Geo".into(),
                             value: "Point".into()
                         },
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     },
                     PatternExpr {
                         pattern: Pattern::Union {
@@ -324,29 +342,49 @@ mod tests {
                             variant: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     },
                     PatternExpr {
                         pattern: Pattern::Struct {
                             typename: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     },
                     PatternExpr {
                         pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Bool(true)
-                        ))))
+                        expr: ExprScope::Expr(Scope {
+                            instructions: vec![
+                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                                )))))
+                            ],
+                            inner_scope: RefCell::new(None),
+                        })
                     }
                 ],
-                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                ))))
+                else_branch: ExprScope::Expr(Scope {
+                    instructions: vec![
+                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                            Atomic::Data(Data::Primitive(Primitive::Bool(true)))
+                        )))))
+                    ],
+                    inner_scope: RefCell::new(None),
+                })
             },
             value
         );
@@ -354,17 +392,27 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let res = TryExpr::<MockScope>::parse("try { 10 } else { 20 }".into());
+        let res = TryExpr::<MockScope>::parse("try 10 else 20".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             TryExpr {
-                try_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
-                )))),
-                else_branch: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(20)
-                )))),
+                try_branch: ExprScope::Expr(Scope {
+                    instructions: vec![
+                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                            Atomic::Data(Data::Primitive(Primitive::Number(10)))
+                        )))))
+                    ],
+                    inner_scope: RefCell::new(None),
+                }),
+                else_branch: ExprScope::Expr(Scope {
+                    instructions: vec![
+                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
+                            Atomic::Data(Data::Primitive(Primitive::Number(20)))
+                        )))))
+                    ],
+                    inner_scope: RefCell::new(None),
+                }),
             },
             value
         );

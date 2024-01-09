@@ -77,7 +77,7 @@ impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
                             ),
                         )),
                     ),
-                    wst(lexem::BRA_C),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
             |(expr, (patterns, else_branch))| MatchStat {

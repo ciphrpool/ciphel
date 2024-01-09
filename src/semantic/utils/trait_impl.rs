@@ -22,12 +22,15 @@ where
         match self {
             Some(value) => value.compatible_with(other, scope),
             None => {
-                let other_type = other.type_of(&scope)?;
-                if <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_unit(&other_type) {
-                    Ok(())
-                } else {
-                    Err(SemanticError::IncompatibleTypes)
-                }
+                Ok(())
+
+                // let other_type = other.type_of(&scope)?;
+
+                // if <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_unit(&other_type) {
+                //     Ok(())
+                // } else {
+                //     Err(SemanticError::IncompatibleTypes)
+                // }
             }
         }
     }

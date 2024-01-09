@@ -183,19 +183,30 @@ impl ScopeApi for Scope {
 
     fn find_type(&self, id: &ID) -> Result<Self::UserType, crate::semantic::SemanticError> {
         match self {
-            Scope::Inner { data, parent, .. } => data
+            Scope::Inner {
+                data,
+                parent,
+                general,
+            } => data
                 .types
                 .get(id)
                 .cloned()
-                .or_else(|| {
-                    parent.as_ref()?.upgrade().and_then(|p| {
+                .or_else(|| match parent {
+                    Some(parent) => parent.upgrade().and_then(|p| {
                         let borrowed_scope =
                             <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         borrowed_scope.find_type(id).ok()
-                    })
+                    }),
+                    None => {
+                        let borrowed_scope =
+                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&general);
+                        let borrowed_scope = borrowed_scope.borrow();
+
+                        borrowed_scope.find_type(id).ok()
+                    }
                 })
-                .ok_or(SemanticError::UnknownType),
+                .ok_or(SemanticError::UnknownVar(id.clone())),
             Scope::General { data, .. } => data
                 .types
                 .get(id)

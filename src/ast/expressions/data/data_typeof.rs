@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use super::{
-    Address, Channel, Closure, ClosureParam, ClosureScope, Data, Enum, FieldAccess, KeyData,
+    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
     ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 use crate::ast::types::PrimitiveType;
@@ -281,7 +281,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
             .map(|value| EitherType::Static(value))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ClosureScope<Scope> {
+impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -291,8 +291,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureScope<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            ClosureScope::Scope(value) => value.type_of(&scope),
-            ClosureScope::Expr(value) => value.type_of(&scope),
+            ExprScope::Scope(value) => value.type_of(&scope),
+            ExprScope::Expr(value) => value.type_of(&scope),
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::{
         self,
         utils::{numbers::Number, strings::ID},
     },
-    semantic::{scope::ScopeApi},
+    semantic::scope::ScopeApi,
 };
 
 use super::Expression;
@@ -80,13 +80,13 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    scope: ClosureScope<InnerScope>,
+    scope: ExprScope<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClosureScope<InnerScope: ScopeApi> {
+pub enum ExprScope<InnerScope: ScopeApi> {
     Scope(ast::statements::scope::Scope<InnerScope>),
-    Expr(Box<Expression<InnerScope>>),
+    Expr(ast::statements::scope::Scope<InnerScope>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

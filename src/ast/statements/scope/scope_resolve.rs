@@ -21,7 +21,6 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
         Self: Sized,
     {
         let mut inner_scope = OuterScope::child_scope_with(scope, extra.clone())?;
-
         for instruction in &self.instructions {
             let _ = instruction.resolve(&mut inner_scope, context, &())?;
         }

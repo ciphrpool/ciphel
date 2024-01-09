@@ -122,3 +122,74 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
         self.call.resolve(scope, &None, extra)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::TryParse;
+    use crate::semantic::scope::scope_impl::Scope;
+    use crate::semantic::scope::static_type_impl::{PrimitiveType, StaticType};
+    use crate::semantic::scope::var_impl::Var;
+    #[test]
+    fn valid_if() {
+        let expr = IfStat::parse(
+            r##"
+            if true {
+                let x = 1;
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn valid_match() {
+        let expr = MatchStat::parse(
+            r##"
+            match x {
+                case 20 => {
+                    let x = 1;
+                },
+                case 30 => {
+                    let x = 1;
+                },
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn valid_try() {
+        let expr = TryStat::parse(
+            r##"
+            try {
+                let x = 1;
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+}

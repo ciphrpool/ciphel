@@ -7,6 +7,7 @@ pub const BIGARROW: &str = "=>";
 pub const ELSE: &str = "else";
 pub const TRY: &str = "try";
 pub const IF: &str = "if";
+pub const THEN: &str = "then";
 pub const MATCH: &str = "match";
 pub const CASE: &str = "case";
 pub const RETURN: &str = "return";

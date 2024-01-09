@@ -48,8 +48,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr<Scope> {
         if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
-        let _ = self.main_branch.resolve(scope, context, extra)?;
-        let _ = self.else_branch.resolve(scope, context, extra)?;
+
+        let _ = self.main_branch.resolve(scope, context, &Vec::default())?;
+        let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
 
         let main_branch_type = self.main_branch.type_of(&scope.borrow())?;
         let _ = main_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
@@ -183,7 +184,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
 impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    type Extra = ();
+    type Extra = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -194,9 +195,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _vars = self.pattern.resolve(scope, context, extra)?;
+        let vars = self.pattern.resolve(scope, &extra, &())?;
         // create a scope and assign the pattern variable to it before resolving the expression
-        let _ = self.expr.resolve(scope, context, &())?;
+        let _ = self.expr.resolve(scope, context, &vars)?;
         Ok(())
     }
 }
@@ -214,15 +215,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.expr.resolve(scope, context, extra)?;
+        let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
-        let _ = self.else_branch.resolve(scope, &expr_type, &())?;
-
+        let _ = self.else_branch.resolve(scope, &context, &Vec::default())?;
+        let else_branch_type = Some(self.else_branch.type_of(&scope.borrow())?);
         for pattern in &self.patterns {
-            let _ = pattern.resolve(scope, &expr_type, &())?;
+            let _ = pattern.resolve(scope, &else_branch_type, &expr_type)?;
         }
-        let else_branch_type = self.else_branch.type_of(&scope.borrow())?;
+        let else_branch_type = else_branch_type.unwrap();
 
         let (maybe_err, _) =
             self.patterns
@@ -261,8 +262,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.try_branch.resolve(scope, context, extra)?;
-        let _ = self.else_branch.resolve(scope, context, extra)?;
+        let _ = self.try_branch.resolve(scope, context, &Vec::default())?;
+        let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
 
         let try_branch_type = self.try_branch.type_of(&scope.borrow())?;
         let _ = try_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
@@ -319,13 +320,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::TryParse, semantic::scope::scope_impl::Scope};
+    use std::collections::{HashMap, HashSet};
+
+    use crate::{
+        ast::TryParse,
+        semantic::scope::{
+            scope_impl::Scope,
+            static_type_impl::{FnType, PrimitiveType, SliceType, StaticType},
+            user_type_impl::{Enum, Struct, Union, UserType},
+            var_impl::Var,
+        },
+    };
 
     use super::*;
 
     #[test]
     fn valid_if() {
-        let expr = IfExpr::parse("if true {10} else {20}".into()).unwrap().1;
+        let expr = IfExpr::parse("if true then 10 else 20".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
@@ -333,13 +344,379 @@ mod tests {
 
     #[test]
     fn robustness_if() {
-        let expr = IfExpr::parse("if 10 {10} else {20}".into()).unwrap().1;
+        let expr = IfExpr::parse("if 10 then 10 else 20".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = IfExpr::parse("if true {10} else {'a'}".into()).unwrap().1;
+        let expr = IfExpr::parse("if true then 10 else 'a'".into()).unwrap().1;
         let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_match_basic() {
+        let expr = MatchExpr::parse(
+            r##"
+            match x {
+                case 20 => 1,
+                case 30 => 2,
+                else => 3
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            match_type
+        );
+
+        let expr = MatchExpr::parse(
+            r##"
+            match x {
+                case Color::RED => 1,
+                case Color::GREEN => 2,
+                else => 3
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Color".into(),
+                UserType::Enum(Enum {
+                    id: "Color".into(),
+                    values: {
+                        let mut res = HashSet::new();
+                        res.insert("RED".into());
+                        res.insert("GREEN".into());
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::User(UserType::Enum(Enum {
+                    id: "Color".into(),
+                    values: {
+                        let mut res = HashSet::new();
+                        res.insert("RED".into());
+                        res.insert("GREEN".into());
+                        res
+                    },
+                })),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            match_type
+        );
+
+        let expr = MatchExpr::parse(
+            r##"
+            match x { 
+                case "red" => Color::RED,
+                case "green" => Color::GREEN,
+                else => Color::YELLOW
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Color".into(),
+                UserType::Enum(Enum {
+                    id: "Color".into(),
+                    values: {
+                        let mut res = HashSet::new();
+                        res.insert("RED".into());
+                        res.insert("GREEN".into());
+                        res.insert("YELLOW".into());
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Slice(SliceType::String)),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::User(UserType::Enum(Enum {
+                id: "Color".into(),
+                values: {
+                    let mut res = HashSet::new();
+                    res.insert("RED".into());
+                    res.insert("GREEN".into());
+                    res.insert("YELLOW".into());
+                    res
+                },
+            })),
+            match_type
+        );
+    }
+
+    #[test]
+    fn robustness_match_basic() {
+        let expr = MatchExpr::parse(
+            r##"
+            match x { 
+                case 20 => true,
+                case 30 => false,
+                else => 'a'
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
+
+        let expr = MatchExpr::parse(
+            r##"
+            match x { 
+                case 20 => true,
+                case 'a' => false,
+                else => true
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_match_complex() {
+        let expr = MatchExpr::parse(
+            r##"
+            match x { 
+                case Geo::Point {x,y} => x + y,
+                case Geo::Axe{x} => x,
+                else => 3
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(
+                &"Geo".into(),
+                UserType::Union(Union {
+                    id: "Geo".into(),
+                    variants: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "Point".into(),
+                            Struct {
+                                id: "Point".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res.insert(
+                                        "y".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res.insert(
+                            "Axe".into(),
+                            Struct {
+                                id: "Axe".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res
+                    },
+                }),
+            )
+            .unwrap();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::User(UserType::Union(Union {
+                    id: "Geo".into(),
+                    variants: {
+                        let mut res = HashMap::new();
+                        res.insert(
+                            "Point".into(),
+                            Struct {
+                                id: "Point".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res.insert(
+                                        "y".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res.insert(
+                            "Axe".into(),
+                            Struct {
+                                id: "Axe".into(),
+                                fields: {
+                                    let mut res = HashMap::new();
+                                    res.insert(
+                                        "x".into(),
+                                        EitherType::Static(StaticType::Primitive(
+                                            PrimitiveType::Number,
+                                        )),
+                                    );
+                                    res
+                                },
+                            },
+                        );
+                        res
+                    },
+                })),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let match_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            match_type
+        );
+    }
+
+    #[test]
+    fn valid_try() {
+        let expr = TryExpr::parse("try 10 else 20".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn valid_call() {
+        let expr = FnCall::parse("f(10,20+20)".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "f".into(),
+                type_sig: EitherType::Static(StaticType::Fn(FnType {
+                    params: vec![
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                    ],
+                    ret: Box::new(EitherType::Static(StaticType::Primitive(
+                        PrimitiveType::Number,
+                    ))),
+                })),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let ret_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            ret_type,
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number))
+        )
+    }
+
+    #[test]
+    fn robustness_call() {
+        let expr = FnCall::parse("f(10,20+20)".into()).unwrap().1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "f".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            })
+            .unwrap();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
     }
