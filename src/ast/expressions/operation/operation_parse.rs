@@ -6,6 +6,7 @@ use nom::{
 
 use crate::{
     ast::{
+        types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
@@ -17,8 +18,8 @@ use crate::{
 };
 
 use super::{
-    Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Equation, Expression, HighOrdMath,
-    Inclusion, LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
+    HighOrdMath, Inclusion, LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 
 impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
@@ -229,6 +230,27 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScop
     }
 }
 
+impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
+    /*
+     * @desc Parse bitwise xor operation
+     *
+     * @grammar
+     * XOr := BAnd as Type | BAnd
+     */
+    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+        let (remainder, left) = BitwiseOR::parse(input)?;
+        let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
+
+        if let Some(_op) = op {
+            let (remainder, right) = Type::parse(remainder)?;
+            let left = Box::new(left);
+            Ok((remainder, Expression::Cast(Cast { left, right })))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum ComparaisonOPERATOR {
     Less,
@@ -247,7 +269,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
      * CompOp := BOr (< |<= | >= | > | == | != | in ) BOr | BOr
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = BitwiseOR::parse(input)?;
+        let (remainder, left) = Cast::parse(input)?;
         let (remainder, op) = opt(alt((
             value(ComparaisonOPERATOR::LessEqual, wst(lexem::ELE)),
             value(ComparaisonOPERATOR::Less, wst(lexem::LE)),
@@ -259,7 +281,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = BitwiseOR::parse(remainder)?;
+            let (remainder, right) = Cast::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((

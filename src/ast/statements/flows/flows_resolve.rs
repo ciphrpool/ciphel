@@ -145,6 +145,20 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
+
+        let expr = IfStat::parse(
+            r##"
+            if 1 as bool {
+                let x = 1;
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
     }
 
     #[test]

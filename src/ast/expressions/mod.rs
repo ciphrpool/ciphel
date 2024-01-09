@@ -34,6 +34,7 @@ pub enum Expression<InnerScope: ScopeApi> {
     BitwiseAnd(operation::BitwiseAnd<InnerScope>),
     BitwiseXOR(operation::BitwiseXOR<InnerScope>),
     BitwiseOR(operation::BitwiseOR<InnerScope>),
+    Cast(operation::Cast<InnerScope>),
     Comparaison(operation::Comparaison<InnerScope>),
     Equation(operation::Equation<InnerScope>),
     Inclusion(operation::Inclusion<InnerScope>),
@@ -169,6 +170,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
             Expression::Inclusion(value) => value.resolve(scope, context, extra),
             Expression::LogicalOr(value) => value.resolve(scope, context, extra),
             Expression::Atomic(value) => value.resolve(scope, context, extra),
+            Expression::Cast(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -195,6 +197,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
             Expression::Equation(value) => value.type_of(&scope),
             Expression::Inclusion(value) => value.type_of(&scope),
             Expression::Atomic(value) => value.type_of(&scope),
+            Expression::Cast(value) => value.type_of(&scope),
         }
     }
 }

@@ -337,7 +337,19 @@ where
             EitherType::User(value) => value.merge_bitwise_or(other, scope),
         }
     }
-
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.cast(other, scope),
+            EitherType::User(value) => value.cast(other, scope),
+        }
+    }
     fn can_comparaison(&self) -> Result<(), SemanticError> {
         match self {
             EitherType::Static(value) => value.can_comparaison(),

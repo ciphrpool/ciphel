@@ -945,6 +945,107 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         }
     }
 
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type {
+            return Ok(EitherType::Static(StaticType::Error));
+        }
+        match self {
+            // PRIMITIVE
+            StaticType::Primitive(PrimitiveType::Char) => match other_type {
+                StaticType::Primitive(PrimitiveType::Bool) => {
+                    Err(SemanticError::IncompatibleOperands)
+                }
+                StaticType::Primitive(to) => Ok(EitherType::Static(Self::Primitive(to))),
+                StaticType::Slice(SliceType::String) => {
+                    Ok(EitherType::Static(Self::Slice(SliceType::String)))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Primitive(_) => match other_type {
+                StaticType::Primitive(res) => Ok(EitherType::Static(StaticType::Primitive(res))),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+
+            // SLICE
+            StaticType::Slice(SliceType::String) => match other_type {
+                Self::Slice(SliceType::String) => {
+                    Ok(EitherType::Static(Self::Slice(SliceType::String)))
+                }
+                StaticType::Slice(SliceType::List(size, subtype)) => {
+                    let casted = subtype.as_ref().cast(
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+                        scope,
+                    )?;
+                    Ok(EitherType::Static(StaticType::Slice(SliceType::List(
+                        size,
+                        Box::new(casted),
+                    ))))
+                }
+                Self::Vec(other_subtype) => {
+                    let casted = EitherType::<UserType, StaticType>::Static(StaticType::Primitive(
+                        PrimitiveType::Char,
+                    ))
+                    .cast(other_subtype.0.as_ref(), scope)?;
+                    Ok(EitherType::Static(StaticType::Vec(VecType(Box::new(
+                        casted,
+                    )))))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Slice(SliceType::List(size, subtype)) => match other_type {
+                StaticType::Slice(SliceType::List(other_size, other_subtype)) => {
+                    if size < &other_size {
+                        return Err(SemanticError::IncompatibleOperands);
+                    }
+                    let casted = subtype.as_ref().cast(other_subtype.as_ref(), scope)?;
+                    Ok(EitherType::Static(StaticType::Slice(SliceType::List(
+                        other_size,
+                        Box::new(casted),
+                    ))))
+                }
+                StaticType::Slice(SliceType::String) => {
+                    let _ = subtype.as_ref().cast(
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+                        scope,
+                    )?;
+                    Ok(EitherType::Static(StaticType::Slice(SliceType::String)))
+                }
+                StaticType::Vec(other_subtype) => {
+                    let casted = subtype.cast(other_subtype.0.as_ref(), scope)?;
+                    Ok(EitherType::Static(StaticType::Vec(VecType(Box::new(
+                        casted,
+                    )))))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+
+            // VEC
+            StaticType::Vec(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Fn(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Chan(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Tuple(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Unit => match other_type {
+                StaticType::Unit => Ok(EitherType::Static(StaticType::Unit)),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Any => Ok(EitherType::Static(other_type)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Address(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Map(_) => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
     fn can_comparaison(&self) -> Result<(), SemanticError> {
         match self {
             StaticType::Primitive(_) => Ok(()),

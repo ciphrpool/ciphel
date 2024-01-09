@@ -6,8 +6,8 @@ use crate::semantic::{
 };
 
 use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Equation, HighOrdMath, Inclusion, LogicalAnd,
-    LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, HighOrdMath, Inclusion,
+    LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
@@ -137,6 +137,22 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
         left_type.merge_bitwise_or(&right_type, scope)
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Cast<Scope> {
+    fn type_of(
+        &self,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let left_type = self.left.type_of(&scope)?;
+        let right_type = self.right.type_of(&scope)?;
+        left_type.cast(&right_type, scope)
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
     fn type_of(
         &self,

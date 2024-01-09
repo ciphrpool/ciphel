@@ -1,4 +1,4 @@
-use crate::semantic::scope::ScopeApi;
+use crate::{ast::types::Type, semantic::scope::ScopeApi};
 
 use super::{Atomic, Expression};
 pub mod operation_parse;
@@ -62,6 +62,13 @@ pub struct BitwiseOR<InnerScope: ScopeApi> {
     left: Box<Expression<InnerScope>>,
     right: Box<Expression<InnerScope>>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Cast<InnerScope: ScopeApi> {
+    left: Box<Expression<InnerScope>>,
+    right: Type,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Comparaison<InnerScope: ScopeApi> {
     Less {

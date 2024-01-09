@@ -1,6 +1,6 @@
 use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Comparaison, Equation, HighOrdMath, Inclusion, LogicalAnd,
-    LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, HighOrdMath, Inclusion,
+    LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
 };
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::{
@@ -208,6 +208,29 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
         Ok(())
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for Cast<Scope> {
+    type Output = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        let _ = self.left.resolve(scope, context, extra)?;
+
+        let _ = self.right.resolve(scope, &(), extra)?;
+
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for Comparaison<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
@@ -369,7 +392,7 @@ mod tests {
         },
         semantic::scope::{
             scope_impl::Scope,
-            static_type_impl::{PrimitiveType, StaticType},
+            static_type_impl::{PrimitiveType, SliceType, StaticType},
             var_impl::Var,
         },
     };
@@ -572,6 +595,64 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_cast() {
+        let expr = Cast::parse("10 as float".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Float)),
+            expr_type
+        );
+
+        let expr = Cast::parse("'a' as number".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            expr_type
+        );
+
+        let expr = Cast::parse("'a' as string".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Slice(SliceType::String)),
+            expr_type
+        );
+
+        let expr = Cast::parse("['a'] as string".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Slice(SliceType::String)),
+            expr_type
+        );
+
+        let expr = Cast::parse("\"hello\" as [10]char".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            EitherType::Static(StaticType::Slice(SliceType::List(
+                10,
+                Box::new(EitherType::Static(StaticType::Primitive(
+                    PrimitiveType::Char
+                )))
+            ))),
+            expr_type
+        );
     }
 
     #[test]

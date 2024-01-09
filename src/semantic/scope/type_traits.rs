@@ -5,7 +5,7 @@ use crate::{
     semantic::{EitherType, SemanticError, TypeOf},
 };
 
-use super::ScopeApi;
+use super::{static_type_impl::StaticType, ScopeApi};
 
 pub trait GetSubTypes<Scope: ScopeApi> {
     fn get_nth(&self, _n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
@@ -154,6 +154,17 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Err(SemanticError::IncompatibleOperands)
+    }
+
+    fn cast<Other>(
+        &self,
+        _other: &Other,
+        scope: &Ref<Scope>,
     ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
