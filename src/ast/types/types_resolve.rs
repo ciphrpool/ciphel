@@ -231,7 +231,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
             KeyType::Slice(value) => value.resolve(scope, context, extra),
             KeyType::EnumID(value) => {
                 let borrowed_scope = scope.borrow();
-                let enum_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(value)?;
+                let enum_type = borrowed_scope.find_type(value)?;
                 if enum_type.is_enum() {
                     return Err(SemanticError::ExpectedEnum);
                 }

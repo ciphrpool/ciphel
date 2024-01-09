@@ -73,16 +73,16 @@ mod tests {
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             x_type
         );
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             y_type
         );
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(EitherType::Static(StaticType::Unit), res)
+        assert_eq!(EitherType::Static(StaticType::Unit.into()), res)
     }
 
     #[test]
@@ -103,9 +103,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &Vec::default(),
         );
         assert!(res.is_ok());
@@ -113,7 +113,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             res
         )
     }
@@ -140,9 +140,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &Vec::default(),
         );
         assert!(res.is_ok());
@@ -150,7 +150,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             res
         );
 
@@ -174,9 +174,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &Vec::default(),
         );
         assert!(res.is_ok());
@@ -184,7 +184,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             res
         )
     }
@@ -207,9 +207,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &Vec::default(),
         );
         assert!(res.is_ok());
@@ -217,7 +217,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             res
         )
     }
@@ -242,9 +242,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &Vec::default(),
         );
         assert!(res.is_err());

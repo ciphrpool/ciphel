@@ -20,7 +20,7 @@ impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
             return Err(SemanticError::NotResolvedYet);
         };
         let inner_scope = binding.borrow();
-        let mut return_type = EitherType::Static(OuterScope::StaticType::build_unit());
+        let mut return_type = EitherType::Static(OuterScope::StaticType::build_unit().into());
 
         for instruction in &self.instructions {
             match instruction {

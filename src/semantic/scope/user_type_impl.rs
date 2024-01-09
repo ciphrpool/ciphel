@@ -1,6 +1,7 @@
 use std::{
     cell::Ref,
     collections::{HashMap, HashSet},
+    rc::Rc,
 };
 
 use crate::{
@@ -42,6 +43,19 @@ pub struct Union {
     pub variants: HashMap<ID, Struct>,
 }
 
+impl<Scope: ScopeApi<UserType = UserType>> TypeOf<Scope> for Rc<UserType> {
+    fn type_of(
+        &self,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: super::ScopeApi,
+        Self: Sized,
+    {
+        Ok(EitherType::User(self.clone()))
+    }
+}
+
 impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {
     fn type_of(
         &self,
@@ -51,7 +65,7 @@ impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {
         Scope: super::ScopeApi,
         Self: Sized,
     {
-        Ok(EitherType::User(self.clone()))
+        Ok(EitherType::User(self.clone().into()))
     }
 }
 
@@ -96,7 +110,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scop
             UserType::Struct(_) => None,
             UserType::Enum(value) => {
                 if value.values.contains(variant) {
-                    Some(EitherType::Static(StaticType::Unit))
+                    Some(EitherType::Static(StaticType::Unit.into()))
                 } else {
                     None
                 }
@@ -104,7 +118,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scop
             UserType::Union(value) => value
                 .variants
                 .get(variant)
-                .map(|field| EitherType::User(UserType::Struct(field.clone()))),
+                .map(|field| EitherType::User(UserType::Struct(field.clone()).into())),
         }
     }
     fn get_fields(
@@ -157,22 +171,22 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
-            UserType::Struct(value) => match other_type {
+            UserType::Struct(value) => match other_type.as_ref() {
                 UserType::Struct(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Struct(v))),
+                    .map(|v| EitherType::User(UserType::Struct(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
-            UserType::Enum(value) => match other_type {
+            UserType::Enum(value) => match other_type.as_ref() {
                 UserType::Enum(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Enum(v))),
+                    .map(|v| EitherType::User(UserType::Enum(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
-            UserType::Union(value) => match other_type {
+            UserType::Union(value) => match other_type.as_ref() {
                 UserType::Union(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Union(v))),
+                    .map(|v| EitherType::User(UserType::Union(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
         }
@@ -187,7 +201,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(UserType::Struct(other_type)) = other_type else {
+        let EitherType::User(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let UserType::Struct(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.id != other_type.id || self.fields.len() != other_type.fields.len() {
@@ -212,7 +229,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(UserType::Union(other_type)) = other_type else {
+        let EitherType::User(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let UserType::Union(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.id != other_type.id || self.variants.len() != other_type.variants.len() {
@@ -243,7 +263,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(UserType::Enum(other_type)) = other_type else {
+        let EitherType::User(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let UserType::Enum(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.id != other_type.id || self.values.len() != other_type.values.len() {

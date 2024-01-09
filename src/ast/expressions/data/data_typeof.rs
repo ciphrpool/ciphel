@@ -35,7 +35,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
             Data::Address(value) => value.type_of(&scope),
             Data::PtrAccess(value) => value.type_of(&scope),
             Data::Variable(value) => value.type_of(&scope),
-            Data::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            Data::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
             Data::Map(value) => value.type_of(&scope),
             Data::Struct(value) => value.type_of(&scope),
             Data::Union(value) => value.type_of(&scope),
@@ -162,7 +162,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for String {
         Self: Sized,
     {
         Scope::StaticType::build_slice(&SliceType::String, scope)
-            .map(|value| (EitherType::Static(value)))
+            .map(|value| (EitherType::Static(value.into())))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
@@ -177,14 +177,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
         match self {
             Primitive::Number(_) => {
                 Scope::StaticType::build_primitive(&PrimitiveType::Number, scope)
-                    .map(|value| (EitherType::Static(value)))
+                    .map(|value| (EitherType::Static(value.into())))
             }
             Primitive::Float(_) => Scope::StaticType::build_primitive(&PrimitiveType::Float, scope)
-                .map(|value| (EitherType::Static(value))),
+                .map(|value| (EitherType::Static(value.into()))),
             Primitive::Bool(_) => Scope::StaticType::build_primitive(&PrimitiveType::Bool, scope)
-                .map(|value| (EitherType::Static(value))),
+                .map(|value| (EitherType::Static(value.into()))),
             Primitive::Char(_) => Scope::StaticType::build_primitive(&PrimitiveType::Char, scope)
-                .map(|value| (EitherType::Static(value))),
+                .map(|value| (EitherType::Static(value.into()))),
         }
     }
 }
@@ -200,16 +200,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
     {
         match self {
             Slice::String(_) => Scope::StaticType::build_slice(&SliceType::String, scope)
-                .map(|value| (EitherType::Static(value))),
+                .map(|value| (EitherType::Static(value.into()))),
             Slice::List(vec) => {
-                let mut list_type = EitherType::Static(Scope::StaticType::build_unit());
+                let mut list_type = EitherType::Static(Scope::StaticType::build_unit().into());
                 for expr in vec {
                     let expr_type = expr.type_of(&scope)?;
                     list_type = list_type.merge(&expr_type, scope)?;
                 }
 
                 Scope::StaticType::build_slice_from(&vec.len(), &list_type, scope)
-                    .map(|value| (EitherType::Static(value)))
+                    .map(|value| (EitherType::Static(value.into())))
             }
         }
     }
@@ -231,12 +231,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
                 let expr_type = expr_type?;
 
                 Scope::StaticType::build_vec_from(&expr_type, scope)
-                    .map(|value| EitherType::Static(value))
+                    .map(|value| EitherType::Static(value.into()))
             }
             Vector::Def { .. } => {
                 let any_type: Scope::StaticType = Scope::StaticType::build_any();
-                Scope::StaticType::build_vec_from(&EitherType::Static(any_type), scope)
-                    .map(|value| EitherType::Static(value))
+                Scope::StaticType::build_vec_from(&EitherType::Static(any_type.into()), scope)
+                    .map(|value| EitherType::Static(value.into()))
             }
         }
     }
@@ -257,7 +257,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
         }
 
         Scope::StaticType::build_tuple_from(&list_types, scope)
-            .map(|value| EitherType::Static(value))
+            .map(|value| EitherType::Static(value.into()))
     }
 }
 
@@ -278,7 +278,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
         let ret_type = self.scope.type_of(&scope)?;
 
         Scope::StaticType::build_fn_from(&params_types, &ret_type, scope)
-            .map(|value| EitherType::Static(value))
+            .map(|value| EitherType::Static(value.into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {
@@ -307,7 +307,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
     {
         match self {
             ClosureParam::Full { id: _, signature } => signature.type_of(&scope),
-            ClosureParam::Minimal(_) => Ok(EitherType::Static(Scope::StaticType::build_any())),
+            ClosureParam::Minimal(_) => {
+                Ok(EitherType::Static(Scope::StaticType::build_any().into()))
+            }
         }
     }
 }
@@ -322,7 +324,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Address {
     {
         let addr_type = self.0.type_of(&scope)?;
 
-        Scope::StaticType::build_addr_from(&addr_type, scope).map(|value| EitherType::Static(value))
+        Scope::StaticType::build_addr_from(&addr_type, scope)
+            .map(|value| EitherType::Static(value.into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
@@ -335,7 +338,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
         Self: Sized + Resolve<Scope>,
     {
         let _addr_type = self.0.type_of(&scope)?;
-        Ok(EitherType::Static(Scope::StaticType::build_any()))
+        Ok(EitherType::Static(Scope::StaticType::build_any().into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
@@ -361,13 +364,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
                 Ok(result_type)
             }
             Channel::Send { addr: _, msg: _ } => {
-                Ok(EitherType::Static(Scope::StaticType::build_unit()))
+                Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
             }
             Channel::Init(_) => {
                 let any_type: Scope::StaticType = Scope::StaticType::build_any();
 
-                Scope::StaticType::build_chan_from(&EitherType::Static(any_type), scope)
-                    .map(|value| EitherType::Static(value))
+                Scope::StaticType::build_chan_from(&EitherType::Static(any_type.into()), scope)
+                    .map(|value| EitherType::Static(value.into()))
             }
         }
     }
@@ -430,12 +433,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
                 let value_type = value.type_of(&scope)?;
 
                 Scope::StaticType::build_map_from(&key_type, &value_type, scope)
-                    .map(|value| EitherType::Static(value))
+                    .map(|value| EitherType::Static(value.into()))
             }
             Map::Def {
                 length: _,
                 capacity: _,
-            } => Ok(EitherType::Static(Scope::StaticType::build_any())),
+            } => Ok(EitherType::Static(Scope::StaticType::build_any().into())),
         }
     }
 }

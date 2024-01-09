@@ -119,8 +119,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 vars,
             } => {
                 let borrowed_scope = scope.borrow();
-                let user_type: <Scope as ScopeApi>::UserType =
-                    borrowed_scope.find_type(typename)?;
+                let user_type = borrowed_scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
@@ -150,8 +149,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 vars,
             } => {
                 let borrowed_scope = scope.borrow();
-                let user_type: <Scope as ScopeApi>::UserType =
-                    borrowed_scope.find_type(typename)?;
+                let user_type = borrowed_scope.find_type(typename)?;
                 let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
@@ -185,8 +183,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
             }
             PatternVar::StructInline { typename, vars } => {
                 let borrowed_scope = scope.borrow();
-                let user_type: <Scope as ScopeApi>::UserType =
-                    borrowed_scope.find_type(typename)?;
+                let user_type = borrowed_scope.find_type(typename)?;
                 let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EitherType<
@@ -206,8 +203,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
             }
             PatternVar::StructFields { typename, vars } => {
                 let borrowed_scope = scope.borrow();
-                let user_type: <Scope as ScopeApi>::UserType =
-                    borrowed_scope.find_type(typename)?;
+                let user_type = borrowed_scope.find_type(typename)?;
                 let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EitherType<
@@ -282,7 +278,7 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             x_type.type_sig
         );
 
@@ -294,7 +290,7 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Float)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Float).into()),
             x_type.type_sig
         );
     }
@@ -318,12 +314,12 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
             y_type.type_sig
         );
     }
@@ -345,11 +341,11 @@ mod tests {
                         let mut res = HashMap::new();
                         res.insert(
                             "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
                         );
                         res.insert(
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
                         );
                         res
                     },
@@ -361,12 +357,12 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             y_type.type_sig
         );
     }

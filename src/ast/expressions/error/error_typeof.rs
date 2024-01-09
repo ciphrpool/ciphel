@@ -13,6 +13,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Error {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_error()))
+        Ok(EitherType::Static(Scope::StaticType::build_error().into()))
     }
 }

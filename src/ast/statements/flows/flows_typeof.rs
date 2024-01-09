@@ -36,7 +36,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
@@ -71,7 +71,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 pattern_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
@@ -91,7 +91,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
@@ -105,6 +105,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit()))
+        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
     }
 }

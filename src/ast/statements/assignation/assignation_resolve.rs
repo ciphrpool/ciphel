@@ -109,7 +109,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &());
@@ -132,7 +132,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &());

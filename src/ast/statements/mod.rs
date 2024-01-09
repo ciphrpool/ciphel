@@ -104,7 +104,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
             Statement::Assignation(value) => value.type_of(&scope),
             Statement::Declaration(value) => value.type_of(&scope),
             Statement::Definition(_value) => {
-                Ok(EitherType::Static(Scope::StaticType::build_unit()))
+                Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
             }
             Statement::Loops(value) => value.type_of(&scope),
             Statement::Return(value) => value.type_of(&scope),
@@ -197,7 +197,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Return::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            Return::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
             Return::Expr(expr) => expr.type_of(&scope),
         }
     }
@@ -240,7 +240,7 @@ mod tests {
         assert!(res.is_ok());
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(EitherType::Static(StaticType::Unit), return_type);
+        assert_eq!(EitherType::Static(StaticType::Unit.into()), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -256,7 +256,7 @@ mod tests {
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             return_type
         );
     }
@@ -274,9 +274,9 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = return_statement.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Char,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Char).into(),
+            )),
             &(),
         );
         assert!(res.is_err());
