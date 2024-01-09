@@ -1,4 +1,5 @@
 use std::cell::Ref;
+use std::rc::Rc;
 
 use crate::semantic::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf};
 
@@ -73,11 +74,11 @@ pub enum KeyType {
     Enum(Enum),
 }
 
-impl<Scope: ScopeApi<StaticType = Self>> TypeOf<Scope> for StaticType {
+impl<Scope: ScopeApi<StaticType = StaticType>> TypeOf<Scope> for Rc<StaticType> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<EitherType<<Scope as ScopeApi>::UserType, Self>, SemanticError>
+    ) -> Result<EitherType<<Scope as ScopeApi>::UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -85,7 +86,18 @@ impl<Scope: ScopeApi<StaticType = Self>> TypeOf<Scope> for StaticType {
         Ok(EitherType::Static(self.clone()))
     }
 }
-
+impl<Scope: ScopeApi<StaticType = StaticType>> TypeOf<Scope> for StaticType {
+    fn type_of(
+        &self,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<<Scope as ScopeApi>::UserType, StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized,
+    {
+        Ok(EitherType::Static(Rc::new(self.clone())))
+    }
+}
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> CompatibleWith<Scope> for StaticType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
@@ -100,8 +112,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> CompatibleWith<Sco
             StaticType::Tuple(value) => value.compatible_with(other, scope),
             StaticType::Unit => {
                 let other_type = other.type_of(&scope)?;
-                if let EitherType::Static(StaticType::Unit) = other_type {
-                    return Ok(());
+                if let EitherType::Static(other_type) = other_type {
+                    if let StaticType::Unit = other_type.as_ref() {
+                        return Ok(());
+                    } else {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
                 } else {
                     return Err(SemanticError::IncompatibleTypes);
                 }
@@ -291,7 +307,8 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
                     }
                 },
                 ast::types::KeyType::EnumID(value) => {
-                    let UserType::Enum(enum_type) = scope.find_type(&value)? else {
+                    let binding = scope.find_type(&value)?;
+                    let UserType::Enum(enum_type) = binding.as_ref() else {
                         return Err(SemanticError::IncompatibleTypes);
                     };
                     KeyType::Enum(enum_type.clone())
@@ -313,13 +330,13 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     ) -> Result<Self, SemanticError> {
         let key_type = {
             match key {
-                EitherType::Static(value) => match value {
+                EitherType::Static(value) => match value.as_ref() {
                     StaticType::Primitive(value) => KeyType::Primitive(value.clone()),
                     StaticType::Slice(value) => KeyType::Slice(value.clone()),
                     StaticType::Address(value) => KeyType::Address(value.clone()),
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },
-                EitherType::User(value) => match value {
+                EitherType::User(value) => match value.as_ref() {
                     UserType::Enum(value) => KeyType::Enum(value.clone()),
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },
@@ -357,7 +374,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(value) => match value {
-                SliceType::String => Some(EitherType::Static(Self::Primitive(PrimitiveType::Char))),
+                SliceType::String => Some(EitherType::Static(
+                    Self::Primitive(PrimitiveType::Char).into(),
+                )),
                 SliceType::List(_, value) => Some(value.as_ref().clone()),
             },
             StaticType::Vec(value) => Some(value.0.as_ref().clone()),
@@ -366,7 +385,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
             StaticType::Any => None,
-            StaticType::Error => Some(EitherType::Static(Self::Error)),
+            StaticType::Error => Some(EitherType::Static(Self::Error.into())),
             StaticType::Address(AddrType(value)) => {
                 <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_item(value)
             }
@@ -379,14 +398,18 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
     ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
         match self {
             StaticType::Map(value) => match &value.keys_type {
-                KeyType::Primitive(value) => {
-                    Some(EitherType::Static(StaticType::Primitive(value.clone())))
+                KeyType::Primitive(value) => Some(EitherType::Static(
+                    StaticType::Primitive(value.clone()).into(),
+                )),
+                KeyType::Address(value) => Some(EitherType::Static(
+                    StaticType::Address(value.clone()).into(),
+                )),
+                KeyType::Slice(value) => {
+                    Some(EitherType::Static(StaticType::Slice(value.clone()).into()))
                 }
-                KeyType::Address(value) => {
-                    Some(EitherType::Static(StaticType::Address(value.clone())))
+                KeyType::Enum(value) => {
+                    Some(EitherType::User(UserType::Enum(value.clone()).into()))
                 }
-                KeyType::Slice(value) => Some(EitherType::Static(StaticType::Slice(value.clone()))),
-                KeyType::Enum(value) => Some(EitherType::User(UserType::Enum(value.clone()))),
             },
             StaticType::Address(AddrType(value)) => {
                 <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_key(value)
@@ -604,33 +627,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => {
                 <EitherType<UserType, StaticType> as OperandMerging<Scope>>::merge_high_ord_math(
                     &value.0, other, scope,
@@ -667,33 +690,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::merge_low_ord_math(&value.0, other, scope),
@@ -728,33 +751,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::merge_shift(&value.0, other, scope),
@@ -789,33 +812,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::merge_bitwise_and(&value.0, other, scope),
@@ -850,33 +873,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::merge_bitwise_xor(&value.0, other, scope),
@@ -911,33 +934,33 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             StaticType::Primitive(value) => match value {
-                PrimitiveType::Number => match other_type {
+                PrimitiveType::Number => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number),
+                        StaticType::Primitive(PrimitiveType::Number).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
-                PrimitiveType::Float => match other_type {
+                PrimitiveType::Float => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Float),
+                        StaticType::Primitive(PrimitiveType::Float).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
                 Scope,
             >>::merge_bitwise_xor(&value.0, other, scope),
@@ -957,75 +980,79 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
-        if let StaticType::Error = other_type {
-            return Ok(EitherType::Static(StaticType::Error));
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
         }
         match self {
             // PRIMITIVE
-            StaticType::Primitive(PrimitiveType::Char) => match other_type {
+            StaticType::Primitive(PrimitiveType::Char) => match other_type.as_ref() {
                 StaticType::Primitive(PrimitiveType::Bool) => {
                     Err(SemanticError::IncompatibleOperands)
                 }
-                StaticType::Primitive(to) => Ok(EitherType::Static(Self::Primitive(to))),
+                StaticType::Primitive(to) => {
+                    Ok(EitherType::Static(Self::Primitive(to.clone()).into()))
+                }
                 StaticType::Slice(SliceType::String) => {
-                    Ok(EitherType::Static(Self::Slice(SliceType::String)))
+                    Ok(EitherType::Static(Self::Slice(SliceType::String).into()))
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Primitive(_) => match other_type {
-                StaticType::Primitive(res) => Ok(EitherType::Static(StaticType::Primitive(res))),
+            StaticType::Primitive(_) => match other_type.as_ref() {
+                StaticType::Primitive(res) => Ok(EitherType::Static(
+                    StaticType::Primitive(res.clone()).into(),
+                )),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
 
             // SLICE
-            StaticType::Slice(SliceType::String) => match other_type {
+            StaticType::Slice(SliceType::String) => match other_type.as_ref() {
                 Self::Slice(SliceType::String) => {
-                    Ok(EitherType::Static(Self::Slice(SliceType::String)))
+                    Ok(EitherType::Static(Self::Slice(SliceType::String).into()))
                 }
                 StaticType::Slice(SliceType::List(size, subtype)) => {
                     let casted = subtype.as_ref().cast(
-                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                         scope,
                     )?;
-                    Ok(EitherType::Static(StaticType::Slice(SliceType::List(
-                        size,
-                        Box::new(casted),
-                    ))))
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::List(*size, Box::new(casted))).into(),
+                    ))
                 }
                 Self::Vec(other_subtype) => {
-                    let casted = EitherType::<UserType, StaticType>::Static(StaticType::Primitive(
-                        PrimitiveType::Char,
-                    ))
+                    let casted = EitherType::<UserType, StaticType>::Static(
+                        StaticType::Primitive(PrimitiveType::Char).into(),
+                    )
                     .cast(other_subtype.0.as_ref(), scope)?;
-                    Ok(EitherType::Static(StaticType::Vec(VecType(Box::new(
-                        casted,
-                    )))))
+                    Ok(EitherType::Static(
+                        StaticType::Vec(VecType(Box::new(casted))).into(),
+                    ))
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Slice(SliceType::List(size, subtype)) => match other_type {
+            StaticType::Slice(SliceType::List(size, subtype)) => match other_type.as_ref() {
                 StaticType::Slice(SliceType::List(other_size, other_subtype)) => {
                     if size < &other_size {
                         return Err(SemanticError::IncompatibleOperands);
                     }
                     let casted = subtype.as_ref().cast(other_subtype.as_ref(), scope)?;
-                    Ok(EitherType::Static(StaticType::Slice(SliceType::List(
-                        other_size,
-                        Box::new(casted),
-                    ))))
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::List(*other_size, Box::new(casted))).into(),
+                    ))
                 }
                 StaticType::Slice(SliceType::String) => {
                     let _ = subtype.as_ref().cast(
-                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                         scope,
                     )?;
-                    Ok(EitherType::Static(StaticType::Slice(SliceType::String)))
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::String).into(),
+                    ))
                 }
                 StaticType::Vec(other_subtype) => {
                     let casted = subtype.cast(other_subtype.0.as_ref(), scope)?;
-                    Ok(EitherType::Static(StaticType::Vec(VecType(Box::new(
-                        casted,
-                    )))))
+                    Ok(EitherType::Static(
+                        StaticType::Vec(VecType(Box::new(casted))).into(),
+                    ))
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
@@ -1035,12 +1062,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
             StaticType::Fn(_) => Err(SemanticError::IncompatibleOperands),
             StaticType::Chan(_) => Err(SemanticError::IncompatibleOperands),
             StaticType::Tuple(_) => Err(SemanticError::IncompatibleOperands),
-            StaticType::Unit => match other_type {
-                StaticType::Unit => Ok(EitherType::Static(StaticType::Unit)),
+            StaticType::Unit => match other_type.as_ref() {
+                StaticType::Unit => Ok(EitherType::Static(StaticType::Unit.into())),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
             StaticType::Any => Ok(EitherType::Static(other_type)),
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(_) => Err(SemanticError::IncompatibleOperands),
             StaticType::Map(_) => Err(SemanticError::IncompatibleOperands),
         }
@@ -1064,9 +1091,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     where
         Other: TypeOf<Scope>,
     {
-        Ok(EitherType::Static(StaticType::Primitive(
-            PrimitiveType::Bool,
-        )))
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
     }
 
     fn can_equate(&self) -> Result<(), SemanticError> {
@@ -1091,9 +1118,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     where
         Other: TypeOf<Scope>,
     {
-        Ok(EitherType::Static(StaticType::Primitive(
-            PrimitiveType::Bool,
-        )))
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
     }
 
     fn can_include_right(&self) -> Result<(), SemanticError> {
@@ -1116,9 +1143,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     where
         Other: TypeOf<Scope>,
     {
-        Ok(EitherType::Static(StaticType::Primitive(
-            PrimitiveType::Bool,
-        )))
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
     }
 
     fn can_logical_and(&self) -> Result<(), SemanticError> {
@@ -1142,9 +1169,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     where
         Other: TypeOf<Scope>,
     {
-        Ok(EitherType::Static(StaticType::Primitive(
-            PrimitiveType::Bool,
-        )))
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
     }
 
     fn can_logical_or(&self) -> Result<(), SemanticError> {
@@ -1168,9 +1195,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Sco
     where
         Other: TypeOf<Scope>,
     {
-        Ok(EitherType::Static(StaticType::Primitive(
-            PrimitiveType::Bool,
-        )))
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
     }
 }
 
@@ -1191,9 +1218,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
         let EitherType::Static(static_other_type) = &other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        match static_other_type {
-            Self::Error => return Ok(EitherType::Static(StaticType::Error)),
-            Self::Unit => return Ok(EitherType::Static(self.clone())),
+        match static_other_type.as_ref() {
+            Self::Error => return Ok(EitherType::Static(StaticType::Error.into())),
+            Self::Unit => return Ok(EitherType::Static(self.clone().into())),
             _ => {}
         }
         match self {
@@ -1205,7 +1232,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
             StaticType::Any => Err(SemanticError::CantInferType),
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
         }
@@ -1227,35 +1254,38 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Primitive(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Primitive(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
             PrimitiveType::Number => match other_type {
-                PrimitiveType::Number => Ok(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Number,
-                ))),
+                PrimitiveType::Number => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number).into(),
+                )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Float => match other_type {
-                PrimitiveType::Number => Ok(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Float,
-                ))),
-                PrimitiveType::Float => Ok(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Float,
-                ))),
+                PrimitiveType::Number => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Char => match other_type {
-                PrimitiveType::Char => Ok(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Char,
-                ))),
+                PrimitiveType::Char => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Char).into(),
+                )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Bool => match other_type {
-                PrimitiveType::Bool => Ok(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Bool,
-                ))),
+                PrimitiveType::Bool => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Bool).into(),
+                )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
         }
@@ -1275,25 +1305,30 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Slice(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Slice(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
             SliceType::String => match other_type {
-                SliceType::String => Ok(EitherType::Static(StaticType::Slice(SliceType::String))),
+                SliceType::String => Ok(EitherType::Static(
+                    StaticType::Slice(SliceType::String).into(),
+                )),
                 SliceType::List(_, _) => Err(SemanticError::IncompatibleTypes),
             },
             SliceType::List(size, subtype) => match other_type {
                 SliceType::String => Err(SemanticError::IncompatibleTypes),
                 SliceType::List(other_size, other_subtype) => {
-                    if size != &other_size {
+                    if size != other_size {
                         Err(SemanticError::IncompatibleTypes)
                     } else {
                         let merged = subtype.merge(other_subtype.as_ref(), scope)?;
-                        Ok(EitherType::Static(StaticType::Slice(SliceType::List(
-                            size.clone(),
-                            Box::new(merged),
-                        ))))
+                        Ok(EitherType::Static(
+                            StaticType::Slice(SliceType::List(size.clone(), Box::new(merged)))
+                                .into(),
+                        ))
                     }
                 }
             },
@@ -1314,13 +1349,16 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Vec(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Vec(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(StaticType::Vec(VecType(Box::new(
-            merged,
-        )))))
+        Ok(EitherType::Static(
+            StaticType::Vec(VecType(Box::new(merged))).into(),
+        ))
     }
 }
 
@@ -1337,7 +1375,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Fn(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Fn(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.params.len() != other_type.params.len() {
@@ -1349,10 +1390,13 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             merged_params.push(merged);
         }
         let merged_ret = self.ret.merge(other_type.ret.as_ref(), scope)?;
-        Ok(EitherType::Static(StaticType::Fn(FnType {
-            params: merged_params,
-            ret: Box::new(merged_ret),
-        })))
+        Ok(EitherType::Static(
+            StaticType::Fn(FnType {
+                params: merged_params,
+                ret: Box::new(merged_ret),
+            })
+            .into(),
+        ))
     }
 }
 
@@ -1369,13 +1413,16 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Chan(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Chan(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(StaticType::Chan(ChanType(Box::new(
-            merged,
-        )))))
+        Ok(EitherType::Static(
+            StaticType::Chan(ChanType(Box::new(merged))).into(),
+        ))
     }
 }
 
@@ -1392,7 +1439,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Tuple(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Tuple(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.0.len() != other_type.0.len() {
@@ -1405,7 +1455,9 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             };
             merged_vec.push(merged);
         }
-        Ok(EitherType::Static(StaticType::Tuple(TupleType(merged_vec))))
+        Ok(EitherType::Static(
+            StaticType::Tuple(TupleType(merged_vec)).into(),
+        ))
     }
 }
 
@@ -1422,13 +1474,16 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Address(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Address(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(StaticType::Address(AddrType(Box::new(
-            merged,
-        )))))
+        Ok(EitherType::Static(
+            StaticType::Address(AddrType(Box::new(merged))).into(),
+        ))
     }
 }
 
@@ -1445,7 +1500,10 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(StaticType::Map(other_type)) = other_type else {
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Map(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
 
@@ -1454,10 +1512,13 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         let merged_value = self
             .values_type
             .merge(other_type.values_type.as_ref(), scope)?;
-        Ok(EitherType::Static(StaticType::Map(MapType {
-            keys_type: merged_key,
-            values_type: Box::new(merged_value),
-        })))
+        Ok(EitherType::Static(
+            StaticType::Map(MapType {
+                keys_type: merged_key,
+                values_type: Box::new(merged_value),
+            })
+            .into(),
+        ))
     }
 }
 

@@ -40,8 +40,8 @@ pub enum SemanticError {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum EitherType<User, Static> {
-    Static(Static),
-    User(User),
+    Static(Rc<Static>),
+    User(Rc<User>),
 }
 
 pub trait Resolve<Scope: ScopeApi> {

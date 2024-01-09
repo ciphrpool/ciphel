@@ -432,7 +432,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -510,7 +510,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -605,7 +605,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Float)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Float).into()),
             expr_type
         );
 
@@ -615,7 +615,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             expr_type
         );
 
@@ -625,7 +625,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::String)),
+            EitherType::Static(StaticType::Slice(SliceType::String).into()),
             expr_type
         );
 
@@ -635,7 +635,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::String)),
+            EitherType::Static(StaticType::Slice(SliceType::String).into()),
             expr_type
         );
 
@@ -645,12 +645,15 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::List(
-                10,
-                Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Char
-                )))
-            ))),
+            EitherType::Static(
+                StaticType::Slice(SliceType::List(
+                    10,
+                    Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Char).into()
+                    ))
+                ))
+                .into()
+            ),
             expr_type
         );
     }

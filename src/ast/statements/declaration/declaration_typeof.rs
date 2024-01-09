@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit()))
+        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
@@ -39,7 +39,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            DeclaredVar::Id(_) => Ok(EitherType::Static(Scope::StaticType::build_unit())),
+            DeclaredVar::Id(_) => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
             DeclaredVar::Typed(value) => value.type_of(&scope),
             DeclaredVar::Pattern(value) => value.type_of(&scope),
         }
@@ -54,6 +54,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit()))
+        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
     }
 }

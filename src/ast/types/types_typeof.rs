@@ -67,7 +67,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         let EitherType::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        let StaticType::Primitive(other_type) = other_type else {
+        let StaticType::Primitive(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
@@ -120,27 +120,35 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         match self {
             static_type_impl::SliceType::String => {
                 let other_type = other.type_of(&scope)?;
-                if let EitherType::Static(StaticType::Slice(static_type_impl::SliceType::String)) =
-                    other_type
-                {
-                    return Ok(());
+                if let EitherType::Static(other_type) = other_type {
+                    if let StaticType::Slice(static_type_impl::SliceType::String) =
+                        other_type.as_ref()
+                    {
+                        return Ok(());
+                    } else {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
                 } else {
                     return Err(SemanticError::IncompatibleTypes);
                 }
             }
             static_type_impl::SliceType::List(size, subtype) => {
                 let other_type = other.type_of(&scope)?;
-                if let EitherType::Static(StaticType::Slice(static_type_impl::SliceType::List(
-                    other_size,
-                    other_subtype,
-                ))) = other_type
-                {
-                    if &other_size != size {
+                if let EitherType::Static(other_type) = other_type {
+                    if let StaticType::Slice(static_type_impl::SliceType::List(
+                        other_size,
+                        other_subtype,
+                    )) = other_type.as_ref()
+                    {
+                        if other_size != size {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                        let subtype = subtype.type_of(&scope)?;
+                        let other_subtype = other_subtype.type_of(&scope)?;
+                        return subtype.compatible_with(&other_subtype, scope);
+                    } else {
                         return Err(SemanticError::IncompatibleTypes);
                     }
-                    let subtype = subtype.type_of(&scope)?;
-                    let other_subtype = other_subtype.type_of(&scope)?;
-                    return subtype.compatible_with(&other_subtype, scope);
                 } else {
                     return Err(SemanticError::IncompatibleTypes);
                 }
@@ -172,12 +180,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Vec(static_type_impl::VecType(other_subtype))) =
-            other_type
-        {
-            let subtype = self.0.type_of(&scope)?;
-            let other_subtype = other_subtype.type_of(&scope)?;
-            return subtype.compatible_with(&other_subtype, scope);
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Vec(static_type_impl::VecType(other_subtype)) = other_type.as_ref() {
+                let subtype = self.0.type_of(&scope)?;
+                let other_subtype = other_subtype.type_of(&scope)?;
+                return subtype.compatible_with(&other_subtype, scope);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }
@@ -207,22 +217,26 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Fn(static_type_impl::FnType {
-            params: other_params,
-            ret: other_ret,
-        })) = other_type
-        {
-            if self.params.len() != other_params.len() {
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Fn(static_type_impl::FnType {
+                params: other_params,
+                ret: other_ret,
+            }) = other_type.as_ref()
+            {
+                if self.params.len() != other_params.len() {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+                for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
+                    let self_param = self_param.type_of(&scope)?;
+                    let other_param = other_param.type_of(&scope)?;
+                    let _ = self_param.compatible_with(&other_param, scope)?;
+                }
+                let ret = self.ret.type_of(&scope)?;
+                let other_ret = other_ret.type_of(&scope)?;
+                return ret.compatible_with(&other_ret, scope);
+            } else {
                 return Err(SemanticError::IncompatibleTypes);
             }
-            for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
-                let self_param = self_param.type_of(&scope)?;
-                let other_param = other_param.type_of(&scope)?;
-                let _ = self_param.compatible_with(&other_param, scope)?;
-            }
-            let ret = self.ret.type_of(&scope)?;
-            let other_ret = other_ret.type_of(&scope)?;
-            return ret.compatible_with(&other_ret, scope);
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }
@@ -252,12 +266,15 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Chan(static_type_impl::ChanType(other_subtype))) =
-            other_type
-        {
-            let subtype = self.0.type_of(&scope)?;
-            let other_subtype = other_subtype.type_of(&scope)?;
-            return subtype.compatible_with(&other_subtype, scope);
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Chan(static_type_impl::ChanType(other_subtype)) = other_type.as_ref()
+            {
+                let subtype = self.0.type_of(&scope)?;
+                let other_subtype = other_subtype.type_of(&scope)?;
+                return subtype.compatible_with(&other_subtype, scope);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }
@@ -287,18 +304,21 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Tuple(static_type_impl::TupleType(other_type))) =
-            other_type
-        {
-            if self.0.len() != other_type.len() {
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Tuple(static_type_impl::TupleType(other_type)) = other_type.as_ref()
+            {
+                if self.0.len() != other_type.len() {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+                for (self_param, other_param) in self.0.iter().zip(other_type.iter()) {
+                    let self_param = self_param.type_of(&scope)?;
+                    let other_param = other_param.type_of(&scope)?;
+                    let _ = self_param.compatible_with(&other_param, scope)?;
+                }
+                return Ok(());
+            } else {
                 return Err(SemanticError::IncompatibleTypes);
             }
-            for (self_param, other_param) in self.0.iter().zip(other_type.iter()) {
-                let self_param = self_param.type_of(&scope)?;
-                let other_param = other_param.type_of(&scope)?;
-                let _ = self_param.compatible_with(&other_param, scope)?;
-            }
-            return Ok(());
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }
@@ -328,12 +348,16 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Address(static_type_impl::AddrType(other_subtype))) =
-            other_type
-        {
-            let subtype = self.0.type_of(&scope)?;
-            let other_subtype = other_subtype.type_of(&scope)?;
-            return subtype.compatible_with(&other_subtype, scope);
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Address(static_type_impl::AddrType(other_subtype)) =
+                other_type.as_ref()
+            {
+                let subtype = self.0.type_of(&scope)?;
+                let other_subtype = other_subtype.type_of(&scope)?;
+                return subtype.compatible_with(&other_subtype, scope);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }
@@ -363,29 +387,35 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        if let EitherType::Static(StaticType::Map(static_type_impl::MapType {
-            keys_type: other_key,
-            values_type: other_value,
-        })) = other_type
-        {
-            let other_key = match other_key {
-                static_type_impl::KeyType::Primitive(value) => {
-                    EitherType::Static(StaticType::Primitive(value))
-                }
-                static_type_impl::KeyType::Address(value) => {
-                    EitherType::Static(StaticType::Address(value))
-                }
-                static_type_impl::KeyType::Slice(value) => {
-                    EitherType::Static(StaticType::Slice(value))
-                }
-                static_type_impl::KeyType::Enum(value) => EitherType::User(UserType::Enum(value)),
-            };
+        if let EitherType::Static(other_type) = other_type {
+            if let StaticType::Map(static_type_impl::MapType {
+                keys_type: other_key,
+                values_type: other_value,
+            }) = other_type.as_ref()
+            {
+                let other_key = match other_key {
+                    static_type_impl::KeyType::Primitive(value) => {
+                        EitherType::Static(StaticType::Primitive(value.clone()).into())
+                    }
+                    static_type_impl::KeyType::Address(value) => {
+                        EitherType::Static(StaticType::Address(value.clone()).into())
+                    }
+                    static_type_impl::KeyType::Slice(value) => {
+                        EitherType::Static(StaticType::Slice(value.clone()).into())
+                    }
+                    static_type_impl::KeyType::Enum(value) => {
+                        EitherType::User(UserType::Enum(value.clone()).into())
+                    }
+                };
 
-            let _ = self.keys_type.compatible_with(&other_key, scope)?;
+                let _ = self.keys_type.compatible_with(&other_key, scope)?;
 
-            let subtype = self.values_type.type_of(&scope)?;
-            let other_subtype = other_value.type_of(&scope)?;
-            return subtype.compatible_with(&other_subtype, scope);
+                let subtype = self.values_type.type_of(&scope)?;
+                let other_subtype = other_value.type_of(&scope)?;
+                return subtype.compatible_with(&other_subtype, scope);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
         } else {
             return Err(SemanticError::IncompatibleTypes);
         }

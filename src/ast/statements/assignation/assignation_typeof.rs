@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Assignation<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit()))
+        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {

@@ -14,8 +14,8 @@ use super::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
-    vars: HashMap<ID, Var>,
-    types: HashMap<ID, UserType>,
+    vars: HashMap<ID, Rc<Var>>,
+    types: HashMap<ID, Rc<UserType>>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,7 +108,7 @@ impl ScopeApi for Scope {
                 general: _,
                 data,
             } => {
-                data.types.insert(id.clone(), reg);
+                data.types.insert(id.clone(), reg.into());
                 Ok(())
             }
             Scope::General {
@@ -116,7 +116,7 @@ impl ScopeApi for Scope {
                 events: _,
                 channels: _,
             } => {
-                data.types.insert(id.clone(), reg);
+                data.types.insert(id.clone(), reg.into());
                 Ok(())
             }
         }
@@ -129,11 +129,11 @@ impl ScopeApi for Scope {
     fn register_var(&mut self, reg: Self::Var) -> Result<(), crate::semantic::SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.vars.insert(reg.id.clone(), reg);
+                data.vars.insert(reg.id.clone(), reg.into());
                 Ok(())
             }
             Scope::General { data, .. } => {
-                data.vars.insert(reg.id.clone(), reg);
+                data.vars.insert(reg.id.clone(), reg.into());
                 Ok(())
             }
         }
@@ -143,7 +143,7 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<Self::Var, crate::semantic::SemanticError> {
+    fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, crate::semantic::SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -181,7 +181,7 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<Self::UserType, crate::semantic::SemanticError> {
+    fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, crate::semantic::SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -257,7 +257,7 @@ impl ScopeApi for MockScope {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError> {
+    fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, SemanticError> {
         todo!()
     }
 
@@ -265,7 +265,7 @@ impl ScopeApi for MockScope {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<Self::UserType, SemanticError> {
+    fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, SemanticError> {
         todo!()
     }
 

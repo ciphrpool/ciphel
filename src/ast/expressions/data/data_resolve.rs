@@ -531,7 +531,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
         Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
-        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.id)?;
+        let user_type = borrowed_scope.find_type(&self.id)?;
         let user_type = user_type.type_of(&scope.borrow())?;
         for (field_name, expr) in &self.fields {
             let field_context = <EitherType<
@@ -585,7 +585,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
         Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
-        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.typename)?;
+        let user_type = borrowed_scope.find_type(&self.typename)?;
         let variant_type = user_type.get_variant(&self.variant);
         let Some(variant_type) = variant_type else {
             return Err(SemanticError::CantInferType);
@@ -642,7 +642,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
-        let user_type: <Scope as ScopeApi>::UserType = borrowed_scope.find_type(&self.typename)?;
+        let user_type = borrowed_scope.find_type(&self.typename)?;
         let Some(_) = user_type.get_variant(&self.value) else {
             return Err(SemanticError::IncorrectVariant);
         };
@@ -750,9 +750,9 @@ mod tests {
 
         let res = primitive.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Number,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -764,9 +764,9 @@ mod tests {
 
         let res = primitive.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Bool,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Bool).into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -782,7 +782,9 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Slice(SliceType::String))),
+            &Some(EitherType::Static(
+                StaticType::Slice(SliceType::String).into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -795,12 +797,15 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
-                2,
-                Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Number,
-                ))),
-            )))),
+            &Some(EitherType::Static(
+                StaticType::Slice(SliceType::List(
+                    2,
+                    Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                ))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -813,9 +818,9 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Primitive(
-                PrimitiveType::Bool,
-            ))),
+            &Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Bool).into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -824,12 +829,15 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
-                2,
-                Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Bool,
-                ))),
-            )))),
+            &Some(EitherType::Static(
+                StaticType::Slice(SliceType::List(
+                    2,
+                    Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Bool).into(),
+                    )),
+                ))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -838,12 +846,15 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Slice(SliceType::List(
-                4,
-                Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Number,
-                ))),
-            )))),
+            &Some(EitherType::Static(
+                StaticType::Slice(SliceType::List(
+                    4,
+                    Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                ))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -865,9 +876,12 @@ mod tests {
 
         let res = vector.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-            ))))),
+            &Some(EitherType::Static(
+                StaticType::Vec(VecType(Box::new(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number).into(),
+                ))))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -880,9 +894,12 @@ mod tests {
 
         let res = vector.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Vec(VecType(Box::new(
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
-            ))))),
+            &Some(EitherType::Static(
+                StaticType::Vec(VecType(Box::new(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Bool).into(),
+                ))))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -896,7 +913,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -906,7 +923,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             variable_type
         );
 
@@ -916,9 +933,12 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Vec(VecType(Box::new(
-                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                )))),
+                type_sig: EitherType::Static(
+                    StaticType::Vec(VecType(Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    ))))
+                    .into(),
+                ),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -928,7 +948,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             variable_type
         );
 
@@ -938,21 +958,31 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "point".into(),
-                type_sig: EitherType::User(UserType::Struct(user_type_impl::Struct {
-                    id: "Point".into(),
-                    fields: {
-                        let mut res = HashMap::new();
-                        res.insert(
-                            "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                        );
-                        res.insert(
-                            "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                        );
-                        res
-                    },
-                })),
+                type_sig: EitherType::User(
+                    UserType::Struct(
+                        user_type_impl::Struct {
+                            id: "Point".into(),
+                            fields: {
+                                let mut res = HashMap::new();
+                                res.insert(
+                                    "x".into(),
+                                    EitherType::Static(
+                                        StaticType::Primitive(PrimitiveType::Number).into(),
+                                    ),
+                                );
+                                res.insert(
+                                    "y".into(),
+                                    EitherType::Static(
+                                        StaticType::Primitive(PrimitiveType::Number).into(),
+                                    ),
+                                );
+                                res
+                            },
+                        }
+                        .into(),
+                    )
+                    .into(),
+                ),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -962,7 +992,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             variable_type
         )
     }
@@ -975,7 +1005,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
         let res = address.resolve(&scope, &None, &());
@@ -985,9 +1015,12 @@ mod tests {
         assert!(address_type.is_ok());
         let address_type = address_type.unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Address(AddrType(Box::new(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number)
-            ))))),
+            EitherType::Static(
+                StaticType::Address(AddrType(Box::new(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number).into()
+                ))))
+                .into()
+            ),
             address_type
         )
     }
@@ -1000,9 +1033,12 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "chan1".into(),
-                type_sig: EitherType::Static(StaticType::Chan(ChanType(Box::new(
-                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                )))),
+                type_sig: EitherType::Static(
+                    StaticType::Chan(ChanType(Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    ))))
+                    .into(),
+                ),
             })
             .unwrap();
 
@@ -1022,7 +1058,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "chan1".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
             .unwrap();
 
@@ -1043,10 +1079,13 @@ mod tests {
 
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
-            ])))),
+            &Some(EitherType::Static(
+                StaticType::Tuple(TupleType(vec![
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                ]))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -1058,21 +1097,27 @@ mod tests {
         let scope = Scope::new();
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Char)),
-            ])))),
+            &Some(EitherType::Static(
+                StaticType::Tuple(TupleType(vec![
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                ]))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
 
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Tuple(TupleType(vec![
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-                EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
-            ])))),
+            &Some(EitherType::Static(
+                StaticType::Tuple(TupleType(vec![
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                    EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                ]))
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -1087,12 +1132,15 @@ mod tests {
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Map(MapType {
-                keys_type: KeyType::Slice(SliceType::String),
-                values_type: Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Number,
-                ))),
-            }))),
+            &Some(EitherType::Static(
+                StaticType::Map(MapType {
+                    keys_type: KeyType::Slice(SliceType::String),
+                    values_type: Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                })
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_ok());
@@ -1105,24 +1153,30 @@ mod tests {
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Map(MapType {
-                keys_type: KeyType::Slice(SliceType::String),
-                values_type: Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Bool,
-                ))),
-            }))),
+            &Some(EitherType::Static(
+                StaticType::Map(MapType {
+                    keys_type: KeyType::Slice(SliceType::String),
+                    values_type: Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Bool).into(),
+                    )),
+                })
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(StaticType::Map(MapType {
-                keys_type: KeyType::Primitive(PrimitiveType::Number),
-                values_type: Box::new(EitherType::Static(StaticType::Primitive(
-                    PrimitiveType::Number,
-                ))),
-            }))),
+            &Some(EitherType::Static(
+                StaticType::Map(MapType {
+                    keys_type: KeyType::Primitive(PrimitiveType::Number),
+                    values_type: Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                })
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_err());
@@ -1144,11 +1198,11 @@ mod tests {
                         let mut res = HashMap::new();
                         res.insert(
                             "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
                         );
                         res.insert(
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
                         );
                         res
                     },
@@ -1178,11 +1232,11 @@ mod tests {
                         let mut res = HashMap::new();
                         res.insert(
                             "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
                         );
                         res.insert(
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Bool)),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
                         );
                         res
                     },
@@ -1216,15 +1270,15 @@ mod tests {
                                     let mut res = HashMap::new();
                                     res.insert(
                                         "x".into(),
-                                        EitherType::Static(StaticType::Primitive(
-                                            PrimitiveType::Number,
-                                        )),
+                                        EitherType::Static(
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                        ),
                                     );
                                     res.insert(
                                         "y".into(),
-                                        EitherType::Static(StaticType::Primitive(
-                                            PrimitiveType::Number,
-                                        )),
+                                        EitherType::Static(
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                        ),
                                     );
                                     res
                                 },
@@ -1238,9 +1292,9 @@ mod tests {
                                     let mut res = HashMap::new();
                                     res.insert(
                                         "x".into(),
-                                        EitherType::Static(StaticType::Primitive(
-                                            PrimitiveType::Number,
-                                        )),
+                                        EitherType::Static(
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                        ),
                                     );
                                     res
                                 },
@@ -1282,15 +1336,15 @@ mod tests {
                                     let mut res = HashMap::new();
                                     res.insert(
                                         "x".into(),
-                                        EitherType::Static(StaticType::Primitive(
-                                            PrimitiveType::Number,
-                                        )),
+                                        EitherType::Static(
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                        ),
                                     );
                                     res.insert(
                                         "y".into(),
-                                        EitherType::Static(StaticType::Primitive(
-                                            PrimitiveType::Bool,
-                                        )),
+                                        EitherType::Static(
+                                            StaticType::Primitive(PrimitiveType::Bool).into(),
+                                        ),
                                     );
                                     res
                                 },

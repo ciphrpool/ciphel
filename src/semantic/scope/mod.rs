@@ -154,8 +154,8 @@ where
     fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError>;
     fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<Self::Var, SemanticError>;
+    fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, SemanticError>;
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;
-    fn find_type(&self, id: &ID) -> Result<Self::UserType, SemanticError>;
+    fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, SemanticError>;
     fn find_event(&self) -> Result<&Self::Event, SemanticError>;
 }
