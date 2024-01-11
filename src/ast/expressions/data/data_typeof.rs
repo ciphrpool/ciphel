@@ -2,7 +2,8 @@ use std::cell::Ref;
 
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
+    ListAccess, Map, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
+    Vector,
 };
 use crate::ast::types::PrimitiveType;
 use crate::semantic::scope::type_traits::TypeChecking;
@@ -44,7 +45,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
     }
 }
 
-impl Variable {
+impl<InnerScope: ScopeApi> Variable<InnerScope> {
     fn typeof_based<Scope>(
         &self,
         context: &EitherType<Scope::UserType, Scope::StaticType>,
@@ -73,11 +74,12 @@ impl Variable {
                     Ok(var_type)
                 }
             }
+            Variable::NumAccess(_) => todo!(),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
+impl<Scope: ScopeApi> TypeOf<Scope> for Variable<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -90,6 +92,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Variable {
             Variable::Var(value) => value.type_of(&scope),
             Variable::FieldAccess(value) => value.type_of(&scope),
             Variable::ListAccess(value) => value.type_of(&scope),
+            Variable::NumAccess(value) => value.type_of(&scope),
         }
     }
 }
@@ -108,7 +111,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for VarID {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess {
+impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -122,7 +125,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess {
+impl<Scope: ScopeApi> TypeOf<Scope> for NumAccess<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -133,22 +136,28 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess {
     {
         let var_type = self.var.type_of(&scope)?;
 
-        match <EitherType<
+        <EitherType<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_item(&var_type) {
-            Some(res) => Ok(res),
-            None => {
-                let Some(res) = <EitherType<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_nth(&var_type,&self.index) else {
-                    return Err(SemanticError::CantInferType);
-                };
+        > as GetSubTypes<Scope>>::get_nth(&var_type,&self.index).ok_or(SemanticError::ExpectedIndexable)
+    }
+}
 
-                Ok(res)
-            },
-        }
+impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess<Scope> {
+    fn type_of(
+        &self,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let var_type = self.var.type_of(&scope)?;
+
+        <EitherType<
+            <Scope as ScopeApi>::UserType,
+            <Scope as ScopeApi>::StaticType,
+        > as GetSubTypes<Scope>>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
     }
 }
 
@@ -313,7 +322,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Address {
+impl<Scope: ScopeApi> TypeOf<Scope> for Address<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -328,7 +337,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Address {
             .map(|value| EitherType::Static(value.into()))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess {
+impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

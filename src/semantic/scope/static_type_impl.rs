@@ -414,6 +414,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Address(AddrType(value)) => {
                 <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_key(value)
             }
+            StaticType::Slice(_) => Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
+            StaticType::Vec(_) => Some(EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number).into(),
+            )),
             _ => None,
         }
     }
@@ -509,10 +515,10 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
     fn is_indexable(&self) -> bool {
         match self {
             StaticType::Primitive(_) => false,
-            StaticType::Slice(_) => true,
-            StaticType::Vec(_) => true,
+            StaticType::Slice(_) => false,
+            StaticType::Vec(_) => false,
             StaticType::Fn(_) => false,
-            StaticType::Chan(_) => true,
+            StaticType::Chan(_) => false,
             StaticType::Tuple(_) => true,
             StaticType::Unit => false,
             StaticType::Any => false,

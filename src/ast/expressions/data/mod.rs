@@ -20,9 +20,9 @@ pub enum Data<InnerScope: ScopeApi> {
     Closure(Closure<InnerScope>),
     Chan(Channel<InnerScope>),
     Tuple(Tuple<InnerScope>),
-    Address(Address),
-    PtrAccess(PtrAccess),
-    Variable(Variable),
+    Address(Address<InnerScope>),
+    PtrAccess(PtrAccess<InnerScope>),
+    Variable(Variable<InnerScope>),
     Unit,
     Map(Map<InnerScope>),
     Struct(Struct<InnerScope>),
@@ -31,25 +31,32 @@ pub enum Data<InnerScope: ScopeApi> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Variable {
+pub enum Variable<InnerScope: ScopeApi> {
     Var(VarID),
-    FieldAccess(FieldAccess),
-    ListAccess(ListAccess),
+    FieldAccess(FieldAccess<InnerScope>),
+    NumAccess(NumAccess<InnerScope>),
+    ListAccess(ListAccess<InnerScope>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarID(pub ID);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ListAccess {
-    var: Box<Variable>,
-    index: usize,
+pub struct ListAccess<InnerScope: ScopeApi> {
+    var: Box<Variable<InnerScope>>,
+    index: Box<Expression<InnerScope>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FieldAccess {
-    pub var: Box<Variable>,
-    pub field: Box<Variable>,
+pub struct FieldAccess<InnerScope: ScopeApi> {
+    pub var: Box<Variable<InnerScope>>,
+    pub field: Box<Variable<InnerScope>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumAccess<InnerScope: ScopeApi> {
+    pub var: Box<Variable<InnerScope>>,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,19 +103,19 @@ pub enum ClosureParam {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Address(pub Variable);
+pub struct Address<InnerScope: ScopeApi>(pub Variable<InnerScope>);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PtrAccess(pub Variable);
+pub struct PtrAccess<InnerScope: ScopeApi>(pub Variable<InnerScope>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Channel<InnerScope: ScopeApi> {
     Receive {
-        addr: Address,
+        addr: Address<InnerScope>,
         timeout: usize,
     },
     Send {
-        addr: Address,
+        addr: Address<InnerScope>,
         msg: Box<Expression<InnerScope>>,
     },
     Init(String),
@@ -148,6 +155,6 @@ pub enum Map<InnerScope: ScopeApi> {
 pub enum KeyData<InnerScope: ScopeApi> {
     Primitive(Primitive),
     Slice(Slice<InnerScope>),
-    Address(Address),
+    Address(Address<InnerScope>),
     Enum(Enum),
 }

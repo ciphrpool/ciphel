@@ -33,7 +33,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Assignee {
+impl<Scope: ScopeApi> TypeOf<Scope> for Assignee<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,

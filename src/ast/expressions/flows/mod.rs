@@ -64,6 +64,6 @@ pub struct TryExpr<InnerScope: ScopeApi> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnCall<InnerScope: ScopeApi> {
-    pub fn_var: Variable,
+    pub fn_var: Variable<InnerScope>,
     pub params: Vec<Expression<InnerScope>>,
 }

@@ -1,9 +1,6 @@
 use crate::{
-    ast::{
-        types::{Type},
-        utils::strings::ID,
-    },
-    semantic::{scope::ScopeApi},
+    ast::{types::Type, utils::strings::ID},
+    semantic::scope::ScopeApi,
 };
 
 use super::{declaration::TypedVar, scope::Scope};

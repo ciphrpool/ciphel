@@ -40,7 +40,10 @@ pub enum ForIterator<InnerScope: ScopeApi> {
     Id(ID),
     Vec(Vector<InnerScope>),
     Slice(Slice<InnerScope>),
-    Receive { addr: Address, timeout: usize },
+    Receive {
+        addr: Address<InnerScope>,
+        timeout: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

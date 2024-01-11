@@ -61,7 +61,7 @@ impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     }
 }
 
-impl TryParse for Assignee {
+impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
     /*
      * @desc Parse assigne
      *

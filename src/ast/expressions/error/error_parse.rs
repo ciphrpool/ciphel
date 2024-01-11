@@ -1,16 +1,12 @@
-use crate::{
-    ast::{
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{wst},
-        },
-        TryParse,
+use crate::ast::{
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::wst,
     },
+    TryParse,
 };
-use nom::{
-    combinator::{value},
-};
+use nom::combinator::value;
 
 use super::Error;
 
@@ -21,7 +17,6 @@ impl TryParse for Error {
 }
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
 

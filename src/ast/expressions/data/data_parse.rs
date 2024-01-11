@@ -21,15 +21,17 @@ use crate::{
 };
 use nom::{
     branch::alt,
+    character::complete::digit1,
     combinator::{map, opt, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
+use nom_supreme::error::ErrorTree;
 
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
-    Vector,
+    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
+    VarID, Variable, Vector,
 };
 impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
@@ -53,17 +55,17 @@ impl<Scope: ScopeApi> TryParse for Data<Scope> {
 }
 
 impl VarID {
-    fn parse(input: Span) -> PResult<Variable> {
+    fn parse<InnerScope: ScopeApi>(input: Span) -> PResult<Variable<InnerScope>> {
         map(parse_id, |id| Variable::Var(VarID(id)))(input)
     }
 }
 
-impl ListAccess {
-    fn parse(input: Span) -> PResult<Variable> {
+impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
+    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = VarID::parse(input)?;
         let (remainder, index) = opt(delimited(
             wst(lexem::SQ_BRA_O),
-            parse_number,
+            Expression::parse,
             wst(lexem::SQ_BRA_C),
         ))(remainder)?;
 
@@ -72,7 +74,7 @@ impl ListAccess {
                 remainder,
                 Variable::ListAccess(ListAccess {
                     var: Box::new(var),
-                    index: index.unsigned_abs() as usize,
+                    index: Box::new(index),
                 }),
             ))
         } else {
@@ -81,12 +83,30 @@ impl ListAccess {
     }
 }
 
-impl FieldAccess {
-    fn parse(input: Span) -> PResult<Variable> {
+impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
+    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = ListAccess::parse(input)?;
         let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
 
         if let Some(_index) = index {
+            let (remainder, num) = opt(digit1)(remainder)?;
+            if let Some(try_num) = num {
+                let index = try_num.parse::<usize>();
+                if index.is_err() {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: try_num,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+                let index = index.unwrap();
+                return Ok((
+                    remainder,
+                    Variable::NumAccess(NumAccess {
+                        var: Box::new(var),
+                        index,
+                    }),
+                ));
+            }
             let (remainder, right) = FieldAccess::parse(remainder)?;
             Ok((
                 remainder,
@@ -101,7 +121,7 @@ impl FieldAccess {
     }
 }
 
-impl TryParse for Variable {
+impl<InnerScope: ScopeApi> TryParse for Variable<InnerScope> {
     /*
      * @desc Parse variable
      *
@@ -275,7 +295,7 @@ impl TryParse for ClosureParam {
     }
 }
 
-impl TryParse for Address {
+impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
     /*
      * @desc Parse pointer address
      *
@@ -289,7 +309,7 @@ impl TryParse for Address {
     }
 }
 
-impl TryParse for PtrAccess {
+impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
     /*
      * @desc Parse pointer access
      *
@@ -637,7 +657,7 @@ mod tests {
 
     #[test]
     fn valid_address() {
-        let res = Address::parse("&x".into());
+        let res = Address::<MockScope>::parse("&x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Address(Variable::Var(VarID("x".into()))), value);
@@ -645,7 +665,7 @@ mod tests {
 
     #[test]
     fn valid_access() {
-        let res = PtrAccess::parse("*x".into());
+        let res = PtrAccess::<MockScope>::parse("*x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(PtrAccess(Variable::Var(VarID("x".into()))), value);
@@ -747,23 +767,25 @@ mod tests {
 
     #[test]
     fn valid_variable() {
-        let res = Variable::parse("x".into());
+        let res = Variable::<MockScope>::parse("x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Variable::Var(VarID("x".into())), value);
 
-        let res = Variable::parse("x[3]".into());
+        let res = Variable::<MockScope>::parse("x[3]".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Variable::ListAccess(ListAccess {
                 var: Box::new(Variable::Var(VarID("x".into()))),
-                index: 3
+                index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(3)
+                ))))
             }),
             value
         );
 
-        let res = Variable::parse("x.y".into());
+        let res = Variable::<MockScope>::parse("x.y".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -773,7 +795,7 @@ mod tests {
             }),
             value
         );
-        let res = Variable::parse("x.y.z".into());
+        let res = Variable::<MockScope>::parse("x.y.z".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -786,7 +808,7 @@ mod tests {
             }),
             value
         );
-        let res = Variable::parse("x.y[3]".into());
+        let res = Variable::<MockScope>::parse("x.y[3]".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -794,19 +816,23 @@ mod tests {
                 var: Box::new(Variable::Var(VarID("x".into()))),
                 field: Box::new(Variable::ListAccess(ListAccess {
                     var: Box::new(Variable::Var(VarID("y".into()))),
-                    index: 3
+                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(3)
+                    ))))
                 }))
             }),
             value
         );
-        let res = Variable::parse("x[3].y".into());
+        let res = Variable::<MockScope>::parse("x[3].y".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
                 var: Box::new(Variable::ListAccess(ListAccess {
                     var: Box::new(Variable::Var(VarID("x".into()))),
-                    index: 3
+                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(3)
+                    ))))
                 })),
                 field: Box::new(Variable::Var(VarID("y".into())))
             }),

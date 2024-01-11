@@ -3,7 +3,7 @@ use crate::{
         flows::{FnCall, Pattern},
         Expression,
     },
-    semantic::{scope::ScopeApi},
+    semantic::scope::ScopeApi,
 };
 
 use super::scope::Scope;

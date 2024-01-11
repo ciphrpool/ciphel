@@ -66,7 +66,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Assignee {
+impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();

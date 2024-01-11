@@ -1,7 +1,7 @@
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
-    Vector,
+    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
+    VarID, Variable, Vector,
 };
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
@@ -42,40 +42,55 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     }
 }
 
-impl Variable {
-    fn resolve_based<Scope>(
+impl<InnerScope: ScopeApi> Variable<InnerScope> {
+    fn resolve_based(
         &self,
-        context: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+        scope: &Rc<RefCell<InnerScope>>,
+        context: &EitherType<InnerScope::UserType, InnerScope::StaticType>,
+    ) -> Result<EitherType<InnerScope::UserType, InnerScope::StaticType>, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
+        InnerScope: ScopeApi,
     {
         match self {
             Variable::Var(VarID(value)) => <EitherType<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_field(
+                <InnerScope as ScopeApi>::UserType,
+                <InnerScope as ScopeApi>::StaticType,
+            > as GetSubTypes<InnerScope>>::get_field(
                 context, value
             )
             .ok_or(SemanticError::UnknownField),
             Variable::FieldAccess(FieldAccess { var, field }) => {
-                let var_type = var.resolve_based::<Scope>(context)?;
-                field.resolve_based::<Scope>(&var_type)
+                let var_type = var.resolve_based(scope, context)?;
+                field.resolve_based(scope, &var_type)
             }
-            Variable::ListAccess(ListAccess { var, .. }) => {
-                let var_type = var.resolve_based::<Scope>(context)?;
-                if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_indexable(&var_type) {
+            Variable::ListAccess(ListAccess { var, index }) => {
+                let var_type = var.resolve_based(scope, context)?;
+                if !<EitherType<
+                    <InnerScope as ScopeApi>::UserType,
+                    <InnerScope as ScopeApi>::StaticType,
+                > as TypeChecking<InnerScope>>::is_iterable(&var_type)
+                {
                     Err(SemanticError::ExpectedIterable)
                 } else {
+                    let key_type =
+                        <EitherType<
+                            <InnerScope as ScopeApi>::UserType,
+                            <InnerScope as ScopeApi>::StaticType,
+                        > as GetSubTypes<InnerScope>>::get_key(&var_type);
+
+                    let _ = index.resolve(scope, &key_type, &())?;
+                    let index_type = index.type_of(&scope.borrow())?;
+                    let _ = key_type.compatible_with(&index_type, &scope.borrow())?;
                     Ok(var_type)
                 }
             }
+            Variable::NumAccess(_) => todo!(),
         }
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Variable {
+impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
@@ -93,6 +108,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable {
             Variable::Var(value) => value.resolve(scope, context, extra),
             Variable::FieldAccess(value) => value.resolve(scope, context, extra),
             Variable::ListAccess(value) => value.resolve(scope, context, extra),
+            Variable::NumAccess(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -116,7 +132,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess {
+impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
     type Output = ();
 
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
@@ -133,12 +149,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess {
     {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
-        let _ = self.field.resolve_based::<Scope>(&var_type)?;
+        let _ = self.field.resolve_based(scope, &var_type)?;
         Ok(())
     }
 }
-
-impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
+impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     type Output = ();
 
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
@@ -157,10 +172,52 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess {
         let var_type = self.var.type_of(&scope.borrow())?;
         if !<
             EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-         as TypeChecking<Scope>>::is_indexable(&var_type)
+        as TypeChecking<Scope>>::is_indexable(&var_type)
         {
             Err(SemanticError::ExpectedIndexable)
         } else {
+            Ok(())
+        }
+    }
+}
+
+impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
+    type Output = ();
+
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let _ = self.var.resolve(scope, context, extra)?;
+        let var_type = self.var.type_of(&scope.borrow())?;
+        if !<
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            as TypeChecking<Scope>>::is_channel(&var_type)
+        && !<
+            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            as TypeChecking<Scope>>::is_iterable(&var_type)
+        {
+            Err(SemanticError::ExpectedIndexable)
+        } else {
+
+            let key_type = match context {
+                Some(context) => <EitherType<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_key(context),
+                None => None,
+            };
+            let _ = self.index.resolve(scope, &key_type, extra)?;
+            let index_type = self.index.type_of(&scope.borrow())?;
+            let _ = key_type.compatible_with(&index_type, &scope.borrow())?;
             Ok(())
         }
     }
@@ -446,7 +503,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Address {
+impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
@@ -463,7 +520,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address {
         self.0.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess {
+impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
@@ -937,6 +994,61 @@ mod tests {
                     StaticType::Vec(VecType(Box::new(EitherType::Static(
                         StaticType::Primitive(PrimitiveType::Number).into(),
                     ))))
+                    .into(),
+                ),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable = Variable::parse("x[10 + 10]".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(
+                    StaticType::Vec(VecType(Box::new(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    ))))
+                    .into(),
+                ),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable = Variable::parse("x[\"Test\"]".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(
+                    StaticType::Map(MapType {
+                        keys_type: KeyType::Slice(SliceType::String),
+                        values_type: Box::new(EitherType::Static(
+                            StaticType::Primitive(PrimitiveType::Number).into(),
+                        )),
+                    })
+                    .into(),
+                ),
+            })
+            .unwrap();
+        let res = variable.resolve(&scope, &None, &());
+        assert!(res.is_ok());
+
+        let variable = Variable::parse("x.0".into()).unwrap().1;
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                id: "x".into(),
+                type_sig: EitherType::Static(
+                    StaticType::Tuple(TupleType(vec![
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                    ]))
                     .into(),
                 ),
             })

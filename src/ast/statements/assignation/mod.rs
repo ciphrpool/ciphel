@@ -3,7 +3,7 @@ use crate::{
         data::{PtrAccess, Variable},
         Expression,
     },
-    semantic::{scope::ScopeApi},
+    semantic::scope::ScopeApi,
 };
 
 use super::scope::Scope;
@@ -13,7 +13,7 @@ pub mod assignation_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Assignation<InnerScope: ScopeApi> {
-    left: Assignee,
+    left: Assignee<InnerScope>,
     right: AssignValue<InnerScope>,
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,7 @@ pub enum AssignValue<InnerScope: ScopeApi> {
     Expr(Box<Expression<InnerScope>>),
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum Assignee {
-    Variable(Variable),
-    PtrAccess(PtrAccess),
+pub enum Assignee<InnerScope: ScopeApi> {
+    Variable(Variable<InnerScope>),
+    PtrAccess(PtrAccess<InnerScope>),
 }
