@@ -87,3 +87,7 @@ pub trait MergeType<Scope: ScopeApi> {
     where
         Other: TypeOf<Scope>;
 }
+
+pub trait SizeOf {
+    fn size_of(&self) -> usize;
+}

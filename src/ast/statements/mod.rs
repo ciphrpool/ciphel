@@ -207,7 +207,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
 mod tests {
     use crate::semantic::scope::{
         scope_impl::{self, MockScope},
-        static_type_impl::{PrimitiveType, StaticType},
+        static_types::{PrimitiveType, StaticType},
     };
 
     use super::*;

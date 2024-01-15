@@ -222,7 +222,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl,
-            static_type_impl::{FnType, PrimitiveType, SliceType, StaticType},
+            static_types::{FnType, PrimitiveType, SliceType, StaticType},
             user_type_impl::{Enum, Struct, Union, UserType},
         },
     };
@@ -252,15 +252,15 @@ mod tests {
             UserType::Struct(Struct {
                 id: "Point".into(),
                 fields: {
-                    let mut res = HashMap::new();
-                    res.insert(
+                    let mut res = Vec::new();
+                    res.push((
                         "x".into(),
                         EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
-                    );
-                    res.insert(
+                    ));
+                    res.push((
                         "y".into(),
                         EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
-                    );
+                    ));
                     res
                 },
             }),
@@ -290,15 +290,15 @@ mod tests {
                 UserType::Struct(Struct {
                     id: "Point".into(),
                     fields: {
-                        let mut res = HashMap::new();
-                        res.insert(
+                        let mut res = Vec::new();
+                        res.push((
                             "x".into(),
                             EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
-                        );
-                        res.insert(
+                        ));
+                        res.push((
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
-                        );
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                        ));
                         res
                     },
                 }),
@@ -313,57 +313,53 @@ mod tests {
             UserType::Struct(Struct {
                 id: "Line".into(),
                 fields: {
-                    let mut res = HashMap::new();
-                    res.insert(
+                    let mut res = Vec::new();
+                    res.push((
                         "start".into(),
                         EitherType::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
-                                fields: {
-                                    let mut res = HashMap::new();
-                                    res.insert(
+                                fields: vec![
+                                    (
                                         "x".into(),
                                         EitherType::Static(
                                             StaticType::Primitive(PrimitiveType::Number).into(),
                                         ),
-                                    );
-                                    res.insert(
+                                    ),
+                                    (
                                         "y".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Bool).into(),
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
                                         ),
-                                    );
-                                    res
-                                },
+                                    ),
+                                ],
                             })
                             .into(),
                         ),
-                    );
-                    res.insert(
+                    ));
+                    res.push((
                         "end".into(),
                         EitherType::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
-                                fields: {
-                                    let mut res = HashMap::new();
-                                    res.insert(
+                                fields: vec![
+                                    (
                                         "x".into(),
                                         EitherType::Static(
                                             StaticType::Primitive(PrimitiveType::Number).into(),
                                         ),
-                                    );
-                                    res.insert(
+                                    ),
+                                    (
                                         "y".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Bool).into(),
+                                            StaticType::Primitive(PrimitiveType::Number).into(),
                                         ),
-                                    );
-                                    res
-                                },
+                                    ),
+                                ],
                             })
                             .into(),
                         ),
-                    );
+                    ));
                     res
                 },
             }),
@@ -405,19 +401,19 @@ mod tests {
                         Struct {
                             id: "Point".into(),
                             fields: {
-                                let mut res = HashMap::new();
-                                res.insert(
+                                let mut res = Vec::new();
+                                res.push((
                                     "x".into(),
                                     EitherType::Static(
                                         StaticType::Primitive(PrimitiveType::Number).into(),
                                     ),
-                                );
-                                res.insert(
+                                ));
+                                res.push((
                                     "y".into(),
                                     EitherType::Static(
                                         StaticType::Primitive(PrimitiveType::Number).into(),
                                     ),
-                                );
+                                ));
                                 res
                             },
                         },
@@ -427,13 +423,13 @@ mod tests {
                         Struct {
                             id: "Axe".into(),
                             fields: {
-                                let mut res = HashMap::new();
-                                res.insert(
+                                let mut res = Vec::new();
+                                res.push((
                                     "x".into(),
                                     EitherType::Static(
                                         StaticType::Primitive(PrimitiveType::Number).into(),
                                     ),
-                                );
+                                ));
                                 res
                             },
                         },

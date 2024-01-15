@@ -8,7 +8,7 @@ use std::{
 use crate::{ast::utils::strings::ID, semantic::SemanticError};
 
 use super::{
-    chan_impl::Chan, event_impl::Event, static_type_impl::StaticType, user_type_impl::UserType,
+    chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
     var_impl::Var, ScopeApi,
 };
 

@@ -43,7 +43,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl,
-            static_type_impl::{PrimitiveType, StaticType},
+            static_types::{PrimitiveType, StaticType},
         },
     };
 

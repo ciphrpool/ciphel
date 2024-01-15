@@ -261,7 +261,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl::Scope,
-            static_type_impl::{PrimitiveType, StaticType},
+            static_types::{PrimitiveType, StaticType},
             user_type_impl::{Struct, UserType},
         },
     };
@@ -338,15 +338,15 @@ mod tests {
                 UserType::Struct(Struct {
                     id: "Point".into(),
                     fields: {
-                        let mut res = HashMap::new();
-                        res.insert(
+                        let mut res = Vec::new();
+                        res.push((
                             "x".into(),
                             EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
-                        );
-                        res.insert(
+                        ));
+                        res.push((
                             "y".into(),
                             EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
-                        );
+                        ));
                         res
                     },
                 }),

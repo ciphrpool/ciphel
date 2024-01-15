@@ -7,7 +7,7 @@ use crate::{
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
             ScopeApi,
         },
-        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+        CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf,
     },
 };
 
@@ -46,6 +46,15 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for EitherType<Scope::UserType, Scop
         match self {
             EitherType::Static(static_type) => static_type.compatible_with(other, scope),
             EitherType::User(user_type) => user_type.compatible_with(other, scope),
+        }
+    }
+}
+
+impl<S: SizeOf, U: SizeOf> SizeOf for EitherType<S, U> {
+    fn size_of(&self) -> usize {
+        match self {
+            EitherType::Static(value) => value.size_of(),
+            EitherType::User(value) => value.size_of(),
         }
     }
 }

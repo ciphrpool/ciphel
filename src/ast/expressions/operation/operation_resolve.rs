@@ -392,7 +392,7 @@ mod tests {
         },
         semantic::scope::{
             scope_impl::Scope,
-            static_type_impl::{PrimitiveType, SliceType, StaticType},
+            static_types::{PrimitiveType, SliceType, StaticType},
             var_impl::Var,
         },
     };

@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    static_type_impl::StaticType,
+    static_types::StaticType,
     type_traits::{GetSubTypes, TypeChecking},
     user_type_impl::UserType,
     BuildVar, ScopeApi,

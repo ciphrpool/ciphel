@@ -5,7 +5,7 @@ use crate::{
     semantic::{EitherType, SemanticError, TypeOf},
 };
 
-use super::{static_type_impl::StaticType, ScopeApi};
+use super::{static_types::StaticType, ScopeApi};
 
 pub trait GetSubTypes<Scope: ScopeApi> {
     fn get_nth(&self, _n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {

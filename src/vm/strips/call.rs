@@ -1,2 +1,2 @@
 #[derive(Debug, Clone)]
-pub struct Scheduler {}
+pub struct Call {}

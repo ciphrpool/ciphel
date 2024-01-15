@@ -8,11 +8,11 @@ use crate::ast::{statements::definition, types, utils::strings::ID};
 
 use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
 
-use super::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf};
+use super::{CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;
-pub mod static_type_impl;
+pub mod static_types;
 pub mod type_traits;
 pub mod user_type_impl;
 pub mod var_impl;
@@ -129,7 +129,8 @@ where
         + TypeChecking<Self>
         + OperandMerging<Self>
         + IsEnum
-        + MergeType<Self>;
+        + MergeType<Self>
+        + SizeOf;
     type StaticType: Clone
         + Debug
         + CompatibleWith<Self>
@@ -138,7 +139,8 @@ where
         + GetSubTypes<Self>
         + TypeChecking<Self>
         + OperandMerging<Self>
-        + MergeType<Self>;
+        + MergeType<Self>
+        + SizeOf;
 
     type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
     type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;

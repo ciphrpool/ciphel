@@ -128,7 +128,7 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::scope::scope_impl::Scope;
-    use crate::semantic::scope::static_type_impl::{PrimitiveType, StaticType};
+    use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
     use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {

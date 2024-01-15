@@ -9,11 +9,11 @@ use crate::{
         statements::definition::{self},
         utils::strings::ID,
     },
-    semantic::{CompatibleWith, EitherType, MergeType, SemanticError, TypeOf},
+    semantic::{CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf},
 };
 
 use super::{
-    static_type_impl::StaticType,
+    static_types::StaticType,
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
     BuildUserType, ScopeApi,
 };
@@ -28,7 +28,7 @@ pub enum UserType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub id: ID,
-    pub fields: HashMap<ID, EitherType<UserType, StaticType>>,
+    pub fields: Vec<(ID, EitherType<UserType, StaticType>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +100,11 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> BuildUserType<Sc
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scope> for UserType {
     fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
         match self {
-            UserType::Struct(value) => value.fields.get(field_id).map(|field| field.clone()),
+            UserType::Struct(value) => value
+                .fields
+                .iter()
+                .find(|(id, _)| id == field_id)
+                .map(|(_, field)| field.clone()),
             UserType::Enum(_) => None,
             UserType::Union(_) => None,
         }
@@ -193,6 +197,37 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
+impl SizeOf for UserType {
+    fn size_of(&self) -> usize {
+        match self {
+            UserType::Struct(value) => value.size_of(),
+            UserType::Enum(value) => value.size_of(),
+            UserType::Union(value) => value.size_of(),
+        }
+    }
+}
+
+impl SizeOf for Struct {
+    fn size_of(&self) -> usize {
+        self.fields.iter().map(|(_, field)| field.size_of()).sum()
+    }
+}
+impl SizeOf for Union {
+    fn size_of(&self) -> usize {
+        8 + self
+            .variants
+            .iter()
+            .map(|(_, variant)| variant.size_of())
+            .max()
+            .unwrap_or(0)
+    }
+}
+impl SizeOf for Enum {
+    fn size_of(&self) -> usize {
+        8
+    }
+}
+
 impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
     for Struct
 {
@@ -211,7 +246,8 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_key, self_field) in self.fields.iter() {
-            if let Some(other_field) = other_type.fields.get(self_key) {
+            if let Some((_, other_field)) = other_type.fields.iter().find(|(id, _)| id == self_key)
+            {
                 let _ = self_field.compatible_with(other_field, scope)?;
             } else {
                 return Err(SemanticError::IncompatibleTypes);
@@ -244,7 +280,9 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
                     return Err(SemanticError::IncompatibleTypes);
                 }
                 for (self_key, self_field) in self_variant.fields.iter() {
-                    if let Some(other_field) = other_variant.fields.get(self_key) {
+                    if let Some((_, other_field)) =
+                        other_variant.fields.iter().find(|(id, _)| id == self_key)
+                    {
                         let _ = self_field.compatible_with(other_field, scope)?;
                     } else {
                         return Err(SemanticError::IncompatibleTypes);
@@ -286,10 +324,10 @@ impl Struct {
         from: &definition::StructDef,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let mut fields = HashMap::new();
+        let mut fields = Vec::with_capacity(from.fields.len());
         for (id, field) in &from.fields {
             let field_type = field.type_of(&scope)?;
-            fields.insert(id.clone(), field_type);
+            fields.push((id.clone(), field_type));
         }
         Ok(Self {
             id: from.id.clone(),
@@ -309,10 +347,10 @@ impl Union {
     ) -> Result<Self, SemanticError> {
         let mut variants = HashMap::new();
         for (id, variant) in &from.variants {
-            let mut fields = HashMap::new();
+            let mut fields = Vec::with_capacity(variant.len());
             for (id, field) in variant {
                 let field_type = field.type_of(&scope)?;
-                fields.insert(id.clone(), field_type);
+                fields.push((id.clone(), field_type));
             }
             variants.insert(
                 id.clone(),

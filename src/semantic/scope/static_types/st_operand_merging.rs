@@ -1,0 +1,644 @@
+use std::cell::Ref;
+
+use crate::{
+    ast,
+    semantic::{
+        scope::{type_traits::OperandMerging, user_type_impl::UserType, BuildStaticType, ScopeApi},
+        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+    },
+};
+
+use super::{
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
+    VecType,
+};
+
+impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> OperandMerging<Scope> for StaticType {
+    fn can_minus(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::can_minus(&value.0)
+            }
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn can_negate(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Bool => Ok(()),
+                _ => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::can_negate(&value.0)
+            }
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn can_high_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_high_ord_math(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_high_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::merge_high_ord_math(
+                    &value.0, other, scope,
+                )
+            }
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_low_ord_math(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_low_ord_math(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_low_ord_math<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::merge_low_ord_math(&value.0, other, scope),
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_shift(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::can_shift(&value.0)
+            }
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::merge_shift(&value.0, other, scope),
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_and(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_bitwise_and(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_and<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::merge_bitwise_and(&value.0, other, scope),
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_xor(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_bitwise_xor(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_xor<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::merge_bitwise_xor(&value.0, other, scope),
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_bitwise_or(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => Ok(()),
+                PrimitiveType::Float => Ok(()),
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_bitwise_or(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_bitwise_or<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Number => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Float => match other_type.as_ref() {
+                    StaticType::Primitive(PrimitiveType::Number) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    StaticType::Primitive(PrimitiveType::Float) => Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Float).into(),
+                    )),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                },
+                PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
+                PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::merge_bitwise_xor(&value.0, other, scope),
+            _ => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let EitherType::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        if let StaticType::Error = other_type.as_ref() {
+            return Ok(EitherType::Static(StaticType::Error.into()));
+        }
+        match self {
+            // PRIMITIVE
+            StaticType::Primitive(PrimitiveType::Char) => match other_type.as_ref() {
+                StaticType::Primitive(PrimitiveType::Bool) => {
+                    Err(SemanticError::IncompatibleOperands)
+                }
+                StaticType::Primitive(to) => {
+                    Ok(EitherType::Static(Self::Primitive(to.clone()).into()))
+                }
+                StaticType::Slice(SliceType::String) => {
+                    Ok(EitherType::Static(Self::Slice(SliceType::String).into()))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Primitive(_) => match other_type.as_ref() {
+                StaticType::Primitive(res) => Ok(EitherType::Static(
+                    StaticType::Primitive(res.clone()).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+
+            // SLICE
+            StaticType::Slice(SliceType::String) => match other_type.as_ref() {
+                Self::Slice(SliceType::String) => {
+                    Ok(EitherType::Static(Self::Slice(SliceType::String).into()))
+                }
+                StaticType::Slice(SliceType::List(size, subtype)) => {
+                    let casted = subtype.as_ref().cast(
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                        scope,
+                    )?;
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::List(*size, Box::new(casted))).into(),
+                    ))
+                }
+                Self::Vec(other_subtype) => {
+                    let casted = EitherType::<UserType, StaticType>::Static(
+                        StaticType::Primitive(PrimitiveType::Char).into(),
+                    )
+                    .cast(other_subtype.0.as_ref(), scope)?;
+                    Ok(EitherType::Static(
+                        StaticType::Vec(VecType(Box::new(casted))).into(),
+                    ))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Slice(SliceType::List(size, subtype)) => match other_type.as_ref() {
+                StaticType::Slice(SliceType::List(other_size, other_subtype)) => {
+                    if size < &other_size {
+                        return Err(SemanticError::IncompatibleOperands);
+                    }
+                    let casted = subtype.as_ref().cast(other_subtype.as_ref(), scope)?;
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::List(*other_size, Box::new(casted))).into(),
+                    ))
+                }
+                StaticType::Slice(SliceType::String) => {
+                    let _ = subtype.as_ref().cast(
+                        &EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                        scope,
+                    )?;
+                    Ok(EitherType::Static(
+                        StaticType::Slice(SliceType::String).into(),
+                    ))
+                }
+                StaticType::Vec(other_subtype) => {
+                    let casted = subtype.cast(other_subtype.0.as_ref(), scope)?;
+                    Ok(EitherType::Static(
+                        StaticType::Vec(VecType(Box::new(casted))).into(),
+                    ))
+                }
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+
+            // VEC
+            StaticType::Vec(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Fn(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Chan(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Tuple(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Unit => match other_type.as_ref() {
+                StaticType::Unit => Ok(EitherType::Static(StaticType::Unit.into())),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Any => Ok(EitherType::Static(other_type)),
+            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Address(_) => Err(SemanticError::IncompatibleOperands),
+            StaticType::Map(_) => Err(SemanticError::IncompatibleOperands),
+        }
+    }
+
+    fn can_comparaison(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(_) => Ok(()),
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_comparaison(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_comparaison<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
+    }
+
+    fn can_equate(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(_) => Ok(()),
+            StaticType::Slice(_) => Ok(()),
+            StaticType::Tuple(_) => Ok(()),
+            StaticType::Map(_) => Ok(()),
+            StaticType::Vec(_) => Ok(()),
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => {
+                <EitherType<UserType, StaticType> as OperandMerging<Scope>>::can_equate(&value.0)
+            }
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_equation<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
+    }
+
+    fn can_include_right(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Slice(_) => Ok(()),
+            StaticType::Map(_) => Ok(()),
+            StaticType::Vec(_) => Ok(()),
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_include_right(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_inclusion<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
+    }
+
+    fn can_logical_and(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Bool => Ok(()),
+                _ => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_bitwise_or(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_logical_and<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
+    }
+
+    fn can_logical_or(&self) -> Result<(), SemanticError> {
+        match self {
+            StaticType::Primitive(value) => match value {
+                PrimitiveType::Bool => Ok(()),
+                _ => Err(SemanticError::IncompatibleOperation),
+            },
+            StaticType::Error => Ok(()),
+            StaticType::Address(value) => <EitherType<UserType, StaticType> as OperandMerging<
+                Scope,
+            >>::can_bitwise_or(&value.0),
+            _ => Err(SemanticError::IncompatibleOperation),
+        }
+    }
+    fn merge_logical_or<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Ok(EitherType::Static(
+            StaticType::Primitive(PrimitiveType::Bool).into(),
+        ))
+    }
+}
