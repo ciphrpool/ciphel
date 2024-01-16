@@ -1348,7 +1348,7 @@ mod tests {
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                            EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                         ));
                         res
                     },
@@ -1452,7 +1452,7 @@ mod tests {
                                     (
                                         "y".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                            StaticType::Primitive(PrimitiveType::Char).into(),
                                         ),
                                     ),
                                 ],

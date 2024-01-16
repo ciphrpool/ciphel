@@ -3,8 +3,8 @@ use std::{borrow::BorrowMut, cell::RefCell, fmt::Debug, ops::RangeFull, rc::Rc};
 use nom::Offset;
 use num_traits::ToBytes;
 
-const ALIGNMENT: usize = 8;
-const HEAP_SIZE: usize = 512;
+pub const ALIGNMENT: usize = 8;
+pub const HEAP_SIZE: usize = 512;
 
 type Pointer = usize;
 
