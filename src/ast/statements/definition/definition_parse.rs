@@ -1,3 +1,5 @@
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -151,6 +153,7 @@ impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
             |(id, params, ret, scope)| FnDef {
                 id,
                 params,
+                env: Rc::new(RefCell::new(HashMap::default())),
                 ret: Box::new(ret),
                 scope,
             },
@@ -191,7 +194,7 @@ impl TryParse for EventCondition {
 #[cfg(test)]
 mod tests {
 
-    use std::cell::RefCell;
+    use std::{cell::RefCell, collections::HashMap};
 
     use crate::{
         ast::{
@@ -304,10 +307,12 @@ mod tests {
                     signature: Type::Primitive(PrimitiveType::Number)
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number)),
+                env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
                     )))],
+
                     inner_scope: RefCell::new(None),
                 }
             },

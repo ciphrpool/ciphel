@@ -1,4 +1,4 @@
-use std::cell::Ref;
+use std::cell::{Ref, RefCell};
 
 use crate::{
     ast::utils::strings::ID,
@@ -16,6 +16,7 @@ use super::{
 pub struct Var {
     pub id: ID,
     pub type_sig: EitherType<UserType, StaticType>,
+    pub captured: RefCell<bool>,
 }
 
 impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>>
@@ -57,6 +58,7 @@ impl<Scope: ScopeApi<Var = Self, StaticType = StaticType, UserType = UserType>> 
         Self {
             id: id.clone(),
             type_sig: type_sig.clone(),
+            captured: RefCell::new(false),
         }
     }
 }

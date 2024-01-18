@@ -5,6 +5,7 @@ use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
+use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     type Output = ();
@@ -138,6 +139,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
+        if let Some(api) = PlatformApi::from(&self.id) {
+            return Err(SemanticError::PlatformAPIOverriding);
+        }
         for value in &self.params {
             let _ = value.resolve(scope, context, extra)?;
         }
@@ -158,6 +162,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             .collect::<Vec<Scope::Var>>();
 
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
+
+        let env_vars = self.scope.find_outer_vars()?;
+        {
+            let mut borrowed_env = self.env.borrow_mut();
+            borrowed_env.extend(env_vars);
+        }
 
         //let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
 
@@ -224,6 +234,7 @@ mod tests {
             scope_impl,
             static_types::{FnType, PrimitiveType, SliceType, StaticType},
             user_type_impl::{Enum, Struct, Union, UserType},
+            var_impl::Var,
         },
     };
 
@@ -615,6 +626,108 @@ mod tests {
                 })
                 .into()
             )
+        )
+    }
+
+    #[test]
+    fn valid_function_no_args_captures() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main() -> Unit {
+            x = 10;
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                captured: RefCell::new(false),
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            })
+            .expect("registering vars should succeed");
+
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let captured_vars = function
+            .env
+            .as_ref()
+            .borrow()
+            .clone()
+            .values()
+            .cloned()
+            .map(|v| v.as_ref().clone())
+            .collect::<Vec<Var>>();
+        assert_eq!(
+            captured_vars,
+            vec![Var {
+                id: "x".into(),
+                captured: RefCell::new(false),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            }]
+        )
+    }
+
+    #[test]
+    fn valid_args_captures() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main(y:number) -> Unit {
+            x = 10;
+            y = 10;
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                captured: RefCell::new(false),
+                id: "x".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            })
+            .expect("registering vars should succeed");
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                captured: RefCell::new(false),
+                id: "y".into(),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            })
+            .expect("registering vars should succeed");
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok());
+
+        let captured_vars = function
+            .env
+            .as_ref()
+            .borrow()
+            .clone()
+            .values()
+            .cloned()
+            .map(|v| v.as_ref().clone())
+            .collect::<Vec<Var>>();
+        assert_eq!(
+            captured_vars,
+            vec![Var {
+                id: "x".into(),
+                captured: RefCell::new(false),
+                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            }]
         )
     }
 }

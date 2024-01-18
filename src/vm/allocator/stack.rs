@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use crate::vm::vm::RuntimeError;
+
 use super::heap::ALIGNMENT;
 
 const STACK_SIZE: usize = 512;
@@ -13,6 +15,12 @@ pub enum StackError {
     Default,
 }
 
+impl Into<RuntimeError> for StackError {
+    fn into(self) -> RuntimeError {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Stack {
     stack: Rc<RefCell<Box<[u8; STACK_SIZE]>>>,
@@ -20,19 +28,24 @@ pub struct Stack {
 }
 
 #[derive(Debug, Clone)]
-pub struct Frame<'stack> {
+pub struct Frame {
     zero: usize,
     bottom: usize,
-    stack: &'stack Stack,
 }
 
-impl<'stack> Frame<'stack> {
-    pub fn clean(self) -> Result<(), StackError> {
-        let top = self.stack.top.borrow().clone();
+#[derive(Debug, Clone)]
+pub struct StackSlice {
+    pub offset: usize,
+    pub size: usize,
+}
+
+impl Frame {
+    pub fn clean(self, stack: &Stack) -> Result<(), StackError> {
+        let top = stack.top.borrow().clone();
         if top < self.zero {
             return Err(StackError::StackUnderflow);
         }
-        self.stack.pop(top - self.zero)
+        stack.pop(top - self.zero)
     }
 
     pub fn saved(&self) -> std::ops::Range<usize> {
@@ -47,7 +60,16 @@ impl Stack {
             top: Rc::new(RefCell::new(0)),
         }
     }
-
+    pub fn no_return_frame(&self) -> Result<Frame, StackError> {
+        let bottom = {
+            let top = self.top.borrow();
+            top.clone()
+        };
+        Ok(Frame {
+            zero: bottom,
+            bottom,
+        })
+    }
     pub fn frame(&self, offset: usize) -> Result<Frame, StackError> {
         let bottom = {
             let top = self.top.borrow();
@@ -57,7 +79,6 @@ impl Stack {
         Ok(Frame {
             zero: bottom + offset,
             bottom,
-            stack: &self,
         })
     }
 
@@ -87,7 +108,7 @@ impl Stack {
         let borrowed_buffer = self.stack.borrow();
         Ok(borrowed_buffer[offset..offset + size].to_vec())
     }
-    pub fn write(&self, offset: usize, data: Vec<u8>) -> Result<(), StackError> {
+    pub fn write(&self, offset: usize, data: &Vec<u8>) -> Result<(), StackError> {
         let top = self.top.borrow();
         if offset >= *top || offset + data.len() > *top {
             return Err(StackError::ReadError);
@@ -157,7 +178,7 @@ mod tests {
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
-            .write(0, vec![1; 8])
+            .write(0, &vec![1; 8])
             .expect("Write should have succeeded");
 
         let borrowed_stack = stack.stack.borrow();
@@ -168,7 +189,7 @@ mod tests {
     fn robustness_write() {
         let stack = Stack::new();
         let _ = stack
-            .write(0, vec![1; 8])
+            .write(0, &vec![1; 8])
             .expect_err("Read should have failed");
     }
 
@@ -180,7 +201,7 @@ mod tests {
         let frame = stack
             .frame(8)
             .expect("Frame creation should have succeeded");
-        let _ = frame.stack.push(8).expect("Push should have succeeded");
+        let _ = stack.push(8).expect("Push should have succeeded");
 
         assert_eq!(frame.bottom, 8);
         assert_eq!(frame.zero, 16);
@@ -194,8 +215,8 @@ mod tests {
         let frame = stack
             .frame(8)
             .expect("Frame creation should have succeeded");
-        let _ = frame.stack.push(8).expect("Push should have succeeded");
-        let _ = frame.clean().expect("Clean should have succeeded");
+        let _ = stack.push(8).expect("Push should have succeeded");
+        let _ = frame.clean(&stack).expect("Clean should have succeeded");
 
         assert_eq!(stack.top.borrow().clone(), 8);
     }

@@ -108,6 +108,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
@@ -131,6 +132,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })

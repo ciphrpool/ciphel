@@ -98,4 +98,38 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
             _ => false,
         }
     }
+
+    fn is_addr(&self) -> bool {
+        match self {
+            StaticType::Address(AddrType(value)) => true,
+            _ => false,
+        }
+    }
+
+    fn is_num(&self) -> bool {
+        match self {
+            StaticType::Primitive(PrimitiveType::Number) => true,
+            _ => false,
+        }
+    }
+
+    fn is_char(&self) -> bool {
+        match self {
+            StaticType::Primitive(PrimitiveType::Char) => true,
+            _ => false,
+        }
+    }
+
+    fn is_vec(&self) -> bool {
+        match self {
+            StaticType::Vec(_) => true,
+            _ => false,
+        }
+    }
+    fn is_map(&self) -> bool {
+        match self {
+            StaticType::Map(_) => true,
+            _ => false,
+        }
+    }
 }

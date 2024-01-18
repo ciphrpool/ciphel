@@ -3,6 +3,8 @@ use std::{borrow::BorrowMut, cell::RefCell, fmt::Debug, ops::RangeFull, rc::Rc};
 use nom::Offset;
 use num_traits::ToBytes;
 
+use crate::vm::vm::RuntimeError;
+
 pub const ALIGNMENT: usize = 8;
 pub const HEAP_SIZE: usize = 512;
 
@@ -15,6 +17,12 @@ pub enum HeapError {
     FreeError,
     InvalidPointer,
     Default,
+}
+
+impl Into<RuntimeError> for HeapError {
+    fn into(self) -> RuntimeError {
+        todo!()
+    }
 }
 
 #[derive(Clone)]
@@ -669,7 +677,7 @@ impl Heap {
         Ok(())
     }
 
-    pub fn read(&self, address: Pointer, size: usize) -> Result<Vec<u8>, HeapError> {
+    pub fn read(&self, address: Pointer, offset: usize, size: usize) -> Result<Vec<u8>, HeapError> {
         let block = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();
@@ -678,7 +686,7 @@ impl Heap {
         if !block.header.allocated {
             return Err(HeapError::InvalidPointer);
         }
-        if block.data_size() < size {
+        if block.data_size() < size + offset {
             return Err(HeapError::InvalidPointer);
         }
         let res = {
@@ -688,11 +696,11 @@ impl Heap {
             match data_range {
                 Some(data_range) => {
                     let (start, end) = (data_range.start, data_range.end);
-                    if end < start {
+                    if end < start + offset {
                         None
                     } else {
-                        let mut output = Vec::with_capacity(end - start);
-                        output.extend_from_slice(&borrowed[start..start + size]);
+                        let mut output = Vec::with_capacity(end - (start + offset));
+                        output.extend_from_slice(&borrowed[start + offset..start + offset + size]);
                         Some(output)
                     }
                 }
@@ -706,7 +714,7 @@ impl Heap {
         Ok(res)
     }
 
-    pub fn write(&self, address: Pointer, data: &Vec<u8>) -> Result<(), HeapError> {
+    pub fn write(&self, address: Pointer, offset: usize, data: &Vec<u8>) -> Result<(), HeapError> {
         let block = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();
@@ -715,7 +723,7 @@ impl Heap {
         if !block.header.allocated {
             return Err(HeapError::InvalidPointer);
         }
-        if block.data_size() < data.len() {
+        if block.data_size() < data.len() + offset {
             return Err(HeapError::InvalidPointer);
         }
         {
@@ -724,10 +732,10 @@ impl Heap {
                 return Err(HeapError::InvalidPointer);
             };
             let (start, end) = (data_range.start, data_range.end);
-            if start + data.len() >= end {
+            if start + offset + data.len() >= end {
                 return Err(HeapError::WriteError);
             }
-            borrowed[start..start + data.len()].copy_from_slice(&data);
+            borrowed[start + offset..start + offset + data.len()].copy_from_slice(&data);
         }
 
         Ok(())
@@ -894,7 +902,9 @@ mod tests {
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0);
-        let res = heap.read(address, 6).expect("Read should have succeeded");
+        let res = heap
+            .read(address, 0, 6)
+            .expect("Read should have succeeded");
         assert_eq!(res.len(), 6)
     }
 
@@ -904,13 +914,13 @@ mod tests {
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0);
-        let res = heap.read(address + 1, 6);
+        let res = heap.read(address + 1, 0, 6);
         assert!(res.is_err());
 
-        let res = heap.read(address, 30);
+        let res = heap.read(address, 30, 0);
         assert!(res.is_err());
 
-        let res = heap.read(HEAP_SIZE + 1, 6);
+        let res = heap.read(HEAP_SIZE + 1, 0, 6);
         assert!(res.is_err());
     }
 
@@ -922,10 +932,12 @@ mod tests {
         assert_eq!(address, 0);
         let data = vec![1u8; 6];
 
-        heap.write(address, &data)
+        heap.write(address, 0, &data)
             .expect("Write should have succeeded");
 
-        let res = heap.read(address, 6).expect("Read should have succeeded");
+        let res = heap
+            .read(address, 0, 6)
+            .expect("Read should have succeeded");
         assert_eq!(res, data);
     }
 
@@ -937,10 +949,10 @@ mod tests {
         assert_eq!(address, 0);
         let data = vec![1u8; 64];
 
-        let res = heap.write(address, &data);
+        let res = heap.write(address, 0, &data);
         assert!(res.is_err());
 
-        let res = heap.write(address + 1, &data);
+        let res = heap.write(address + 1, 0, &data);
         assert!(res.is_err());
     }
 }

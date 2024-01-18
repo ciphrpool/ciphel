@@ -195,6 +195,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
@@ -206,6 +207,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None),
                 }))
             },
@@ -238,6 +240,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
@@ -249,6 +252,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None),
                 }))
             },

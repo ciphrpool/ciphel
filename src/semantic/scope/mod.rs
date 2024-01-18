@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell},
+    collections::HashMap,
     fmt::Debug,
     rc::Rc,
 };
@@ -142,7 +143,7 @@ where
         + MergeType<Self>
         + SizeOf;
 
-    type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self>;
+    type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self> + PartialEq;
     type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
     type Event: BuildEvent<Self>;
 
@@ -157,6 +158,7 @@ where
     fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError>;
 
     fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, SemanticError>;
+    fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>>;
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, SemanticError>;
     fn find_event(&self) -> Result<&Self::Event, SemanticError>;

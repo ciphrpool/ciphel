@@ -13,6 +13,7 @@ pub mod utils;
 #[derive(Debug, Clone)]
 pub enum SemanticError {
     NotResolvedYet,
+    PlatformAPIOverriding,
 
     CantInferType,
     CantRegisterType,
@@ -30,6 +31,7 @@ pub enum SemanticError {
     UnknownType,
     UnknownField,
 
+    IncorrectArguments,
     IncorrectStruct,
     IncorrectVariant,
     InvalidPattern,

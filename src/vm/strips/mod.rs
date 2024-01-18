@@ -1,5 +1,5 @@
 use super::{
-    allocator::Memory,
+    allocator::{stack::Frame, Memory},
     vm::{self, Executable},
 };
 
@@ -14,6 +14,18 @@ pub mod operation;
 pub mod scope_strip;
 pub mod serialize;
 pub mod try_strip;
+
+#[derive(Debug, Clone)]
+pub struct Strips {
+    frame: Frame,
+    strips: Vec<Strip>,
+}
+
+impl Executable for Strips {
+    fn execute(&self, memory: &Memory) -> Result<(), vm::RuntimeError> {
+        todo!()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Strip {
@@ -32,6 +44,18 @@ pub enum Strip {
 
 impl Executable for Strip {
     fn execute(&self, memory: &Memory) -> Result<(), vm::RuntimeError> {
-        todo!()
+        match self {
+            Strip::Operation(value) => value.execute(memory),
+            Strip::Call(value) => value.execute(memory),
+            Strip::Serialize(value) => value.execute(memory),
+            Strip::Access(value) => value.execute(memory),
+            Strip::If(value) => value.execute(memory),
+            Strip::Match(value) => value.execute(memory),
+            Strip::Try(value) => value.execute(memory),
+            Strip::Assign(value) => value.execute(memory),
+            Strip::Declare(value) => value.execute(memory),
+            Strip::Loop(value) => value.execute(memory),
+            Strip::Scope(value) => value.execute(memory),
+        }
     }
 }

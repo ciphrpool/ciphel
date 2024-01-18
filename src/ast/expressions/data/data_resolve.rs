@@ -456,6 +456,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
 
         let _ = self.scope.resolve(scope, &Some(context_return), &vars)?;
 
+        let env_vars = self.scope.find_outer_vars()?;
+        {
+            let mut borrowed_env = self.env.borrow_mut();
+            borrowed_env.extend(env_vars);
+        }
         Ok(())
     }
 }
@@ -969,6 +974,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
@@ -989,6 +995,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(
                     StaticType::Vec(VecType(Box::new(EitherType::Static(
@@ -1006,6 +1013,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(
                     StaticType::Vec(VecType(Box::new(EitherType::Static(
@@ -1023,6 +1031,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(
                     StaticType::Map(MapType {
@@ -1043,6 +1052,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(
                     StaticType::Tuple(TupleType(vec![
@@ -1069,6 +1079,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "point".into(),
                 type_sig: EitherType::User(
                     UserType::Struct(
@@ -1116,6 +1127,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "x".into(),
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })
@@ -1144,6 +1156,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "chan1".into(),
                 type_sig: EitherType::Static(
                     StaticType::Chan(ChanType(Box::new(EitherType::Static(
@@ -1169,6 +1182,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
+                captured: RefCell::new(false),
                 id: "chan1".into(),
                 type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
             })

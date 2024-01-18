@@ -30,18 +30,9 @@ pub enum DeclaredVar {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatternVar {
-    UnionInline {
-        typename: ID,
-        variant: ID,
-        vars: Vec<ID>,
-    },
     UnionFields {
         typename: ID,
         variant: ID,
-        vars: Vec<ID>,
-    },
-    StructInline {
-        typename: ID,
         vars: Vec<ID>,
     },
     StructFields {

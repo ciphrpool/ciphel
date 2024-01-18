@@ -68,6 +68,21 @@ pub trait TypeChecking<Scope: ScopeApi> {
     fn is_unit(&self) -> bool {
         false
     }
+    fn is_addr(&self) -> bool {
+        false
+    }
+    fn is_num(&self) -> bool {
+        false
+    }
+    fn is_char(&self) -> bool {
+        false
+    }
+    fn is_vec(&self) -> bool {
+        false
+    }
+    fn is_map(&self) -> bool {
+        false
+    }
 }
 
 pub trait OperandMerging<Scope: ScopeApi> {

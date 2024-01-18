@@ -1,2 +1,16 @@
+use crate::vm::{
+    allocator::{Memory, MemoryAddress},
+    vm::{Executable, RuntimeError},
+};
+
 #[derive(Debug, Clone)]
-pub enum Declare {}
+pub struct Declare {
+    size: usize,
+}
+
+impl Executable for Declare {
+    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+        let _ = memory.stack.push(self.size).map_err(|e| e.into())?;
+        Ok(())
+    }
+}

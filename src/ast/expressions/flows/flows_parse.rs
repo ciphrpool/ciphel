@@ -262,6 +262,7 @@ mod tests {
                             Atomic::Data(Data::Primitive(Primitive::Number(10)))
                         )))))
                     ],
+
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
@@ -270,6 +271,7 @@ mod tests {
                             Atomic::Data(Data::Primitive(Primitive::Number(20)))
                         )))))
                     ],
+
                     inner_scope: RefCell::new(None),
                 }),
             },
@@ -308,6 +310,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     },
@@ -319,6 +322,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     },
@@ -333,6 +337,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     },
@@ -348,6 +353,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     },
@@ -362,6 +368,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     },
@@ -373,6 +380,7 @@ mod tests {
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                                 )))))
                             ],
+
                             inner_scope: RefCell::new(None),
                         })
                     }
@@ -383,6 +391,7 @@ mod tests {
                             Atomic::Data(Data::Primitive(Primitive::Bool(true)))
                         )))))
                     ],
+
                     inner_scope: RefCell::new(None),
                 })
             },
@@ -403,6 +412,7 @@ mod tests {
                             Atomic::Data(Data::Primitive(Primitive::Number(10)))
                         )))))
                     ],
+
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
@@ -411,6 +421,7 @@ mod tests {
                             Atomic::Data(Data::Primitive(Primitive::Number(20)))
                         )))))
                     ],
+
                     inner_scope: RefCell::new(None),
                 }),
             },

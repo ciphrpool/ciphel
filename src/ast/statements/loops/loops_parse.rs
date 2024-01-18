@@ -164,6 +164,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None)
                 })
             },
@@ -197,6 +198,7 @@ mod tests {
                             )))]
                         }
                     }))],
+
                     inner_scope: RefCell::new(None)
                 })
             },
@@ -226,6 +228,7 @@ mod tests {
                         )))]
                     }
                 }))],
+
                 inner_scope: RefCell::new(None)
             })),
             value

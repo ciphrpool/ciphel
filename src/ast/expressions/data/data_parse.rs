@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{
@@ -254,7 +254,11 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
                 ),
                 preceded(wst(lexem::ARROW), ExprScope::parse),
             ),
-            |(params, scope)| Closure { params, scope },
+            |(params, scope)| Closure {
+                params,
+                scope,
+                env: Rc::new(RefCell::new(HashMap::default())),
+            },
         )(input)
     }
 }
@@ -596,6 +600,7 @@ mod tests {
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
+                env: Rc::new(RefCell::new(HashMap::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(

@@ -1,9 +1,11 @@
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 use crate::{
     ast::{
         self,
         utils::{numbers::Number, strings::ID},
     },
-    semantic::scope::ScopeApi,
+    semantic::{scope::ScopeApi, SemanticError},
 };
 
 use super::Expression;
@@ -87,6 +89,7 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
+    env: Rc<RefCell<HashMap<ID, Rc<InnerScope::Var>>>>,
     scope: ExprScope<InnerScope>,
 }
 
@@ -94,6 +97,15 @@ pub struct Closure<InnerScope: ScopeApi> {
 pub enum ExprScope<InnerScope: ScopeApi> {
     Scope(ast::statements::scope::Scope<InnerScope>),
     Expr(ast::statements::scope::Scope<InnerScope>),
+}
+
+impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
+    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<InnerScope::Var>>, SemanticError> {
+        match self {
+            ExprScope::Scope(scope) => scope.find_outer_vars(),
+            ExprScope::Expr(scope) => scope.find_outer_vars(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

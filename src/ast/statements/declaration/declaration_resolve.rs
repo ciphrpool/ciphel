@@ -3,6 +3,7 @@ use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
 use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
+use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     type Output = ();
@@ -22,6 +23,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
+
                 let var = Scope::Var::build_var(&value.id, &var_type);
                 let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
@@ -64,6 +66,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
         Self: Sized,
         Scope: ScopeApi,
     {
+        if let Some(api) = PlatformApi::from(&self.id) {
+            return Err(SemanticError::PlatformAPIOverriding);
+        }
         self.signature.resolve(scope, context, extra)
     }
 }
@@ -83,6 +88,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     {
         match self {
             DeclaredVar::Id(id) => {
+                if let Some(api) = PlatformApi::from(id) {
+                    return Err(SemanticError::PlatformAPIOverriding);
+                }
                 let mut vars = Vec::with_capacity(1);
                 let Some(var_type) = context else {
                     return Err(SemanticError::CantInferType);
@@ -113,36 +121,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
         Scope: ScopeApi,
     {
         match self {
-            PatternVar::UnionInline {
-                typename,
-                variant,
-                vars,
-            } => {
-                let borrowed_scope = scope.borrow();
-                let user_type = borrowed_scope.find_type(typename)?;
-                let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
-                    user_type.get_variant(variant);
-                let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(
-                    &variant_type
-                ) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &vars[index];
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
             PatternVar::UnionFields {
                 typename,
                 variant,
@@ -177,26 +155,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
-            PatternVar::StructInline { typename, vars } => {
-                let borrowed_scope = scope.borrow();
-                let user_type = borrowed_scope.find_type(typename)?;
-                let user_type = user_type.type_of(&scope.borrow())?;
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(&user_type) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &vars[index];
+                    if let Some(api) = PlatformApi::from(var_name) {
+                        return Err(SemanticError::PlatformAPIOverriding);
+                    }
                     scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
@@ -225,6 +186,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
+                    if let Some(api) = PlatformApi::from(var_name) {
+                        return Err(SemanticError::PlatformAPIOverriding);
+                    }
                     scope_vars.push(Scope::Var::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)

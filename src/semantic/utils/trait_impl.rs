@@ -138,6 +138,40 @@ impl<Scope: ScopeApi> TypeChecking<Scope> for EitherType<Scope::UserType, Scope:
             EitherType::User(_user_type) => false,
         }
     }
+
+    fn is_addr(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_addr(),
+            EitherType::User(_user_type) => false,
+        }
+    }
+
+    fn is_num(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_num(),
+            EitherType::User(_user_type) => false,
+        }
+    }
+
+    fn is_char(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_char(),
+            EitherType::User(_user_type) => false,
+        }
+    }
+
+    fn is_vec(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_vec(),
+            EitherType::User(_user_type) => false,
+        }
+    }
+    fn is_map(&self) -> bool {
+        match self {
+            EitherType::Static(static_type) => static_type.is_map(),
+            EitherType::User(_user_type) => false,
+        }
+    }
 }
 
 impl<Scope: ScopeApi> GetSubTypes<Scope> for EitherType<Scope::UserType, Scope::StaticType> {

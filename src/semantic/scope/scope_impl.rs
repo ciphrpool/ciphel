@@ -23,6 +23,7 @@ pub enum Scope {
     Inner {
         parent: Option<Weak<RefCell<Scope>>>,
         general: Rc<RefCell<Scope>>,
+        outer_vars: Rc<RefCell<HashMap<ID, Rc<Var>>>>,
         data: ScopeData,
     },
     General {
@@ -73,6 +74,7 @@ impl ScopeApi for Scope {
                     parent: Some(Rc::downgrade(parent)),
                     general: general.clone(),
                     data: ScopeData::new(),
+                    outer_vars: Rc::new(RefCell::new(HashMap::default())),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -88,6 +90,7 @@ impl ScopeApi for Scope {
                     parent: None,
                     general: parent.clone(),
                     data: ScopeData::new(),
+                    outer_vars: Rc::new(RefCell::new(HashMap::default())),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -107,6 +110,7 @@ impl ScopeApi for Scope {
                 parent: _,
                 general: _,
                 data,
+                ..
             } => {
                 data.types.insert(id.clone(), reg.into());
                 Ok(())
@@ -149,6 +153,7 @@ impl ScopeApi for Scope {
                 data,
                 parent,
                 general,
+                outer_vars,
             } => data
                 .vars
                 .get(id)
@@ -158,14 +163,32 @@ impl ScopeApi for Scope {
                         let borrowed_scope =
                             <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
-                        borrowed_scope.find_var(id).ok()
+                        match borrowed_scope.find_var(id) {
+                            Ok(var) => {
+                                {
+                                    let mut captured = var.captured.borrow_mut();
+                                    *captured = true;
+                                }
+                                let mut borrowerd_mut = outer_vars.borrow_mut();
+                                borrowerd_mut.insert(var.id.clone(), var.clone());
+                                Some(var)
+                            }
+                            Err(_) => None,
+                        }
                     }),
                     None => {
                         let borrowed_scope =
                             <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
-                        borrowed_scope.find_var(id).ok()
+                        match borrowed_scope.find_var(id) {
+                            Ok(var) => {
+                                let mut borrowerd_mut = outer_vars.borrow_mut();
+                                borrowerd_mut.insert(var.id.clone(), var.clone());
+                                Some(var)
+                            }
+                            Err(_) => None,
+                        }
                     }
                 })
                 .ok_or(SemanticError::UnknownVar(id.clone())),
@@ -174,6 +197,13 @@ impl ScopeApi for Scope {
                 .get(id)
                 .cloned()
                 .ok_or(SemanticError::UnknownVar(id.clone())),
+        }
+    }
+
+    fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>> {
+        match self {
+            Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
+            Scope::General { .. } => HashMap::default(),
         }
     }
 
@@ -187,6 +217,7 @@ impl ScopeApi for Scope {
                 data,
                 parent,
                 general,
+                ..
             } => data
                 .types
                 .get(id)
@@ -238,38 +269,40 @@ impl ScopeApi for MockScope {
         parent: &Rc<RefCell<Self>>,
         vars: Vec<Self::Var>,
     ) -> Result<Rc<RefCell<Self>>, SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
-
+    fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>> {
+        unimplemented!("Mock function call")
+    }
     fn find_chan(&self) -> Result<&Self::Chan, SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 
     fn find_event(&self) -> Result<&Self::Event, SemanticError> {
-        todo!()
+        unimplemented!("Mock function call")
     }
 }

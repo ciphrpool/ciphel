@@ -95,21 +95,6 @@ impl TryParse for PatternVar {
                 pair(
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
                     delimited(
-                        wst(lexem::PAR_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                |((typename, variant), vars)| PatternVar::UnionInline {
-                    typename,
-                    variant,
-                    vars,
-                },
-            ),
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
                         wst(lexem::BRA_O),
                         separated_list1(wst(lexem::COMA), parse_id),
                         wst(lexem::BRA_C),
@@ -120,17 +105,6 @@ impl TryParse for PatternVar {
                     variant,
                     vars,
                 },
-            ),
-            map(
-                pair(
-                    parse_id,
-                    delimited(
-                        wst(lexem::PAR_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                |(typename, vars)| PatternVar::StructInline { typename, vars },
             ),
             map(
                 pair(

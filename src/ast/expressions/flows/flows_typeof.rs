@@ -1,8 +1,12 @@
 use std::cell::Ref;
 
-use crate::semantic::{
-    scope::{type_traits::GetSubTypes, ScopeApi},
-    EitherType, MergeType, Resolve, SemanticError, TypeOf,
+use crate::{
+    ast::expressions::data::{VarID, Variable},
+    semantic::{
+        scope::{type_traits::GetSubTypes, ScopeApi},
+        EitherType, MergeType, Resolve, SemanticError, TypeOf,
+    },
+    vm::platform::api::PlatformApi,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
@@ -102,6 +106,15 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
+        match &self.fn_var {
+            Variable::Var(VarID(id)) => {
+                if let Some(api) = PlatformApi::from(id) {
+                    return Ok(api.returns::<Scope>());
+                }
+            }
+            _ => {}
+        }
+
         let fn_var_type = self.fn_var.type_of(&scope)?;
         let Some(return_type) = <EitherType<
             <Scope as ScopeApi>::UserType,
