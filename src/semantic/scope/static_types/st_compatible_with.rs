@@ -1,16 +1,14 @@
 use std::cell::Ref;
 
 use crate::{
-    ast,
     semantic::{
-        scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
+        scope::{user_type_impl::UserType, ScopeApi},
         CompatibleWith, EitherType, SemanticError, TypeOf,
     },
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    StaticType,
 };
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> CompatibleWith<Scope> for StaticType {

@@ -66,7 +66,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(api) = PlatformApi::from(&self.id) {
+        if let Some(_api) = PlatformApi::from(&self.id) {
             return Err(SemanticError::PlatformAPIOverriding);
         }
         self.signature.resolve(scope, context, extra)
@@ -88,7 +88,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     {
         match self {
             DeclaredVar::Id(id) => {
-                if let Some(api) = PlatformApi::from(id) {
+                if let Some(_api) = PlatformApi::from(id) {
                     return Err(SemanticError::PlatformAPIOverriding);
                 }
                 let mut vars = Vec::with_capacity(1);
@@ -155,7 +155,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    if let Some(api) = PlatformApi::from(var_name) {
+                    if let Some(_api) = PlatformApi::from(var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
                     scope_vars.push(Scope::Var::build_var(var_name, field_type));
@@ -186,7 +186,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    if let Some(api) = PlatformApi::from(var_name) {
+                    if let Some(_api) = PlatformApi::from(var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
                     scope_vars.push(Scope::Var::build_var(var_name, field_type));
@@ -219,7 +219,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    
 
     use crate::{
         ast::TryParse,

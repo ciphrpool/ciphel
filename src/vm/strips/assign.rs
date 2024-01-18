@@ -1,6 +1,6 @@
 use crate::vm::{
     allocator::{
-        stack::{Stack, StackSlice},
+        stack::{StackSlice},
         Memory, MemoryAddress,
     },
     vm::{Executable, RuntimeError},

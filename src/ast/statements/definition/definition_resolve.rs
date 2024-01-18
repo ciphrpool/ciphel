@@ -4,7 +4,7 @@ use crate::ast::types::Types;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, CompatibleWith, Resolve, SemanticError, TypeOf};
+use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
 use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
@@ -139,7 +139,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(api) = PlatformApi::from(&self.id) {
+        if let Some(_api) = PlatformApi::from(&self.id) {
             return Err(SemanticError::PlatformAPIOverriding);
         }
         for value in &self.params {

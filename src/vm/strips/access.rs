@@ -16,7 +16,7 @@ impl Executable for Access {
                 offset,
                 size,
             } => {
-                let data = memory
+                let _data = memory
                     .heap
                     .read(address, offset, size)
                     .map_err(|err| err.into())?;
@@ -24,7 +24,7 @@ impl Executable for Access {
                 Ok(())
             }
             MemoryAddress::Stack { offset, size } => {
-                let data = memory.stack.read(offset, size).map_err(|err| err.into())?;
+                let _data = memory.stack.read(offset, size).map_err(|err| err.into())?;
 
                 todo!("Copy data onto stack");
                 Ok(())

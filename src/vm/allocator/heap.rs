@@ -1,6 +1,6 @@
-use std::{borrow::BorrowMut, cell::RefCell, fmt::Debug, ops::RangeFull, rc::Rc};
+use std::{borrow::BorrowMut, cell::RefCell, fmt::Debug, rc::Rc};
 
-use nom::Offset;
+
 use num_traits::ToBytes;
 
 use crate::vm::vm::RuntimeError;
@@ -333,7 +333,7 @@ impl Heap {
     }
 
     pub fn new() -> Self {
-        let header = HEAP_SIZE as u64;
+        let _header = HEAP_SIZE as u64;
 
         let res = Self {
             heap: Rc::new(RefCell::new([0; HEAP_SIZE])),
@@ -744,7 +744,7 @@ impl Heap {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::expressions::data;
+    
 
     use super::*;
 
@@ -766,7 +766,7 @@ mod tests {
     fn valid_alloc_free_in_fragmented() {
         let heap = Heap::new();
         let mut pointers = Vec::default();
-        for i in 0..6 {
+        for _i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
             pointers.push(address);
         }

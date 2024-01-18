@@ -4,7 +4,7 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::{Return, Statement},
+        statements::{Statement},
         utils::{
             io::{PResult, Span},
             lexem,

@@ -7,7 +7,7 @@ use crate::vm::{
 pub struct TryStrip {}
 
 impl Executable for TryStrip {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

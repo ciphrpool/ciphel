@@ -7,7 +7,7 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{Address, Slice, Tuple, Vector},
+            data::{Address, Slice, Vector},
             Expression,
         },
         statements::{declaration::PatternVar, scope::Scope},

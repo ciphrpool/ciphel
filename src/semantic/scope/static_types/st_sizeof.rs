@@ -1,7 +1,7 @@
 use crate::semantic::SizeOf;
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
     VecType,
 };
 

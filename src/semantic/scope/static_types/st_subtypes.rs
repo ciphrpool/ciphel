@@ -1,20 +1,16 @@
-use std::cell::Ref;
+
 
 use crate::{
-    ast,
     semantic::{
         scope::{
-            type_traits::{GetSubTypes, OperandMerging},
-            user_type_impl::UserType,
-            BuildStaticType, ScopeApi,
-        },
-        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+            type_traits::{GetSubTypes},
+            user_type_impl::UserType, ScopeApi,
+        }, EitherType,
     },
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    AddrType, KeyType, PrimitiveType, SliceType, StaticType,
 };
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope> for StaticType {

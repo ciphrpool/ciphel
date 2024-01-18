@@ -7,7 +7,7 @@ use crate::vm::{
 pub enum LoopStrip {}
 
 impl Executable for LoopStrip {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

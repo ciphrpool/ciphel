@@ -1,15 +1,13 @@
 use std::cell::Ref;
 
 use crate::{
-    ast,
     semantic::{
-        scope::{type_traits::OperandMerging, user_type_impl::UserType, BuildStaticType, ScopeApi},
-        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+        scope::{type_traits::OperandMerging, user_type_impl::UserType, ScopeApi}, EitherType, SemanticError, TypeOf,
     },
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
+    PrimitiveType, SliceType, StaticType,
     VecType,
 };
 

@@ -46,7 +46,7 @@ impl Executable for Operation {
 pub enum HighOrdMath {}
 
 impl Executable for HighOrdMath {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -55,7 +55,7 @@ impl Executable for HighOrdMath {
 pub enum LowOrdMath {}
 
 impl Executable for LowOrdMath {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -64,7 +64,7 @@ impl Executable for LowOrdMath {
 pub enum Shift {}
 
 impl Executable for Shift {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -73,7 +73,7 @@ impl Executable for Shift {
 pub enum BitwiseAnd {}
 
 impl Executable for BitwiseAnd {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -82,7 +82,7 @@ impl Executable for BitwiseAnd {
 pub enum BitwiseXOR {}
 
 impl Executable for BitwiseXOR {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -91,7 +91,7 @@ impl Executable for BitwiseXOR {
 pub enum BitwiseOR {}
 
 impl Executable for BitwiseOR {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -100,7 +100,7 @@ impl Executable for BitwiseOR {
 pub enum Cast {}
 
 impl Executable for Cast {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -109,7 +109,7 @@ impl Executable for Cast {
 pub enum Comparaison {}
 
 impl Executable for Comparaison {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -118,7 +118,7 @@ impl Executable for Comparaison {
 pub enum Equation {}
 
 impl Executable for Equation {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -127,7 +127,7 @@ impl Executable for Equation {
 pub enum Inclusion {}
 
 impl Executable for Inclusion {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -136,7 +136,7 @@ impl Executable for Inclusion {
 pub enum LogicalAnd {}
 
 impl Executable for LogicalAnd {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -145,7 +145,7 @@ impl Executable for LogicalAnd {
 pub enum LogicalOr {}
 
 impl Executable for LogicalOr {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -154,7 +154,7 @@ impl Executable for LogicalOr {
 pub enum Minus {}
 
 impl Executable for Minus {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
@@ -163,7 +163,7 @@ impl Executable for Minus {
 pub enum Not {}
 
 impl Executable for Not {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

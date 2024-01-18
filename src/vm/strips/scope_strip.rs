@@ -7,7 +7,7 @@ use crate::vm::{
 pub struct ScopeStrip {}
 
 impl Executable for ScopeStrip {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

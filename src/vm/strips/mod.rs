@@ -22,7 +22,7 @@ pub struct Strips {
 }
 
 impl Executable for Strips {
-    fn execute(&self, memory: &Memory) -> Result<(), vm::RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), vm::RuntimeError> {
         todo!()
     }
 }

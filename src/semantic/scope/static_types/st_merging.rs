@@ -1,10 +1,8 @@
 use std::cell::Ref;
 
 use crate::{
-    ast,
     semantic::{
-        scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
-        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+        scope::{user_type_impl::UserType, ScopeApi}, EitherType, MergeType, SemanticError, TypeOf,
     },
 };
 

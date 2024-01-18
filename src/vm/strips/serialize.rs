@@ -7,7 +7,7 @@ use crate::vm::{
 pub enum Serialize {}
 
 impl Executable for Serialize {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

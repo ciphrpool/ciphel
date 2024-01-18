@@ -255,7 +255,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
         &self,
         scope: &Rc<RefCell<Scope>>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

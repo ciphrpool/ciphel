@@ -1,20 +1,16 @@
-use std::cell::Ref;
+
 
 use crate::{
-    ast,
     semantic::{
         scope::{
-            type_traits::{OperandMerging, TypeChecking},
-            user_type_impl::UserType,
-            BuildStaticType, ScopeApi,
-        },
-        CompatibleWith, EitherType, MergeType, SemanticError, TypeOf,
+            type_traits::{TypeChecking},
+            user_type_impl::UserType, ScopeApi,
+        }, EitherType,
     },
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    AddrType, PrimitiveType, StaticType,
 };
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope> for StaticType {
@@ -101,7 +97,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
 
     fn is_addr(&self) -> bool {
         match self {
-            StaticType::Address(AddrType(value)) => true,
+            StaticType::Address(AddrType(_value)) => true,
             _ => false,
         }
     }

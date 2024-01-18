@@ -266,29 +266,29 @@ impl ScopeApi for MockScope {
     type Event = Event;
 
     fn child_scope_with(
-        parent: &Rc<RefCell<Self>>,
-        vars: Vec<Self::Var>,
+        _parent: &Rc<RefCell<Self>>,
+        _vars: Vec<Self::Var>,
     ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_type(&mut self, id: &ID, reg: Self::UserType) -> Result<(), SemanticError> {
+    fn register_type(&mut self, _id: &ID, _reg: Self::UserType) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError> {
+    fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_var(&mut self, reg: Self::Var) -> Result<(), SemanticError> {
+    fn register_var(&mut self, _reg: Self::Var) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_event(&mut self, reg: Self::Event) -> Result<(), SemanticError> {
+    fn register_event(&mut self, _reg: Self::Event) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, SemanticError> {
+    fn find_var(&self, _id: &ID) -> Result<Rc<Self::Var>, SemanticError> {
         unimplemented!("Mock function call")
     }
     fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>> {
@@ -298,7 +298,7 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
 
-    fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, SemanticError> {
+    fn find_type(&self, _id: &ID) -> Result<Rc<Self::UserType>, SemanticError> {
         unimplemented!("Mock function call")
     }
 

@@ -1,14 +1,12 @@
 use std::cell::Ref;
 use std::rc::Rc;
 
-use crate::semantic::{CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf};
+use crate::semantic::{EitherType, SemanticError, TypeOf};
 
-use crate::ast;
+
 
 use super::{
-    type_traits::{GetSubTypes, OperandMerging, TypeChecking},
-    user_type_impl::{Enum, UserType},
-    BuildStaticType, ScopeApi,
+    user_type_impl::{Enum, UserType}, ScopeApi,
 };
 
 pub mod st_builder;

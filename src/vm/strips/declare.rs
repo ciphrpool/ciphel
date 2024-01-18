@@ -1,5 +1,5 @@
 use crate::vm::{
-    allocator::{Memory, MemoryAddress},
+    allocator::{Memory},
     vm::{Executable, RuntimeError},
 };
 

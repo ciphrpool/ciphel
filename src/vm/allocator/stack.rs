@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::vm::vm::RuntimeError;
 
-use super::heap::ALIGNMENT;
+
 
 const STACK_SIZE: usize = 512;
 

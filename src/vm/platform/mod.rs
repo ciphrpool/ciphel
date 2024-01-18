@@ -50,7 +50,6 @@ pub mod api {
         ast::{expressions::Expression, utils::strings::ID},
         semantic::{
             scope::{
-                static_types::{AddrType, FnType, PrimitiveType},
                 type_traits::{GetSubTypes, TypeChecking},
                 BuildStaticType, ScopeApi,
             },
@@ -58,7 +57,7 @@ pub mod api {
         },
     };
 
-    use super::{names, PlatformFunction};
+    use super::{names};
 
     pub enum PlatformApi {
         LEFT,

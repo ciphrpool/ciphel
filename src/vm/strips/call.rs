@@ -7,7 +7,7 @@ use crate::vm::{
 pub struct Call {}
 
 impl Executable for Call {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }
