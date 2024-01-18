@@ -4,7 +4,7 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::{Statement},
+        statements::Statement,
         utils::{
             io::{PResult, Span},
             lexem,
@@ -505,7 +505,10 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::expressions::Atomic, semantic::scope::scope_impl::MockScope};
+    use crate::{
+        ast::{expressions::Atomic, statements::Return},
+        semantic::scope::scope_impl::MockScope,
+    };
 
     use super::*;
 

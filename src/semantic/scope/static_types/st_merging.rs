@@ -1,9 +1,8 @@
 use std::cell::Ref;
 
-use crate::{
-    semantic::{
-        scope::{user_type_impl::UserType, ScopeApi}, EitherType, MergeType, SemanticError, TypeOf,
-    },
+use crate::semantic::{
+    scope::{user_type_impl::UserType, ScopeApi},
+    EitherType, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
