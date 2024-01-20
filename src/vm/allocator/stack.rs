@@ -2,8 +2,6 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::vm::vm::RuntimeError;
 
-
-
 const STACK_SIZE: usize = 512;
 
 #[derive(Debug, Clone)]
@@ -45,7 +43,8 @@ impl Frame {
         if top < self.zero {
             return Err(StackError::StackUnderflow);
         }
-        stack.pop(top - self.zero)
+        let _ = stack.pop(top - self.zero)?;
+        Ok(())
     }
 
     pub fn saved(&self) -> std::ops::Range<usize> {
@@ -82,6 +81,12 @@ impl Stack {
         })
     }
 
+    pub fn top(&self) -> usize {
+        let borrowed = self.top.as_ref().borrow();
+        let top = borrowed.clone();
+        top
+    }
+
     pub fn push(&self, size: usize) -> Result<(), StackError> {
         let mut top = self.top.borrow_mut();
         if *top + size >= STACK_SIZE {
@@ -91,13 +96,18 @@ impl Stack {
         Ok(())
     }
 
-    pub fn pop(&self, size: usize) -> Result<(), StackError> {
+    pub fn pop(&self, size: usize) -> Result<Vec<u8>, StackError> {
         let mut top = self.top.borrow_mut();
         if *top < size {
             return Err(StackError::StackUnderflow);
         }
+        let res = {
+            let borrowed = self.stack.borrow();
+            borrowed[*top - size..*top].to_vec()
+        };
+
         *top -= size;
-        Ok(())
+        Ok(res)
     }
 
     pub fn read(&self, offset: usize, size: usize) -> Result<Vec<u8>, StackError> {
@@ -108,6 +118,16 @@ impl Stack {
         let borrowed_buffer = self.stack.borrow();
         Ok(borrowed_buffer[offset..offset + size].to_vec())
     }
+
+    pub fn read_last(&self, size: usize) -> Result<Vec<u8>, StackError> {
+        let top = self.top.borrow();
+        if *top < size {
+            return Err(StackError::ReadError);
+        }
+        let borrowed_buffer = self.stack.borrow();
+        Ok(borrowed_buffer[*top - size..*top].to_vec())
+    }
+
     pub fn write(&self, offset: usize, data: &Vec<u8>) -> Result<(), StackError> {
         let top = self.top.borrow();
         if offset >= *top || offset + data.len() > *top {

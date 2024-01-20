@@ -1,8 +1,7 @@
 use crate::semantic::SizeOf;
 
 use super::{
-    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StaticType, TupleType, VecType,
 };
 
 impl SizeOf for StaticType {

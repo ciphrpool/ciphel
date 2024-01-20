@@ -248,10 +248,27 @@ where
     User: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
     Static: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
 {
-    fn can_minus(&self) -> Result<(), SemanticError> {
+    fn can_substract(&self) -> Result<(), SemanticError> {
         match self {
-            EitherType::Static(value) => value.can_minus(),
-            EitherType::User(value) => value.can_minus(),
+            EitherType::Static(value) => value.can_substract(),
+            EitherType::User(value) => value.can_substract(),
+        }
+    }
+
+    fn merge_substraction<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<
+        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
+        SemanticError,
+    >
+    where
+        Other: TypeOf<Scope>,
+    {
+        match self {
+            EitherType::Static(value) => value.merge_substraction(other, scope),
+            EitherType::User(value) => value.merge_substraction(other, scope),
         }
     }
     fn can_negate(&self) -> Result<(), SemanticError> {
@@ -261,13 +278,13 @@ where
         }
     }
 
-    fn can_high_ord_math(&self) -> Result<(), SemanticError> {
+    fn can_product(&self) -> Result<(), SemanticError> {
         match self {
-            EitherType::Static(value) => value.can_high_ord_math(),
-            EitherType::User(value) => value.can_high_ord_math(),
+            EitherType::Static(value) => value.can_product(),
+            EitherType::User(value) => value.can_product(),
         }
     }
-    fn merge_high_ord_math<Other>(
+    fn merge_product<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
@@ -276,18 +293,18 @@ where
         Other: TypeOf<Scope>,
     {
         match self {
-            EitherType::Static(value) => value.merge_high_ord_math(other, scope),
-            EitherType::User(value) => value.merge_high_ord_math(other, scope),
+            EitherType::Static(value) => value.merge_product(other, scope),
+            EitherType::User(value) => value.merge_product(other, scope),
         }
     }
 
-    fn can_low_ord_math(&self) -> Result<(), SemanticError> {
+    fn can_add(&self) -> Result<(), SemanticError> {
         match self {
-            EitherType::Static(value) => value.can_low_ord_math(),
-            EitherType::User(value) => value.can_low_ord_math(),
+            EitherType::Static(value) => value.can_add(),
+            EitherType::User(value) => value.can_add(),
         }
     }
-    fn merge_low_ord_math<Other>(
+    fn merge_addition<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
@@ -296,8 +313,8 @@ where
         Other: TypeOf<Scope>,
     {
         match self {
-            EitherType::Static(value) => value.merge_low_ord_math(other, scope),
-            EitherType::User(value) => value.merge_low_ord_math(other, scope),
+            EitherType::Static(value) => value.merge_addition(other, scope),
+            EitherType::User(value) => value.merge_addition(other, scope),
         }
     }
 

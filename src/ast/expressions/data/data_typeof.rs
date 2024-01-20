@@ -208,7 +208,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Slice::String(_) => Scope::StaticType::build_slice(&SliceType::String, scope)
+            Slice::String(..) => Scope::StaticType::build_slice(&SliceType::String, scope)
                 .map(|value| (EitherType::Static(value.into()))),
             Slice::List(vec) => {
                 let mut list_type = EitherType::Static(Scope::StaticType::build_unit().into());

@@ -5,7 +5,7 @@ use crate::{
     semantic::{EitherType, SemanticError, TypeOf},
 };
 
-use super::{ScopeApi};
+use super::ScopeApi;
 
 pub trait GetSubTypes<Scope: ScopeApi> {
     fn get_nth(&self, _n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
@@ -86,16 +86,26 @@ pub trait TypeChecking<Scope: ScopeApi> {
 }
 
 pub trait OperandMerging<Scope: ScopeApi> {
-    fn can_minus(&self) -> Result<(), SemanticError> {
+    fn can_substract(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
+    }
+    fn merge_substraction<Other>(
+        &self,
+        _other: &Other,
+        _scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        Err(SemanticError::IncompatibleOperands)
     }
     fn can_negate(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
     }
-    fn can_high_ord_math(&self) -> Result<(), SemanticError> {
+    fn can_product(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
     }
-    fn merge_high_ord_math<Other>(
+    fn merge_product<Other>(
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
@@ -106,10 +116,10 @@ pub trait OperandMerging<Scope: ScopeApi> {
         Err(SemanticError::IncompatibleOperands)
     }
 
-    fn can_low_ord_math(&self) -> Result<(), SemanticError> {
+    fn can_add(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
     }
-    fn merge_low_ord_math<Other>(
+    fn merge_addition<Other>(
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,

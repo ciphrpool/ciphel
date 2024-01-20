@@ -287,7 +287,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
         match &self.fn_var {
             Variable::Var(VarID(id)) => {
                 if let Some(api) = PlatformApi::from(id) {
-                    let _ = api.accept(&self.params, &scope.borrow())?;
+                    let _ = api.resolve(&self.params, scope)?;
                     return Ok(());
                 }
             }

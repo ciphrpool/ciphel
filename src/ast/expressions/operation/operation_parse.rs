@@ -18,8 +18,8 @@ use crate::{
 };
 
 use super::{
-    Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
-    HighOrdMath, Inclusion, LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
+    Inclusion, LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
 impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
@@ -52,7 +52,7 @@ enum HighOrdMathOPERATOR {
     Div,
     Mod,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for HighOrdMath<InnerScope> {
+impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope> {
     /*
      * @desc Parse Multiplication, division, modulo operation
      *
@@ -73,10 +73,10 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for HighOrdMath<InnerSc
             let right = Box::new(Expression::Atomic(right));
             Ok((
                 remainder,
-                Expression::HighOrdMath(match op {
-                    HighOrdMathOPERATOR::Mult => HighOrdMath::Mult { left, right },
-                    HighOrdMathOPERATOR::Div => HighOrdMath::Div { left, right },
-                    HighOrdMathOPERATOR::Mod => HighOrdMath::Mod { left, right },
+                Expression::Product(match op {
+                    HighOrdMathOPERATOR::Mult => Product::Mult { left, right },
+                    HighOrdMathOPERATOR::Div => Product::Div { left, right },
+                    HighOrdMathOPERATOR::Mod => Product::Mod { left, right },
                 }),
             ))
         } else {
@@ -91,7 +91,7 @@ enum LowOrdMathOPERATOR {
     Minus,
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LowOrdMath<InnerScope> {
+impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Addition<InnerScope> {
     /*
      * @desc Parse addition operation
      *
@@ -99,22 +99,24 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LowOrdMath<InnerSco
      * LowM := HighM + HighM | HighM
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = HighOrdMath::parse(input)?;
+        let (remainder, left) = Product::parse(input)?;
         let (remainder, op) = opt(alt((
             value(LowOrdMathOPERATOR::Add, wst(lexem::ADD)),
             value(LowOrdMathOPERATOR::Minus, wst(lexem::MINUS)),
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = HighOrdMath::parse(remainder)?;
+            let (remainder, right) = Product::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
                 remainder,
-                Expression::LowOrdMath(match op {
-                    LowOrdMathOPERATOR::Add => LowOrdMath::Add { left, right },
-                    LowOrdMathOPERATOR::Minus => LowOrdMath::Minus { left, right },
-                }),
+                match op {
+                    LowOrdMathOPERATOR::Add => Expression::Addition(Addition { left, right }),
+                    LowOrdMathOPERATOR::Minus => {
+                        Expression::Substraction(Substraction { left, right })
+                    }
+                },
             ))
         } else {
             Ok((remainder, left))
@@ -135,14 +137,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
      * Shift := LowM (<<|>>) LowM | LowM
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = LowOrdMath::parse(input)?;
+        let (remainder, left) = Addition::parse(input)?;
         let (remainder, op) = opt(alt((
             value(ShiftOPERATOR::Left, wst(lexem::SHL)),
             value(ShiftOPERATOR::Right, wst(lexem::SHR)),
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = LowOrdMath::parse(remainder)?;
+            let (remainder, right) = Addition::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -395,11 +397,11 @@ mod tests {
 
     #[test]
     fn valid_binary_math() {
-        let res = LowOrdMath::<MockScope>::parse("10 + 10".into());
+        let res = Addition::<MockScope>::parse("10 + 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Expression::LowOrdMath(LowOrdMath::Add {
+            Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
                 )))),
@@ -410,11 +412,11 @@ mod tests {
             value
         );
 
-        let res = HighOrdMath::<MockScope>::parse("10 * 10".into());
+        let res = Addition::<MockScope>::parse("10 - 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Expression::HighOrdMath(HighOrdMath::Mult {
+            Expression::Substraction(Substraction {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
                 )))),
@@ -425,11 +427,11 @@ mod tests {
             value
         );
 
-        let res = HighOrdMath::<MockScope>::parse("10 / 10".into());
+        let res = Product::<MockScope>::parse("10 * 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Expression::HighOrdMath(HighOrdMath::Div {
+            Expression::Product(Product::Mult {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
                 )))),
@@ -440,11 +442,26 @@ mod tests {
             value
         );
 
-        let res = HighOrdMath::<MockScope>::parse("10 % 2".into());
+        let res = Product::<MockScope>::parse("10 / 10".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Expression::HighOrdMath(HighOrdMath::Mod {
+            Expression::Product(Product::Div {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                )))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(10)
+                ))))
+            }),
+            value
+        );
+
+        let res = Product::<MockScope>::parse("10 % 2".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Product(Product::Mod {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(10)
                 )))),

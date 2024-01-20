@@ -6,8 +6,8 @@ use crate::semantic::{
 };
 
 use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, HighOrdMath, Inclusion,
-    LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
+    LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
@@ -25,7 +25,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath<Scope> {
+impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -35,25 +35,25 @@ impl<Scope: ScopeApi> TypeOf<Scope> for HighOrdMath<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            HighOrdMath::Mult { left, right } => {
+            Product::Mult { left, right } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
-                left_type.merge_high_ord_math(&right_type, scope)
+                left_type.merge_product(&right_type, scope)
             }
-            HighOrdMath::Div { left, right } => {
+            Product::Div { left, right } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
-                left_type.merge_high_ord_math(&right_type, scope)
+                left_type.merge_product(&right_type, scope)
             }
-            HighOrdMath::Mod { left, right } => {
+            Product::Mod { left, right } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
-                left_type.merge_high_ord_math(&right_type, scope)
+                left_type.merge_product(&right_type, scope)
             }
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath<Scope> {
+impl<Scope: ScopeApi> TypeOf<Scope> for Addition<Scope> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
@@ -62,16 +62,27 @@ impl<Scope: ScopeApi> TypeOf<Scope> for LowOrdMath<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        match self {
-            LowOrdMath::Add { left, right } => {
-                let left_type = left.type_of(&scope)?;
-                let right_type = right.type_of(&scope)?;
-                left_type.merge_low_ord_math(&right_type, scope)
-            }
-            LowOrdMath::Minus { left: _, right: _ } => todo!(),
-        }
+        let left_type = self.left.type_of(&scope)?;
+        let right_type = self.right.type_of(&scope)?;
+        left_type.merge_addition(&right_type, scope)
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Substraction<Scope> {
+    fn type_of(
+        &self,
+        scope: &Ref<Scope>,
+    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let left_type = self.left.type_of(&scope)?;
+        let right_type = self.right.type_of(&scope)?;
+        left_type.merge_substraction(&right_type, scope)
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
     fn type_of(
         &self,

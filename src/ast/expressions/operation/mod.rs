@@ -11,7 +11,7 @@ pub enum UnaryOperation<InnerScope: ScopeApi> {
     Not(Box<Expression<InnerScope>>),
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum HighOrdMath<InnerScope: ScopeApi> {
+pub enum Product<InnerScope: ScopeApi> {
     Mult {
         left: Box<Expression<InnerScope>>,
         right: Box<Expression<InnerScope>>,
@@ -26,16 +26,17 @@ pub enum HighOrdMath<InnerScope: ScopeApi> {
     },
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum LowOrdMath<InnerScope: ScopeApi> {
-    Add {
-        left: Box<Expression<InnerScope>>,
-        right: Box<Expression<InnerScope>>,
-    },
-    Minus {
-        left: Box<Expression<InnerScope>>,
-        right: Box<Expression<InnerScope>>,
-    },
+pub struct Addition<InnerScope: ScopeApi> {
+    pub left: Box<Expression<InnerScope>>,
+    pub right: Box<Expression<InnerScope>>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Substraction<InnerScope: ScopeApi> {
+    pub left: Box<Expression<InnerScope>>,
+    pub right: Box<Expression<InnerScope>>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shift<InnerScope: ScopeApi> {
     Left {

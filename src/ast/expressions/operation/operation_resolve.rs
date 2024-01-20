@@ -1,6 +1,6 @@
 use super::{
-    BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, HighOrdMath, Inclusion,
-    LogicalAnd, LogicalOr, LowOrdMath, Shift, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
+    LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::{
@@ -27,7 +27,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
             UnaryOperation::Minus(value) => {
                 let _ = value.resolve(scope, context, extra)?;
                 let value_type = value.type_of(&scope.borrow())?;
-                let _ = value_type.can_minus()?;
+                let _ = value_type.can_substract()?;
                 Ok(())
             }
             UnaryOperation::Not(value) => {
@@ -39,7 +39,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath<Scope> {
+impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
@@ -54,23 +54,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for HighOrdMath<Scope> {
         Scope: ScopeApi,
     {
         let (left, right) = match self {
-            HighOrdMath::Mult { left, right } => (left, right),
-            HighOrdMath::Div { left, right } => (left, right),
-            HighOrdMath::Mod { left, right } => (left, right),
+            Product::Mult { left, right } => (left, right),
+            Product::Div { left, right } => (left, right),
+            Product::Mod { left, right } => (left, right),
         };
         let _ = left.resolve(scope, context, extra)?;
         let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_high_ord_math()?;
+        let _ = left_type.can_product()?;
 
         let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_high_ord_math()?;
+        let _ = right_type.can_product()?;
 
         let _ = left_type.compatible_with(right, &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath<Scope> {
+impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
@@ -84,22 +84,46 @@ impl<Scope: ScopeApi> Resolve<Scope> for LowOrdMath<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let (left, right) = match self {
-            LowOrdMath::Add { left, right } => (left, right),
-            LowOrdMath::Minus { left, right } => (left, right),
-        };
-        let _ = left.resolve(scope, context, extra)?;
-        let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_low_ord_math()?;
+        let _ = self.left.resolve(scope, context, extra)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
+        let _ = left_type.can_add()?;
 
-        let _ = right.resolve(scope, context, extra)?;
-        let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_low_ord_math()?;
+        let _ = self.right.resolve(scope, context, extra)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
+        let _ = right_type.can_add()?;
 
-        let _ = left_type.compatible_with(right, &scope.borrow())?;
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
         Ok(())
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
+    type Output = ();
+    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        let _ = self.left.resolve(scope, context, extra)?;
+        let left_type = self.left.type_of(&scope.borrow())?;
+        let _ = left_type.can_substract()?;
+
+        let _ = self.right.resolve(scope, context, extra)?;
+        let right_type = self.right.type_of(&scope.borrow())?;
+        let _ = right_type.can_substract()?;
+
+        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
     type Output = ();
     type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
@@ -401,32 +425,32 @@ mod tests {
 
     #[test]
     fn valid_high_ord_math() {
-        let expr = HighOrdMath::parse("10 * 10".into()).unwrap().1;
+        let expr = Product::parse("10 * 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = HighOrdMath::parse("10.0 * 10".into()).unwrap().1;
+        let expr = Product::parse("10.0 * 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = HighOrdMath::parse("10 * 10.0".into()).unwrap().1;
+        let expr = Product::parse("10 * 10.0".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 * (10+10)".into()).unwrap().1;
+        let expr = Product::parse("10 * (10+10)".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("(10+10) * 10".into()).unwrap().1;
+        let expr = Product::parse("(10+10) * 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = HighOrdMath::parse("10 * x".into()).unwrap().1;
+        let expr = Product::parse("10 * x".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -442,17 +466,17 @@ mod tests {
 
     #[test]
     fn robustness_high_ord_math() {
-        let expr = HighOrdMath::parse("10 * 'a'".into()).unwrap().1;
+        let expr = Product::parse("10 * 'a'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = HighOrdMath::parse("'a' * 'a'".into()).unwrap().1;
+        let expr = Product::parse("'a' * 'a'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = HighOrdMath::parse("10 * x".into()).unwrap().1;
+        let expr = Product::parse("10 * x".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
@@ -460,52 +484,52 @@ mod tests {
 
     #[test]
     fn valid_low_ord_math() {
-        let expr = LowOrdMath::parse("10 + 10".into()).unwrap().1;
+        let expr = Addition::parse("10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 - 10".into()).unwrap().1;
+        let expr = Addition::parse("10 - 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 + (10*10)".into()).unwrap().1;
+        let expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 + 10*10".into()).unwrap().1;
+        let expr = Addition::parse("10 + 10*10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10.0 + 10".into()).unwrap().1;
+        let expr = Addition::parse("10.0 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("(10 * 10) + 10".into()).unwrap().1;
+        let expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 * 10 + 10".into()).unwrap().1;
+        let expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = HighOrdMath::parse("10.0 * 10 + 10".into()).unwrap().1;
+        let expr = Product::parse("10.0 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = HighOrdMath::parse("10 * 10.0 + 10".into()).unwrap().1;
+        let expr = Product::parse("10 * 10.0 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = LowOrdMath::parse("10 + x".into()).unwrap().1;
+        let expr = Addition::parse("10 + x".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -521,17 +545,17 @@ mod tests {
 
     #[test]
     fn robustness_low_ord_math() {
-        let expr = LowOrdMath::parse("10 + 'a'".into()).unwrap().1;
+        let expr = Addition::parse("10 + 'a'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = LowOrdMath::parse("'a' + 'a'".into()).unwrap().1;
+        let expr = Addition::parse("'a' + 'a'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = LowOrdMath::parse("10 + x".into()).unwrap().1;
+        let expr = Addition::parse("10 + x".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());

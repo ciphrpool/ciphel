@@ -22,3 +22,12 @@ pub struct Memory {
     pub heap: Heap,
     pub stack: Stack,
 }
+
+impl Memory {
+    pub fn new() -> Self {
+        Self {
+            heap: Heap::new(),
+            stack: Stack::new(),
+        }
+    }
+}

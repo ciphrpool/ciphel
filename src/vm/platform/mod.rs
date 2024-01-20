@@ -44,10 +44,16 @@ pub trait PlatformExecutor {
 }
 
 pub mod api {
-    use std::cell::Ref;
+    use std::{
+        cell::{Ref, RefCell},
+        rc::Rc,
+    };
 
     use crate::{
-        ast::{expressions::Expression, utils::strings::ID},
+        ast::{
+            expressions::{Atomic, Expression},
+            utils::strings::ID,
+        },
         semantic::{
             scope::{
                 type_traits::{GetSubTypes, TypeChecking},
@@ -57,7 +63,7 @@ pub mod api {
         },
     };
 
-    use super::{names};
+    use super::names;
 
     pub enum PlatformApi {
         LEFT,
@@ -99,8 +105,8 @@ pub mod api {
             }
         }
 
-        pub fn accept<Scope: ScopeApi>(
-            self,
+        fn accept<Scope: ScopeApi>(
+            &self,
             args: &Vec<Expression<Scope>>,
             scope: &Ref<Scope>,
         ) -> Result<(), SemanticError> {
@@ -259,6 +265,15 @@ pub mod api {
                 }
                 PlatformApi::PRINT => Ok(()),
             }
+        }
+
+        pub fn resolve<Scope: ScopeApi>(
+            &self,
+            args: &Vec<Expression<Scope>>,
+            scope: &Rc<RefCell<Scope>>,
+        ) -> Result<(), SemanticError> {
+            let _ = self.accept(args, &scope.borrow())?;
+            Ok(())
         }
 
         pub fn returns<Scope: ScopeApi>(self) -> EitherType<Scope::UserType, Scope::StaticType> {

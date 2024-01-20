@@ -31,7 +31,7 @@ impl Executable for Strips {
 pub enum Strip {
     Operation(operation::Operation),
     Call(call::Call),
-    Serialize(serialize::Serialize),
+    Serialize(serialize::Serialized),
     Access(access::Access),
     If(if_strip::IfSrip),
     Match(match_strip::MatchStrip),

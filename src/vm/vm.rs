@@ -7,6 +7,7 @@ pub enum CodeGenerationError {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
+    MathError,
     Default,
 }
 

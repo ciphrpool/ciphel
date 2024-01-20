@@ -261,7 +261,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Slice::String(_) => match context {
+            Slice::String(..) => match context {
                 Some(context_type) => {
                     let _ = context_type.compatible_with(self, &scope.borrow())?;
                     Ok(())

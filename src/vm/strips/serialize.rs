@@ -1,13 +1,30 @@
-use crate::vm::{
-    allocator::Memory,
-    vm::{Executable, RuntimeError},
+use crate::{
+    ast::expressions::data,
+    semantic::{
+        scope::{static_types::StaticType, user_type_impl::UserType},
+        EitherType,
+    },
+    vm::{
+        allocator::Memory,
+        vm::{Executable, RuntimeError},
+    },
 };
 
 #[derive(Debug, Clone)]
-pub enum Serialize {}
+pub struct Serialized {
+    pub data: Vec<u8>,
+    pub data_type: EitherType<UserType, StaticType>,
+}
 
-impl Executable for Serialize {
-    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
-        todo!()
+impl Executable for Serialized {
+    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+        let offset = memory.stack.top();
+        let _ = memory.stack.push(self.data.len()).map_err(|e| e.into())?;
+        let _ = memory
+            .stack
+            .write(offset, &self.data)
+            .map_err(|e| e.into())?;
+
+        Ok(())
     }
 }

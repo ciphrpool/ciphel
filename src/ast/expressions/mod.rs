@@ -28,8 +28,9 @@ pub mod operation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression<InnerScope: ScopeApi> {
-    HighOrdMath(operation::HighOrdMath<InnerScope>),
-    LowOrdMath(operation::LowOrdMath<InnerScope>),
+    Product(operation::Product<InnerScope>),
+    Addition(operation::Addition<InnerScope>),
+    Substraction(operation::Substraction<InnerScope>),
     Shift(operation::Shift<InnerScope>),
     BitwiseAnd(operation::BitwiseAnd<InnerScope>),
     BitwiseXOR(operation::BitwiseXOR<InnerScope>),
@@ -158,8 +159,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Expression::HighOrdMath(value) => value.resolve(scope, context, extra),
-            Expression::LowOrdMath(value) => value.resolve(scope, context, extra),
+            Expression::Product(value) => value.resolve(scope, context, extra),
+            Expression::Addition(value) => value.resolve(scope, context, extra),
+            Expression::Substraction(value) => value.resolve(scope, context, extra),
             Expression::Shift(value) => value.resolve(scope, context, extra),
             Expression::BitwiseAnd(value) => value.resolve(scope, context, extra),
             Expression::BitwiseXOR(value) => value.resolve(scope, context, extra),
@@ -185,8 +187,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Expression::HighOrdMath(value) => value.type_of(&scope),
-            Expression::LowOrdMath(value) => value.type_of(&scope),
+            Expression::Product(value) => value.type_of(&scope),
+            Expression::Addition(value) => value.type_of(&scope),
+            Expression::Substraction(value) => value.type_of(&scope),
             Expression::Shift(value) => value.type_of(&scope),
             Expression::BitwiseAnd(value) => value.type_of(&scope),
             Expression::BitwiseXOR(value) => value.type_of(&scope),
@@ -235,11 +238,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression<Scope>> {
 
 #[cfg(test)]
 mod tests {
+    use tests::operation::Addition;
+
     use crate::{
-        ast::expressions::{
-            data::{Data, Primitive},
-            operation::LowOrdMath,
-        },
+        ast::expressions::data::{Data, Primitive},
         semantic::scope::scope_impl::MockScope,
     };
 
@@ -251,11 +253,11 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Expression::LowOrdMath(LowOrdMath::Add {
+            Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(1)
                 )))),
-                right: Box::new(Expression::HighOrdMath(operation::HighOrdMath::Mult {
+                right: Box::new(Expression::Product(operation::Product::Mult {
                     left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(2)
                     )))),
