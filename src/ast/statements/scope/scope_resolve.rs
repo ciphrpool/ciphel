@@ -43,7 +43,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl,
-            static_types::{PrimitiveType, StaticType},
+            static_types::{NumberType, PrimitiveType, StaticType},
         },
     };
 
@@ -73,11 +73,15 @@ mod tests {
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             x_type
         );
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             y_type
         );
 
@@ -104,7 +108,7 @@ mod tests {
         let res = expr_scope.resolve(
             &scope,
             &Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
         );
@@ -113,7 +117,9 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             res
         )
     }
@@ -141,7 +147,7 @@ mod tests {
         let res = expr_scope.resolve(
             &scope,
             &Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
         );
@@ -150,7 +156,9 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             res
         );
 
@@ -175,7 +183,7 @@ mod tests {
         let res = expr_scope.resolve(
             &scope,
             &Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
         );
@@ -184,7 +192,9 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             res
         )
     }
@@ -208,7 +218,7 @@ mod tests {
         let res = expr_scope.resolve(
             &scope,
             &Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
         );
@@ -217,7 +227,9 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             res
         )
     }
@@ -243,7 +255,7 @@ mod tests {
         let res = expr_scope.resolve(
             &scope,
             &Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
         );

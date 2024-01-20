@@ -59,7 +59,7 @@ impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
                 )),
                 |(_, addr, timeout)| ForIterator::Receive {
                     addr,
-                    timeout: timeout.unsigned_abs() as usize,
+                    timeout: timeout as usize,
                 },
             ),
         ))(input)
@@ -125,7 +125,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Primitive, VarID, Variable},
+                data::{Data, Number, Primitive, VarID, Variable},
                 flows::FnCall,
                 Atomic,
             },
@@ -160,7 +160,7 @@ mod tests {
                         call: FnCall {
                             fn_var: Variable::Var(VarID("f".into())),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(10)
+                                Primitive::Number(Number::U64(10))
                             )))]
                         }
                     }))],
@@ -194,7 +194,7 @@ mod tests {
                         call: FnCall {
                             fn_var: Variable::Var(VarID("f".into())),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(10)
+                                Primitive::Number(Number::U64(10))
                             )))]
                         }
                     }))],
@@ -224,7 +224,7 @@ mod tests {
                     call: FnCall {
                         fn_var: Variable::Var(VarID("f".into())),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(10)
+                            Primitive::Number(Number::U64(10))
                         )))]
                     }
                 }))],

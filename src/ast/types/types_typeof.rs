@@ -71,14 +71,14 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
-            static_types::PrimitiveType::Number => match other_type {
-                static_types::PrimitiveType::Number => Ok(()),
+            static_types::PrimitiveType::Number(_) => match other_type {
+                static_types::PrimitiveType::Number(_) => Ok(()),
                 static_types::PrimitiveType::Float => Ok(()),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
 
             static_types::PrimitiveType::Float => match other_type {
-                static_types::PrimitiveType::Number => Ok(()),
+                static_types::PrimitiveType::Number(_) => Ok(()),
                 static_types::PrimitiveType::Float => Ok(()),
                 _ => Err(SemanticError::IncompatibleTypes),
             },

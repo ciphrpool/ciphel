@@ -2,10 +2,10 @@ use std::cell::Ref;
 
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable,
-    Vector,
+    ListAccess, Map, NumAccess, Number, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID,
+    Variable, Vector,
 };
-use crate::ast::types::PrimitiveType;
+use crate::ast::types::{NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
@@ -184,10 +184,58 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Primitive::Number(_) => {
-                Scope::StaticType::build_primitive(&PrimitiveType::Number, scope)
-                    .map(|value| (EitherType::Static(value.into())))
-            }
+            Primitive::Number(num) => match num {
+                Number::U8(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::U8),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::U16(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::U16),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::U32(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::U32),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::U64(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::U64),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::U128(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::U128),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::I8(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::I8),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::I16(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::I16),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::I32(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::I32),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::I64(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::I64),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+                Number::I128(_) => Scope::StaticType::build_primitive(
+                    &PrimitiveType::Number(NumberType::I128),
+                    scope,
+                )
+                .map(|value| (EitherType::Static(value.into()))),
+            },
             Primitive::Float(_) => Scope::StaticType::build_primitive(&PrimitiveType::Float, scope)
                 .map(|value| (EitherType::Static(value.into()))),
             Primitive::Bool(_) => Scope::StaticType::build_primitive(&PrimitiveType::Bool, scope)

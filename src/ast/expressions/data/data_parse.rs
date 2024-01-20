@@ -143,7 +143,9 @@ impl TryParse for Primitive {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(parse_float, |value| Primitive::Float(value)),
-            map(parse_number, |value| Primitive::Number(value)),
+            map(parse_number, |value| {
+                Primitive::Number(super::Number::U64(value))
+            }),
             map(
                 alt((
                     value(true, wst(lexem::TRUE)),
@@ -209,8 +211,8 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
                     ),
                 ),
                 |(length, capacity)| Vector::Def {
-                    length: length.unsigned_abs() as usize,
-                    capacity: capacity.unsigned_abs() as usize,
+                    length: length as usize,
+                    capacity: capacity as usize,
                 },
             ),
         ))(input)
@@ -344,7 +346,7 @@ impl<Scope: ScopeApi> TryParse for Channel<Scope> {
                 )),
                 |(_, addr, timeout)| Channel::Receive {
                     addr,
-                    timeout: timeout.unsigned_abs() as usize,
+                    timeout: timeout as usize,
                 },
             ),
             map(
@@ -478,8 +480,8 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
                     ),
                 ),
                 |(length, capacity)| Map::Def {
-                    length: length.unsigned_abs() as usize,
-                    capacity: capacity.unsigned_abs() as usize,
+                    length: length as usize,
+                    capacity: capacity as usize,
                 },
             ),
         ))(input)
@@ -506,7 +508,10 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{expressions::Atomic, statements::Return},
+        ast::{
+            expressions::{data::Number, Atomic},
+            statements::Return,
+        },
         semantic::scope::scope_impl::MockScope,
     };
 
@@ -527,7 +532,7 @@ mod tests {
         let res = Primitive::parse("42".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(42), value);
+        assert_eq!(Primitive::Number(Number::U64(42)), value);
 
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok());
@@ -552,9 +557,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Slice::List(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(5)))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(2)
+                )))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(5)
+                )))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(6)
+                ))))
             ]),
             value
         );
@@ -572,9 +583,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Vector::Init(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(5)))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(2)
+                )))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(5)
+                )))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(6)
+                ))))
             ]),
             value,
         );
@@ -637,7 +654,7 @@ mod tests {
             Channel::Send {
                 addr: Address(Variable::Var(VarID("chan1".into()))),
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 ))))
             },
             value
@@ -656,7 +673,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Tuple(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2)))),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(2)
+                )))),
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
             ]),
             value
@@ -689,11 +708,15 @@ mod tests {
                 fields: vec![
                     (
                         KeyData::Slice(Slice::String("x".into())),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(2)
+                        ))))
                     ),
                     (
                         KeyData::Slice(Slice::String("y".into())),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(6))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(6)
+                        ))))
                     )
                 ]
             },
@@ -723,11 +746,15 @@ mod tests {
                 fields: vec![
                     (
                         "x".into(),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(2)
+                        ))))
                     ),
                     (
                         "y".into(),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(8)
+                        ))))
                     )
                 ],
             },
@@ -747,11 +774,15 @@ mod tests {
                 fields: vec![
                     (
                         "x".into(),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(2))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(2)
+                        ))))
                     ),
                     (
                         "y".into(),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(8))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(8)
+                        ))))
                     )
                 ],
             },
@@ -787,7 +818,7 @@ mod tests {
             Variable::ListAccess(ListAccess {
                 var: Box::new(Variable::Var(VarID("x".into()))),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(3)
+                    Primitive::Number(Number::U64(3))
                 ))))
             }),
             value
@@ -825,7 +856,7 @@ mod tests {
                 field: Box::new(Variable::ListAccess(ListAccess {
                     var: Box::new(Variable::Var(VarID("y".into()))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(3)
+                        Primitive::Number(Number::U64(3))
                     ))))
                 }))
             }),
@@ -839,7 +870,7 @@ mod tests {
                 var: Box::new(Variable::ListAccess(ListAccess {
                     var: Box::new(Variable::Var(VarID("x".into()))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(3)
+                        Primitive::Number(Number::U64(3))
                     ))))
                 })),
                 field: Box::new(Variable::Var(VarID("y".into())))

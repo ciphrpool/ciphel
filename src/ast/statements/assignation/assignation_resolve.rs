@@ -93,7 +93,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl::Scope,
-            static_types::{PrimitiveType, StaticType},
+            static_types::{NumberType, PrimitiveType, StaticType},
             var_impl::Var,
         },
     };
@@ -110,7 +110,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &());
@@ -134,7 +136,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &());

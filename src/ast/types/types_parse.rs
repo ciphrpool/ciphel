@@ -15,8 +15,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, TupleType, Type, Types,
-    VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, TupleType,
+    Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -46,17 +46,41 @@ impl TryParse for PrimitiveType {
      * @desc Parse Primitive types
      *
      * @grammar
-     * Primitive := num | int | float | char | bool
+     * Primitive := num | float | char | bool
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            value(PrimitiveType::Number, wst(lexem::NUMBER)),
+            map(NumberType::parse, |num| PrimitiveType::Number(num)),
             value(PrimitiveType::Float, wst(lexem::FLOAT)),
             value(PrimitiveType::Char, wst(lexem::CHAR)),
             value(PrimitiveType::Bool, wst(lexem::BOOL)),
         ))(input)
     }
 }
+
+impl TryParse for NumberType {
+    /*
+     * @desc Parse Primitive types
+     *
+     * @grammar
+     * num := u8 | u16 | u32 | u64 | u128 | i8 | i16 | i32 | i64 | i128
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        alt((
+            value(NumberType::U8, wst(lexem::U8)),
+            value(NumberType::U16, wst(lexem::U16)),
+            value(NumberType::U32, wst(lexem::U32)),
+            value(NumberType::U64, wst(lexem::U64)),
+            value(NumberType::U128, wst(lexem::U128)),
+            value(NumberType::I8, wst(lexem::I8)),
+            value(NumberType::I16, wst(lexem::I16)),
+            value(NumberType::I32, wst(lexem::I32)),
+            value(NumberType::I64, wst(lexem::I64)),
+            value(NumberType::I128, wst(lexem::I128)),
+        ))(input)
+    }
+}
+
 impl TryParse for SliceType {
     /*
      * @desc Parse Slice types
@@ -74,7 +98,7 @@ impl TryParse for SliceType {
                     delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
                     Type::parse,
                 ),
-                |(size, value)| SliceType::List(size.unsigned_abs() as usize, Box::new(value)),
+                |(size, value)| SliceType::List(size as usize, Box::new(value)),
             ),
         ))(input)
     }
@@ -235,10 +259,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Bool, value);
 
-        let res = PrimitiveType::parse("number".into());
+        let res = PrimitiveType::parse("u8".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(PrimitiveType::Number, value);
+        assert_eq!(PrimitiveType::Number(NumberType::U8), value);
 
         let res = PrimitiveType::parse("char".into());
         assert!(res.is_ok());
@@ -258,15 +282,18 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(SliceType::String, value);
 
-        let res = SliceType::parse("[8]number".into());
+        let res = SliceType::parse("[8]u32".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            SliceType::List(8, Box::new(Type::Primitive(PrimitiveType::Number))),
+            SliceType::List(
+                8,
+                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U32)))
+            ),
             value
         );
 
-        let res = SliceType::parse("[8][2]number".into());
+        let res = SliceType::parse("[8][2]i32".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
@@ -274,7 +301,7 @@ mod tests {
                 8,
                 Box::new(Type::Slice(SliceType::List(
                     2,
-                    Box::new(Type::Primitive(PrimitiveType::Number))
+                    Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I32)))
                 )))
             ),
             value
@@ -283,13 +310,13 @@ mod tests {
 
     #[test]
     fn valid_vec_type() {
-        let res = VecType::parse("Vec<[8]number>".into());
+        let res = VecType::parse("Vec<[8]u128>".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             VecType(Box::new(Type::Slice(SliceType::List(
                 8,
-                Box::new(Type::Primitive(PrimitiveType::Number))
+                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U128)))
             )))),
             value
         );
@@ -297,12 +324,12 @@ mod tests {
 
     #[test]
     fn valid_fn_type() {
-        let res = FnType::parse("fn(number) -> bool".into());
+        let res = FnType::parse("fn(u16) -> bool".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             FnType {
-                params: vec![Type::Primitive(PrimitiveType::Number)],
+                params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool))
             },
             value
@@ -311,13 +338,13 @@ mod tests {
 
     #[test]
     fn valid_chan_type() {
-        let res = ChanType::parse("Chan<[8]number>".into());
+        let res = ChanType::parse("Chan<[8]i128>".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             ChanType(Box::new(Type::Slice(SliceType::List(
                 8,
-                Box::new(Type::Primitive(PrimitiveType::Number))
+                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I128)))
             )))),
             value
         );
@@ -325,11 +352,13 @@ mod tests {
 
     #[test]
     fn valid_address_type() {
-        let res = AddrType::parse("&number".into());
+        let res = AddrType::parse("&u64".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            AddrType(Box::new(Type::Primitive(PrimitiveType::Number))),
+            AddrType(Box::new(Type::Primitive(PrimitiveType::Number(
+                NumberType::U64
+            )))),
             value
         );
     }
@@ -350,13 +379,13 @@ mod tests {
 
     #[test]
     fn valid_tuple_type() {
-        let res = TupleType::parse("(number,number)".into());
+        let res = TupleType::parse("(i32,u16)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             TupleType(vec![
-                Type::Primitive(PrimitiveType::Number),
-                Type::Primitive(PrimitiveType::Number)
+                Type::Primitive(PrimitiveType::Number(NumberType::I32)),
+                Type::Primitive(PrimitiveType::Number(NumberType::U16))
             ]),
             value
         );

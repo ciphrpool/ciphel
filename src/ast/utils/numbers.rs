@@ -66,21 +66,19 @@ fn float(input: Span) -> IResult<Span, Span> {
     ))(input)
 }
 
-pub type Number = i64;
-
-pub fn parse_number(input: Span) -> PResult<Number> {
+pub fn parse_number(input: Span) -> PResult<u64> {
     alt((
         map_res(octal, |value| {
-            Number::from_str_radix(&value.replace("_", ""), 8)
+            u64::from_str_radix(&value.replace("_", ""), 8)
         }),
         map_res(hexadecimal, |value| {
-            Number::from_str_radix(&value.replace("_", ""), 16)
+            u64::from_str_radix(&value.replace("_", ""), 16)
         }),
         map_res(binary, |value| {
-            Number::from_str_radix(&value.replace("_", ""), 2)
+            u64::from_str_radix(&value.replace("_", ""), 2)
         }),
         map_res(decimal, |value| {
-            Number::from_str_radix(&value.replace("_", ""), 10)
+            u64::from_str_radix(&value.replace("_", ""), 10)
         }),
     ))(input)
 }

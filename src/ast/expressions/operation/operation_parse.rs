@@ -366,7 +366,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScop
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::expressions::data::{Data, Primitive},
+        ast::expressions::data::{Data, Number, Primitive},
         semantic::scope::scope_impl::MockScope,
     };
 
@@ -379,7 +379,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             UnaryOperation::Minus(Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                Primitive::Number(10)
+                Primitive::Number(Number::U64(10))
             ))))),
             value
         );
@@ -403,10 +403,10 @@ mod tests {
         assert_eq!(
             Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 ))))
             }),
             value
@@ -418,10 +418,10 @@ mod tests {
         assert_eq!(
             Expression::Substraction(Substraction {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 ))))
             }),
             value
@@ -433,10 +433,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Mult {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 ))))
             }),
             value
@@ -448,10 +448,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Div {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 ))))
             }),
             value
@@ -463,10 +463,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Mod {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(2)
+                    Primitive::Number(Number::U64(2))
                 ))))
             }),
             value
@@ -478,10 +478,10 @@ mod tests {
         assert_eq!(
             Expression::Shift(Shift::Left {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(2)
+                    Primitive::Number(Number::U64(2))
                 ))))
             }),
             value
@@ -493,10 +493,10 @@ mod tests {
         assert_eq!(
             Expression::Shift(Shift::Right {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(2)
+                    Primitive::Number(Number::U64(2))
                 ))))
             }),
             value
@@ -574,10 +574,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::Less {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value
@@ -589,10 +589,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::LessEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value
@@ -604,10 +604,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::Greater {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value
@@ -619,10 +619,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::GreaterEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value
@@ -634,10 +634,10 @@ mod tests {
         assert_eq!(
             Expression::Equation(Equation::Equal {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value
@@ -649,10 +649,10 @@ mod tests {
         assert_eq!(
             Expression::Equation(Equation::NotEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(10)
+                    Primitive::Number(Number::U64(10))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(5)
+                    Primitive::Number(Number::U64(5))
                 ))))
             }),
             value

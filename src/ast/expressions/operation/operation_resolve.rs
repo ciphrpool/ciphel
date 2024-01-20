@@ -416,7 +416,7 @@ mod tests {
         },
         semantic::scope::{
             scope_impl::Scope,
-            static_types::{PrimitiveType, SliceType, StaticType},
+            static_types::{NumberType, PrimitiveType, SliceType, StaticType},
             var_impl::Var,
         },
     };
@@ -457,7 +457,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -536,7 +538,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -635,13 +639,15 @@ mod tests {
             expr_type
         );
 
-        let expr = Cast::parse("'a' as number".into()).unwrap().1;
+        let expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             expr_type
         );
 

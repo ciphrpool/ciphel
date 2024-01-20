@@ -232,7 +232,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl,
-            static_types::{FnType, PrimitiveType, SliceType, StaticType},
+            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },
@@ -245,8 +245,8 @@ mod tests {
         let type_def = TypeDef::parse(
             r#"
             struct Point {
-                x : number,
-                y : number
+                x : u64,
+                y : u64
             }
         "#
             .into(),
@@ -266,11 +266,15 @@ mod tests {
                     let mut res = Vec::new();
                     res.push((
                         "x".into(),
-                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                        EitherType::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        ),
                     ));
                     res.push((
                         "y".into(),
-                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                        EitherType::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        ),
                     ));
                     res
                 },
@@ -304,11 +308,17 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                            EitherType::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                            EitherType::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            ),
                         ));
                         res
                     },
@@ -334,13 +344,19 @@ mod tests {
                                     (
                                         "x".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                            StaticType::Primitive(PrimitiveType::Number(
+                                                NumberType::U64,
+                                            ))
+                                            .into(),
                                         ),
                                     ),
                                     (
                                         "y".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                            StaticType::Primitive(PrimitiveType::Number(
+                                                NumberType::U64,
+                                            ))
+                                            .into(),
                                         ),
                                     ),
                                 ],
@@ -357,13 +373,19 @@ mod tests {
                                     (
                                         "x".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                            StaticType::Primitive(PrimitiveType::Number(
+                                                NumberType::U64,
+                                            ))
+                                            .into(),
                                         ),
                                     ),
                                     (
                                         "y".into(),
                                         EitherType::Static(
-                                            StaticType::Primitive(PrimitiveType::Number).into(),
+                                            StaticType::Primitive(PrimitiveType::Number(
+                                                NumberType::U64,
+                                            ))
+                                            .into(),
                                         ),
                                     ),
                                 ],
@@ -384,11 +406,11 @@ mod tests {
             r#"
             union Geo {
                 Point {
-                    x : number,
-                    y : number,
+                    x : u64,
+                    y : u64,
                 },
                 Axe {
-                    x : number,
+                    x : u64,
                 }
             }
         "#
@@ -416,13 +438,19 @@ mod tests {
                                 res.push((
                                     "x".into(),
                                     EitherType::Static(
-                                        StaticType::Primitive(PrimitiveType::Number).into(),
+                                        StaticType::Primitive(PrimitiveType::Number(
+                                            NumberType::U64,
+                                        ))
+                                        .into(),
                                     ),
                                 ));
                                 res.push((
                                     "y".into(),
                                     EitherType::Static(
-                                        StaticType::Primitive(PrimitiveType::Number).into(),
+                                        StaticType::Primitive(PrimitiveType::Number(
+                                            NumberType::U64,
+                                        ))
+                                        .into(),
                                     ),
                                 ));
                                 res
@@ -438,7 +466,10 @@ mod tests {
                                 res.push((
                                     "x".into(),
                                     EitherType::Static(
-                                        StaticType::Primitive(PrimitiveType::Number).into(),
+                                        StaticType::Primitive(PrimitiveType::Number(
+                                            NumberType::U64,
+                                        ))
+                                        .into(),
                                     ),
                                 ));
                                 res
@@ -526,7 +557,7 @@ mod tests {
         let function = FnDef::<scope_impl::Scope>::parse(
             r##"
 
-        fn main(x:number,text:string) -> Unit {
+        fn main(x:u64,text:string) -> Unit {
 
         }
 
@@ -552,7 +583,9 @@ mod tests {
             EitherType::Static(
                 StaticType::Fn(FnType {
                     params: vec![
-                        EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                        EitherType::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+                        ),
                         EitherType::Static(StaticType::Slice(SliceType::String).into())
                     ],
                     ret: Box::new(EitherType::Static(StaticType::Unit.into()))
@@ -571,7 +604,9 @@ mod tests {
             .find_var(&"x".into())
             .unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             x_type.type_sig
         );
         let text_type = function_scope
@@ -593,7 +628,7 @@ mod tests {
         let function = FnDef::<scope_impl::Scope>::parse(
             r##"
 
-        fn main() -> number {
+        fn main() -> u64 {
             let x = 10;
             return x;
         }
@@ -621,7 +656,7 @@ mod tests {
                 StaticType::Fn(FnType {
                     params: vec![],
                     ret: Box::new(EitherType::Static(
-                        StaticType::Primitive(PrimitiveType::Number).into()
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                     ))
                 })
                 .into()
@@ -650,7 +685,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .expect("registering vars should succeed");
 
@@ -671,7 +708,9 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 captured: RefCell::new(false),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+                ),
             }]
         )
     }
@@ -681,7 +720,7 @@ mod tests {
         let function = FnDef::<scope_impl::Scope>::parse(
             r##"
 
-        fn main(y:number) -> Unit {
+        fn main(y:u64) -> Unit {
             x = 10;
             y = 10;
         }
@@ -698,7 +737,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .expect("registering vars should succeed");
         let _ = scope
@@ -706,7 +747,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "y".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .expect("registering vars should succeed");
         let res = function.resolve(&scope, &(), &());
@@ -726,7 +769,9 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 captured: RefCell::new(false),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+                ),
             }]
         )
     }

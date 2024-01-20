@@ -6,8 +6,8 @@ use crate::semantic::{
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+    TupleType, VecType,
 };
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> for StaticType {
@@ -70,14 +70,167 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
-            PrimitiveType::Number => match other_type {
-                PrimitiveType::Number => Ok(EitherType::Static(
-                    StaticType::Primitive(PrimitiveType::Number).into(),
+            PrimitiveType::Number(NumberType::U8) => match other_type {
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
                 )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
+
+            self_num @ PrimitiveType::Number(NumberType::U16) => match other_type {
+                PrimitiveType::Number(NumberType::U8) => Ok(EitherType::Static(
+                    StaticType::Primitive(self_num.clone()).into(),
+                )),
+                PrimitiveType::Number(NumberType::I8 | NumberType::I16) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I32)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            self_num @ PrimitiveType::Number(NumberType::U32) => match other_type {
+                PrimitiveType::Number(NumberType::U8 | NumberType::U16) => Ok(EitherType::Static(
+                    StaticType::Primitive(self_num.clone()).into(),
+                )),
+                PrimitiveType::Number(NumberType::I8 | NumberType::I16 | NumberType::I32) => {
+                    Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                    ))
+                }
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            self_num @ PrimitiveType::Number(NumberType::U64) => match other_type {
+                PrimitiveType::Number(NumberType::U8 | NumberType::U16 | NumberType::U32) => Ok(
+                    EitherType::Static(StaticType::Primitive(self_num.clone()).into()),
+                ),
+                PrimitiveType::Number(
+                    NumberType::I8 | NumberType::I16 | NumberType::I32 | NumberType::I64,
+                ) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            self_num @ PrimitiveType::Number(NumberType::U128) => match other_type {
+                PrimitiveType::Number(
+                    NumberType::U8 | NumberType::U16 | NumberType::U32 | NumberType::U64,
+                ) => Ok(EitherType::Static(
+                    StaticType::Primitive(self_num.clone()).into(),
+                )),
+                PrimitiveType::Number(
+                    NumberType::I8 | NumberType::I16 | NumberType::I32 | NumberType::I64,
+                ) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            PrimitiveType::Number(NumberType::I8) => match other_type {
+                PrimitiveType::Number(
+                    NumberType::U8
+                    | NumberType::U16
+                    | NumberType::U32
+                    | NumberType::U64
+                    | NumberType::U128,
+                ) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I8)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            PrimitiveType::Number(NumberType::I16) => match other_type {
+                PrimitiveType::Number(
+                    NumberType::U16 | NumberType::U32 | NumberType::U64 | NumberType::U128,
+                ) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I16)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            PrimitiveType::Number(NumberType::I32) => match other_type {
+                PrimitiveType::Number(NumberType::U32 | NumberType::U64 | NumberType::U128) => {
+                    Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I32)).into(),
+                    ))
+                }
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            PrimitiveType::Number(NumberType::I64) => match other_type {
+                PrimitiveType::Number(NumberType::U64 | NumberType::U128) => {
+                    Ok(EitherType::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                    ))
+                }
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
+            PrimitiveType::Number(NumberType::I128) => match other_type {
+                PrimitiveType::Number(NumberType::U128) => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
+                )),
+                num @ PrimitiveType::Number(_) => Ok(EitherType::Static(
+                    StaticType::Primitive(num.clone()).into(),
+                )),
+                PrimitiveType::Float => Ok(EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+
             PrimitiveType::Float => match other_type {
-                PrimitiveType::Number => Ok(EitherType::Static(
+                PrimitiveType::Number(_) => Ok(EitherType::Static(
                     StaticType::Primitive(PrimitiveType::Float).into(),
                 )),
                 PrimitiveType::Float => Ok(EitherType::Static(
@@ -340,13 +493,120 @@ impl KeyType {
         match (self, other) {
             (KeyType::Primitive(value), KeyType::Primitive(other_value)) => {
                 match (value, other_value) {
-                    (PrimitiveType::Number, PrimitiveType::Number) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Number))
+                    (PrimitiveType::Number(NumberType::U8), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
                     }
-                    (PrimitiveType::Number, PrimitiveType::Float) => {
+
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U16),
+                        PrimitiveType::Number(NumberType::U8),
+                    ) => Ok(KeyType::Primitive(self_num.clone())),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U16),
+                        PrimitiveType::Number(NumberType::I8 | NumberType::I16),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I32))),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U16),
+                        num @ PrimitiveType::Number(_),
+                    ) => Ok(KeyType::Primitive(num.clone())),
+
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U32),
+                        PrimitiveType::Number(NumberType::U8 | NumberType::U16),
+                    ) => Ok(KeyType::Primitive(self_num.clone())),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U32),
+                        PrimitiveType::Number(NumberType::I8 | NumberType::I16 | NumberType::I32),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I64))),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U32),
+                        num @ PrimitiveType::Number(_),
+                    ) => Ok(KeyType::Primitive(num.clone())),
+
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U64),
+                        PrimitiveType::Number(NumberType::U8 | NumberType::U16 | NumberType::U32),
+                    ) => Ok(KeyType::Primitive(self_num.clone())),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U64),
+                        PrimitiveType::Number(
+                            NumberType::I8 | NumberType::I16 | NumberType::I32 | NumberType::I64,
+                        ),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I128))),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U64),
+                        num @ PrimitiveType::Number(_),
+                    ) => Ok(KeyType::Primitive(num.clone())),
+
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U128),
+                        PrimitiveType::Number(
+                            NumberType::U8 | NumberType::U16 | NumberType::U32 | NumberType::U64,
+                        ),
+                    ) => Ok(KeyType::Primitive(self_num.clone())),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U128),
+                        PrimitiveType::Number(
+                            NumberType::I8 | NumberType::I16 | NumberType::I32 | NumberType::I64,
+                        ),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I128)).into()),
+                    (
+                        self_num @ PrimitiveType::Number(NumberType::U128),
+                        num @ PrimitiveType::Number(_),
+                    ) => Ok(KeyType::Primitive(num.clone()).into()),
+
+                    (
+                        PrimitiveType::Number(NumberType::I8),
+                        PrimitiveType::Number(
+                            NumberType::U8
+                            | NumberType::U16
+                            | NumberType::U32
+                            | NumberType::U64
+                            | NumberType::U128,
+                        ),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I8))),
+                    (PrimitiveType::Number(NumberType::I8), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
+                    }
+
+                    (
+                        PrimitiveType::Number(NumberType::I16),
+                        PrimitiveType::Number(
+                            NumberType::U16 | NumberType::U32 | NumberType::U64 | NumberType::U128,
+                        ),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I16))),
+                    (PrimitiveType::Number(NumberType::I16), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
+                    }
+
+                    (
+                        PrimitiveType::Number(NumberType::I32),
+                        PrimitiveType::Number(NumberType::U32 | NumberType::U64 | NumberType::U128),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I32))),
+                    (PrimitiveType::Number(NumberType::I32), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
+                    }
+
+                    (
+                        PrimitiveType::Number(NumberType::I64),
+                        PrimitiveType::Number(NumberType::U64 | NumberType::U128),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I64))),
+                    (PrimitiveType::Number(NumberType::I64), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
+                    }
+
+                    (
+                        PrimitiveType::Number(NumberType::I128),
+                        PrimitiveType::Number(NumberType::U128),
+                    ) => Ok(KeyType::Primitive(PrimitiveType::Number(NumberType::I128))),
+                    (PrimitiveType::Number(NumberType::I128), num @ PrimitiveType::Number(_)) => {
+                        Ok(KeyType::Primitive(num.clone()))
+                    }
+
+                    (PrimitiveType::Number(_), PrimitiveType::Float) => {
                         Ok(KeyType::Primitive(PrimitiveType::Float))
                     }
-                    (PrimitiveType::Float, PrimitiveType::Number) => {
+                    (PrimitiveType::Float, PrimitiveType::Number(_)) => {
                         Ok(KeyType::Primitive(PrimitiveType::Float))
                     }
                     (PrimitiveType::Float, PrimitiveType::Float) => {

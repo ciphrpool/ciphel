@@ -199,11 +199,11 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Primitive},
+                data::{Data, Number, Primitive},
                 Atomic, Expression,
             },
             statements::{Return, Statement},
-            types::PrimitiveType,
+            types::{NumberType, PrimitiveType},
         },
         semantic::scope::scope_impl::MockScope,
     };
@@ -215,8 +215,8 @@ mod tests {
         let res = StructDef::parse(
             r#"
         struct Point {
-            x : number,
-            y : number
+            x : u64,
+            y : u64
         }
         "#
             .into(),
@@ -227,8 +227,14 @@ mod tests {
             StructDef {
                 id: "Point".into(),
                 fields: vec![
-                    ("x".into(), Type::Primitive(PrimitiveType::Number)),
-                    ("y".into(), Type::Primitive(PrimitiveType::Number))
+                    (
+                        "x".into(),
+                        Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                    ),
+                    (
+                        "y".into(),
+                        Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                    )
                 ]
             },
             value
@@ -241,8 +247,8 @@ mod tests {
             r#"
         union Geo {
             Point {
-                x : number,
-                y : number
+                x : u64,
+                y : u64
             }
         }
         "#
@@ -256,8 +262,14 @@ mod tests {
                 variants: vec![(
                     "Point".into(),
                     vec![
-                        ("x".into(), Type::Primitive(PrimitiveType::Number)),
-                        ("y".into(), Type::Primitive(PrimitiveType::Number))
+                        (
+                            "x".into(),
+                            Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                        ),
+                        (
+                            "y".into(),
+                            Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                        )
                     ]
                 ),]
             },
@@ -291,7 +303,7 @@ mod tests {
     fn valid_fn_def() {
         let res = FnDef::<MockScope>::parse(
             r#"
-        fn f(x:number) -> number {
+        fn f(x:u64) -> u64 {
             return 10;
         }
         "#
@@ -304,13 +316,15 @@ mod tests {
                 id: "f".into(),
                 params: vec![TypedVar {
                     id: "x".into(),
-                    signature: Type::Primitive(PrimitiveType::Number)
+                    signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],
-                ret: Box::new(Type::Primitive(PrimitiveType::Number)),
+                ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(10)
+                        ))))
                     )))],
 
                     inner_scope: RefCell::new(None),
@@ -340,7 +354,7 @@ mod tests {
         //         scope: Scope {
         //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
         //                 fn_id: "f".into(),
-        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10)))]
+        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))]
         //             }))]
         //         }
         //     },

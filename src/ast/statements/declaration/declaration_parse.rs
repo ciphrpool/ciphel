@@ -133,10 +133,10 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Primitive, Tuple},
+                data::{Data, Number, Primitive, Tuple},
                 Atomic, Expression,
             },
-            types::PrimitiveType,
+            types::{NumberType, PrimitiveType},
         },
         semantic::scope::scope_impl::MockScope,
     };
@@ -145,13 +145,13 @@ mod tests {
 
     #[test]
     fn valid_declaration_declared() {
-        let res = Declaration::<MockScope>::parse("let x:number;".into());
+        let res = Declaration::<MockScope>::parse("let x:u64;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Declared(TypedVar {
                 id: "x".into(),
-                signature: Type::Primitive(PrimitiveType::Number)
+                signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
             }),
             value
         );
@@ -159,17 +159,17 @@ mod tests {
 
     #[test]
     fn valid_declaration_assigned() {
-        let res = Declaration::<MockScope>::parse("let x:number = 10;".into());
+        let res = Declaration::<MockScope>::parse("let x:u64 = 10;".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
                 left: DeclaredVar::Typed(TypedVar {
                     id: "x".into(),
-                    signature: Type::Primitive(PrimitiveType::Number)
+                    signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(10))
+                    Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
             },
             value
@@ -182,7 +182,7 @@ mod tests {
             Declaration::Assigned {
                 left: DeclaredVar::Id("x".into()),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(10))
+                    Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
             },
             value
@@ -196,8 +196,12 @@ mod tests {
                 left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".into(), "y".into()])),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
                     Tuple(vec![
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10)))),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(10)
+                        )))),
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                            Number::U64(10)
+                        ))))
                     ])
                 )))))
             },

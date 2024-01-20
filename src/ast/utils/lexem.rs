@@ -17,7 +17,17 @@ pub const WHILE: &str = "while";
 pub const FOR: &str = "for";
 pub const LOOP: &str = "loop";
 // TYPE
-pub const NUMBER: &str = "number";
+pub const U8: &str = "u8";
+pub const U16: &str = "u16";
+pub const U32: &str = "u32";
+pub const U64: &str = "u64";
+pub const U128: &str = "u128";
+pub const I8: &str = "i8";
+pub const I16: &str = "i16";
+pub const I32: &str = "i32";
+pub const I64: &str = "i64";
+pub const I128: &str = "i128";
+
 pub const FLOAT: &str = "float";
 pub const CHAR: &str = "char";
 pub const STRING: &str = "string";

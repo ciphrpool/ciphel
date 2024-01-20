@@ -25,7 +25,18 @@ impl SizeOf for StaticType {
 impl SizeOf for PrimitiveType {
     fn size_of(&self) -> usize {
         match self {
-            PrimitiveType::Number => 8,
+            PrimitiveType::Number(num) => match num {
+                super::NumberType::U8 => 1,
+                super::NumberType::U16 => 2,
+                super::NumberType::U32 => 4,
+                super::NumberType::U64 => 8,
+                super::NumberType::U128 => 16,
+                super::NumberType::I8 => 1,
+                super::NumberType::I16 => 2,
+                super::NumberType::I32 => 4,
+                super::NumberType::I64 => 8,
+                super::NumberType::I128 => 16,
+            },
             PrimitiveType::Float => 8,
             PrimitiveType::Char => 1,
             PrimitiveType::Bool => 1,

@@ -82,7 +82,7 @@ impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
 mod tests {
     use crate::{
         ast::expressions::{
-            data::{Data, FieldAccess, Primitive, VarID, Variable},
+            data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
             Atomic,
         },
         semantic::scope::scope_impl::MockScope,
@@ -99,7 +99,7 @@ mod tests {
             Assignation {
                 left: Assignee::Variable(Variable::Var(VarID("x".into()))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(10))
+                    Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
             },
             value
@@ -112,7 +112,7 @@ mod tests {
             Assignation {
                 left: Assignee::PtrAccess(PtrAccess(Variable::Var(VarID("x".into())))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(10))
+                    Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
             },
             value
@@ -128,7 +128,7 @@ mod tests {
                     field: Box::new(Variable::Var(VarID("y".into())))
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(10))
+                    Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
             },
             value

@@ -235,7 +235,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Primitive, VarID, Variable},
+                data::{Data, Number, Primitive, VarID, Variable},
                 flows::PatternExpr,
                 Atomic, Expression,
             },
@@ -259,7 +259,7 @@ mod tests {
                 main_branch: ExprScope::Expr(Scope {
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(10)))
+                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
                         )))))
                     ],
 
@@ -268,7 +268,7 @@ mod tests {
                 else_branch: ExprScope::Expr(Scope {
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(20)))
+                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
                         )))))
                     ],
 
@@ -303,7 +303,7 @@ mod tests {
                 )))),
                 patterns: vec![
                     PatternExpr {
-                        pattern: Pattern::Primitive(Primitive::Number(10)),
+                        pattern: Pattern::Primitive(Primitive::Number(Number::U64(10))),
                         expr: ExprScope::Expr(Scope {
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
@@ -409,7 +409,7 @@ mod tests {
                 try_branch: ExprScope::Expr(Scope {
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(10)))
+                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
                         )))))
                     ],
 
@@ -418,7 +418,7 @@ mod tests {
                 else_branch: ExprScope::Expr(Scope {
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(20)))
+                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
                         )))))
                     ],
 
@@ -441,7 +441,9 @@ mod tests {
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
                         "x".into()
                     ))))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(10))))
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(10)
+                    ))))
                 ]
             },
             value

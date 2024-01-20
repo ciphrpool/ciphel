@@ -1,17 +1,9 @@
-
-
-use crate::{
-    semantic::{
-        scope::{
-            type_traits::{TypeChecking},
-            user_type_impl::UserType, ScopeApi,
-        }, EitherType,
-    },
+use crate::semantic::{
+    scope::{type_traits::TypeChecking, user_type_impl::UserType, ScopeApi},
+    EitherType,
 };
 
-use super::{
-    AddrType, PrimitiveType, StaticType,
-};
+use super::{AddrType, PrimitiveType, StaticType};
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope> for StaticType {
     fn is_iterable(&self) -> bool {
@@ -104,7 +96,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
 
     fn is_num(&self) -> bool {
         match self {
-            StaticType::Primitive(PrimitiveType::Number) => true,
+            StaticType::Primitive(PrimitiveType::Number(_)) => true,
             _ => false,
         }
     }

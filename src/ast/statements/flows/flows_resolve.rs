@@ -128,7 +128,7 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::scope::scope_impl::Scope;
-    use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
+    use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
     use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {
@@ -184,7 +184,9 @@ mod tests {
             .register_var(Var {
                 captured: RefCell::new(false),
                 id: "x".into(),
-                type_sig: EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                type_sig: EitherType::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());

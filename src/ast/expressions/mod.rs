@@ -238,7 +238,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression<Scope>> {
 
 #[cfg(test)]
 mod tests {
-    use tests::operation::Addition;
+    use tests::{data::Number, operation::Addition};
 
     use crate::{
         ast::expressions::data::{Data, Primitive},
@@ -255,14 +255,14 @@ mod tests {
         assert_eq!(
             Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(1)
+                    Primitive::Number(Number::U64(1))
                 )))),
                 right: Box::new(Expression::Product(operation::Product::Mult {
                     left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(2)
+                        Primitive::Number(Number::U64(2))
                     )))),
                     right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(4)
+                        Primitive::Number(Number::U64(4))
                     ))))
                 }))
             }),

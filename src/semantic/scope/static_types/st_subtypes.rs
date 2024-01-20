@@ -1,17 +1,9 @@
-
-
-use crate::{
-    semantic::{
-        scope::{
-            type_traits::{GetSubTypes},
-            user_type_impl::UserType, ScopeApi,
-        }, EitherType,
-    },
+use crate::semantic::{
+    scope::{type_traits::GetSubTypes, user_type_impl::UserType, ScopeApi},
+    EitherType,
 };
 
-use super::{
-    AddrType, KeyType, PrimitiveType, SliceType, StaticType,
-};
+use super::{AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType};
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope> for StaticType {
     fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
@@ -77,10 +69,10 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
                 <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_key(value)
             }
             StaticType::Slice(_) => Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             StaticType::Vec(_) => Some(EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             _ => None,
         }

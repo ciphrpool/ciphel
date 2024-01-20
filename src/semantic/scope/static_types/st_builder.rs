@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, TupleType,
-    VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+    TupleType, VecType,
 };
 
 impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Scope>
@@ -21,7 +21,36 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Primitive(match type_sig {
-            ast::types::PrimitiveType::Number => PrimitiveType::Number,
+            ast::types::PrimitiveType::Number(ast::types::NumberType::U8) => {
+                PrimitiveType::Number(NumberType::U8)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::U16) => {
+                PrimitiveType::Number(NumberType::U16)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::U32) => {
+                PrimitiveType::Number(NumberType::U32)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::U64) => {
+                PrimitiveType::Number(NumberType::U64)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::U128) => {
+                PrimitiveType::Number(NumberType::U128)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::I8) => {
+                PrimitiveType::Number(NumberType::I8)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::I16) => {
+                PrimitiveType::Number(NumberType::I16)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::I32) => {
+                PrimitiveType::Number(NumberType::I32)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::I64) => {
+                PrimitiveType::Number(NumberType::I64)
+            }
+            ast::types::PrimitiveType::Number(ast::types::NumberType::I128) => {
+                PrimitiveType::Number(NumberType::I128)
+            }
             ast::types::PrimitiveType::Float => PrimitiveType::Float,
             ast::types::PrimitiveType::Char => PrimitiveType::Char,
             ast::types::PrimitiveType::Bool => PrimitiveType::Bool,
@@ -173,7 +202,36 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
         let key_type = {
             match &type_sig.keys_type {
                 ast::types::KeyType::Primitive(value) => KeyType::Primitive(match value {
-                    ast::types::PrimitiveType::Number => PrimitiveType::Number,
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::U8) => {
+                        PrimitiveType::Number(NumberType::U8)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::U16) => {
+                        PrimitiveType::Number(NumberType::U16)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::U32) => {
+                        PrimitiveType::Number(NumberType::U32)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::U64) => {
+                        PrimitiveType::Number(NumberType::U64)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::U128) => {
+                        PrimitiveType::Number(NumberType::U128)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::I8) => {
+                        PrimitiveType::Number(NumberType::I8)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::I16) => {
+                        PrimitiveType::Number(NumberType::I16)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::I32) => {
+                        PrimitiveType::Number(NumberType::I32)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::I64) => {
+                        PrimitiveType::Number(NumberType::I64)
+                    }
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::I128) => {
+                        PrimitiveType::Number(NumberType::I128)
+                    }
                     ast::types::PrimitiveType::Float => PrimitiveType::Float,
                     ast::types::PrimitiveType::Char => PrimitiveType::Char,
                     ast::types::PrimitiveType::Bool => PrimitiveType::Bool,

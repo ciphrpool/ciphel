@@ -219,13 +219,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::TryParse,
         semantic::scope::{
             scope_impl::Scope,
-            static_types::{PrimitiveType, StaticType},
+            static_types::{NumberType, PrimitiveType, StaticType},
             user_type_impl::{Struct, UserType},
         },
     };
@@ -234,7 +233,7 @@ mod tests {
 
     #[test]
     fn valid_declaration() {
-        let decl = Declaration::parse("let x:number = 1;".into()).unwrap().1;
+        let decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
         let res = decl.resolve(&scope, &None, &());
@@ -242,7 +241,9 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             x_type.type_sig
         );
 
@@ -278,7 +279,9 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
@@ -305,11 +308,17 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                            EitherType::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+                            EitherType::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            ),
                         ));
                         res
                     },
@@ -321,12 +330,16 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             y_type.type_sig
         );
     }

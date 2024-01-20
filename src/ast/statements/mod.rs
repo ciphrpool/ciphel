@@ -207,7 +207,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
 mod tests {
     use crate::semantic::scope::{
         scope_impl::{self, MockScope},
-        static_types::{PrimitiveType, StaticType},
+        static_types::{NumberType, PrimitiveType, StaticType},
     };
 
     use super::*;
@@ -256,7 +256,9 @@ mod tests {
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Number).into()),
+            EitherType::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+            ),
             return_type
         );
     }
