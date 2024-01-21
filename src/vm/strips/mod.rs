@@ -10,6 +10,7 @@ pub mod declare;
 pub mod if_strip;
 pub mod loop_strip;
 pub mod match_strip;
+mod math_operation;
 pub mod operation;
 pub mod scope_strip;
 pub mod serialize;

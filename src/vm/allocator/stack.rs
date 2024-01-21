@@ -96,6 +96,17 @@ impl Stack {
         Ok(())
     }
 
+    pub fn push_with(&self, data: &[u8]) -> Result<(), StackError> {
+        let mut top = self.top.borrow_mut();
+        if *top + data.len() >= STACK_SIZE {
+            return Err(StackError::StackOverflow);
+        }
+        let mut borrowed_buffer = self.stack.borrow_mut();
+        borrowed_buffer[*top..*top + data.len()].copy_from_slice(&data);
+        *top += data.len();
+        Ok(())
+    }
+
     pub fn pop(&self, size: usize) -> Result<Vec<u8>, StackError> {
         let mut top = self.top.borrow_mut();
         if *top < size {
