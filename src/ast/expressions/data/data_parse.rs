@@ -5,6 +5,7 @@ use crate::{
         self,
         expressions::Expression,
         statements::Statement,
+        types::NumberType,
         utils::{
             io::{PResult, Span},
             lexem,
@@ -143,9 +144,24 @@ impl TryParse for Primitive {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(parse_float, |value| Primitive::Float(value)),
-            map(parse_number, |value| {
-                Primitive::Number(super::Number::U64(value))
-            }),
+            map(
+                pair(parse_number, opt(NumberType::parse)),
+                |(value, opt_type)| match opt_type {
+                    Some(number_type) => match number_type {
+                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8)),
+                        NumberType::U16 => Primitive::Number(super::Number::U16(value as u16)),
+                        NumberType::U32 => Primitive::Number(super::Number::U32(value as u32)),
+                        NumberType::U64 => Primitive::Number(super::Number::U64(value as u64)),
+                        NumberType::U128 => Primitive::Number(super::Number::U128(value as u128)),
+                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8)),
+                        NumberType::I16 => Primitive::Number(super::Number::I16(value as i16)),
+                        NumberType::I32 => Primitive::Number(super::Number::I32(value as i32)),
+                        NumberType::I64 => Primitive::Number(super::Number::I64(value as i64)),
+                        NumberType::I128 => Primitive::Number(super::Number::I128(value as i128)),
+                    },
+                    None => Primitive::Number(super::Number::U64(value)),
+                },
+            ),
             map(
                 alt((
                     value(true, wst(lexem::TRUE)),
@@ -533,6 +549,11 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(Primitive::Number(Number::U64(42)), value);
+
+        let res = Primitive::parse("42i16".into());
+        assert!(res.is_ok());
+        let value = res.unwrap().1;
+        assert_eq!(Primitive::Number(Number::I16(42)), value);
 
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok());
