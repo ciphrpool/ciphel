@@ -6,15 +6,8 @@ pub mod vtable;
 
 #[derive(Debug, Clone)]
 pub enum MemoryAddress {
-    Heap {
-        address: usize,
-        offset: usize,
-        size: usize,
-    },
-    Stack {
-        offset: usize,
-        size: usize,
-    },
+    Heap,
+    Stack { offset: usize },
 }
 
 #[derive(Debug, Clone)]

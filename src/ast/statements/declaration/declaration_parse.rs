@@ -16,12 +16,24 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl<Scope: ScopeApi> TryParse for Declaration<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Declaration<Scope>
+{
     /*
      * @desc Parse Declaration
      *
@@ -138,7 +150,7 @@ mod tests {
             },
             types::{NumberType, PrimitiveType},
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -195,14 +207,17 @@ mod tests {
             Declaration::Assigned {
                 left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".into(), "y".into()])),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
-                    Tuple(vec![
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(10)
-                        )))),
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(10)
-                        ))))
-                    ])
+                    Tuple {
+                        value: vec![
+                            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                                Number::U64(10)
+                            )))),
+                            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                                Number::U64(10)
+                            ))))
+                        ],
+                        metadata: Metadata::default()
+                    }
                 )))))
             },
             value

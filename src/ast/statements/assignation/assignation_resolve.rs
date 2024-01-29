@@ -1,12 +1,25 @@
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::{
-    scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Assignation<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -24,9 +37,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for AssignValue<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -66,7 +88,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Assignee<Scope>
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -109,8 +140,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -135,8 +167,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })

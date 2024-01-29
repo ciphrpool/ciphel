@@ -1,10 +1,9 @@
 use crate::vm::{
-    allocator::{
-        stack::{StackSlice},
-        Memory, MemoryAddress,
-    },
+    allocator::{stack::StackSlice, Memory, MemoryAddress},
     vm::{Executable, RuntimeError},
 };
+
+use super::operation::OpPrimitive;
 
 #[derive(Debug, Clone)]
 pub struct Assign {
@@ -20,13 +19,9 @@ impl Executable for Assign {
             .map_err(|err| err.into())?;
 
         match self.address {
-            MemoryAddress::Heap {
-                address, offset, ..
-            } => {
-                let _ = memory
-                    .heap
-                    .write(address, offset, &data)
-                    .map_err(|e| e.into())?;
+            MemoryAddress::Heap => {
+                let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
+                let _ = memory.heap.write(address, &data).map_err(|e| e.into())?;
             }
             MemoryAddress::Stack { offset, .. } => {
                 let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;

@@ -1,13 +1,25 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::{
-    scope::{type_traits::TypeChecking, ScopeApi},
-    EitherType, Resolve, SemanticError, TypeOf,
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::TypeChecking,
+        user_type_impl::UserType, var_impl::Var, ScopeApi,
+    },
+    Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Flow<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -27,9 +39,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for IfStat<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -44,7 +65,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
         let _ = self.condition.resolve(scope, &None, extra)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
@@ -55,9 +76,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for MatchStat<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -84,9 +114,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for TryStat<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -105,7 +144,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for CallStat<Scope>
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -183,8 +231,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })

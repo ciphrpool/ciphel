@@ -18,12 +18,24 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
-impl<Scope: ScopeApi> TryParse for Definition<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Definition<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(TypeDef::parse, |value| Definition::Type(value)),
@@ -131,7 +143,16 @@ impl TryParse for EnumDef {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for FnDef<InnerScope>
+{
     /*
      * @desc Parse function definition
      *
@@ -161,7 +182,16 @@ impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for EventDef<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for EventDef<InnerScope>
+{
     /*
      * @desc Parse event definition
      *

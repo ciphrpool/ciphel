@@ -1,7 +1,7 @@
 use std::cell::Ref;
 use std::rc::Rc;
 
-use crate::semantic::{EitherType, SemanticError, TypeOf};
+use crate::semantic::{Either, SemanticError, TypeOf};
 
 use super::{
     user_type_impl::{Enum, UserType},
@@ -16,7 +16,7 @@ pub mod st_sizeof;
 pub mod st_subtypes;
 pub mod st_type_checking;
 
-type SubType = Box<EitherType<UserType, StaticType>>;
+type SubType = Box<Either<UserType, StaticType>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StaticType {
@@ -67,7 +67,7 @@ pub struct FnType {
     pub params: Types,
     pub ret: SubType,
 }
-pub type Types = Vec<EitherType<UserType, StaticType>>;
+pub type Types = Vec<Either<UserType, StaticType>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChanType(pub SubType);
@@ -96,12 +96,12 @@ impl<Scope: ScopeApi<StaticType = StaticType>> TypeOf<Scope> for StaticType {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<EitherType<<Scope as ScopeApi>::UserType, StaticType>, SemanticError>
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
-        Ok(EitherType::Static(Rc::new(self.clone())))
+        Ok(Either::Static(Rc::new(self.clone())))
     }
 }
 

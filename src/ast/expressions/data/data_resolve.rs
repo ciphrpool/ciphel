@@ -5,13 +5,27 @@ use super::{
 };
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
+use crate::semantic::Info;
 use crate::semantic::{
-    scope::ScopeApi, CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Data<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -42,31 +56,40 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> Variable<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Variable<InnerScope>
+{
     fn resolve_based(
         &self,
         scope: &Rc<RefCell<InnerScope>>,
-        context: &EitherType<InnerScope::UserType, InnerScope::StaticType>,
-    ) -> Result<EitherType<InnerScope::UserType, InnerScope::StaticType>, SemanticError>
+        context: &Either<InnerScope::UserType, InnerScope::StaticType>,
+    ) -> Result<Either<InnerScope::UserType, InnerScope::StaticType>, SemanticError>
     where
         Self: Sized,
         InnerScope: ScopeApi,
     {
         match self {
-            Variable::Var(VarID(value)) => <EitherType<
+            Variable::Var(VarID { id: value, metadata }) => <Either<
                 <InnerScope as ScopeApi>::UserType,
                 <InnerScope as ScopeApi>::StaticType,
             > as GetSubTypes<InnerScope>>::get_field(
                 context, value
             )
             .ok_or(SemanticError::UnknownField),
-            Variable::FieldAccess(FieldAccess { var, field }) => {
+            Variable::FieldAccess(FieldAccess { var, field, metadata }) => {
                 let var_type = var.resolve_based(scope, context)?;
                 field.resolve_based(scope, &var_type)
             }
-            Variable::ListAccess(ListAccess { var, index }) => {
+            Variable::ListAccess(ListAccess { var, index, metadata }) => {
                 let var_type = var.resolve_based(scope, context)?;
-                if !<EitherType<
+                if !<Either<
                     <InnerScope as ScopeApi>::UserType,
                     <InnerScope as ScopeApi>::StaticType,
                 > as TypeChecking<InnerScope>>::is_iterable(&var_type)
@@ -74,7 +97,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                     Err(SemanticError::ExpectedIterable)
                 } else {
                     let key_type =
-                        <EitherType<
+                        <Either<
                             <InnerScope as ScopeApi>::UserType,
                             <InnerScope as ScopeApi>::StaticType,
                         > as GetSubTypes<InnerScope>>::get_key(&var_type);
@@ -85,14 +108,47 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                     Ok(var_type)
                 }
             }
-            Variable::NumAccess(_) => todo!(),
+            Variable::NumAccess(NumAccess { var, index, metadata }) => {
+                let _ = var.resolve_based(scope, context)?;
+                let var_type = var.type_of(&scope.borrow())?;
+                if !<Either<
+                    <InnerScope as ScopeApi>::UserType,
+                    <InnerScope as ScopeApi>::StaticType,
+                > as TypeChecking<InnerScope>>::is_indexable(&var_type)
+                {
+                    Err(SemanticError::ExpectedIndexable)
+                } else {
+                    let Some(fields) =
+                        <Either<
+                            <InnerScope as ScopeApi>::UserType,
+                            <InnerScope as ScopeApi>::StaticType,
+                        > as GetSubTypes<InnerScope>>::get_fields(&var_type)
+                    else {
+                        return Err(SemanticError::InvalidPattern);
+                    };
+                    if index >= &fields.len() {
+                        Err(SemanticError::InvalidPattern)
+                    } else {
+                        Ok(fields[*index].1.clone())
+                    }
+                }
+            }
         }
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Variable<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -112,30 +168,55 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for VarID {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for VarID<Scope>
+{
     type Output = ();
 
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
 
     type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        _context: &Self::Context,
+        context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = scope.borrow().find_var(&self.0)?;
-
+        let var = scope.borrow().find_var(&self.id)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+            *borrowed_metadata = Info::Resolved {
+                context,
+                signature: var.type_of(scope),
+                extra: todo!(),
+            };
+        }
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for FieldAccess<Scope>
+{
     type Output = ();
 
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -153,10 +234,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for NumAccess<Scope>
+{
     type Output = ();
 
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -171,20 +261,39 @@ impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
         if !<
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
         as TypeChecking<Scope>>::is_indexable(&var_type)
         {
             Err(SemanticError::ExpectedIndexable)
         } else {
-            Ok(())
+            let Some(fields) = <Either<
+                <Scope as ScopeApi>::UserType,
+                <Scope as ScopeApi>::StaticType,
+            > as GetSubTypes<Scope>>::get_fields(&var_type) else {
+                return Err(SemanticError::InvalidPattern);
+            };
+            if self.index >= fields.len() {
+                Err(SemanticError::InvalidPattern)
+            }else {
+                Ok(())
+            }
         }
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for ListAccess<Scope>
+{
     type Output = ();
 
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -198,18 +307,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
     {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
+
         if !<
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
             as TypeChecking<Scope>>::is_channel(&var_type)
         && !<
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+            as TypeChecking<Scope>>::is_map(&var_type)
+        && <
+            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
             as TypeChecking<Scope>>::is_iterable(&var_type)
         {
-            Err(SemanticError::ExpectedIndexable)
-        } else {
-
             let key_type = match context {
-                Some(context) => <EitherType<
+                Some(context) => <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_key(context),
@@ -217,15 +327,31 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
             };
             let _ = self.index.resolve(scope, &key_type, extra)?;
             let index_type = self.index.type_of(&scope.borrow())?;
-            let _ = key_type.compatible_with(&index_type, &scope.borrow())?;
-            Ok(())
+            if <
+                Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
+                as TypeChecking<Scope>>::is_u64(&index_type) {
+                Ok(())
+            } else {
+                Err(SemanticError::ExpectedIndexable)
+            }
+        } else {
+            Err(SemanticError::ExpectedIndexable)
         }
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Primitive
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -246,9 +372,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Slice<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -261,28 +396,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Slice::String(..) => match context {
+            Slice::String { .. } => match context {
                 Some(context_type) => {
                     let _ = context_type.compatible_with(self, &scope.borrow())?;
                     Ok(())
                 }
                 None => Ok(()),
             },
-            Slice::List(value) => {
+            Slice::List { value, .. } => {
                 let (param_context, maybe_length) =
                     match context {
-                        Some(context) => (
-                            <EitherType<
-                                <Scope as ScopeApi>::UserType,
-                                <Scope as ScopeApi>::StaticType,
-                            > as GetSubTypes<Scope>>::get_item(context),
-                            <EitherType<
-                                <Scope as ScopeApi>::UserType,
-                                <Scope as ScopeApi>::StaticType,
-                            > as GetSubTypes<Scope>>::get_length(
-                                context
-                            ),
-                        ),
+                        Some(context) => {
+                            (
+                                <Either<
+                                    <Scope as ScopeApi>::UserType,
+                                    <Scope as ScopeApi>::StaticType,
+                                > as GetSubTypes<Scope>>::get_item(
+                                    context
+                                ),
+                                <Either<
+                                    <Scope as ScopeApi>::UserType,
+                                    <Scope as ScopeApi>::StaticType,
+                                > as GetSubTypes<Scope>>::get_length(
+                                    context
+                                ),
+                            )
+                        }
                         None => (None, None),
                     };
                 match maybe_length {
@@ -301,9 +440,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Vector<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -316,9 +464,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init(value) => {
+            Vector::Init { value, .. } => {
                 let param_context = match context {
-                    Some(context) => <EitherType<
+                    Some(context) => <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_item(context),
@@ -331,15 +479,24 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
                 Ok(())
             }
             Vector::Def {
-                length: _,
                 capacity: _,
+                metadata,
             } => Ok(()),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Tuple<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -351,12 +508,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context, extra)
+        self.value.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for MultiData<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -368,13 +534,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let maybe_length = match context {
-            Some(context) => <EitherType<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_length(context),
-            None => None,
-        };
+        let maybe_length =
+            match context {
+                Some(context) => <Either<
+                    <Scope as ScopeApi>::UserType,
+                    <Scope as ScopeApi>::StaticType,
+                > as GetSubTypes<Scope>>::get_length(context),
+                None => None,
+            };
         match maybe_length {
             Some(length) => {
                 if length != self.len() {
@@ -385,7 +552,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         }
         for (index, expr) in self.iter().enumerate() {
             let param_context = match context {
-                Some(context) => <EitherType<
+                Some(context) => <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_nth(context, &index),
@@ -396,9 +563,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Closure<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -414,7 +590,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             return Err(SemanticError::CantInferType);
         };
         for (index, expr) in self.params.iter().enumerate() {
-            let param_context = <EitherType<
+            let param_context = <Either<
                 <Scope as ScopeApi>::UserType,
                 <Scope as ScopeApi>::StaticType,
             > as GetSubTypes<Scope>>::get_nth(context, &index);
@@ -439,7 +615,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             })
             .map(|(index, id, param)| {
                 let _param_type = param.type_of(&scope.borrow());
-                let param_type = <EitherType<
+                let param_type = <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_nth(context, &index);
@@ -447,7 +623,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             })
             .collect::<Vec<Scope::Var>>();
 
-        let Some(context_return) = <EitherType<
+        let Some(context_return) = <Either<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
         > as GetSubTypes<Scope>>::get_return(context) else {
@@ -464,9 +640,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for ExprScope<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = Vec<Scope::Var>;
     fn resolve(
         &self,
@@ -484,10 +669,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for ClosureParam
+{
     type Output = ();
-    type Context =
-        Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
+    type Context = Option<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -508,9 +701,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Address<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -522,12 +724,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context, extra)
+        self.value.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for PtrAccess<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -539,12 +750,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.0.resolve(scope, context, extra)
+        self.value.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Channel<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -560,27 +780,40 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
             Channel::Receive { addr, .. } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
+                if ! <Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 Ok(())
             }
-            Channel::Send { addr, msg } => {
+            Channel::Send {
+                addr,
+                msg,
+                metadata,
+            } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if ! <EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
+                if ! <Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 let _ = msg.resolve(scope, context, extra)?;
                 Ok(())
             }
-            Channel::Init(id) => scope.borrow_mut().register_chan(id),
+            Channel::Init { value: id, .. } => scope.borrow_mut().register_chan(id),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Struct<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -596,7 +829,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
         let user_type = borrowed_scope.find_type(&self.id)?;
         let user_type = user_type.type_of(&scope.borrow())?;
         for (field_name, expr) in &self.fields {
-            let field_context = <EitherType<
+            let field_context = <Either<
                 <Scope as ScopeApi>::UserType,
                 <Scope as ScopeApi>::StaticType,
             > as GetSubTypes<Scope>>::get_field(
@@ -606,7 +839,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) = <EitherType<
+        let Some(fields_type) = <Either<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
         > as GetSubTypes<Scope>>::get_fields(&user_type) else {
@@ -632,9 +865,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Union<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -653,7 +895,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
             return Err(SemanticError::CantInferType);
         };
         for (field_name, expr) in &self.fields {
-            let field_context = <EitherType<
+            let field_context = <Either<
                 <Scope as ScopeApi>::UserType,
                 <Scope as ScopeApi>::StaticType,
             > as GetSubTypes<Scope>>::get_field(
@@ -663,7 +905,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) = <EitherType<
+        let Some(fields_type) = <Either<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
         > as GetSubTypes<Scope>>::get_fields(&variant_type) else {
@@ -689,9 +931,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Enum {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Enum<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -713,9 +964,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         // Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Map<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -728,9 +988,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Map::Init { fields } => {
+            Map::Init { fields, metadata } => {
                 let item_type = match context {
-                    Some(context) => <EitherType<
+                    Some(context) => <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_item(context),
@@ -738,7 +998,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
                 };
 
                 let key_type = match context {
-                    Some(context) => <EitherType<
+                    Some(context) => <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_key(context),
@@ -754,13 +1014,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
             Map::Def {
                 length: _,
                 capacity: _,
+                metadata,
             } => Ok(()),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for KeyData<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -812,7 +1082,7 @@ mod tests {
 
         let res = primitive.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &(),
@@ -826,7 +1096,7 @@ mod tests {
 
         let res = primitive.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
             &(),
@@ -844,9 +1114,7 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(EitherType::Static(
-                StaticType::Slice(SliceType::String).into(),
-            )),
+            &Some(Either::Static(StaticType::Slice(SliceType::String).into())),
             &(),
         );
         assert!(res.is_ok());
@@ -859,10 +1127,10 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Slice(SliceType::List(
                     2,
-                    Box::new(EitherType::Static(
+                    Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
                 ))
@@ -880,7 +1148,7 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
             &(),
@@ -891,10 +1159,10 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Slice(SliceType::List(
                     2,
-                    Box::new(EitherType::Static(
+                    Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                 ))
@@ -908,10 +1176,10 @@ mod tests {
 
         let res = slice.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Slice(SliceType::List(
                     4,
-                    Box::new(EitherType::Static(
+                    Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
                 ))
@@ -924,7 +1192,7 @@ mod tests {
 
     #[test]
     fn valid_vector() {
-        let vector = Vector::parse("vec(2,8)".into()).unwrap().1;
+        let vector = Vector::parse("vec(8)".into()).unwrap().1;
 
         let scope = Scope::new();
         let res = vector.resolve(&scope, &None, &());
@@ -938,8 +1206,8 @@ mod tests {
 
         let res = vector.resolve(
             &scope,
-            &Some(EitherType::Static(
-                StaticType::Vec(VecType(Box::new(EitherType::Static(
+            &Some(Either::Static(
+                StaticType::Vec(VecType(Box::new(Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ))))
                 .into(),
@@ -956,8 +1224,8 @@ mod tests {
 
         let res = vector.resolve(
             &scope,
-            &Some(EitherType::Static(
-                StaticType::Vec(VecType(Box::new(EitherType::Static(
+            &Some(Either::Static(
+                StaticType::Vec(VecType(Box::new(Either::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 ))))
                 .into(),
@@ -975,8 +1243,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -988,9 +1257,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             variable_type
         );
 
@@ -1000,9 +1267,10 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
-                    StaticType::Vec(VecType(Box::new(EitherType::Static(
+                type_sig: Either::Static(
+                    StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ))))
                     .into(),
@@ -1018,9 +1286,10 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
-                    StaticType::Vec(VecType(Box::new(EitherType::Static(
+                type_sig: Either::Static(
+                    StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ))))
                     .into(),
@@ -1036,11 +1305,12 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::Slice(SliceType::String),
-                        values_type: Box::new(EitherType::Static(
+                        values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),
                     })
@@ -1049,7 +1319,7 @@ mod tests {
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_err());
 
         let variable = Variable::parse("x.0".into()).unwrap().1;
         let scope = Scope::new();
@@ -1057,13 +1327,14 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Tuple(TupleType(vec![
-                        EitherType::Static(
+                        Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         ),
-                        EitherType::Static(
+                        Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         ),
                     ]))
@@ -1078,9 +1349,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             variable_type
         );
 
@@ -1090,8 +1359,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "point".into(),
-                type_sig: EitherType::User(
+                type_sig: Either::User(
                     UserType::Struct(
                         user_type_impl::Struct {
                             id: "Point".into(),
@@ -1099,7 +1369,7 @@ mod tests {
                                 let mut res = Vec::new();
                                 res.push((
                                     "x".into(),
-                                    EitherType::Static(
+                                    Either::Static(
                                         StaticType::Primitive(PrimitiveType::Number(
                                             NumberType::U64,
                                         ))
@@ -1108,7 +1378,7 @@ mod tests {
                                 ));
                                 res.push((
                                     "y".into(),
-                                    EitherType::Static(
+                                    Either::Static(
                                         StaticType::Primitive(PrimitiveType::Number(
                                             NumberType::U64,
                                         ))
@@ -1131,9 +1401,7 @@ mod tests {
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             variable_type
         )
     }
@@ -1146,8 +1414,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -1159,8 +1428,8 @@ mod tests {
         assert!(address_type.is_ok());
         let address_type = address_type.unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Address(AddrType(Box::new(EitherType::Static(
+            Either::Static(
+                StaticType::Address(AddrType(Box::new(Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ))))
                 .into()
@@ -1177,9 +1446,10 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "chan1".into(),
-                type_sig: EitherType::Static(
-                    StaticType::Chan(ChanType(Box::new(EitherType::Static(
+                type_sig: Either::Static(
+                    StaticType::Chan(ChanType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ))))
                     .into(),
@@ -1203,8 +1473,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "chan1".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -1227,12 +1498,12 @@ mod tests {
 
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Tuple(TupleType(vec![
-                    EitherType::Static(
+                    Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ),
-                    EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                    Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                 ]))
                 .into(),
             )),
@@ -1247,12 +1518,12 @@ mod tests {
         let scope = Scope::new();
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Tuple(TupleType(vec![
-                    EitherType::Static(
+                    Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ),
-                    EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                    Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                 ]))
                 .into(),
             )),
@@ -1262,15 +1533,15 @@ mod tests {
 
         let res = tuple.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Tuple(TupleType(vec![
-                    EitherType::Static(
+                    Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ),
-                    EitherType::Static(
+                    Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ),
-                    EitherType::Static(
+                    Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     ),
                 ]))
@@ -1290,10 +1561,10 @@ mod tests {
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Map(MapType {
                     keys_type: KeyType::Slice(SliceType::String),
-                    values_type: Box::new(EitherType::Static(
+                    values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
                 })
@@ -1311,10 +1582,10 @@ mod tests {
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Map(MapType {
                     keys_type: KeyType::Slice(SliceType::String),
-                    values_type: Box::new(EitherType::Static(
+                    values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                 })
@@ -1326,10 +1597,10 @@ mod tests {
 
         let res = map.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Map(MapType {
                     keys_type: KeyType::Primitive(PrimitiveType::Number(NumberType::U64)),
-                    values_type: Box::new(EitherType::Static(
+                    values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
                 })
@@ -1356,14 +1627,14 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
@@ -1396,14 +1667,14 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                            Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                         ));
                         res
                     },
@@ -1428,15 +1699,15 @@ mod tests {
                 UserType::Union(user_type_impl::Union {
                     id: "Geo".into(),
                     variants: {
-                        let mut res = HashMap::new();
-                        res.insert(
+                        let mut res = Vec::new();
+                        res.push((
                             "Point".into(),
                             user_type_impl::Struct {
                                 id: "Point".into(),
                                 fields: vec![
                                     (
                                         "x".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -1445,7 +1716,7 @@ mod tests {
                                     ),
                                     (
                                         "y".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -1454,8 +1725,8 @@ mod tests {
                                     ),
                                 ],
                             },
-                        );
-                        res.insert(
+                        ));
+                        res.push((
                             "Axe".into(),
                             user_type_impl::Struct {
                                 id: "Axe".into(),
@@ -1463,7 +1734,7 @@ mod tests {
                                     let mut res = Vec::new();
                                     res.push((
                                         "x".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -1473,7 +1744,7 @@ mod tests {
                                     res
                                 },
                             },
-                        );
+                        ));
                         res
                     },
                 }),
@@ -1501,15 +1772,15 @@ mod tests {
                 UserType::Union(user_type_impl::Union {
                     id: "Geo".into(),
                     variants: {
-                        let mut res = HashMap::new();
-                        res.insert(
+                        let mut res = Vec::new();
+                        res.push((
                             "Point".into(),
                             user_type_impl::Struct {
                                 id: "Point".into(),
                                 fields: vec![
                                     (
                                         "x".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -1518,13 +1789,13 @@ mod tests {
                                     ),
                                     (
                                         "y".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Char).into(),
                                         ),
                                     ),
                                 ],
                             },
-                        );
+                        ));
                         res
                     },
                 }),
@@ -1554,8 +1825,8 @@ mod tests {
                 UserType::Enum(user_type_impl::Enum {
                     id: "Geo".into(),
                     values: {
-                        let mut res = HashSet::new();
-                        res.insert("Point".into());
+                        let mut res = Vec::new();
+                        res.push("Point".into());
                         res
                     },
                 }),
@@ -1576,8 +1847,8 @@ mod tests {
                 UserType::Enum(user_type_impl::Enum {
                     id: "Geo".into(),
                     values: {
-                        let mut res = HashSet::new();
-                        res.insert("Axe".into());
+                        let mut res = Vec::new();
+                        res.push("Axe".into());
                         res
                     },
                 }),

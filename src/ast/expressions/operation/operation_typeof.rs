@@ -1,8 +1,11 @@
 use std::cell::Ref;
 
 use crate::semantic::{
-    scope::{type_traits::OperandMerging, ScopeApi},
-    EitherType, Resolve, SemanticError, TypeOf,
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::OperandMerging,
+        user_type_impl::UserType, var_impl::Var, ScopeApi,
+    },
+    Either, Resolve, SemanticError, TypeOf,
 };
 
 use super::{
@@ -10,11 +13,20 @@ use super::{
     LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for UnaryOperation<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -25,11 +37,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Product<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -53,11 +74,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Addition<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Addition<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -68,11 +98,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Addition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Substraction<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Substraction<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -83,11 +122,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Substraction<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Shift<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -106,11 +154,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for BitwiseAnd<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -120,11 +177,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd<Scope> {
         left_type.merge_bitwise_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for BitwiseXOR<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -134,11 +200,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR<Scope> {
         left_type.merge_bitwise_xor(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for BitwiseOR<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -149,11 +224,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Cast<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Cast<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -164,11 +248,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Cast<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Comparaison<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -198,11 +291,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Equation<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -222,11 +324,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Inclusion<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Inclusion<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -237,11 +348,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Inclusion<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for LogicalAnd<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -251,11 +371,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd<Scope> {
         left_type.merge_logical_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalOr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for LogicalOr<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

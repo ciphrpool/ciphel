@@ -18,12 +18,24 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for ExprFlow<Scope>
+{
     /*
      * @desc Parse expression statement
      *
@@ -40,7 +52,16 @@ impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for IfExpr<Scope>
+{
     /*
      * @desc Parse If expression
      *
@@ -126,7 +147,16 @@ impl TryParse for Pattern {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for PatternExpr<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
@@ -139,7 +169,16 @@ impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for MatchExpr<Scope>
+{
     /*
      * @desc Parse Match expression
      *
@@ -184,7 +223,16 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for TryExpr<Scope>
+{
     /*
      * @desc Parse try expression
      *
@@ -205,7 +253,16 @@ impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for FnCall<Scope>
+{
     /*
      * @desc Parse fn call
      *
@@ -241,7 +298,7 @@ mod tests {
             },
             statements::{scope::Scope, Return, Statement},
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -299,7 +356,10 @@ mod tests {
         assert_eq!(
             MatchExpr {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var(VarID("x".into()))
+                    Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })
                 )))),
                 patterns: vec![
                     PatternExpr {
@@ -436,11 +496,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnCall {
-                fn_var: Variable::Var(VarID("f".into())),
+                fn_var: Variable::Var(VarID {
+                    id: "f".into(),
+                    metadata: Metadata::default()
+                }),
                 params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
-                        "x".into()
-                    ))))),
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::U64(10)
                     ))))

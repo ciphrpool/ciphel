@@ -139,7 +139,7 @@ impl Stack {
         Ok(borrowed_buffer[*top - size..*top].to_vec())
     }
 
-    pub fn write(&self, offset: usize, data: &Vec<u8>) -> Result<(), StackError> {
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<(), StackError> {
         let top = self.top.borrow();
         if offset >= *top || offset + data.len() > *top {
             return Err(StackError::ReadError);

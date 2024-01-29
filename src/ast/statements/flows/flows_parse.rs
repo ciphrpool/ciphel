@@ -1,6 +1,9 @@
 use crate::{
     ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse},
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 use nom::{
     branch::alt,
@@ -20,7 +23,16 @@ use crate::ast::{
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
-impl<Scope: ScopeApi> TryParse for Flow<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Flow<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(IfStat::parse, |value| Flow::If(value)),
@@ -31,7 +43,16 @@ impl<Scope: ScopeApi> TryParse for Flow<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for IfStat<InnerScope>
+{
     /*
      * @desc Parse If statement
      *
@@ -53,7 +74,16 @@ impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for MatchStat<InnerScope>
+{
     /*
      * @desc Parse match statements
      *
@@ -89,7 +119,16 @@ impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for PatternStat<InnerScope>
+{
     /*
      * @desc Parse pattern statements
      *
@@ -111,7 +150,16 @@ impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for TryStat<InnerScope>
+{
     /*
      * @desc Parse try statements
      *
@@ -132,7 +180,16 @@ impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for CallStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for CallStat<Scope>
+{
     /*
      * @desc Parse call statements
      *
@@ -162,7 +219,7 @@ mod tests {
                 Statement,
             },
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -189,7 +246,10 @@ mod tests {
                 main_branch: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]
@@ -201,7 +261,10 @@ mod tests {
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]
@@ -234,7 +297,10 @@ mod tests {
                 try_branch: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]
@@ -246,7 +312,10 @@ mod tests {
                 else_branch: Some(Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]

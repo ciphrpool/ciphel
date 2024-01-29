@@ -18,12 +18,24 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Assignation<Scope>
+{
     /*
      * @desc Parse assignation
      *
@@ -41,7 +53,16 @@ impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for AssignValue<InnerScope>
+{
     /*
      * @desc Parse assigned value
      *
@@ -61,7 +82,16 @@ impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Assignee<InnerScope>
+{
     /*
      * @desc Parse assigne
      *
@@ -85,7 +115,7 @@ mod tests {
             data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
             Atomic,
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -97,7 +127,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::Variable(Variable::Var(VarID("x".into()))),
+                left: Assignee::Variable(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
@@ -110,7 +143,13 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::PtrAccess(PtrAccess(Variable::Var(VarID("x".into())))),
+                left: Assignee::PtrAccess(PtrAccess {
+                    value: Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    }),
+                    metadata: Metadata::default()
+                }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
@@ -124,8 +163,15 @@ mod tests {
         assert_eq!(
             Assignation {
                 left: Assignee::Variable(Variable::FieldAccess(FieldAccess {
-                    var: Box::new(Variable::Var(VarID("x".into()))),
-                    field: Box::new(Variable::Var(VarID("y".into())))
+                    var: Box::new(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })),
+                    field: Box::new(Variable::Var(VarID {
+                        id: "y".into(),
+                        metadata: Metadata::default()
+                    })),
+                    metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))

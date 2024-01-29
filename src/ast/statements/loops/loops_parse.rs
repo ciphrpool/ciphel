@@ -19,12 +19,24 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
-impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Loop<InnerScope>
+{
     /*
      * @desc Parse loop
      *
@@ -45,7 +57,16 @@ impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for ForIterator<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(parse_id, |value| ForIterator::Id(value)),
@@ -75,7 +96,16 @@ impl TryParse for ForItem {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for ForLoop<InnerScope>
+{
     /*
      * @desc Parse for loop
      *
@@ -100,7 +130,16 @@ impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for WhileLoop<InnerScope>
+{
     /*
      * @desc Parse while loop
      *
@@ -134,7 +173,7 @@ mod tests {
                 Statement,
             },
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -158,7 +197,10 @@ mod tests {
                 scope: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]
@@ -192,7 +234,10 @@ mod tests {
                 scope: Box::new(Scope {
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
                             )))]
@@ -222,7 +267,10 @@ mod tests {
             Loop::Loop(Box::new(Scope {
                 instructions: vec![Statement::Flow(Flow::Call(CallStat {
                     call: FnCall {
-                        fn_var: Variable::Var(VarID("f".into())),
+                        fn_var: Variable::Var(VarID {
+                            id: "f".into(),
+                            metadata: Metadata::default()
+                        }),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                             Primitive::Number(Number::U64(10))
                         )))]

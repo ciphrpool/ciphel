@@ -5,11 +5,23 @@ use super::{
     VecType,
 };
 use crate::semantic::{
-    scope::{type_traits::IsEnum, ScopeApi},
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::IsEnum,
+        user_type_impl::UserType, var_impl::Var, ScopeApi,
+    },
     Resolve, SemanticError,
 };
 
-impl<Scope: ScopeApi> Resolve<Scope> for Type {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Type
+{
     type Output = ();
     type Context = ();
 
@@ -40,7 +52,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for PrimitiveType
+{
     type Output = ();
     type Context = ();
 
@@ -57,7 +78,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for SliceType
+{
     type Output = ();
     type Context = ();
 
@@ -78,7 +108,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for VecType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for VecType
+{
     type Output = ();
     type Context = ();
 
@@ -96,7 +135,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for FnType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for FnType
+{
     type Output = ();
     type Context = ();
 
@@ -117,7 +165,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Types {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Types
+{
     type Output = ();
     type Context = ();
 
@@ -138,7 +195,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Types {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for ChanType
+{
     type Output = ();
     type Context = ();
 
@@ -156,7 +222,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for TupleType
+{
     type Output = ();
     type Context = ();
 
@@ -174,7 +249,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for AddrType
+{
     type Output = ();
     type Context = ();
 
@@ -192,7 +276,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for MapType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for MapType
+{
     type Output = ();
     type Context = ();
 
@@ -211,7 +304,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for KeyType
+{
     type Output = ();
     type Context = ();
 

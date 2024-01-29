@@ -59,7 +59,7 @@ pub mod api {
                 type_traits::{GetSubTypes, TypeChecking},
                 BuildStaticType, ScopeApi,
             },
-            CompatibleWith, EitherType, SemanticError, TypeOf,
+            CompatibleWith, Either, SemanticError, TypeOf,
         },
     };
 
@@ -123,9 +123,9 @@ pub mod api {
                     }
                     let arg = args.first().unwrap();
                     let arg_type = arg.type_of(scope)?;
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
-                        ::is_num(&arg_type) {
+                        ::is_u64(&arg_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     Ok(())
@@ -136,14 +136,14 @@ pub mod api {
                     }
                     let cell = &args[0];
                     let cell_type = cell.type_of(scope)?;
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
-                        ::is_num(&cell_type) {
+                        ::is_u64(&cell_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let data = &args[1];
                     let data_type = data.type_of(scope)?;
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                         ::is_char(&data_type) {
                         return Err(SemanticError::IncorrectArguments);
@@ -158,12 +158,12 @@ pub mod api {
                     let vector_type = vector.type_of(scope)?;
                     let element = &args[1];
                     let element_type = element.type_of(scope)?;
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                         ::is_vec(&vector_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
-                    let item_type = <EitherType<
+                    let item_type = <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_item(
@@ -186,12 +186,12 @@ pub mod api {
                     let expr_value = &args[2];
                     let expr_value_type = expr_value.type_of(scope)?;
 
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                         ::is_map(&map_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
-                    let value_type = <EitherType<
+                    let value_type = <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_item(
@@ -199,7 +199,7 @@ pub mod api {
                     )
                     .unwrap();
 
-                    let key_type = <EitherType<
+                    let key_type = <Either<
                         <Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType,
                     > as GetSubTypes<Scope>>::get_key(&map_type)
@@ -219,10 +219,10 @@ pub mod api {
                     let expr_key = &args[1];
                     let expr_key_type = expr_key.type_of(scope)?;
 
-                    if <EitherType<<Scope as ScopeApi>::UserType,
+                    if <Either<<Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                     ::is_map(&iterator_type) {
-                        let key_type = <EitherType<
+                        let key_type = <Either<
                             <Scope as ScopeApi>::UserType,
                             <Scope as ScopeApi>::StaticType,
                         > as GetSubTypes<Scope>>::get_key(&iterator_type)
@@ -230,12 +230,12 @@ pub mod api {
 
                         let _ = key_type.compatible_with(&expr_key_type, scope)?;
 
-                    }else if <EitherType<<Scope as ScopeApi>::UserType,
+                    }else if <Either<<Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                     ::is_vec(&iterator_type){
-                        if !<EitherType<<Scope as ScopeApi>::UserType,
+                        if !<Either<<Scope as ScopeApi>::UserType,
                             <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
-                            ::is_num(&expr_key_type) {
+                            ::is_u64(&expr_key_type) {
                             return Err(SemanticError::IncorrectArguments);
                         }
                     }else {
@@ -250,7 +250,7 @@ pub mod api {
                     }
                     let arg = args.first().unwrap();
                     let arg_type = arg.type_of(scope)?;
-                    if !<EitherType<<Scope as ScopeApi>::UserType,
+                    if !<Either<<Scope as ScopeApi>::UserType,
                         <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>
                         ::is_addr(&arg_type) {
                         return Err(SemanticError::IncorrectArguments);
@@ -276,8 +276,8 @@ pub mod api {
             Ok(())
         }
 
-        pub fn returns<Scope: ScopeApi>(self) -> EitherType<Scope::UserType, Scope::StaticType> {
-            EitherType::Static(Scope::StaticType::build_unit().into())
+        pub fn returns<Scope: ScopeApi>(self) -> Either<Scope::UserType, Scope::StaticType> {
+            Either::Static(Scope::StaticType::build_unit().into())
         }
     }
 }

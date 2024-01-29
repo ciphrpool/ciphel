@@ -1,13 +1,28 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::BuildVar;
-use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
+use crate::semantic::Either;
+use crate::semantic::{
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Resolve, SemanticError, TypeOf,
+};
 use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Declaration<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -52,7 +67,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for TypedVar
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -72,9 +96,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
         self.signature.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for DeclaredVar
+{
     type Output = Vec<Scope::Var>;
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -106,9 +139,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for PatternVar
+{
     type Output = Vec<Scope::Var>;
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -128,13 +170,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
             } => {
                 let borrowed_scope = scope.borrow();
                 let user_type = borrowed_scope.find_type(typename)?;
-                let variant_type: Option<EitherType<Scope::UserType, Scope::StaticType>> =
+                let variant_type: Option<Either<Scope::UserType, Scope::StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
                     return Err(SemanticError::CantInferType);
                 };
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
+                let Some(fields) = <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_fields(
@@ -167,7 +209,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let user_type = borrowed_scope.find_type(typename)?;
                 let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EitherType<
+                let Some(fields) = <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_fields(&user_type) else {
@@ -198,7 +240,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                 let Some(user_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                let Some(fields) = <EitherType<
+                let Some(fields) = <Either<
                     <Scope as ScopeApi>::UserType,
                     <Scope as ScopeApi>::StaticType,
                 > as GetSubTypes<Scope>>::get_fields(user_type) else {
@@ -241,9 +283,7 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
 
@@ -255,7 +295,7 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Float).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Float).into()),
             x_type.type_sig
         );
     }
@@ -279,14 +319,12 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
             y_type.type_sig
         );
     }
@@ -308,14 +346,14 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
@@ -330,16 +368,12 @@ mod tests {
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             y_type.type_sig
         );
     }

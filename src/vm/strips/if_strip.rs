@@ -1,7 +1,7 @@
 use crate::{
     semantic::{
         scope::static_types::{PrimitiveType, StaticType},
-        EitherType,
+        Either,
     },
     vm::{
         allocator::{Memory, MemoryAddress},

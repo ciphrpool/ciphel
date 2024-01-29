@@ -22,7 +22,16 @@ use super::{
     Inclusion, LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
-impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for UnaryOperation<InnerScope>
+{
     /*
      * @desc Parse Unary opertion
      *
@@ -52,7 +61,16 @@ enum HighOrdMathOPERATOR {
     Div,
     Mod,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for Product<InnerScope>
+{
     /*
      * @desc Parse Multiplication, division, modulo operation
      *
@@ -91,7 +109,16 @@ enum LowOrdMathOPERATOR {
     Minus,
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Addition<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for Addition<InnerScope>
+{
     /*
      * @desc Parse addition operation
      *
@@ -129,7 +156,16 @@ enum ShiftOPERATOR {
     Left,
     Right,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for Shift<InnerScope>
+{
     /*
      * @desc Parse bitwise shift operation
      *
@@ -160,7 +196,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for BitwiseAnd<InnerScope>
+{
     /*
      * @desc Parse bitwise and operation
      *
@@ -185,7 +230,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for BitwiseXOR<InnerScope>
+{
     /*
      * @desc Parse bitwise xor operation
      *
@@ -210,7 +264,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for BitwiseOR<InnerScope>
+{
     /*
      * @desc Parse bitwise or operation
      *
@@ -232,7 +295,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScop
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for Cast<InnerScope>
+{
     /*
      * @desc Parse bitwise xor operation
      *
@@ -263,7 +335,16 @@ enum ComparaisonOPERATOR {
     NotEqual,
     In,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for Comparaison<InnerScope>
+{
     /*
      * @desc Parse comparaison operation
      *
@@ -316,7 +397,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for LogicalAnd<InnerScope>
+{
     /*
      * @desc Parse logical and operation
      *
@@ -341,7 +431,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParseOperation<InnerScope> for LogicalOr<InnerScope>
+{
     /*
      * @desc Parse logical or operation
      *

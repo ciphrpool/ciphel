@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     rc::Rc,
 };
 
@@ -14,7 +14,17 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Either, Resolve, SemanticError, TypeOf,
+    },
+    vm::{
+        strips::Strip,
+        vm::{CodeGenerationError, GenerateCode},
+    },
 };
 
 use self::operation::operation_parse::TryParseOperation;
@@ -53,7 +63,16 @@ pub enum Atomic<InnerScope: ScopeApi> {
     Error(error::Error),
 }
 
-impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Atomic<Scope>
+{
     /*
      * @desc Parse an atomic expression
      *
@@ -81,9 +100,18 @@ impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Atomic<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -105,11 +133,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Atomic<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -124,7 +161,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Expression<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Expression<Scope>
+{
     /*
      * @desc Parse an expression
      *
@@ -144,9 +190,18 @@ impl<Scope: ScopeApi> TryParse for Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Expression<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -177,11 +232,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Expression<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -205,34 +269,25 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Box<Expression<Scope>> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        (self.as_ref()).type_of(&scope)
-    }
-}
-
-impl<Scope: ScopeApi> Resolve<Scope> for Box<Expression<Scope>> {
-    type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
-    type Extra = ();
-    fn resolve(
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > GenerateCode<Scope> for Expression<Scope>
+{
+    type Context = Either<Scope::UserType, Scope::StaticType>;
+    fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
+        codes: &Rc<RefCell<Vec<Strip>>>,
+        offset: usize,
         context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        (self.as_ref()).resolve(scope, context, extra)
+    ) -> Result<(), CodeGenerationError> {
+        todo!()
     }
 }
 

@@ -1,8 +1,10 @@
 use std::cell::Ref;
 
 use crate::semantic::{
-    scope::{user_type_impl::UserType, ScopeApi},
-    EitherType, MergeType, SemanticError, TypeOf,
+    scope::{
+        chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
+    },
+    Either, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
@@ -10,12 +12,15 @@ use super::{
     TupleType, VecType,
 };
 
-impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> for StaticType {
+impl<
+        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
+    > MergeType<Scope> for StaticType
+{
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<<Scope as ScopeApi>::UserType, Self>, SemanticError>
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, Self>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -24,12 +29,12 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
             return Ok(other_type);
         }
 
-        let EitherType::Static(static_other_type) = &other_type else {
+        let Either::Static(static_other_type) = &other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         match static_other_type.as_ref() {
-            Self::Error => return Ok(EitherType::Static(StaticType::Error.into())),
-            Self::Unit => return Ok(EitherType::Static(self.clone().into())),
+            Self::Error => return Ok(Either::Static(StaticType::Error.into())),
+            Self::Unit => return Ok(Either::Static(self.clone().into())),
             _ => {}
         }
         match self {
@@ -41,7 +46,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> MergeType<Scope> f
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
             StaticType::Any => Err(SemanticError::CantInferType),
-            StaticType::Error => Ok(EitherType::Static(StaticType::Error.into())),
+            StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
         }
@@ -55,15 +60,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Primitive(other_type) = other_type.as_ref() else {
@@ -71,32 +73,32 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         };
         match self {
             PrimitiveType::Number(left) => match other_type {
-                PrimitiveType::Number(right) => Ok(EitherType::Static(
+                PrimitiveType::Number(right) => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(left.merge(right))).into(),
                 )),
-                PrimitiveType::Float => Ok(EitherType::Static(
+                PrimitiveType::Float => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Float).into(),
                 )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
 
             PrimitiveType::Float => match other_type {
-                PrimitiveType::Number(_) => Ok(EitherType::Static(
+                PrimitiveType::Number(_) => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Float).into(),
                 )),
-                PrimitiveType::Float => Ok(EitherType::Static(
+                PrimitiveType::Float => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Float).into(),
                 )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Char => match other_type {
-                PrimitiveType::Char => Ok(EitherType::Static(
+                PrimitiveType::Char => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Char).into(),
                 )),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Bool => match other_type {
-                PrimitiveType::Bool => Ok(EitherType::Static(
+                PrimitiveType::Bool => Ok(Either::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 )),
                 _ => Err(SemanticError::IncompatibleTypes),
@@ -110,15 +112,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Slice(other_type) = other_type.as_ref() else {
@@ -126,9 +125,9 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         };
         match self {
             SliceType::String => match other_type {
-                SliceType::String => Ok(EitherType::Static(
-                    StaticType::Slice(SliceType::String).into(),
-                )),
+                SliceType::String => {
+                    Ok(Either::Static(StaticType::Slice(SliceType::String).into()))
+                }
                 SliceType::List(_, _) => Err(SemanticError::IncompatibleTypes),
             },
             SliceType::List(size, subtype) => match other_type {
@@ -138,7 +137,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
                         Err(SemanticError::IncompatibleTypes)
                     } else {
                         let merged = subtype.merge(other_subtype.as_ref(), scope)?;
-                        Ok(EitherType::Static(
+                        Ok(Either::Static(
                             StaticType::Slice(SliceType::List(size.clone(), Box::new(merged)))
                                 .into(),
                         ))
@@ -154,22 +153,19 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Vec(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Vec(VecType(Box::new(merged))).into(),
         ))
     }
@@ -180,15 +176,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Fn(other_type) = other_type.as_ref() else {
@@ -203,7 +196,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             merged_params.push(merged);
         }
         let merged_ret = self.ret.merge(other_type.ret.as_ref(), scope)?;
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Fn(FnType {
                 params: merged_params,
                 ret: Box::new(merged_ret),
@@ -218,22 +211,19 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Chan(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Chan(ChanType(Box::new(merged))).into(),
         ))
     }
@@ -244,15 +234,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Tuple(other_type) = other_type.as_ref() else {
@@ -268,7 +255,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
             };
             merged_vec.push(merged);
         }
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Tuple(TupleType(merged_vec)).into(),
         ))
     }
@@ -279,22 +266,19 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Address(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Address(AddrType(Box::new(merged))).into(),
         ))
     }
@@ -305,15 +289,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<
-        EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        SemanticError,
-    >
+    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::Static(other_type) = other_type else {
+        let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let StaticType::Map(other_type) = other_type.as_ref() else {
@@ -325,7 +306,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
         let merged_value = self
             .values_type
             .merge(other_type.values_type.as_ref(), scope)?;
-        Ok(EitherType::Static(
+        Ok(Either::Static(
             StaticType::Map(MapType {
                 keys_type: merged_key,
                 values_type: Box::new(merged_value),

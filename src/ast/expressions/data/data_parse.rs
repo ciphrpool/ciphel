@@ -18,7 +18,13 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Metadata,
+    },
 };
 use nom::{
     branch::alt,
@@ -34,7 +40,16 @@ use super::{
     ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
     VarID, Variable, Vector,
 };
-impl<Scope: ScopeApi> TryParse for Data<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Data<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
@@ -55,13 +70,36 @@ impl<Scope: ScopeApi> TryParse for Data<Scope> {
     }
 }
 
-impl VarID {
-    fn parse<InnerScope: ScopeApi>(input: Span) -> PResult<Variable<InnerScope>> {
-        map(parse_id, |id| Variable::Var(VarID(id)))(input)
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > VarID<InnerScope>
+{
+    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+        map(parse_id, |id| {
+            Variable::Var(VarID {
+                id,
+                metadata: Metadata::default(),
+            })
+        })(input)
     }
 }
 
-impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > ListAccess<InnerScope>
+{
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = VarID::parse(input)?;
         let (remainder, index) = opt(delimited(
@@ -76,6 +114,7 @@ impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
                 Variable::ListAccess(ListAccess {
                     var: Box::new(var),
                     index: Box::new(index),
+                    metadata: Metadata::default(),
                 }),
             ))
         } else {
@@ -84,7 +123,16 @@ impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > FieldAccess<InnerScope>
+{
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = ListAccess::parse(input)?;
         let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
@@ -105,6 +153,7 @@ impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
                     Variable::NumAccess(NumAccess {
                         var: Box::new(var),
                         index,
+                        metadata: Metadata::default(),
                     }),
                 ));
             }
@@ -114,6 +163,7 @@ impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
                 Variable::FieldAccess(FieldAccess {
                     var: Box::new(var),
                     field: Box::new(right),
+                    metadata: Metadata::default(),
                 }),
             ))
         } else {
@@ -122,7 +172,16 @@ impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Variable<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Variable<InnerScope>
+{
     /*
      * @desc Parse variable
      *
@@ -174,7 +233,16 @@ impl TryParse for Primitive {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Slice<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Slice<Scope>
+{
     /*
      * @desc Parse List or Static string
      *
@@ -189,14 +257,29 @@ impl<Scope: ScopeApi> TryParse for Slice<Scope> {
                     MultiData::parse,
                     preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
                 ),
-                |value| Slice::List(value),
+                |value| Slice::List {
+                    value,
+                    metadata: Metadata::default(),
+                },
             ),
-            map(parse_string, |value| Slice::String(value)),
+            map(parse_string, |value| Slice::String {
+                value,
+                metadata: Metadata::default(),
+            }),
         ))(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Vector<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Vector<Scope>
+{
     /*
      * @desc Parse Vector
      *
@@ -215,27 +298,35 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
                         preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
                     ),
                 ),
-                |value| Vector::Init(value),
+                |value| Vector::Init {
+                    value,
+                    metadata: Metadata::default(),
+                },
             ),
             map(
                 preceded(
                     wst(lexem::platform::VEC),
-                    delimited(
-                        wst(lexem::PAR_O),
-                        separated_pair(parse_number, wst(lexem::COMA), parse_number),
-                        wst(lexem::PAR_C),
-                    ),
+                    delimited(wst(lexem::PAR_O), parse_number, wst(lexem::PAR_C)),
                 ),
-                |(length, capacity)| Vector::Def {
-                    length: length as usize,
+                |capacity| Vector::Def {
                     capacity: capacity as usize,
+                    metadata: Metadata::default(),
                 },
             ),
         ))(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Tuple<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(
@@ -243,12 +334,24 @@ impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
                 MultiData::parse,
                 preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C)),
             ),
-            |value| Tuple(value),
+            |value| Tuple {
+                value,
+                metadata: Metadata::default(),
+            },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for MultiData<Scope>
+{
     /*
      * @desc Parse multiple data
      *
@@ -261,7 +364,16 @@ impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Closure<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Closure<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
@@ -276,12 +388,22 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
                 params,
                 scope,
                 env: Rc::new(RefCell::new(HashMap::default())),
+                metadata: Metadata::default(),
             },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for ExprScope<Scope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(ast::statements::scope::Scope::parse, |value| {
@@ -317,7 +439,16 @@ impl TryParse for ClosureParam {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Address<InnerScope>
+{
     /*
      * @desc Parse pointer address
      *
@@ -326,12 +457,24 @@ impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(preceded(wst(lexem::ADDR), Variable::parse), |value| {
-            Address(value)
+            Address {
+                value,
+                metadata: Metadata::default(),
+            }
         })(input)
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for PtrAccess<InnerScope>
+{
     /*
      * @desc Parse pointer access
      *
@@ -340,12 +483,24 @@ impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(preceded(wst(lexem::ACCESS), Variable::parse), |value| {
-            PtrAccess(value)
+            PtrAccess {
+                value,
+                metadata: Metadata::default(),
+            }
         })(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Channel<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Channel<Scope>
+{
     /*
      * @desc Parse grammar
      *
@@ -363,6 +518,7 @@ impl<Scope: ScopeApi> TryParse for Channel<Scope> {
                 |(_, addr, timeout)| Channel::Receive {
                     addr,
                     timeout: timeout as usize,
+                    metadata: Metadata::default(),
                 },
             ),
             map(
@@ -374,6 +530,7 @@ impl<Scope: ScopeApi> TryParse for Channel<Scope> {
                 |(_, addr, msg)| Channel::Send {
                     addr,
                     msg: Box::new(msg),
+                    metadata: Metadata::default(),
                 },
             ),
             map(
@@ -381,13 +538,25 @@ impl<Scope: ScopeApi> TryParse for Channel<Scope> {
                     wst(lexem::platform::CHAN),
                     delimited(wst(lexem::PAR_O), parse_string, wst(lexem::PAR_C)),
                 ),
-                |id| Channel::Init(id),
+                |id| Channel::Init {
+                    value: id,
+                    metadata: Metadata::default(),
+                },
             ),
         ))(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Struct<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Struct<Scope>
+{
     /*
      * @desc Parse an object
      *
@@ -409,12 +578,25 @@ impl<Scope: ScopeApi> TryParse for Struct<Scope> {
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
-            |(id, value)| Struct { id, fields: value },
+            |(id, value)| Struct {
+                id,
+                fields: value,
+                metadata: Metadata::default(),
+            },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Union<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Union<Scope>
+{
     /*
      * @desc Parse an union
      *
@@ -438,14 +620,24 @@ impl<Scope: ScopeApi> TryParse for Union<Scope> {
             ),
             |((typename, name), value)| Union {
                 variant: name,
-                typename: typename,
+                typename,
                 fields: value,
+                metadata: Metadata::default(),
             },
         )(input)
     }
 }
 
-impl TryParse for Enum {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Enum<InnerScope>
+{
     /*
      * @desc Parse enum
      *
@@ -455,12 +647,25 @@ impl TryParse for Enum {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(parse_id, wst(lexem::SEP), parse_id),
-            |(typename, value)| Enum { typename, value },
+            |(typename, value)| Enum {
+                typename,
+                value,
+                metadata: Metadata::default(),
+            },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Map<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Map<Scope>
+{
     /*
      * @desc Parse map
      *
@@ -484,7 +689,10 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
                         preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                     ),
                 ),
-                |value| Map::Init { fields: value },
+                |value| Map::Init {
+                    fields: value,
+                    metadata: Metadata::default(),
+                },
             ),
             map(
                 preceded(
@@ -498,13 +706,23 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
                 |(length, capacity)| Map::Def {
                     length: length as usize,
                     capacity: capacity as usize,
+                    metadata: Metadata::default(),
                 },
             ),
         ))(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for KeyData<Scope>
+{
     /*
      * @desc Parse hashable data for key
      *
@@ -577,24 +795,33 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Slice::List(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(2)
-                )))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(5)
-                )))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(6)
-                ))))
-            ]),
+            Slice::List {
+                value: vec![
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(2)
+                    )))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(5)
+                    )))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(6)
+                    ))))
+                ],
+                metadata: Metadata::default(),
+            },
             value
         );
 
         let res = Slice::<MockScope>::parse("\"Hello World\"".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Slice::String("Hello World".to_string()), value);
+        assert_eq!(
+            Slice::String {
+                value: "Hello World".to_string(),
+                metadata: Metadata::default()
+            },
+            value
+        );
     }
 
     #[test]
@@ -603,27 +830,30 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Vector::Init(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(2)
-                )))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(5)
-                )))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(6)
-                ))))
-            ]),
+            Vector::Init {
+                value: vec![
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(2)
+                    )))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(5)
+                    )))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(6)
+                    ))))
+                ],
+                metadata: Metadata::default(),
+            },
             value,
         );
 
-        let res = Vector::<MockScope>::parse("vec(2,8)".into());
+        let res = Vector::<MockScope>::parse("vec(8)".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Vector::Def {
-                length: 2,
-                capacity: 8
+                capacity: 8,
+                metadata: Metadata::default()
             },
             value
         )
@@ -644,12 +874,14 @@ mod tests {
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
-                        Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
-                            "x".into(),
-                        )))))
+                        Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
+                            id: "x".into(),
+                            metadata: Metadata::default()
+                        }))))
                     )))],
                     inner_scope: RefCell::new(None)
-                })
+                }),
+                metadata: Metadata::default()
             },
             value
         )
@@ -662,8 +894,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Receive {
-                addr: Address(Variable::Var(VarID("chan1".into()))),
-                timeout: 10
+                addr: Address {
+                    value: Variable::Var(VarID {
+                        id: "chan1".into(),
+                        metadata: Metadata::default()
+                    }),
+                    metadata: Metadata::default()
+                },
+                timeout: 10,
+                metadata: Metadata::default()
             },
             value
         );
@@ -673,10 +912,17 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Send {
-                addr: Address(Variable::Var(VarID("chan1".into()))),
+                addr: Address {
+                    value: Variable::Var(VarID {
+                        id: "chan1".into(),
+                        metadata: Metadata::default()
+                    }),
+                    metadata: Metadata::default()
+                },
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(10))
-                ))))
+                )))),
+                metadata: Metadata::default()
             },
             value
         );
@@ -684,7 +930,13 @@ mod tests {
         let res = Channel::<MockScope>::parse("chan(\"ID_CHAN\")".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Channel::Init("ID_CHAN".into()), value);
+        assert_eq!(
+            Channel::Init {
+                value: "ID_CHAN".into(),
+                metadata: Metadata::default(),
+            },
+            value
+        );
     }
 
     #[test]
@@ -693,12 +945,15 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Tuple(vec![
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(2)
-                )))),
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
-            ]),
+            Tuple {
+                value: vec![
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(2)
+                    )))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
+                ],
+                metadata: Metadata::default()
+            },
             value
         );
     }
@@ -708,7 +963,16 @@ mod tests {
         let res = Address::<MockScope>::parse("&x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Address(Variable::Var(VarID("x".into()))), value);
+        assert_eq!(
+            Address {
+                value: Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                }),
+                metadata: Metadata::default()
+            },
+            value
+        );
     }
 
     #[test]
@@ -716,7 +980,16 @@ mod tests {
         let res = PtrAccess::<MockScope>::parse("*x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(PtrAccess(Variable::Var(VarID("x".into()))), value);
+        assert_eq!(
+            PtrAccess {
+                value: Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                }),
+                metadata: Metadata::default()
+            },
+            value
+        );
     }
 
     #[test]
@@ -728,18 +1001,25 @@ mod tests {
             Map::Init {
                 fields: vec![
                     (
-                        KeyData::Slice(Slice::String("x".into())),
+                        KeyData::Slice(Slice::String {
+                            value: "x".into(),
+                            metadata: Metadata::default(),
+                        }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::U64(2)
                         ))))
                     ),
                     (
-                        KeyData::Slice(Slice::String("y".into())),
+                        KeyData::Slice(Slice::String {
+                            value: "y".into(),
+                            metadata: Metadata::default(),
+                        }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::U64(6)
                         ))))
                     )
-                ]
+                ],
+                metadata: Metadata::default()
             },
             value
         );
@@ -750,7 +1030,8 @@ mod tests {
         assert_eq!(
             Map::Def {
                 length: 2,
-                capacity: 8
+                capacity: 8,
+                metadata: Metadata::default()
             },
             value
         )
@@ -778,6 +1059,7 @@ mod tests {
                         ))))
                     )
                 ],
+                metadata: Metadata::default()
             },
             value
         );
@@ -806,6 +1088,7 @@ mod tests {
                         ))))
                     )
                 ],
+                metadata: Metadata::default()
             },
             value
         );
@@ -813,13 +1096,14 @@ mod tests {
 
     #[test]
     fn valid_enum() {
-        let res = Enum::parse(r#"Geo::Point"#.into());
+        let res = Enum::<MockScope>::parse(r#"Geo::Point"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Enum {
                 typename: "Geo".into(),
                 value: "Point".into(),
+                metadata: Metadata::default()
             },
             value
         )
@@ -830,17 +1114,27 @@ mod tests {
         let res = Variable::<MockScope>::parse("x".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Variable::Var(VarID("x".into())), value);
+        assert_eq!(
+            Variable::Var(VarID {
+                id: "x".into(),
+                metadata: Metadata::default()
+            }),
+            value
+        );
 
         let res = Variable::<MockScope>::parse("x[3]".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
             Variable::ListAccess(ListAccess {
-                var: Box::new(Variable::Var(VarID("x".into()))),
+                var: Box::new(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(3))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -850,8 +1144,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID("x".into()))),
-                field: Box::new(Variable::Var(VarID("y".into())))
+                var: Box::new(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
+                field: Box::new(Variable::Var(VarID {
+                    id: "y".into(),
+                    metadata: Metadata::default()
+                })),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -860,11 +1161,22 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID("x".into()))),
+                var: Box::new(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
                 field: Box::new(Variable::FieldAccess(FieldAccess {
-                    var: Box::new(Variable::Var(VarID("y".into()))),
-                    field: Box::new(Variable::Var(VarID("z".into())))
-                }))
+                    var: Box::new(Variable::Var(VarID {
+                        id: "y".into(),
+                        metadata: Metadata::default()
+                    })),
+                    field: Box::new(Variable::Var(VarID {
+                        id: "z".into(),
+                        metadata: Metadata::default()
+                    })),
+                    metadata: Metadata::default()
+                })),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -873,13 +1185,21 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID("x".into()))),
+                var: Box::new(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
                 field: Box::new(Variable::ListAccess(ListAccess {
-                    var: Box::new(Variable::Var(VarID("y".into()))),
+                    var: Box::new(Variable::Var(VarID {
+                        id: "y".into(),
+                        metadata: Metadata::default()
+                    })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::U64(3))
-                    ))))
-                }))
+                    )))),
+                    metadata: Metadata::default()
+                })),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -889,12 +1209,20 @@ mod tests {
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
                 var: Box::new(Variable::ListAccess(ListAccess {
-                    var: Box::new(Variable::Var(VarID("x".into()))),
+                    var: Box::new(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::U64(3))
-                    ))))
+                    )))),
+                    metadata: Metadata::default()
                 })),
-                field: Box::new(Variable::Var(VarID("y".into())))
+                field: Box::new(Variable::Var(VarID {
+                    id: "y".into(),
+                    metadata: Metadata::default()
+                })),
+                metadata: Metadata::default()
             }),
             value
         );

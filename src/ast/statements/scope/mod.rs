@@ -2,7 +2,13 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{scope::ScopeApi, SemanticError},
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        SemanticError,
+    },
 };
 
 use super::Statement;
@@ -17,7 +23,16 @@ pub struct Scope<Inner: ScopeApi> {
     pub inner_scope: RefCell<Option<Rc<RefCell<Inner>>>>,
 }
 
-impl<InnerScope: ScopeApi> Scope<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Scope<InnerScope>
+{
     pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<InnerScope::Var>>, SemanticError> {
         match self.inner_scope.borrow().as_ref() {
             Some(inner) => Ok(inner.as_ref().borrow().find_outer_vars()),

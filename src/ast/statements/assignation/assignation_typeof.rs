@@ -2,26 +2,50 @@ use std::cell::Ref;
 
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
+use crate::semantic::Either;
+use crate::semantic::{
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Resolve, SemanticError, TypeOf,
+};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Assignation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Assignation<Scope>
+{
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
+        Ok(Either::Static(Scope::StaticType::build_unit().into()))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for AssignValue<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -33,11 +57,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Assignee<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Assignee<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

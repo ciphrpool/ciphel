@@ -1,4 +1,5 @@
 use std::{
+    borrow::{Borrow, BorrowMut},
     cell::{Ref, RefCell},
     rc::Rc,
 };
@@ -40,8 +41,32 @@ pub enum SemanticError {
     IncompatibleOperation,
     IncompatibleOperands,
 }
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum EitherType<User, Static> {
+pub struct Metadata<Scope: ScopeApi, Extra = ()> {
+    pub info: Rc<RefCell<Info<Scope, Extra>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Info<Scope: ScopeApi, Extra = ()> {
+    Unresolved,
+    Resolved {
+        context: Option<Either<Scope::UserType, Scope::StaticType>>,
+        signature: Option<Either<Scope::UserType, Scope::StaticType>>,
+        extra: Extra,
+    },
+}
+
+impl<Scope: ScopeApi, Extra> Default for Metadata<Scope, Extra> {
+    fn default() -> Self {
+        Self {
+            info: Rc::new(RefCell::new(Info::Unresolved)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Either<User, Static> {
     Static(Rc<Static>),
     User(Rc<User>),
 }
@@ -74,7 +99,7 @@ pub trait TypeOf<Scope: ScopeApi> {
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized;
@@ -85,7 +110,7 @@ pub trait MergeType<Scope: ScopeApi> {
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>;
 }

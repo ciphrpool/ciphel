@@ -20,7 +20,13 @@ use crate::semantic::{
 };
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError, TypeOf},
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Either, Resolve, SemanticError, TypeOf,
+    },
 };
 
 pub mod assignation;
@@ -41,7 +47,16 @@ pub enum Statement<InnerScope: ScopeApi> {
     Return(Return<InnerScope>),
 }
 
-impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
+impl<
+        InnerScope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Statement<InnerScope>
+{
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(scope::Scope::parse, |value| Statement::Scope(value)),
@@ -60,9 +75,18 @@ impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
         ))(input)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Statement<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -89,11 +113,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Statement<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -104,7 +137,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
             Statement::Assignation(value) => value.type_of(&scope),
             Statement::Declaration(value) => value.type_of(&scope),
             Statement::Definition(_value) => {
-                Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
+                Ok(Either::Static(Scope::StaticType::build_unit().into()))
             }
             Statement::Loops(value) => value.type_of(&scope),
             Statement::Return(value) => value.type_of(&scope),
@@ -118,7 +151,16 @@ pub enum Return<InnerScope: ScopeApi> {
     Expr(Box<Expression<InnerScope>>),
 }
 
-impl<Scope: ScopeApi> TryParse for Return<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TryParse for Return<Scope>
+{
     /*
      * @desc Parse return statements
      *
@@ -142,9 +184,18 @@ impl<Scope: ScopeApi> TryParse for Return<Scope> {
         )(input)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Return<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -160,7 +211,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
             Return::Unit => {
                 match context {
                     Some(context) => {
-                        if !<EitherType<
+                        if !<Either<
                             <Scope as ScopeApi>::UserType,
                             <Scope as ScopeApi>::StaticType,
                         > as TypeChecking<Scope>>::is_unit(context)
@@ -187,17 +238,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Return<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Return::Unit => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
+            Return::Unit => Ok(Either::Static(Scope::StaticType::build_unit().into())),
             Return::Expr(expr) => expr.type_of(&scope),
         }
     }
@@ -240,7 +300,7 @@ mod tests {
         assert!(res.is_ok());
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(EitherType::Static(StaticType::Unit.into()), return_type);
+        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -256,9 +316,7 @@ mod tests {
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             return_type
         );
     }
@@ -276,7 +334,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = return_statement.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Char).into(),
             )),
             &(),

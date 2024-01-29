@@ -3,13 +3,28 @@ use crate::ast::types::FnType;
 use crate::ast::types::Types;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
-use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
+use crate::semantic::Either;
+use crate::semantic::{
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Resolve, SemanticError, TypeOf,
+};
 use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Definition<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -29,7 +44,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for TypeDef
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -62,7 +86,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for StructDef
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -83,7 +116,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for UnionDef
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -107,7 +149,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for EnumDef
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -125,7 +176,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for FnDef<Scope>
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -188,7 +248,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for EventDef<Scope>
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -206,7 +275,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for EventCondition
+{
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -226,7 +304,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
 
     use crate::{
         ast::TryParse,
@@ -266,13 +343,13 @@ mod tests {
                     let mut res = Vec::new();
                     res.push((
                         "x".into(),
-                        EitherType::Static(
+                        Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         ),
                     ));
                     res.push((
                         "y".into(),
-                        EitherType::Static(
+                        Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         ),
                     ));
@@ -308,14 +385,14 @@ mod tests {
                         let mut res = Vec::new();
                         res.push((
                             "x".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
                         ));
                         res.push((
                             "y".into(),
-                            EitherType::Static(
+                            Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
                                     .into(),
                             ),
@@ -337,13 +414,13 @@ mod tests {
                     let mut res = Vec::new();
                     res.push((
                         "start".into(),
-                        EitherType::User(
+                        Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
                                 fields: vec![
                                     (
                                         "x".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -352,7 +429,7 @@ mod tests {
                                     ),
                                     (
                                         "y".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -366,13 +443,13 @@ mod tests {
                     ));
                     res.push((
                         "end".into(),
-                        EitherType::User(
+                        Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
                                 fields: vec![
                                     (
                                         "x".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -381,7 +458,7 @@ mod tests {
                                     ),
                                     (
                                         "y".into(),
-                                        EitherType::Static(
+                                        Either::Static(
                                             StaticType::Primitive(PrimitiveType::Number(
                                                 NumberType::U64,
                                             ))
@@ -428,8 +505,8 @@ mod tests {
             UserType::Union(Union {
                 id: "Geo".into(),
                 variants: {
-                    let mut res = HashMap::new();
-                    res.insert(
+                    let mut res = Vec::new();
+                    res.push((
                         "Point".into(),
                         Struct {
                             id: "Point".into(),
@@ -437,7 +514,7 @@ mod tests {
                                 let mut res = Vec::new();
                                 res.push((
                                     "x".into(),
-                                    EitherType::Static(
+                                    Either::Static(
                                         StaticType::Primitive(PrimitiveType::Number(
                                             NumberType::U64,
                                         ))
@@ -446,7 +523,7 @@ mod tests {
                                 ));
                                 res.push((
                                     "y".into(),
-                                    EitherType::Static(
+                                    Either::Static(
                                         StaticType::Primitive(PrimitiveType::Number(
                                             NumberType::U64,
                                         ))
@@ -456,8 +533,8 @@ mod tests {
                                 res
                             },
                         },
-                    );
-                    res.insert(
+                    ));
+                    res.push((
                         "Axe".into(),
                         Struct {
                             id: "Axe".into(),
@@ -465,7 +542,7 @@ mod tests {
                                 let mut res = Vec::new();
                                 res.push((
                                     "x".into(),
-                                    EitherType::Static(
+                                    Either::Static(
                                         StaticType::Primitive(PrimitiveType::Number(
                                             NumberType::U64,
                                         ))
@@ -475,7 +552,7 @@ mod tests {
                                 res
                             },
                         },
-                    );
+                    ));
                     res
                 },
             }),
@@ -505,8 +582,8 @@ mod tests {
             UserType::Enum(Enum {
                 id: "Geo".into(),
                 values: {
-                    let mut res = HashSet::new();
-                    res.insert("Point".into());
+                    let mut res = Vec::new();
+                    res.push("Point".into());
                     res
                 },
             }),
@@ -542,10 +619,10 @@ mod tests {
 
         assert_eq!(
             function_type,
-            EitherType::Static(
+            Either::Static(
                 StaticType::Fn(FnType {
                     params: vec![],
-                    ret: Box::new(EitherType::Static(StaticType::Unit.into()))
+                    ret: Box::new(Either::Static(StaticType::Unit.into()))
                 })
                 .into()
             )
@@ -580,15 +657,15 @@ mod tests {
 
         assert_eq!(
             function_type,
-            EitherType::Static(
+            Either::Static(
                 StaticType::Fn(FnType {
                     params: vec![
-                        EitherType::Static(
+                        Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                         ),
-                        EitherType::Static(StaticType::Slice(SliceType::String).into())
+                        Either::Static(StaticType::Slice(SliceType::String).into())
                     ],
-                    ret: Box::new(EitherType::Static(StaticType::Unit.into()))
+                    ret: Box::new(Either::Static(StaticType::Unit.into()))
                 })
                 .into()
             )
@@ -604,9 +681,7 @@ mod tests {
             .find_var(&"x".into())
             .unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
         let text_type = function_scope
@@ -618,7 +693,7 @@ mod tests {
             .find_var(&"text".into())
             .unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::Slice(SliceType::String).into()),
             text_type.type_sig
         );
     }
@@ -652,10 +727,10 @@ mod tests {
 
         assert_eq!(
             function_type,
-            EitherType::Static(
+            Either::Static(
                 StaticType::Fn(FnType {
                     params: vec![],
-                    ret: Box::new(EitherType::Static(
+                    ret: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                     ))
                 })
@@ -684,8 +759,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -707,8 +783,9 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
+                address: None,
                 captured: RefCell::new(false),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ),
             }]
@@ -736,8 +813,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -746,8 +824,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "y".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -769,7 +848,8 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 captured: RefCell::new(false),
-                type_sig: EitherType::Static(
+                address: None,
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ),
             }]

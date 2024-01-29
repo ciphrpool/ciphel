@@ -7,9 +7,13 @@ use std::{
 
 use crate::ast::{statements::definition, types, utils::strings::ID};
 
-use self::type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking};
+use self::{
+    event_impl::Event,
+    static_types::StaticType,
+    type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
+};
 
-use super::{CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf};
+use super::{CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;
@@ -30,7 +34,7 @@ pub trait BuildStaticType<Scope: ScopeApi> {
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_slice_from(
         size: &usize,
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -39,7 +43,7 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_tuple_from(
-        type_sig: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
+        type_sig: &Vec<Either<Scope::UserType, Scope::StaticType>>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -48,7 +52,7 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_vec_from(
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -59,8 +63,8 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_fn_from(
-        params: &Vec<EitherType<Scope::UserType, Scope::StaticType>>,
-        ret: &EitherType<Scope::UserType, Scope::StaticType>,
+        params: &Vec<Either<Scope::UserType, Scope::StaticType>>,
+        ret: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -69,7 +73,7 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_chan_from(
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -82,7 +86,7 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_addr_from(
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 
@@ -91,8 +95,8 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
     fn build_map_from(
-        key: &EitherType<Scope::UserType, Scope::StaticType>,
-        value: &EitherType<Scope::UserType, Scope::StaticType>,
+        key: &Either<Scope::UserType, Scope::StaticType>,
+        value: &Either<Scope::UserType, Scope::StaticType>,
         scope: &Ref<Scope>,
     ) -> Result<Scope::StaticType, SemanticError>;
 }
@@ -105,13 +109,10 @@ pub trait BuildUserType<Scope: ScopeApi> {
 }
 
 pub trait BuildVar<Scope: ScopeApi> {
-    fn build_var(id: &ID, type_sig: &EitherType<Scope::UserType, Scope::StaticType>) -> Scope::Var;
+    fn build_var(id: &ID, type_sig: &Either<Scope::UserType, Scope::StaticType>) -> Scope::Var;
 }
 pub trait BuildChan<Scope: ScopeApi> {
-    fn build_chan(
-        id: &ID,
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
-    ) -> Scope::Chan;
+    fn build_chan(id: &ID, type_sig: &Either<Scope::UserType, Scope::StaticType>) -> Scope::Chan;
 }
 pub trait BuildEvent<Scope: ScopeApi> {
     fn build_event(scope: &Ref<Scope>, event: &definition::EventDef<Scope>) -> Scope::Event;
@@ -131,7 +132,9 @@ where
         + OperandMerging<Self>
         + IsEnum
         + MergeType<Self>
+        + PartialEq
         + SizeOf;
+
     type StaticType: Clone
         + Debug
         + CompatibleWith<Self>
@@ -141,6 +144,7 @@ where
         + TypeChecking<Self>
         + OperandMerging<Self>
         + MergeType<Self>
+        + PartialEq
         + SizeOf;
 
     type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self> + PartialEq;

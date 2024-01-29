@@ -2,13 +2,28 @@ use std::cell::Ref;
 
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{scope::ScopeApi, EitherType, MergeType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Either, MergeType, Resolve, SemanticError, TypeOf,
+};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for Flow<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -21,11 +36,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for IfStat<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -36,15 +60,24 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for MatchStat<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -71,16 +104,25 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 pattern_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for TryStat<Scope>
+{
     fn type_of(
         &self,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -91,20 +133,29 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(EitherType::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > TypeOf<Scope> for CallStat<Scope>
+{
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(EitherType::Static(Scope::StaticType::build_unit().into()))
+        Ok(Either::Static(Scope::StaticType::build_unit().into()))
     }
 }

@@ -2,16 +2,30 @@ use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
     LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
+use crate::semantic::scope::chan_impl::Chan;
+use crate::semantic::scope::event_impl::Event;
+use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::type_traits::GetSubTypes;
+use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::scope::var_impl::Var;
 use crate::semantic::{
     scope::{type_traits::OperandMerging, ScopeApi},
-    CompatibleWith, EitherType, Resolve, SemanticError, TypeOf,
+    CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for UnaryOperation<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -39,9 +53,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Product<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -66,13 +89,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_product()?;
 
-        let _ = left_type.compatible_with(right, &scope.borrow())?;
+        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Addition<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -92,14 +124,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_add()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Substraction<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -119,14 +160,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_substract()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Shift<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -150,13 +200,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_shift()?;
 
-        let _ = left_type.compatible_with(right, &scope.borrow())?;
+        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for BitwiseAnd<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -176,13 +235,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_and()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for BitwiseXOR<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -202,13 +270,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_xor()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for BitwiseOR<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -228,14 +305,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_bitwise_or()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Cast<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Cast<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -255,9 +341,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Cast<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Comparaison<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Comparaison<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -283,14 +378,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Comparaison<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_comparaison()?;
 
-        let _ = left_type.compatible_with(right, &scope.borrow())?;
+        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Equation<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Equation<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -314,14 +418,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for Equation<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = right_type.can_equate()?;
 
-        let _ = left_type.compatible_with(right, &scope.borrow())?;
+        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Inclusion<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for Inclusion<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -341,7 +454,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Inclusion<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_include_right()?;
 
-        let Some(right_item) = <EitherType<
+        let Some(right_item) = <Either<
             <Scope as ScopeApi>::UserType,
             <Scope as ScopeApi>::StaticType,
         > as GetSubTypes<Scope>>::get_item(&right_type) else {
@@ -354,9 +467,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Inclusion<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for LogicalAnd<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -376,13 +498,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_logical_and()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr<Scope> {
+impl<
+        Scope: ScopeApi<
+            UserType = UserType,
+            StaticType = StaticType,
+            Var = Var,
+            Chan = Chan,
+            Event = Event,
+        >,
+    > Resolve<Scope> for LogicalOr<Scope>
+{
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -402,7 +533,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = right_type.can_logical_or()?;
 
-        let _ = left_type.compatible_with(&self.right, &scope.borrow())?;
+        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         Ok(())
     }
 }
@@ -456,8 +587,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -537,8 +669,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -635,7 +768,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Primitive(PrimitiveType::Float).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Float).into()),
             expr_type
         );
 
@@ -645,9 +778,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             expr_type
         );
 
@@ -657,7 +788,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::Slice(SliceType::String).into()),
             expr_type
         );
 
@@ -667,7 +798,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::Slice(SliceType::String).into()),
             expr_type
         );
 
@@ -677,10 +808,10 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
+            Either::Static(
                 StaticType::Slice(SliceType::List(
                     10,
-                    Box::new(EitherType::Static(
+                    Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Char).into()
                     ))
                 ))
