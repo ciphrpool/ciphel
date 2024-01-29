@@ -12,7 +12,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::{scope::ScopeApi, Metadata},
 };
 
 use super::Scope;
@@ -27,8 +27,8 @@ impl<Inner: ScopeApi> TryParse for Scope<Inner> {
             ),
             |value| Scope {
                 instructions: value,
-
                 inner_scope: RefCell::new(None),
+                metadata: Metadata::default(),
             },
         )(input)
     }

@@ -10,20 +10,11 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for EventDef<Scope>
-{
+impl<Scope: ScopeApi> TypeOf<Scope> for EventDef<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -32,20 +23,11 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for EventCondition
-{
+impl<Scope: ScopeApi> TypeOf<Scope> for EventCondition {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

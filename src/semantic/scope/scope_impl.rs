@@ -53,19 +53,19 @@ impl Scope {
 }
 
 impl ScopeApi for Scope {
-    type UserType = UserType;
+    // type UserType = UserType;
 
-    type StaticType = StaticType;
+    // type StaticType = StaticType;
 
-    type Var = Var;
+    // type Var = Var;
 
-    type Chan = Chan;
+    // type Chan = Chan;
 
-    type Event = Event;
+    // type Event = Event;
 
     fn child_scope_with(
         parent: &Rc<RefCell<Self>>,
-        vars: Vec<Self::Var>,
+        vars: Vec<Var>,
     ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
@@ -103,7 +103,7 @@ impl ScopeApi for Scope {
     fn register_type(
         &mut self,
         id: &ID,
-        reg: Self::UserType,
+        reg: UserType,
     ) -> Result<(), crate::semantic::SemanticError> {
         match self {
             Scope::Inner {
@@ -130,7 +130,7 @@ impl ScopeApi for Scope {
         todo!()
     }
 
-    fn register_var(&mut self, reg: Self::Var) -> Result<(), crate::semantic::SemanticError> {
+    fn register_var(&mut self, reg: Var) -> Result<(), crate::semantic::SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 data.vars.insert(reg.id.clone(), reg.into());
@@ -143,11 +143,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_event(&mut self, _reg: Self::Event) -> Result<(), crate::semantic::SemanticError> {
+    fn register_event(&mut self, _reg: Event) -> Result<(), crate::semantic::SemanticError> {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<Rc<Self::Var>, crate::semantic::SemanticError> {
+    fn find_var(&self, id: &ID) -> Result<Rc<Var>, crate::semantic::SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -200,18 +200,18 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>> {
+    fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
         match self {
             Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
             Scope::General { .. } => HashMap::default(),
         }
     }
 
-    fn find_chan(&self) -> Result<&Self::Chan, crate::semantic::SemanticError> {
+    fn find_chan(&self) -> Result<&Chan, crate::semantic::SemanticError> {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<Rc<Self::UserType>, crate::semantic::SemanticError> {
+    fn find_type(&self, id: &ID) -> Result<Rc<UserType>, crate::semantic::SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -246,7 +246,7 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_event(&self) -> Result<&Self::Event, crate::semantic::SemanticError> {
+    fn find_event(&self) -> Result<&Event, crate::semantic::SemanticError> {
         todo!()
     }
 }
@@ -255,24 +255,24 @@ impl ScopeApi for Scope {
 pub struct MockScope {}
 
 impl ScopeApi for MockScope {
-    type UserType = UserType;
+    // type UserType = UserType;
 
-    type StaticType = StaticType;
+    // type StaticType = StaticType;
 
-    type Var = Var;
+    // type Var = Var;
 
-    type Chan = Chan;
+    // type Chan = Chan;
 
-    type Event = Event;
+    // type Event = Event;
 
     fn child_scope_with(
         _parent: &Rc<RefCell<Self>>,
-        _vars: Vec<Self::Var>,
+        _vars: Vec<Var>,
     ) -> Result<Rc<RefCell<Self>>, SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_type(&mut self, _id: &ID, _reg: Self::UserType) -> Result<(), SemanticError> {
+    fn register_type(&mut self, _id: &ID, _reg: UserType) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
@@ -280,29 +280,29 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
 
-    fn register_var(&mut self, _reg: Self::Var) -> Result<(), SemanticError> {
+    fn register_var(&mut self, _reg: Var) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn register_event(&mut self, _reg: Self::Event) -> Result<(), SemanticError> {
+    fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn find_var(&self, _id: &ID) -> Result<Rc<Self::Var>, SemanticError> {
+    fn find_var(&self, _id: &ID) -> Result<Rc<Var>, SemanticError> {
         unimplemented!("Mock function call")
     }
-    fn find_outer_vars(&self) -> HashMap<ID, Rc<Self::Var>> {
+    fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
         unimplemented!("Mock function call")
     }
-    fn find_chan(&self) -> Result<&Self::Chan, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn find_type(&self, _id: &ID) -> Result<Rc<Self::UserType>, SemanticError> {
+    fn find_chan(&self) -> Result<&Chan, SemanticError> {
         unimplemented!("Mock function call")
     }
 
-    fn find_event(&self) -> Result<&Self::Event, SemanticError> {
+    fn find_type(&self, _id: &ID) -> Result<Rc<UserType>, SemanticError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn find_event(&self) -> Result<&Event, SemanticError> {
         unimplemented!("Mock function call")
     }
 }

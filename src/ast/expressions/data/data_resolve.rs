@@ -14,18 +14,9 @@ use crate::semantic::{
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Data<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -56,51 +47,41 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Variable<InnerScope>
-{
+impl<InnerScope: ScopeApi> Variable<InnerScope> {
     fn resolve_based(
         &self,
         scope: &Rc<RefCell<InnerScope>>,
-        context: &Either<InnerScope::UserType, InnerScope::StaticType>,
-    ) -> Result<Either<InnerScope::UserType, InnerScope::StaticType>, SemanticError>
+        context: &Either<UserType, StaticType>,
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Self: Sized,
         InnerScope: ScopeApi,
     {
         match self {
-            Variable::Var(VarID { id: value, metadata }) => <Either<
-                <InnerScope as ScopeApi>::UserType,
-                <InnerScope as ScopeApi>::StaticType,
-            > as GetSubTypes<InnerScope>>::get_field(
-                context, value
-            )
-            .ok_or(SemanticError::UnknownField),
-            Variable::FieldAccess(FieldAccess { var, field, metadata }) => {
+            Variable::Var(VarID {
+                id: value,
+                metadata,
+            }) => <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
+                .ok_or(SemanticError::UnknownField),
+            Variable::FieldAccess(FieldAccess {
+                var,
+                field,
+                metadata,
+            }) => {
                 let var_type = var.resolve_based(scope, context)?;
                 field.resolve_based(scope, &var_type)
             }
-            Variable::ListAccess(ListAccess { var, index, metadata }) => {
+            Variable::ListAccess(ListAccess {
+                var,
+                index,
+                metadata,
+            }) => {
                 let var_type = var.resolve_based(scope, context)?;
-                if !<Either<
-                    <InnerScope as ScopeApi>::UserType,
-                    <InnerScope as ScopeApi>::StaticType,
-                > as TypeChecking<InnerScope>>::is_iterable(&var_type)
-                {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
                     Err(SemanticError::ExpectedIterable)
                 } else {
                     let key_type =
-                        <Either<
-                            <InnerScope as ScopeApi>::UserType,
-                            <InnerScope as ScopeApi>::StaticType,
-                        > as GetSubTypes<InnerScope>>::get_key(&var_type);
+                        <Either<UserType, StaticType> as GetSubTypes>::get_key(&var_type);
 
                     let _ = index.resolve(scope, &key_type, &())?;
                     let index_type = index.type_of(&scope.borrow())?;
@@ -108,21 +89,18 @@ impl<
                     Ok(var_type)
                 }
             }
-            Variable::NumAccess(NumAccess { var, index, metadata }) => {
+            Variable::NumAccess(NumAccess {
+                var,
+                index,
+                metadata,
+            }) => {
                 let _ = var.resolve_based(scope, context)?;
                 let var_type = var.type_of(&scope.borrow())?;
-                if !<Either<
-                    <InnerScope as ScopeApi>::UserType,
-                    <InnerScope as ScopeApi>::StaticType,
-                > as TypeChecking<InnerScope>>::is_indexable(&var_type)
-                {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
                     Err(SemanticError::ExpectedIndexable)
                 } else {
                     let Some(fields) =
-                        <Either<
-                            <InnerScope as ScopeApi>::UserType,
-                            <InnerScope as ScopeApi>::StaticType,
-                        > as GetSubTypes<InnerScope>>::get_fields(&var_type)
+                        <Either<UserType, StaticType> as GetSubTypes>::get_fields(&var_type)
                     else {
                         return Err(SemanticError::InvalidPattern);
                     };
@@ -137,18 +115,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Variable<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -168,19 +137,10 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for VarID<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     type Output = ();
 
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -196,27 +156,17 @@ impl<
         {
             let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
             *borrowed_metadata = Info::Resolved {
-                context,
-                signature: var.type_of(scope),
-                extra: todo!(),
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
             };
         }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for FieldAccess<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -231,22 +181,20 @@ impl<
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
         let _ = self.field.resolve_based(scope, &var_type)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for NumAccess<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -260,40 +208,33 @@ impl<
     {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
-        if !<
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-        as TypeChecking<Scope>>::is_indexable(&var_type)
-        {
+        if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
             Err(SemanticError::ExpectedIndexable)
         } else {
-            let Some(fields) = <Either<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_fields(&var_type) else {
+            let Some(fields) = <Either<UserType, StaticType> as GetSubTypes>::get_fields(&var_type)
+            else {
                 return Err(SemanticError::InvalidPattern);
             };
             if self.index >= fields.len() {
                 Err(SemanticError::InvalidPattern)
-            }else {
+            } else {
+                {
+                    let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
         }
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ListAccess<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
 
     type Extra = ();
     fn resolve(
@@ -308,28 +249,25 @@ impl<
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
 
-        if !<
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-            as TypeChecking<Scope>>::is_channel(&var_type)
-        && !<
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-            as TypeChecking<Scope>>::is_map(&var_type)
-        && <
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-            as TypeChecking<Scope>>::is_iterable(&var_type)
+        if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&var_type)
+            && !<Either<UserType, StaticType> as TypeChecking>::is_map(&var_type)
+            && <Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type)
         {
             let key_type = match context {
-                Some(context) => <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_key(context),
+                Some(context) => <Either<UserType, StaticType> as GetSubTypes>::get_key(context),
                 None => None,
             };
             let _ = self.index.resolve(scope, &key_type, extra)?;
             let index_type = self.index.type_of(&scope.borrow())?;
-            if <
-                Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                as TypeChecking<Scope>>::is_u64(&index_type) {
+            if <Either<UserType, StaticType> as TypeChecking>::is_u64(&index_type) {
+                {
+                    let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             } else {
                 Err(SemanticError::ExpectedIndexable)
@@ -340,18 +278,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Primitive
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -372,18 +301,9 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Slice<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -396,34 +316,31 @@ impl<
         Scope: ScopeApi,
     {
         match self {
-            Slice::String { .. } => match context {
-                Some(context_type) => {
-                    let _ = context_type.compatible_with(self, &scope.borrow())?;
-                    Ok(())
+            Slice::String { metadata, .. } => {
+                match context {
+                    Some(context_type) => {
+                        let _ = context_type.compatible_with(self, &scope.borrow())?;
+                    }
+                    None => {}
                 }
-                None => Ok(()),
-            },
-            Slice::List { value, .. } => {
-                let (param_context, maybe_length) =
-                    match context {
-                        Some(context) => {
-                            (
-                                <Either<
-                                    <Scope as ScopeApi>::UserType,
-                                    <Scope as ScopeApi>::StaticType,
-                                > as GetSubTypes<Scope>>::get_item(
-                                    context
-                                ),
-                                <Either<
-                                    <Scope as ScopeApi>::UserType,
-                                    <Scope as ScopeApi>::StaticType,
-                                > as GetSubTypes<Scope>>::get_length(
-                                    context
-                                ),
-                            )
-                        }
-                        None => (None, None),
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
                     };
+                }
+                Ok(())
+            }
+            Slice::List { value, metadata } => {
+                let (param_context, maybe_length) = match context {
+                    Some(context) => (
+                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context),
+                        <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
+                    ),
+                    None => (None, None),
+                };
                 match maybe_length {
                     Some(length) => {
                         if length != value.len() {
@@ -435,23 +352,22 @@ impl<
                 for expr in value {
                     let _ = expr.resolve(scope, &param_context, &())?;
                 }
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Vector<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -464,39 +380,47 @@ impl<
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init { value, .. } => {
+            Vector::Init { value, metadata } => {
                 let param_context = match context {
-                    Some(context) => <Either<
-                        <Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType,
-                    > as GetSubTypes<Scope>>::get_item(context),
+                    Some(context) => {
+                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
+                    }
                     None => None,
                 };
 
                 for expr in value {
                     let _ = expr.resolve(scope, &param_context, &())?;
                 }
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
             Vector::Def {
                 capacity: _,
                 metadata,
-            } => Ok(()),
+            } => {
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
+                Ok(())
+            }
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Tuple<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -508,21 +432,21 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.value.resolve(scope, context, extra)
+        let _ = self.value.resolve(scope, context, extra)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for MultiData<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -534,14 +458,10 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        let maybe_length =
-            match context {
-                Some(context) => <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_length(context),
-                None => None,
-            };
+        let maybe_length = match context {
+            Some(context) => <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
+            None => None,
+        };
         match maybe_length {
             Some(length) => {
                 if length != self.len() {
@@ -552,10 +472,9 @@ impl<
         }
         for (index, expr) in self.iter().enumerate() {
             let param_context = match context {
-                Some(context) => <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_nth(context, &index),
+                Some(context) => {
+                    <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index)
+                }
                 None => None,
             };
             let _ = expr.resolve(scope, &param_context, &())?;
@@ -563,18 +482,9 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Closure<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -590,10 +500,8 @@ impl<
             return Err(SemanticError::CantInferType);
         };
         for (index, expr) in self.params.iter().enumerate() {
-            let param_context = <Either<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_nth(context, &index);
+            let param_context =
+                <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index);
             let _ = expr.resolve(scope, &param_context, &())?;
         }
 
@@ -615,18 +523,15 @@ impl<
             })
             .map(|(index, id, param)| {
                 let _param_type = param.type_of(&scope.borrow());
-                let param_type = <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_nth(context, &index);
-                Scope::Var::build_var(id, &param_type.unwrap())
+                let param_type =
+                    <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index);
+                <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap())
             })
-            .collect::<Vec<Scope::Var>>();
+            .collect::<Vec<Var>>();
 
-        let Some(context_return) = <Either<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_return(context) else {
+        let Some(context_return) =
+            <Either<UserType, StaticType> as GetSubTypes>::get_return(context)
+        else {
             return Err(SemanticError::CantInferType);
         };
 
@@ -637,22 +542,21 @@ impl<
             let mut borrowed_env = self.env.borrow_mut();
             borrowed_env.extend(env_vars);
         }
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: Some(context.clone()),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ExprScope<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
-    type Extra = Vec<Scope::Var>;
+    type Context = Option<Either<UserType, StaticType>>;
+    type Extra = Vec<Var>;
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -669,18 +573,9 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ClosureParam
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
-    type Context = Option<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -701,18 +596,9 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Address<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -724,21 +610,21 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.value.resolve(scope, context, extra)
+        let _ = self.value.resolve(scope, context, extra)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for PtrAccess<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -750,21 +636,21 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        self.value.resolve(scope, context, extra)
+        let _ = self.value.resolve(scope, context, extra)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Channel<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -777,11 +663,19 @@ impl<
         Scope: ScopeApi,
     {
         match self {
-            Channel::Receive { addr, .. } => {
+            Channel::Receive { addr, metadata, .. } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if ! <Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
+                }
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
                 }
                 Ok(())
             }
@@ -792,33 +686,46 @@ impl<
             } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if ! <Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_channel(&addr_type) {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 let _ = msg.resolve(scope, context, extra)?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
-            Channel::Init { value: id, .. } => scope.borrow_mut().register_chan(id),
+            Channel::Init {
+                value: id,
+                metadata,
+            } => {
+                let _ = scope.borrow_mut().register_chan(id)?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
+                Ok(())
+            }
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Struct<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        _context: &Self::Context,
+        context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -829,20 +736,15 @@ impl<
         let user_type = borrowed_scope.find_type(&self.id)?;
         let user_type = user_type.type_of(&scope.borrow())?;
         for (field_name, expr) in &self.fields {
-            let field_context = <Either<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_field(
-                &user_type, &field_name
-            );
+            let field_context =
+                <Either<UserType, StaticType> as GetSubTypes>::get_field(&user_type, &field_name);
 
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) = <Either<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_fields(&user_type) else {
+        let Some(fields_type) =
+            <Either<UserType, StaticType> as GetSubTypes>::get_fields(&user_type)
+        else {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
@@ -862,26 +764,25 @@ impl<
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Union<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        _context: &Self::Context,
+        context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -895,20 +796,17 @@ impl<
             return Err(SemanticError::CantInferType);
         };
         for (field_name, expr) in &self.fields {
-            let field_context = <Either<
-                <Scope as ScopeApi>::UserType,
-                <Scope as ScopeApi>::StaticType,
-            > as GetSubTypes<Scope>>::get_field(
-                &variant_type, &field_name
+            let field_context = <Either<UserType, StaticType> as GetSubTypes>::get_field(
+                &variant_type,
+                &field_name,
             );
 
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) = <Either<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_fields(&variant_type) else {
+        let Some(fields_type) =
+            <Either<UserType, StaticType> as GetSubTypes>::get_fields(&variant_type)
+        else {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
@@ -928,26 +826,25 @@ impl<
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Enum<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        _context: &Self::Context,
+        context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -959,23 +856,22 @@ impl<
         let Some(_) = user_type.get_variant(&self.value) else {
             return Err(SemanticError::IncorrectVariant);
         };
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
         // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
         // Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Map<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -990,47 +886,53 @@ impl<
         match self {
             Map::Init { fields, metadata } => {
                 let item_type = match context {
-                    Some(context) => <Either<
-                        <Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType,
-                    > as GetSubTypes<Scope>>::get_item(context),
+                    Some(context) => {
+                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
+                    }
                     None => None,
                 };
 
                 let key_type = match context {
-                    Some(context) => <Either<
-                        <Scope as ScopeApi>::UserType,
-                        <Scope as ScopeApi>::StaticType,
-                    > as GetSubTypes<Scope>>::get_key(context),
+                    Some(context) => {
+                        <Either<UserType, StaticType> as GetSubTypes>::get_key(context)
+                    }
                     None => None,
                 };
                 for (key, value) in fields {
                     let _ = key.resolve(scope, &key_type, &())?;
                     let _ = value.resolve(scope, &item_type, &())?;
                 }
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
 
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
             Map::Def {
                 length: _,
                 capacity: _,
                 metadata,
-            } => Ok(()),
+            } => {
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
+                Ok(())
+            }
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for KeyData<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,

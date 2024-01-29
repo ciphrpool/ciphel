@@ -3,14 +3,17 @@ use std::rc::Rc;
 
 use super::Scope;
 
+use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::scope::var_impl::Var;
 use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
-use crate::semantic::{CompatibleWith, TypeOf};
+use crate::semantic::{CompatibleWith, Info, TypeOf};
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     //type Output = Rc<RefCell<OuterScope>>;
     type Output = ();
-    type Context = Option<Either<OuterScope::UserType, OuterScope::StaticType>>;
-    type Extra = Vec<OuterScope::Var>;
+    type Context = Option<Either<UserType, StaticType>>;
+    type Extra = Vec<Var>;
     fn resolve(
         &self,
         scope: &Rc<RefCell<OuterScope>>,
@@ -32,7 +35,14 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
 
         let return_type = self.type_of(&scope.borrow())?;
         let _ = context.compatible_with(&return_type, &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
 
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }

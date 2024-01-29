@@ -11,18 +11,9 @@ use crate::semantic::{
 };
 use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Declaration<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -39,7 +30,7 @@ impl<
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
 
-                let var = Scope::Var::build_var(&value.id, &var_type);
+                let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
                 let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
             }
@@ -49,7 +40,7 @@ impl<
             } => {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
-                let var = Scope::Var::build_var(&value.id, &var_type);
+                let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
                 let _ = right.resolve(scope, &Some(var_type), &())?;
                 let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
@@ -67,16 +58,7 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for TypedVar
-{
+impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -96,18 +78,9 @@ impl<
         self.signature.resolve(scope, context, extra)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for DeclaredVar
-{
-    type Output = Vec<Scope::Var>;
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
+    type Output = Vec<Var>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -128,7 +101,7 @@ impl<
                 let Some(var_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                let var = Scope::Var::build_var(id, var_type);
+                let var = <Var as BuildVar<Scope>>::build_var(id, var_type);
                 vars.push(var);
                 Ok(vars)
             }
@@ -139,18 +112,9 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for PatternVar
-{
-    type Output = Vec<Scope::Var>;
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
+    type Output = Vec<Var>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -170,18 +134,15 @@ impl<
             } => {
                 let borrowed_scope = scope.borrow();
                 let user_type = borrowed_scope.find_type(typename)?;
-                let variant_type: Option<Either<Scope::UserType, Scope::StaticType>> =
+                let variant_type: Option<Either<UserType, StaticType>> =
                     user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
                     return Err(SemanticError::CantInferType);
                 };
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(
-                    &variant_type
-                ) else {
+                let Some(fields) =
+                    <Either<UserType, StaticType> as GetSubTypes>::get_fields(&variant_type)
+                else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if vars.len() != fields.len() {
@@ -200,7 +161,7 @@ impl<
                     if let Some(_api) = PlatformApi::from(var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -209,10 +170,9 @@ impl<
                 let user_type = borrowed_scope.find_type(typename)?;
                 let user_type = user_type.type_of(&scope.borrow())?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(&user_type) else {
+                let Some(fields) =
+                    <Either<UserType, StaticType> as GetSubTypes>::get_fields(&user_type)
+                else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if vars.len() != fields.len() {
@@ -231,7 +191,7 @@ impl<
                     if let Some(_api) = PlatformApi::from(var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -240,10 +200,9 @@ impl<
                 let Some(user_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                let Some(fields) = <Either<
-                    <Scope as ScopeApi>::UserType,
-                    <Scope as ScopeApi>::StaticType,
-                > as GetSubTypes<Scope>>::get_fields(user_type) else {
+                let Some(fields) =
+                    <Either<UserType, StaticType> as GetSubTypes>::get_fields(user_type)
+                else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 if value.len() != fields.len() {
@@ -251,7 +210,7 @@ impl<
                 }
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &value[index];
-                    scope_vars.push(Scope::Var::build_var(var_name, field_type));
+                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }

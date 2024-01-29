@@ -14,20 +14,8 @@ use crate::{
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for ExprFlow<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -40,20 +28,8 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for IfExpr<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -63,20 +39,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for PatternExpr<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -84,20 +48,8 @@ impl<
         self.expr.type_of(&scope)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for MatchExpr<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -123,20 +75,8 @@ impl<
         pattern_type.merge(&else_type, scope)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for TryExpr<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -145,20 +85,8 @@ impl<
         try_branch_type.merge(&self.else_branch, scope)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for FnCall<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -173,10 +101,9 @@ impl<
         }
 
         let fn_var_type = self.fn_var.type_of(&scope)?;
-        let Some(return_type) = <Either<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_return(&fn_var_type) else {
+        let Some(return_type) =
+            <Either<UserType, StaticType> as GetSubTypes>::get_return(&fn_var_type)
+        else {
             return Err(SemanticError::CantInferType);
         };
 

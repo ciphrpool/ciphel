@@ -8,10 +8,7 @@ use crate::semantic::{
 
 use super::{AddrType, NumberType, PrimitiveType, StaticType};
 
-impl<
-        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
-    > TypeChecking<Scope> for StaticType
-{
+impl TypeChecking for StaticType {
     fn is_iterable(&self) -> bool {
         match self {
             StaticType::Primitive(_) => false,
@@ -24,7 +21,7 @@ impl<
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_iterable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_iterable(value)
             }
             StaticType::Map(_) => true,
         }
@@ -41,7 +38,7 @@ impl<
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_indexable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_indexable(value)
             }
             StaticType::Map(_) => false,
         }
@@ -50,7 +47,7 @@ impl<
         match self {
             StaticType::Chan(_) => true,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_channel(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_channel(value)
             }
             _ => false,
         }
@@ -59,7 +56,7 @@ impl<
         match self {
             StaticType::Primitive(PrimitiveType::Bool) => true,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_boolean(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_boolean(value)
             }
             _ => false,
         }
@@ -69,7 +66,7 @@ impl<
         match self {
             StaticType::Fn(_) => true,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_callable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_callable(value)
             }
             _ => false,
         }
@@ -78,7 +75,7 @@ impl<
         match self {
             StaticType::Any => true,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_any(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_any(value)
             }
             _ => false,
         }
@@ -87,7 +84,7 @@ impl<
         match self {
             StaticType::Unit => true,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking<Scope>>::is_unit(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_unit(value)
             }
             _ => false,
         }

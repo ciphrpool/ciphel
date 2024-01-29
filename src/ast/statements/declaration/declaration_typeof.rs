@@ -11,41 +11,22 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Declaration<Scope>
-{
+impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(Either::Static(Scope::StaticType::build_unit().into()))
+        Ok(Either::Static(
+            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+        ))
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for TypedVar
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -53,49 +34,32 @@ impl<
         self.signature.type_of(&scope)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for DeclaredVar
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            DeclaredVar::Id(_) => Ok(Either::Static(Scope::StaticType::build_unit().into())),
+            DeclaredVar::Id(_) => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
             DeclaredVar::Typed(value) => value.type_of(&scope),
             DeclaredVar::Pattern(value) => value.type_of(&scope),
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for PatternVar
-{
+impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(Either::Static(Scope::StaticType::build_unit().into()))
+        Ok(Either::Static(
+            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+        ))
     }
 }

@@ -7,7 +7,7 @@ use crate::{
             chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
             var_impl::Var, ScopeApi,
         },
-        SemanticError,
+        Metadata, SemanticError,
     },
 };
 
@@ -21,19 +21,11 @@ pub mod scope_typeof;
 pub struct Scope<Inner: ScopeApi> {
     pub instructions: Vec<Statement<Inner>>,
     pub inner_scope: RefCell<Option<Rc<RefCell<Inner>>>>,
+    pub metadata: Metadata,
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Scope<InnerScope>
-{
-    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<InnerScope::Var>>, SemanticError> {
+impl<InnerScope: ScopeApi> Scope<InnerScope> {
+    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<Var>>, SemanticError> {
         match self.inner_scope.borrow().as_ref() {
             Some(inner) => Ok(inner.as_ref().borrow().find_outer_vars()),
             None => Err(SemanticError::NotResolvedYet),

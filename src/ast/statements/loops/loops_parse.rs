@@ -27,16 +27,7 @@ use crate::{
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Loop<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
     /*
      * @desc Parse loop
      *
@@ -57,16 +48,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for ForIterator<Scope>
-{
+impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(parse_id, |value| ForIterator::Id(value)),
@@ -96,16 +78,7 @@ impl TryParse for ForItem {
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for ForLoop<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
     /*
      * @desc Parse for loop
      *
@@ -130,16 +103,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for WhileLoop<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
     /*
      * @desc Parse while loop
      *
@@ -195,6 +159,7 @@ mod tests {
                 item: ForItem::Id("i".into()),
                 iterator: ForIterator::Id("x".into()),
                 scope: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
                             fn_var: Variable::Var(VarID {
@@ -203,7 +168,8 @@ mod tests {
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
@@ -232,6 +198,7 @@ mod tests {
                     Primitive::Bool(true)
                 )))),
                 scope: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
                             fn_var: Variable::Var(VarID {
@@ -240,7 +207,8 @@ mod tests {
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
@@ -265,6 +233,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Loop::Loop(Box::new(Scope {
+                metadata: Metadata::default(),
                 instructions: vec![Statement::Flow(Flow::Call(CallStat {
                     call: FnCall {
                         fn_var: Variable::Var(VarID {
@@ -273,7 +242,8 @@ mod tests {
                         }),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                             Primitive::Number(Number::U64(10))
-                        )))]
+                        )))],
+                        metadata: Metadata::default()
                     }
                 }))],
 

@@ -46,20 +46,8 @@ pub struct Union {
     pub variants: Vec<(ID, Struct)>,
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Rc<UserType>
-{
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Rc<UserType> {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
@@ -68,17 +56,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for UserType
-{
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<Self, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for UserType {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<Self, StaticType>, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
@@ -87,16 +66,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > CompatibleWith<Scope> for UserType
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for UserType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -109,16 +79,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > BuildUserType<Scope> for UserType
-{
+impl<Scope: ScopeApi> BuildUserType<Scope> for UserType {
     fn build_usertype(
         type_sig: &crate::ast::statements::definition::TypeDef,
         scope: &Ref<Scope>,
@@ -133,17 +94,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GetSubTypes<Scope> for UserType
-{
-    fn get_field(&self, field_id: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+impl GetSubTypes for UserType {
+    fn get_field(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             UserType::Struct(value) => value
                 .fields
@@ -154,7 +106,7 @@ impl<
             UserType::Union(_) => None,
         }
     }
-    fn get_variant(&self, variant: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_variant(&self, variant: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             UserType::Struct(_) => None,
             UserType::Enum(value) => {
@@ -172,9 +124,7 @@ impl<
                 .map(|field| Either::User(UserType::Struct(field.clone()).into())),
         }
     }
-    fn get_fields(
-        &self,
-    ) -> Option<Vec<(Option<String>, Either<Scope::UserType, Scope::StaticType>)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         match self {
             UserType::Struct(value) => Some(
                 value
@@ -189,29 +139,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeChecking<Scope> for UserType
-{
-}
+impl TypeChecking for UserType {}
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > OperandMerging<Scope> for UserType
-{
-}
+impl<Scope: ScopeApi> OperandMerging<Scope> for UserType {}
 
 impl IsEnum for UserType {
     fn is_enum(&self) -> bool {
@@ -223,12 +153,12 @@ impl IsEnum for UserType {
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for UserType {
+impl<Scope: ScopeApi> MergeType<Scope> for UserType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -290,9 +220,7 @@ impl SizeOf for Enum {
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
-    for Struct
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Struct {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -319,9 +247,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
-    for Union
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Union {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -362,7 +288,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Ok(())
     }
 }
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope> for Enum {
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Enum {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -387,7 +313,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 }
 
 impl Struct {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::StructDef,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
@@ -408,7 +334,7 @@ impl Struct {
 }
 
 impl Union {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::UnionDef,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
@@ -438,7 +364,7 @@ impl Union {
 }
 
 impl Enum {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::EnumDef,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {

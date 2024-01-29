@@ -8,24 +8,16 @@ use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::var_impl::Var;
+use crate::semantic::Info;
 use crate::semantic::{
     scope::{type_traits::OperandMerging, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for UnaryOperation<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -38,33 +30,44 @@ impl<
         Scope: ScopeApi,
     {
         match self {
-            UnaryOperation::Minus(value) => {
+            UnaryOperation::Minus { value, metadata } => {
                 let _ = value.resolve(scope, context, extra)?;
                 let value_type = value.type_of(&scope.borrow())?;
-                let _ = value_type.can_substract()?;
+                let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_substract(
+                    &value_type,
+                )?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
-            UnaryOperation::Not(value) => {
+            UnaryOperation::Not { value, metadata } => {
                 let _ = value.resolve(scope, context, extra)?;
                 let value_type = value.type_of(&scope.borrow())?;
-                let _ = value_type.can_negate()?;
+                let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_negate(
+                    &value_type,
+                )?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(self.type_of(&scope.borrow())?),
+                    };
+                }
                 Ok(())
             }
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Product<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -76,35 +79,46 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        let (left, right) = match self {
-            Product::Mult { left, right } => (left, right),
-            Product::Div { left, right } => (left, right),
-            Product::Mod { left, right } => (left, right),
+        let (left, right, metadata) = match self {
+            Product::Mult {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Product::Div {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Product::Mod {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
         };
         let _ = left.resolve(scope, context, extra)?;
         let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_product()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_product(&left_type)?;
 
         let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_product()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_product(&right_type)?;
 
         let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Addition<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -118,29 +132,28 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_add()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_add(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_add()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_add(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Substraction<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -154,29 +167,29 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_substract()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_substract(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_substract()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_substract(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Shift<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -188,34 +201,41 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        let (left, right) = match self {
-            Shift::Left { left, right } => (left, right),
-            Shift::Right { left, right } => (left, right),
+        let (left, right, metadata) = match self {
+            Shift::Left {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Shift::Right {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
         };
         let _ = left.resolve(scope, context, extra)?;
         let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_shift()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_shift(&left_type)?;
 
         let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_shift()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_shift(&right_type)?;
 
         let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for BitwiseAnd<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -229,28 +249,29 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_bitwise_and()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_and(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_bitwise_and()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_and(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for BitwiseXOR<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -264,28 +285,29 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_bitwise_xor()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_xor(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_bitwise_xor()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_xor(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for BitwiseOR<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -299,29 +321,30 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_bitwise_or()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_or(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_bitwise_or()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_bitwise_or(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Cast<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Cast<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -336,23 +359,21 @@ impl<
         let _ = self.left.resolve(scope, context, extra)?;
 
         let _ = self.right.resolve(scope, &(), extra)?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
 
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Comparaison<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Comparaison<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -364,37 +385,54 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        let (left, right) = match self {
-            Comparaison::Less { left, right } => (left, right),
-            Comparaison::LessEqual { left, right } => (left, right),
-            Comparaison::Greater { left, right } => (left, right),
-            Comparaison::GreaterEqual { left, right } => (left, right),
+        let (left, right, metadata) = match self {
+            Comparaison::Less {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Comparaison::LessEqual {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Comparaison::Greater {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Comparaison::GreaterEqual {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
         };
         let _ = left.resolve(scope, context, extra)?;
         let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_comparaison()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_comparaison(&left_type)?;
 
         let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_comparaison()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_comparaison(&right_type)?;
 
         let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Equation<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Equation<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -406,35 +444,42 @@ impl<
         Self: Sized,
         Scope: ScopeApi,
     {
-        let (left, right) = match self {
-            Equation::Equal { left, right } => (left, right),
-            Equation::NotEqual { left, right } => (left, right),
+        let (left, right, metadata) = match self {
+            Equation::Equal {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
+            Equation::NotEqual {
+                left,
+                right,
+                metadata,
+            } => (left, right, metadata),
         };
         let _ = left.resolve(scope, context, extra)?;
         let left_type = left.type_of(&scope.borrow())?;
-        let _ = left_type.can_equate()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_equate(&left_type)?;
 
         let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
-        let _ = right_type.can_equate()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_equate(&right_type)?;
 
         let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Inclusion<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Inclusion<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -448,37 +493,36 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_include_left()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_include_left(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_include_right()?;
+        let _ = <Either<UserType, StaticType> as OperandMerging<Scope>>::can_include_right(
+            &right_type,
+        )?;
 
-        let Some(right_item) = <Either<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_item(&right_type) else {
+        let Some(right_item) = <Either<UserType, StaticType> as GetSubTypes>::get_item(&right_type)
+        else {
             return Err(SemanticError::IncompatibleOperands);
         };
 
         let _ = left_type.compatible_with(&right_item, &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
 
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for LogicalAnd<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -492,28 +536,29 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_logical_and()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_logical_and(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_logical_and()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_logical_and(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for LogicalOr<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -527,13 +572,23 @@ impl<
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = left_type.can_logical_or()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_logical_or(&left_type)?;
 
         let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = right_type.can_logical_or()?;
+        let _ =
+            <Either<UserType, StaticType> as OperandMerging<Scope>>::can_logical_or(&right_type)?;
 
         let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }

@@ -47,16 +47,7 @@ pub enum Statement<InnerScope: ScopeApi> {
     Return(Return<InnerScope>),
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Statement<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(scope::Scope::parse, |value| Statement::Scope(value)),
@@ -75,18 +66,9 @@ impl<
         ))(input)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Statement<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -113,20 +95,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Statement<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -136,9 +106,9 @@ impl<
             Statement::Flow(value) => value.type_of(&scope),
             Statement::Assignation(value) => value.type_of(&scope),
             Statement::Declaration(value) => value.type_of(&scope),
-            Statement::Definition(_value) => {
-                Ok(Either::Static(Scope::StaticType::build_unit().into()))
-            }
+            Statement::Definition(_value) => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
             Statement::Loops(value) => value.type_of(&scope),
             Statement::Return(value) => value.type_of(&scope),
         }
@@ -151,16 +121,7 @@ pub enum Return<InnerScope: ScopeApi> {
     Expr(Box<Expression<InnerScope>>),
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Return<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Return<Scope> {
     /*
      * @desc Parse return statements
      *
@@ -184,18 +145,9 @@ impl<
         )(input)
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Return<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -211,11 +163,7 @@ impl<
             Return::Unit => {
                 match context {
                     Some(context) => {
-                        if !<Either<
-                            <Scope as ScopeApi>::UserType,
-                            <Scope as ScopeApi>::StaticType,
-                        > as TypeChecking<Scope>>::is_unit(context)
-                        {
+                        if !<Either<UserType, StaticType> as TypeChecking>::is_unit(context) {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                     }
@@ -238,26 +186,16 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Return<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Return::Unit => Ok(Either::Static(Scope::StaticType::build_unit().into())),
+            Return::Unit => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
             Return::Expr(expr) => expr.type_of(&scope),
         }
     }

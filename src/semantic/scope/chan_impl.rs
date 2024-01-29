@@ -13,16 +13,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chan {}
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Self,
-            Event = Event,
-        >,
-    > CompatibleWith<Scope> for Chan
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Chan {
     fn compatible_with<Other>(
         &self,
         _other: &Other,
@@ -35,20 +26,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Self,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Chan
-{
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Chan {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -57,20 +36,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Self,
-            Event = Event,
-        >,
-    > BuildChan<Scope> for Chan
-{
-    fn build_chan(
-        _id: &ID,
-        _type_sig: &Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-    ) -> Self {
+impl<Scope: ScopeApi> BuildChan<Scope> for Chan {
+    fn build_chan(_id: &ID, _type_sig: &Either<UserType, StaticType>) -> Self {
         todo!()
     }
 }

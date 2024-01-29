@@ -10,34 +10,29 @@ use super::{
     var_impl::Var, ScopeApi,
 };
 
-pub trait GetSubTypes<
-    Scope: ScopeApi, //<StaticType = StaticType, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
->
-{
-    fn get_nth(&self, _n: &usize) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+pub trait GetSubTypes {
+    fn get_nth(&self, _n: &usize) -> Option<Either<UserType, StaticType>> {
         None
     }
-    fn get_field(&self, _field_id: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_field(&self, _field_id: &ID) -> Option<Either<UserType, StaticType>> {
         None
     }
-    fn get_variant(&self, _variant: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_variant(&self, _variant: &ID) -> Option<Either<UserType, StaticType>> {
         None
     }
-    fn get_item(&self) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_item(&self) -> Option<Either<UserType, StaticType>> {
         None
     }
-    fn get_key(&self) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_key(&self) -> Option<Either<UserType, StaticType>> {
         None
     }
     fn get_length(&self) -> Option<usize> {
         None
     }
-    fn get_return(&self) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_return(&self) -> Option<Either<UserType, StaticType>> {
         None
     }
-    fn get_fields(
-        &self,
-    ) -> Option<Vec<(Option<String>, Either<Scope::UserType, Scope::StaticType>)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         None
     }
 }
@@ -47,7 +42,7 @@ pub trait IsEnum {
         false
     }
 }
-pub trait TypeChecking<Scope: ScopeApi> {
+pub trait TypeChecking {
     fn is_iterable(&self) -> bool {
         false
     }
@@ -94,7 +89,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -110,7 +105,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -124,7 +119,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -138,7 +133,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -152,7 +147,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -166,7 +161,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -180,7 +175,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -191,7 +186,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -205,7 +200,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -219,7 +214,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -237,7 +232,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -251,7 +246,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -265,7 +260,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {

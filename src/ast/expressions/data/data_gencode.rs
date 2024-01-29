@@ -32,17 +32,8 @@ use super::{
     Slice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Primitive
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -115,11 +106,11 @@ impl<
 //         address: usize,
 //         scope: &Rc<RefCell<Scope>>,
 //         codes: &Rc<RefCell<Vec<Strip>>>,
-//         context: &Either<Scope::UserType, Scope::StaticType>,
+//         context: &Either<UserType, StaticType>,
 //     ) -> Result<
 //         (
 //             (usize, usize),
-//             Either<Scope::UserType, Scope::StaticType>,
+//             Either<UserType, StaticType>,
 //         ),
 //         CodeGenerationError,
 //     > {
@@ -283,7 +274,7 @@ impl<
 //         >,
 //     > GenerateCode<Scope> for Variable<Scope>
 // {
-//     type Context = Either<Scope::UserType, Scope::StaticType>;
+//     type Context = Either<UserType, StaticType>;
 //     fn gencode(
 //         &self,
 //         scope: &Rc<RefCell<Scope>>,
@@ -326,17 +317,8 @@ impl<
 //     }
 // }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Slice<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -357,7 +339,7 @@ impl<
 
                 let (item_size, item_type) = {
                     let Some(item_type) =
-                        <Either<UserType, StaticType> as GetSubTypes<Scope>>::get_item(context)
+                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
                     else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
@@ -378,17 +360,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Vector<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -397,8 +370,7 @@ impl<
         context: &Self::Context,
     ) -> Result<(), CodeGenerationError> {
         let (item_size, item_type) = {
-            let Some(item_type) =
-                <Either<UserType, StaticType> as GetSubTypes<Scope>>::get_item(context)
+            let Some(item_type) = <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
             else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
@@ -471,17 +443,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Tuple<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Tuple<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -493,7 +456,7 @@ impl<
         for (idx, element) in self.value.iter().enumerate() {
             let (item_size, item_type) = {
                 let Some(item_type) =
-                    <Either<UserType, StaticType> as GetSubTypes<Scope>>::get_nth(context, &idx)
+                    <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &idx)
                 else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -506,17 +469,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Closure<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -528,17 +482,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Address<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -550,17 +495,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for PtrAccess<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -572,17 +508,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Channel<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Channel<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -594,17 +521,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Struct<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Struct<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -639,17 +557,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Union<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -701,17 +610,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Enum<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -743,17 +643,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Map<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Map<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,

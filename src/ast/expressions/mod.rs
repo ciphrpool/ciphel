@@ -63,16 +63,7 @@ pub enum Atomic<InnerScope: ScopeApi> {
     Error(error::Error),
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Atomic<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
     /*
      * @desc Parse an atomic expression
      *
@@ -100,18 +91,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Atomic<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -133,20 +115,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Atomic<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -161,16 +131,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Expression<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Expression<Scope> {
     /*
      * @desc Parse an expression
      *
@@ -190,18 +151,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Expression<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -232,20 +184,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Expression<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -269,17 +209,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GenerateCode<Scope> for Expression<Scope>
-{
-    type Context = Either<Scope::UserType, Scope::StaticType>;
+impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
+    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
@@ -297,7 +228,7 @@ mod tests {
 
     use crate::{
         ast::expressions::data::{Data, Primitive},
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -318,8 +249,10 @@ mod tests {
                     )))),
                     right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::U64(4))
-                    ))))
-                }))
+                    )))),
+                    metadata: Metadata::default()
+                })),
+                metadata: Metadata::default()
             }),
             value
         );

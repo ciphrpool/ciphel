@@ -12,15 +12,12 @@ use super::{
     TupleType, VecType,
 };
 
-impl<
-        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
-    > MergeType<Scope> for StaticType
-{
+impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, Self>, SemanticError>
+    ) -> Result<Either<UserType, Self>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -53,14 +50,12 @@ impl<
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope>
-    for PrimitiveType
-{
+impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -107,12 +102,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for SliceType {
+impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -148,12 +143,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for VecType {
+impl<Scope: ScopeApi> MergeType<Scope> for VecType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -171,12 +166,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for FnType {
+impl<Scope: ScopeApi> MergeType<Scope> for FnType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -206,12 +201,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for ChanType {
+impl<Scope: ScopeApi> MergeType<Scope> for ChanType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -229,12 +224,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for TupleType {
+impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -261,12 +256,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for AddrType {
+impl<Scope: ScopeApi> MergeType<Scope> for AddrType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -284,12 +279,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for MapType {
+impl<Scope: ScopeApi> MergeType<Scope> for MapType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -317,7 +312,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Sc
 }
 
 impl KeyType {
-    fn merge_key<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    fn merge_key<Scope: ScopeApi>(
         &self,
         other: &KeyType,
         scope: &Ref<Scope>,

@@ -12,16 +12,7 @@ use crate::semantic::{
     Resolve, SemanticError,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Type
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Type {
     type Output = ();
     type Context = ();
 
@@ -52,16 +43,7 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for PrimitiveType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
     type Output = ();
     type Context = ();
 
@@ -78,16 +60,7 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for SliceType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     type Output = ();
     type Context = ();
 
@@ -108,16 +81,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for VecType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     type Output = ();
     type Context = ();
 
@@ -135,16 +99,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for FnType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for FnType {
     type Output = ();
     type Context = ();
 
@@ -165,16 +120,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Types
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Types {
     type Output = ();
     type Context = ();
 
@@ -195,16 +141,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ChanType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
     type Output = ();
     type Context = ();
 
@@ -222,16 +159,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for TupleType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
     type Output = ();
     type Context = ();
 
@@ -249,16 +177,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for AddrType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
     type Output = ();
     type Context = ();
 
@@ -276,16 +195,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for MapType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     type Output = ();
     type Context = ();
 
@@ -304,16 +214,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for KeyType
-{
+impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
     type Output = ();
     type Context = ();
 

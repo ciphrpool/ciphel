@@ -8,18 +8,9 @@ use crate::semantic::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Flow<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -39,18 +30,9 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for IfStat<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -65,7 +47,7 @@ impl<
         let _ = self.condition.resolve(scope, &None, extra)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<Either<UserType, StaticType> as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
@@ -76,18 +58,9 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for MatchStat<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -114,18 +87,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for TryStat<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -144,16 +108,7 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for CallStat<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();

@@ -92,11 +92,8 @@ pub enum KeyType {
     Enum(Enum),
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType>> TypeOf<Scope> for StaticType {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for StaticType {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,

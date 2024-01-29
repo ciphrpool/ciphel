@@ -9,10 +9,7 @@ use crate::semantic::{
 
 use super::StaticType;
 
-impl<
-        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
-    > CompatibleWith<Scope> for StaticType
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,

@@ -10,16 +10,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {}
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Self,
-        >,
-    > CompatibleWith<Scope> for Event
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Event {
     fn compatible_with<Other>(
         &self,
         _other: &Other,
@@ -32,20 +23,8 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Self,
-        >,
-    > TypeOf<Scope> for Event
-{
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Event {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -54,16 +33,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            StaticType = StaticType,
-            UserType = UserType,
-            Var = Var,
-            Chan = Chan,
-            Event = Self,
-        >,
-    > BuildEvent<Scope> for Event
-{
+impl<Scope: ScopeApi> BuildEvent<Scope> for Event {
     fn build_event(
         _scope: &Ref<Scope>,
         _event: &crate::ast::statements::definition::EventDef<Scope>,

@@ -26,16 +26,7 @@ use crate::{
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Definition<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Definition<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(TypeDef::parse, |value| Definition::Type(value)),
@@ -143,16 +134,7 @@ impl TryParse for EnumDef {
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for FnDef<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
     /*
      * @desc Parse function definition
      *
@@ -182,16 +164,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for EventDef<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for EventDef<InnerScope> {
     /*
      * @desc Parse event definition
      *
@@ -235,7 +208,7 @@ mod tests {
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -351,6 +324,7 @@ mod tests {
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::U64(10)

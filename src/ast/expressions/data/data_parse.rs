@@ -40,16 +40,7 @@ use super::{
     ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
     VarID, Variable, Vector,
 };
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Data<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
@@ -70,17 +61,8 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > VarID<InnerScope>
-{
-    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+impl VarID {
+    fn parse<InnerScope: ScopeApi>(input: Span) -> PResult<Variable<InnerScope>> {
         map(parse_id, |id| {
             Variable::Var(VarID {
                 id,
@@ -90,16 +72,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > ListAccess<InnerScope>
-{
+impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = VarID::parse(input)?;
         let (remainder, index) = opt(delimited(
@@ -123,16 +96,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > FieldAccess<InnerScope>
-{
+impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = ListAccess::parse(input)?;
         let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
@@ -172,16 +136,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Variable<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for Variable<InnerScope> {
     /*
      * @desc Parse variable
      *
@@ -233,16 +188,7 @@ impl TryParse for Primitive {
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Slice<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Slice<Scope> {
     /*
      * @desc Parse List or Static string
      *
@@ -270,16 +216,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Vector<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Vector<Scope> {
     /*
      * @desc Parse Vector
      *
@@ -317,16 +254,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Tuple<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(
@@ -342,16 +270,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for MultiData<Scope>
-{
+impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
     /*
      * @desc Parse multiple data
      *
@@ -364,16 +283,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Closure<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Closure<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
@@ -394,16 +304,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for ExprScope<Scope>
-{
+impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(ast::statements::scope::Scope::parse, |value| {
@@ -411,6 +312,7 @@ impl<
             }),
             map(Expression::parse, |value| {
                 ExprScope::Expr(ast::statements::scope::Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Return(ast::statements::Return::Expr(Box::new(
                         value,
                     )))],
@@ -439,16 +341,7 @@ impl TryParse for ClosureParam {
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Address<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
     /*
      * @desc Parse pointer address
      *
@@ -465,16 +358,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for PtrAccess<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
     /*
      * @desc Parse pointer access
      *
@@ -491,16 +375,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Channel<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Channel<Scope> {
     /*
      * @desc Parse grammar
      *
@@ -547,16 +422,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Struct<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Struct<Scope> {
     /*
      * @desc Parse an object
      *
@@ -587,16 +453,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Union<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Union<Scope> {
     /*
      * @desc Parse an union
      *
@@ -628,16 +485,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Enum<InnerScope>
-{
+impl TryParse for Enum {
     /*
      * @desc Parse enum
      *
@@ -656,16 +504,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Map<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Map<Scope> {
     /*
      * @desc Parse map
      *
@@ -713,16 +552,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for KeyData<Scope>
-{
+impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
     /*
      * @desc Parse hashable data for key
      *
@@ -873,6 +703,7 @@ mod tests {
                 ],
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
                             id: "x".into(),
@@ -1096,7 +927,7 @@ mod tests {
 
     #[test]
     fn valid_enum() {
-        let res = Enum::<MockScope>::parse(r#"Geo::Point"#.into());
+        let res = Enum::parse(r#"Geo::Point"#.into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(

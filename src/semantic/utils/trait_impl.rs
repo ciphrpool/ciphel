@@ -31,7 +31,7 @@ where
 
                 // let other_type = other.type_of(&scope)?;
 
-                // if <Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_unit(&other_type) {
+                // if <Either<UserType, StaticType> as TypeChecking>::is_unit(&other_type) {
                 //     Ok(())
                 // } else {
                 //     Err(SemanticError::IncompatibleTypes)
@@ -41,16 +41,7 @@ where
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > CompatibleWith<Scope> for Either<Scope::UserType, Scope::StaticType>
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Either<UserType, StaticType> {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -73,20 +64,8 @@ impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Either<Scope::UserType, Scope::StaticType>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Either<UserType, StaticType> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -98,21 +77,12 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > MergeType<Scope> for Either<Scope::UserType, Scope::StaticType>
-{
+impl<Scope: ScopeApi> MergeType<Scope> for Either<UserType, StaticType> {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -123,16 +93,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeChecking<Scope> for Either<Scope::UserType, Scope::StaticType>
-{
+impl TypeChecking for Either<UserType, StaticType> {
     fn is_iterable(&self) -> bool {
         match self {
             Either::Static(static_type) => static_type.is_iterable(),
@@ -215,70 +176,48 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > GetSubTypes<Scope> for Either<Scope::UserType, Scope::StaticType>
-{
-    fn get_nth(&self, n: &usize) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+impl GetSubTypes for Either<UserType, StaticType> {
+    fn get_nth(&self, n: &usize) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(static_type) => static_type.get_nth(n),
             Either::User(user_type) => user_type.get_nth(n),
         }
     }
 
-    fn get_field(&self, field_id: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_field(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(_) => None,
             Either::User(user_type) => user_type.get_field(field_id),
         }
     }
-    fn get_variant(&self, field_id: &ID) -> Option<Either<Scope::UserType, Scope::StaticType>> {
+    fn get_variant(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(_) => None,
             Either::User(user_type) => user_type.get_variant(field_id),
         }
     }
-    fn get_item(
-        &self,
-    ) -> Option<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+    fn get_item(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(static_type) => static_type.get_item(),
             Either::User(_) => None,
         }
     }
 
-    fn get_key(
-        &self,
-    ) -> Option<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+    fn get_key(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(static_type) => static_type.get_key(),
             Either::User(_) => None,
         }
     }
 
-    fn get_return(
-        &self,
-    ) -> Option<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+    fn get_return(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             Either::Static(static_type) => static_type.get_return(),
             Either::User(_) => None,
         }
     }
 
-    fn get_fields(
-        &self,
-    ) -> Option<
-        Vec<(
-            Option<String>,
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>,
-        )>,
-    > {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         match self {
             Either::Static(static_type) => static_type.get_fields(),
             Either::User(user_type) => user_type.get_fields(),
@@ -309,7 +248,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -335,7 +274,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -355,7 +294,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -375,7 +314,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -395,7 +334,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -415,7 +354,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -435,7 +374,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -448,7 +387,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -467,7 +406,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -487,7 +426,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -507,7 +446,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -527,7 +466,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -547,7 +486,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {

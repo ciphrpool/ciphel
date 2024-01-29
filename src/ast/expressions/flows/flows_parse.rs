@@ -18,24 +18,18 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Metadata,
     },
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for ExprFlow<Scope>
-{
+impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
     /*
      * @desc Parse expression statement
      *
@@ -52,16 +46,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for IfExpr<Scope>
-{
+impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
     /*
      * @desc Parse If expression
      *
@@ -81,6 +66,7 @@ impl<
                 condition: Box::new(condition),
                 main_branch,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
@@ -147,16 +133,7 @@ impl TryParse for Pattern {
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for PatternExpr<Scope>
-{
+impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
@@ -169,16 +146,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for MatchExpr<Scope>
-{
+impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
     /*
      * @desc Parse Match expression
      *
@@ -218,21 +186,13 @@ impl<
                 expr: Box::new(expr),
                 patterns,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for TryExpr<Scope>
-{
+impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     /*
      * @desc Parse try expression
      *
@@ -248,21 +208,13 @@ impl<
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for FnCall<Scope>
-{
+impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
     /*
      * @desc Parse fn call
      *
@@ -280,7 +232,11 @@ impl<
                     wst(lexem::PAR_C),
                 ),
             ),
-            |(fn_var, params)| FnCall { fn_var, params },
+            |(fn_var, params)| FnCall {
+                fn_var,
+                params,
+                metadata: Metadata::default(),
+            },
         )(input)
     }
 }
@@ -314,6 +270,7 @@ mod tests {
                     Primitive::Bool(true)
                 )))),
                 main_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
@@ -323,6 +280,7 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
@@ -331,6 +289,7 @@ mod tests {
 
                     inner_scope: RefCell::new(None),
                 }),
+                metadata: Metadata::default(),
             },
             value
         );
@@ -361,10 +320,12 @@ mod tests {
                         metadata: Metadata::default()
                     })
                 )))),
+                metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
                         pattern: Pattern::Primitive(Primitive::Number(Number::U64(10))),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -377,6 +338,7 @@ mod tests {
                     PatternExpr {
                         pattern: Pattern::String("Hello world".into()),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -392,6 +354,7 @@ mod tests {
                             value: "Point".into()
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -408,6 +371,7 @@ mod tests {
                             vars: vec!["y".into()]
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -423,6 +387,7 @@ mod tests {
                             vars: vec!["y".into()]
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -435,6 +400,7 @@ mod tests {
                     PatternExpr {
                         pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -446,6 +412,7 @@ mod tests {
                     }
                 ],
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -467,6 +434,7 @@ mod tests {
         assert_eq!(
             TryExpr {
                 try_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
@@ -476,6 +444,7 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
@@ -484,6 +453,7 @@ mod tests {
 
                     inner_scope: RefCell::new(None),
                 }),
+                metadata: Metadata::default(),
             },
             value
         );
@@ -508,7 +478,8 @@ mod tests {
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::U64(10)
                     ))))
-                ]
+                ],
+                metadata: Metadata::default(),
             },
             value
         );

@@ -8,18 +8,9 @@ use crate::semantic::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Assignation<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -37,18 +28,9 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for AssignValue<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -88,16 +70,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Assignee<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();

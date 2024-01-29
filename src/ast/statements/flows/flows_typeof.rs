@@ -10,20 +10,8 @@ use crate::semantic::{
     Either, MergeType, Resolve, SemanticError, TypeOf,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Flow<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -36,20 +24,8 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for IfStat<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -60,24 +36,14 @@ impl<
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for MatchStat<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -104,25 +70,15 @@ impl<
                 let else_type = else_branch.type_of(&scope)?;
                 pattern_type.merge(&else_type, scope)
             }
-            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
         }
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for TryStat<Scope>
-{
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -133,29 +89,24 @@ impl<
                 let else_type = else_branch.type_of(&scope)?;
                 main_type.merge(&else_type, scope)
             }
-            None => Ok(Either::Static(Scope::StaticType::build_unit().into())),
+            None => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
         }
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for CallStat<Scope>
-{
+impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
     fn type_of(
         &self,
         _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(Either::Static(Scope::StaticType::build_unit().into()))
+        Ok(Either::Static(
+            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+        ))
     }
 }

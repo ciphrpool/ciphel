@@ -26,16 +26,7 @@ use crate::{
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Assignation<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
     /*
      * @desc Parse assignation
      *
@@ -53,16 +44,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for AssignValue<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     /*
      * @desc Parse assigned value
      *
@@ -82,16 +64,7 @@ impl<
     }
 }
 
-impl<
-        InnerScope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Assignee<InnerScope>
-{
+impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
     /*
      * @desc Parse assigne
      *

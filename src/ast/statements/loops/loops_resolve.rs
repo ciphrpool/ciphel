@@ -10,18 +10,9 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Loop<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -43,16 +34,7 @@ impl<
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ForIterator<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -72,10 +54,7 @@ impl<
                 let var = borrowed_scope.find_var(value)?;
                 // check that the variable is iterable
                 let var_type = var.type_of(&scope.borrow())?;
-                if !<
-                    Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                 as TypeChecking<Scope>>::is_iterable(&var_type)
-                {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
                     return Err(SemanticError::ExpectedIterable);
                 }
                 Ok(())
@@ -87,18 +66,9 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ForItem
-{
-    type Output = Vec<Scope::Var>;
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
+    type Output = Vec<Var>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -115,24 +85,15 @@ impl<
                 let Some(item_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                Ok(vec![Scope::Var::build_var(value, &item_type)])
+                Ok(vec![<Var as BuildVar<Scope>>::build_var(value, &item_type)])
             }
             ForItem::Pattern(pattern) => pattern.resolve(scope, context, extra),
         }
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for ForLoop<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -146,9 +107,7 @@ impl<
     {
         let _ = self.iterator.resolve(scope, &(), &())?;
         let item_type = self.iterator.type_of(&scope.borrow())?;
-        let item_type = <
-            Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-        as GetSubTypes<Scope>>::get_item(&item_type);
+        let item_type = <Either<UserType, StaticType> as GetSubTypes>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type, &())?;
         // attach the item to the scope
@@ -156,18 +115,9 @@ impl<
         Ok(())
     }
 }
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for WhileLoop<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -182,7 +132,7 @@ impl<
         let _ = self.condition.resolve(scope, &None, &())?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<Either<UserType, StaticType> as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.scope.resolve(scope, context, &Vec::default())?;

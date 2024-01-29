@@ -24,16 +24,7 @@ use crate::{
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TryParse for Declaration<Scope>
-{
+impl<Scope: ScopeApi> TryParse for Declaration<Scope> {
     /*
      * @desc Parse Declaration
      *

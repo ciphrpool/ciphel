@@ -13,18 +13,9 @@ use crate::semantic::{
 };
 use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for Definition<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     type Output = ();
-    type Context = Option<Either<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -44,16 +35,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for TypeDef
-{
+impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -78,7 +60,7 @@ impl<
             TypeDef::Enum(value) => &value.id,
         };
 
-        let type_def = Scope::UserType::build_usertype(self, &scope.borrow())?;
+        let type_def = UserType::build_usertype(self, &scope.borrow())?;
 
         let mut borrowed_scope = scope.borrow_mut();
         let _ = borrowed_scope.register_type(id, type_def)?;
@@ -86,16 +68,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for StructDef
-{
+impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -116,16 +89,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for UnionDef
-{
+impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -149,16 +113,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for EnumDef
-{
+impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -176,16 +131,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for FnDef<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -218,8 +164,8 @@ impl<
                     .ok()
                     .map(|p| (param.id.clone(), p))
             })
-            .map(|(id, param)| Scope::Var::build_var(&id, &param))
-            .collect::<Vec<Scope::Var>>();
+            .map(|(id, param)| <Var as BuildVar<Scope>>::build_var(&id, &param))
+            .collect::<Vec<Var>>();
 
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
 
@@ -242,22 +188,13 @@ impl<
         let fn_type = FnType { params, ret };
 
         let fn_type_sig = fn_type.type_of(&scope.borrow())?;
-        let var = Scope::Var::build_var(&self.id, &fn_type_sig);
+        let var = <Var as BuildVar<Scope>>::build_var(&self.id, &fn_type_sig);
         let _ = scope.borrow_mut().register_var(var)?;
         Ok(())
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for EventDef<Scope>
-{
+impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -275,16 +212,7 @@ impl<
     }
 }
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > Resolve<Scope> for EventCondition
-{
+impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Output = ();
     type Context = ();
     type Extra = ();

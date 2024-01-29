@@ -16,10 +16,7 @@ use super::{
     TupleType, VecType,
 };
 
-impl<
-        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
-    > BuildStaticType<Scope> for StaticType
-{
+impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
     fn build_primitive(
         type_sig: &ast::types::PrimitiveType,
         _scope: &Ref<Scope>,
@@ -76,7 +73,7 @@ impl<
 
     fn build_slice_from(
         size: &usize,
-        type_sig: &Either<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<UserType, StaticType>,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Slice(SliceType::List(
@@ -98,7 +95,7 @@ impl<
     }
 
     fn build_tuple_from(
-        type_sig: &Vec<Either<<Scope as ScopeApi>::UserType, Self>>,
+        type_sig: &Vec<Either<UserType, Self>>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.len());
@@ -118,7 +115,7 @@ impl<
     }
 
     fn build_vec_from(
-        type_sig: &Either<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -143,8 +140,8 @@ impl<
     }
 
     fn build_fn_from(
-        params: &Vec<Either<<Scope as ScopeApi>::UserType, Self>>,
-        ret: &Either<<Scope as ScopeApi>::UserType, Self>,
+        params: &Vec<Either<UserType, Self>>,
+        ret: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut out_params = Vec::with_capacity(params.len());
@@ -168,7 +165,7 @@ impl<
     }
 
     fn build_chan_from(
-        type_sig: &Either<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -192,7 +189,7 @@ impl<
     }
 
     fn build_addr_from(
-        type_sig: &Either<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -269,8 +266,8 @@ impl<
     }
 
     fn build_map_from(
-        key: &Either<<Scope as ScopeApi>::UserType, Self>,
-        value: &Either<<Scope as ScopeApi>::UserType, Self>,
+        key: &Either<UserType, Self>,
+        value: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let key_type = {

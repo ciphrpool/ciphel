@@ -12,10 +12,7 @@ use crate::semantic::{
 
 use super::{PrimitiveType, SliceType, StaticType, VecType};
 
-impl<
-        Scope: ScopeApi<StaticType = Self, UserType = UserType, Var = Var, Chan = Chan, Event = Event>,
-    > OperandMerging<Scope> for StaticType
-{
+impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
     fn can_substract(&self) -> Result<(), SemanticError> {
         match self {
             StaticType::Primitive(value) => match value {
@@ -35,7 +32,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -103,7 +100,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -161,7 +158,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -222,7 +219,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -268,7 +265,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -320,7 +317,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -372,7 +369,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -410,7 +407,7 @@ impl<
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -521,7 +518,7 @@ impl<
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -548,7 +545,7 @@ impl<
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -573,7 +570,7 @@ impl<
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -599,7 +596,7 @@ impl<
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -625,7 +622,7 @@ impl<
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {

@@ -10,24 +10,14 @@ use crate::semantic::{
     Either, Resolve, SemanticError, TypeOf,
 };
 
-impl<
-        Scope: ScopeApi<
-            UserType = UserType,
-            StaticType = StaticType,
-            Var = Var,
-            Chan = Chan,
-            Event = Event,
-        >,
-    > TypeOf<Scope> for Error
-{
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<Either<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Error {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        Ok(Either::Static(Scope::StaticType::build_error().into()))
+        Ok(Either::Static(
+            <StaticType as BuildStaticType<Scope>>::build_error().into(),
+        ))
     }
 }
