@@ -2,7 +2,7 @@ use crate::{
     ast::expressions::data,
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType},
-        EitherType,
+        Either,
     },
     vm::{
         allocator::Memory,
@@ -13,7 +13,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Serialized {
     pub data: Vec<u8>,
-    pub data_type: EitherType<UserType, StaticType>,
+    //pub data_type: Either<UserType, StaticType>,
 }
 
 impl Executable for Serialized {

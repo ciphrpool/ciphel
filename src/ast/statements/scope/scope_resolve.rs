@@ -3,14 +3,17 @@ use std::rc::Rc;
 
 use super::Scope;
 
-use crate::semantic::{scope::ScopeApi, EitherType, Resolve, SemanticError};
-use crate::semantic::{CompatibleWith, TypeOf};
+use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::scope::var_impl::Var;
+use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
+use crate::semantic::{CompatibleWith, Info, TypeOf};
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     //type Output = Rc<RefCell<OuterScope>>;
     type Output = ();
-    type Context = Option<EitherType<OuterScope::UserType, OuterScope::StaticType>>;
-    type Extra = Vec<OuterScope::Var>;
+    type Context = Option<Either<UserType, StaticType>>;
+    type Extra = Vec<Var>;
     fn resolve(
         &self,
         scope: &Rc<RefCell<OuterScope>>,
@@ -32,7 +35,14 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
 
         let return_type = self.type_of(&scope.borrow())?;
         let _ = context.compatible_with(&return_type, &scope.borrow())?;
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
 
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
         Ok(())
     }
 }
@@ -73,20 +83,16 @@ mod tests {
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type
         );
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             y_type
         );
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(EitherType::Static(StaticType::Unit.into()), res)
+        assert_eq!(Either::Static(StaticType::Unit.into()), res)
     }
 
     #[test]
@@ -107,7 +113,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
@@ -117,9 +123,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             res
         )
     }
@@ -146,7 +150,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
@@ -156,9 +160,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             res
         );
 
@@ -182,7 +184,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
@@ -192,9 +194,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             res
         )
     }
@@ -217,7 +217,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),
@@ -227,9 +227,7 @@ mod tests {
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(
-            EitherType::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-            ),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             res
         )
     }
@@ -254,7 +252,7 @@ mod tests {
         let scope = scope_impl::Scope::new();
         let res = expr_scope.resolve(
             &scope,
-            &Some(EitherType::Static(
+            &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             &Vec::default(),

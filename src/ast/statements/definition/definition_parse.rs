@@ -18,7 +18,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
@@ -205,7 +208,7 @@ mod tests {
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -321,6 +324,7 @@ mod tests {
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr(Box::new(
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::U64(10)

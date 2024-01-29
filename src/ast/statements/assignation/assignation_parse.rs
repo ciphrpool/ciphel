@@ -18,7 +18,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{AssignValue, Assignation, Assignee};
@@ -85,7 +88,7 @@ mod tests {
             data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
             Atomic,
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -97,7 +100,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::Variable(Variable::Var(VarID("x".into()))),
+                left: Assignee::Variable(Variable::Var(VarID {
+                    id: "x".into(),
+                    metadata: Metadata::default()
+                })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
@@ -110,7 +116,13 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::PtrAccess(PtrAccess(Variable::Var(VarID("x".into())))),
+                left: Assignee::PtrAccess(PtrAccess {
+                    value: Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    }),
+                    metadata: Metadata::default()
+                }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))
                 ))))
@@ -124,8 +136,15 @@ mod tests {
         assert_eq!(
             Assignation {
                 left: Assignee::Variable(Variable::FieldAccess(FieldAccess {
-                    var: Box::new(Variable::Var(VarID("x".into()))),
-                    field: Box::new(Variable::Var(VarID("y".into())))
+                    var: Box::new(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })),
+                    field: Box::new(Variable::Var(VarID {
+                        id: "y".into(),
+                        metadata: Metadata::default()
+                    })),
+                    metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Number::U64(10)))

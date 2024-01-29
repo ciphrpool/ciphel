@@ -1,6 +1,9 @@
 use crate::{
     ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse},
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 use nom::{
     branch::alt,
@@ -162,7 +165,7 @@ mod tests {
                 Statement,
             },
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -187,24 +190,34 @@ mod tests {
                     Primitive::Bool(true)
                 )))),
                 main_branch: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
@@ -232,24 +245,34 @@ mod tests {
         assert_eq!(
             TryStat {
                 try_branch: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 

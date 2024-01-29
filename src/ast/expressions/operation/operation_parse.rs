@@ -14,7 +14,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::{scope::ScopeApi, Metadata},
 };
 
 use super::{
@@ -32,10 +32,16 @@ impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(preceded(wst(lexem::MINUS), Expression::parse), |value| {
-                UnaryOperation::Minus(Box::new(value))
+                UnaryOperation::Minus {
+                    value: Box::new(value),
+                    metadata: Metadata::default(),
+                }
             }),
             map(preceded(wst(lexem::NEGATION), Expression::parse), |value| {
-                UnaryOperation::Not(Box::new(value))
+                UnaryOperation::Not {
+                    value: Box::new(value),
+                    metadata: Metadata::default(),
+                }
             }),
         ))(input)
     }
@@ -74,9 +80,21 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
             Ok((
                 remainder,
                 Expression::Product(match op {
-                    HighOrdMathOPERATOR::Mult => Product::Mult { left, right },
-                    HighOrdMathOPERATOR::Div => Product::Div { left, right },
-                    HighOrdMathOPERATOR::Mod => Product::Mod { left, right },
+                    HighOrdMathOPERATOR::Mult => Product::Mult {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    },
+                    HighOrdMathOPERATOR::Div => Product::Div {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    },
+                    HighOrdMathOPERATOR::Mod => Product::Mod {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    },
                 }),
             ))
         } else {
@@ -112,10 +130,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Addition<InnerScope
             Ok((
                 remainder,
                 match op {
-                    LowOrdMathOPERATOR::Add => Expression::Addition(Addition { left, right }),
-                    LowOrdMathOPERATOR::Minus => {
-                        Expression::Substraction(Substraction { left, right })
-                    }
+                    LowOrdMathOPERATOR::Add => Expression::Addition(Addition {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
+                    LowOrdMathOPERATOR::Minus => Expression::Substraction(Substraction {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
                 },
             ))
         } else {
@@ -150,8 +174,16 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
             Ok((
                 remainder,
                 Expression::Shift(match op {
-                    ShiftOPERATOR::Left => Shift::Left { left, right },
-                    ShiftOPERATOR::Right => Shift::Right { left, right },
+                    ShiftOPERATOR::Left => Shift::Left {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    },
+                    ShiftOPERATOR::Right => Shift::Right {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    },
                 }),
             ))
         } else {
@@ -177,7 +209,11 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerSco
             let right = Box::new(right);
             Ok((
                 remainder,
-                Expression::BitwiseAnd(BitwiseAnd { left, right }),
+                Expression::BitwiseAnd(BitwiseAnd {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
             ))
         } else {
             Ok((remainder, left))
@@ -202,7 +238,11 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerSco
             let right = Box::new(right);
             Ok((
                 remainder,
-                Expression::BitwiseXOR(BitwiseXOR { left, right }),
+                Expression::BitwiseXOR(BitwiseXOR {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
             ))
         } else {
             Ok((remainder, left))
@@ -225,7 +265,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScop
             let (remainder, right) = BitwiseXOR::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
-            Ok((remainder, Expression::BitwiseOR(BitwiseOR { left, right })))
+            Ok((
+                remainder,
+                Expression::BitwiseOR(BitwiseOR {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
+            ))
         } else {
             Ok((remainder, left))
         }
@@ -246,7 +293,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
         if let Some(_op) = op {
             let (remainder, right) = Type::parse(remainder)?;
             let left = Box::new(left);
-            Ok((remainder, Expression::Cast(Cast { left, right })))
+            Ok((
+                remainder,
+                Expression::Cast(Cast {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
+            ))
         } else {
             Ok((remainder, left))
         }
@@ -289,25 +343,45 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
             Ok((
                 remainder,
                 match op {
-                    ComparaisonOPERATOR::Less => {
-                        Expression::Comparaison(Comparaison::Less { left, right })
-                    }
+                    ComparaisonOPERATOR::Less => Expression::Comparaison(Comparaison::Less {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
                     ComparaisonOPERATOR::LessEqual => {
-                        Expression::Comparaison(Comparaison::LessEqual { left, right })
+                        Expression::Comparaison(Comparaison::LessEqual {
+                            left,
+                            right,
+                            metadata: Metadata::default(),
+                        })
                     }
-                    ComparaisonOPERATOR::Greater => {
-                        Expression::Comparaison(Comparaison::Greater { left, right })
-                    }
+                    ComparaisonOPERATOR::Greater => Expression::Comparaison(Comparaison::Greater {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
                     ComparaisonOPERATOR::GreaterEqual => {
-                        Expression::Comparaison(Comparaison::GreaterEqual { left, right })
+                        Expression::Comparaison(Comparaison::GreaterEqual {
+                            left,
+                            right,
+                            metadata: Metadata::default(),
+                        })
                     }
-                    ComparaisonOPERATOR::Equal => {
-                        Expression::Equation(Equation::Equal { left, right })
-                    }
-                    ComparaisonOPERATOR::NotEqual => {
-                        Expression::Equation(Equation::NotEqual { left, right })
-                    }
-                    ComparaisonOPERATOR::In => Expression::Inclusion(Inclusion { left, right }),
+                    ComparaisonOPERATOR::Equal => Expression::Equation(Equation::Equal {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
+                    ComparaisonOPERATOR::NotEqual => Expression::Equation(Equation::NotEqual {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
+                    ComparaisonOPERATOR::In => Expression::Inclusion(Inclusion {
+                        left,
+                        right,
+                        metadata: Metadata::default(),
+                    }),
                 },
             ))
         } else {
@@ -333,7 +407,11 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerSco
             let right = Box::new(right);
             Ok((
                 remainder,
-                Expression::LogicalAnd(LogicalAnd { left, right }),
+                Expression::LogicalAnd(LogicalAnd {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
             ))
         } else {
             Ok((remainder, left))
@@ -356,7 +434,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScop
             let (remainder, right) = LogicalAnd::<InnerScope>::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
-            Ok((remainder, Expression::LogicalOr(LogicalOr { left, right })))
+            Ok((
+                remainder,
+                Expression::LogicalOr(LogicalOr {
+                    left,
+                    right,
+                    metadata: Metadata::default(),
+                }),
+            ))
         } else {
             Ok((remainder, left))
         }
@@ -378,9 +463,12 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            UnaryOperation::Minus(Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                Primitive::Number(Number::U64(10))
-            ))))),
+            UnaryOperation::Minus {
+                value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::U64(10))
+                )))),
+                metadata: Metadata::default()
+            },
             value
         );
 
@@ -388,9 +476,12 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            UnaryOperation::Not(Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                Primitive::Bool(true)
-            ))))),
+            UnaryOperation::Not {
+                value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                metadata: Metadata::default()
+            },
             value
         );
     }
@@ -407,7 +498,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(10))
-                ))))
+                )))),
+                metadata: Metadata::default(),
             }),
             value
         );
@@ -422,7 +514,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(10))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -437,7 +530,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(10))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -452,7 +546,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(10))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -467,7 +562,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(2))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -482,7 +578,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(2))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -497,7 +594,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(2))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -515,7 +613,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -530,7 +629,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -545,7 +645,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -563,7 +664,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -578,7 +680,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -593,7 +696,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -608,7 +712,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -623,7 +728,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -638,7 +744,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );
@@ -653,7 +760,8 @@ mod tests {
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Number::U64(5))
-                ))))
+                )))),
+                metadata: Metadata::default()
             }),
             value
         );

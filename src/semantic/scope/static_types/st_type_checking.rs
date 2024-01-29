@@ -1,11 +1,14 @@
 use crate::semantic::{
-    scope::{type_traits::TypeChecking, user_type_impl::UserType, ScopeApi},
-    EitherType,
+    scope::{
+        chan_impl::Chan, event_impl::Event, type_traits::TypeChecking, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Either,
 };
 
-use super::{AddrType, PrimitiveType, StaticType};
+use super::{AddrType, NumberType, PrimitiveType, StaticType};
 
-impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope> for StaticType {
+impl TypeChecking for StaticType {
     fn is_iterable(&self) -> bool {
         match self {
             StaticType::Primitive(_) => false,
@@ -18,7 +21,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_iterable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_iterable(value)
             }
             StaticType::Map(_) => true,
         }
@@ -35,7 +38,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_indexable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_indexable(value)
             }
             StaticType::Map(_) => false,
         }
@@ -44,7 +47,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         match self {
             StaticType::Chan(_) => true,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_channel(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_channel(value)
             }
             _ => false,
         }
@@ -53,7 +56,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         match self {
             StaticType::Primitive(PrimitiveType::Bool) => true,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_boolean(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_boolean(value)
             }
             _ => false,
         }
@@ -63,7 +66,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         match self {
             StaticType::Fn(_) => true,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_callable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_callable(value)
             }
             _ => false,
         }
@@ -72,7 +75,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         match self {
             StaticType::Any => true,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_any(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_any(value)
             }
             _ => false,
         }
@@ -81,7 +84,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         match self {
             StaticType::Unit => true,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as TypeChecking<Scope>>::is_unit(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_unit(value)
             }
             _ => false,
         }
@@ -94,9 +97,9 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> TypeChecking<Scope
         }
     }
 
-    fn is_num(&self) -> bool {
+    fn is_u64(&self) -> bool {
         match self {
-            StaticType::Primitive(PrimitiveType::Number(_)) => true,
+            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => true,
             _ => false,
         }
     }

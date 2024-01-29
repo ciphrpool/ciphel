@@ -1,12 +1,18 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
-use crate::semantic::EitherType;
-use crate::semantic::{scope::ScopeApi, Resolve, SemanticError, TypeOf};
+use crate::semantic::Either;
+use crate::semantic::{
+    scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Resolve, SemanticError, TypeOf,
+};
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -48,10 +54,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
                 let var = borrowed_scope.find_var(value)?;
                 // check that the variable is iterable
                 let var_type = var.type_of(&scope.borrow())?;
-                if !<
-                    EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-                 as TypeChecking<Scope>>::is_iterable(&var_type)
-                {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
                     return Err(SemanticError::ExpectedIterable);
                 }
                 Ok(())
@@ -64,8 +67,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
-    type Output = Vec<Scope::Var>;
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Output = Vec<Var>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -82,7 +85,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
                 let Some(item_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                Ok(vec![Scope::Var::build_var(value, &item_type)])
+                Ok(vec![<Var as BuildVar<Scope>>::build_var(value, &item_type)])
             }
             ForItem::Pattern(pattern) => pattern.resolve(scope, context, extra),
         }
@@ -90,7 +93,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -104,9 +107,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     {
         let _ = self.iterator.resolve(scope, &(), &())?;
         let item_type = self.iterator.type_of(&scope.borrow())?;
-        let item_type = <
-            EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>
-        as GetSubTypes<Scope>>::get_item(&item_type);
+        let item_type = <Either<UserType, StaticType> as GetSubTypes>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type, &())?;
         // attach the item to the scope
@@ -116,7 +117,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
     type Output = ();
-    type Context = Option<EitherType<Scope::UserType, Scope::StaticType>>;
+    type Context = Option<Either<UserType, StaticType>>;
     type Extra = ();
     fn resolve(
         &self,
@@ -131,7 +132,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
         let _ = self.condition.resolve(scope, &None, &())?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType> as TypeChecking<Scope>>::is_boolean(&condition_type) {
+        if !<Either<UserType, StaticType> as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.scope.resolve(scope, context, &Vec::default())?;
@@ -169,8 +170,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -193,8 +195,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -220,8 +223,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -244,8 +248,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -255,8 +260,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "y".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -282,8 +288,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -309,8 +316,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
@@ -336,8 +344,9 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
+                address: None,
                 id: "x".into(),
-                type_sig: EitherType::Static(
+                type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })

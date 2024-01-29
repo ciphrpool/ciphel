@@ -1,13 +1,16 @@
 use std::cell::Ref;
 
-use crate::semantic::{CompatibleWith, EitherType, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
 
-use super::{BuildEvent, ScopeApi};
+use super::{
+    chan_impl::Chan, static_types::StaticType, user_type_impl::UserType, var_impl::Var, BuildEvent,
+    ScopeApi,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {}
 
-impl<Scope: ScopeApi<Event = Self>> CompatibleWith<Scope> for Event {
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Event {
     fn compatible_with<Other>(
         &self,
         _other: &Other,
@@ -20,11 +23,8 @@ impl<Scope: ScopeApi<Event = Self>> CompatibleWith<Scope> for Event {
     }
 }
 
-impl<Scope: ScopeApi<Event = Self>> TypeOf<Scope> for Event {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Event {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -33,7 +33,7 @@ impl<Scope: ScopeApi<Event = Self>> TypeOf<Scope> for Event {
     }
 }
 
-impl<Scope: ScopeApi<Event = Self>> BuildEvent<Scope> for Event {
+impl<Scope: ScopeApi> BuildEvent<Scope> for Event {
     fn build_event(
         _scope: &Ref<Scope>,
         _event: &crate::ast::statements::definition::EventDef<Scope>,

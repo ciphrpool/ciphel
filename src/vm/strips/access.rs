@@ -3,31 +3,56 @@ use crate::vm::{
     vm::{Executable, RuntimeError},
 };
 
+use super::operation::OpPrimitive;
+
 #[derive(Debug, Clone)]
-pub struct Access {
-    address: MemoryAddress,
+pub enum Access {
+    Variable { address: MemoryAddress, size: usize },
+    List { address: MemoryAddress, size: usize },
 }
 
 impl Executable for Access {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
-        match self.address {
-            MemoryAddress::Heap {
-                address,
-                offset,
-                size,
-            } => {
-                let _data = memory
-                    .heap
-                    .read(address, offset, size)
-                    .map_err(|err| err.into())?;
-                todo!("Copy data onto stack");
-                Ok(())
-            }
-            MemoryAddress::Stack { offset, size } => {
-                let _data = memory.stack.read(offset, size).map_err(|err| err.into())?;
+        match self {
+            Access::Variable { address, size } => match address {
+                MemoryAddress::Heap => {
+                    let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
+                    let _data = memory.heap.read(address, *size).map_err(|err| err.into())?;
+                    todo!("Copy data onto stack");
+                    Ok(())
+                }
+                MemoryAddress::Stack { offset } => {
+                    let _data = memory
+                        .stack
+                        .read(*offset, *size)
+                        .map_err(|err| err.into())?;
 
-                todo!("Copy data onto stack");
-                Ok(())
+                    todo!("Copy data onto stack");
+                    Ok(())
+                }
+            },
+            Access::List { address, size } => {
+                let index = OpPrimitive::get_num8::<u64>(memory)?;
+                match address {
+                    MemoryAddress::Heap => {
+                        let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
+                        let _data = memory
+                            .heap
+                            .read(address + (*size) * (index as usize), *size)
+                            .map_err(|err| err.into())?;
+                        todo!("Copy data onto stack");
+                        Ok(())
+                    }
+                    MemoryAddress::Stack { offset } => {
+                        let _data = memory
+                            .stack
+                            .read(*offset, (*size) * (index as usize))
+                            .map_err(|err| err.into())?;
+
+                        todo!("Copy data onto stack");
+                        Ok(())
+                    }
+                }
             }
         }
     }

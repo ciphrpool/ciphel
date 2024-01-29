@@ -4,6 +4,7 @@ use super::{
 };
 
 pub mod access;
+pub mod alloc;
 pub mod assign;
 pub mod call;
 pub mod declare;
@@ -11,6 +12,7 @@ pub mod if_strip;
 pub mod loop_strip;
 pub mod match_strip;
 mod math_operation;
+pub mod memcopy;
 pub mod operation;
 pub mod scope_strip;
 pub mod serialize;
@@ -30,6 +32,8 @@ impl Executable for Strips {
 
 #[derive(Debug, Clone)]
 pub enum Strip {
+    Alloc(alloc::Alloc),
+    MemCopy(memcopy::MemCopy),
     Operation(operation::Operation),
     Call(call::Call),
     Serialize(serialize::Serialized),
@@ -57,6 +61,8 @@ impl Executable for Strip {
             Strip::Declare(value) => value.execute(memory),
             Strip::Loop(value) => value.execute(memory),
             Strip::Scope(value) => value.execute(memory),
+            Strip::Alloc(value) => value.execute(memory),
+            Strip::MemCopy(value) => value.execute(memory),
         }
     }
 }

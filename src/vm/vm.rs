@@ -1,7 +1,15 @@
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
+
+use crate::semantic::scope::ScopeApi;
+
 use super::{allocator::Memory, strips::Strip};
 
 #[derive(Debug, Clone)]
 pub enum CodeGenerationError {
+    UnresolvedError,
     Default,
 }
 
@@ -12,8 +20,15 @@ pub enum RuntimeError {
     Default,
 }
 
-pub trait GenerateCode {
-    fn gencode(&self) -> Result<Vec<Strip>, CodeGenerationError>;
+pub trait GenerateCode<Scope: ScopeApi> {
+    type Context;
+    fn gencode(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        codes: &Rc<RefCell<Vec<Strip>>>,
+        offset: usize,
+        context: &Self::Context,
+    ) -> Result<(), CodeGenerationError>;
 }
 
 pub trait Executable {

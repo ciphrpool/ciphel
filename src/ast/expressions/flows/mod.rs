@@ -1,7 +1,10 @@
 pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
-use crate::{ast::utils::strings::ID, semantic::scope::ScopeApi};
+use crate::{
+    ast::utils::strings::ID,
+    semantic::{scope::ScopeApi, Metadata},
+};
 
 use super::{
     data::{ExprScope, Primitive, Variable},
@@ -21,6 +24,7 @@ pub struct IfExpr<InnerScope: ScopeApi> {
     condition: Box<Expression<InnerScope>>,
     main_branch: ExprScope<InnerScope>,
     else_branch: ExprScope<InnerScope>,
+    metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +32,7 @@ pub struct MatchExpr<InnerScope: ScopeApi> {
     expr: Box<Expression<InnerScope>>,
     patterns: Vec<PatternExpr<InnerScope>>,
     else_branch: ExprScope<InnerScope>,
+    metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,10 +65,12 @@ pub struct PatternExpr<InnerScope: ScopeApi> {
 pub struct TryExpr<InnerScope: ScopeApi> {
     try_branch: ExprScope<InnerScope>,
     else_branch: ExprScope<InnerScope>,
+    metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnCall<InnerScope: ScopeApi> {
     pub fn_var: Variable<InnerScope>,
     pub params: Vec<Expression<InnerScope>>,
+    pub metadata: Metadata,
 }

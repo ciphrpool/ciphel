@@ -3,8 +3,11 @@ use std::cell::Ref;
 use crate::{
     ast::expressions::data::{VarID, Variable},
     semantic::{
-        scope::{type_traits::GetSubTypes, ScopeApi},
-        EitherType, MergeType, Resolve, SemanticError, TypeOf,
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::GetSubTypes,
+            user_type_impl::UserType, var_impl::Var, ScopeApi,
+        },
+        Either, MergeType, Resolve, SemanticError, TypeOf,
     },
     vm::platform::api::PlatformApi,
 };
@@ -12,10 +15,7 @@ use crate::{
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -29,10 +29,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -43,10 +40,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -55,10 +49,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -85,10 +76,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -98,16 +86,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
-    fn type_of(
-        &self,
-        scope: &Ref<Scope>,
-    ) -> Result<EitherType<Scope::UserType, Scope::StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         match &self.fn_var {
-            Variable::Var(VarID(id)) => {
+            Variable::Var(VarID { id, .. }) => {
                 if let Some(api) = PlatformApi::from(id) {
                     return Ok(api.returns::<Scope>());
                 }
@@ -116,10 +101,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
         }
 
         let fn_var_type = self.fn_var.type_of(&scope)?;
-        let Some(return_type) = <EitherType<
-            <Scope as ScopeApi>::UserType,
-            <Scope as ScopeApi>::StaticType,
-        > as GetSubTypes<Scope>>::get_return(&fn_var_type) else {
+        let Some(return_type) =
+            <Either<UserType, StaticType> as GetSubTypes>::get_return(&fn_var_type)
+        else {
             return Err(SemanticError::CantInferType);
         };
 

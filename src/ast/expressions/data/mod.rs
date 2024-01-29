@@ -2,11 +2,18 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{self, utils::strings::ID},
-    semantic::{scope::ScopeApi, SemanticError},
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Metadata, SemanticError,
+    },
 };
 
 use super::Expression;
 
+pub mod data_gencode;
 pub mod data_parse;
 pub mod data_resolve;
 pub mod data_typeof;
@@ -38,24 +45,30 @@ pub enum Variable<InnerScope: ScopeApi> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VarID(pub ID);
+pub struct VarID {
+    pub id: ID,
+    pub metadata: Metadata,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListAccess<InnerScope: ScopeApi> {
-    var: Box<Variable<InnerScope>>,
-    index: Box<Expression<InnerScope>>,
+    pub var: Box<Variable<InnerScope>>,
+    pub index: Box<Expression<InnerScope>>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldAccess<InnerScope: ScopeApi> {
     pub var: Box<Variable<InnerScope>>,
     pub field: Box<Variable<InnerScope>>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumAccess<InnerScope: ScopeApi> {
     pub var: Box<Variable<InnerScope>>,
     pub index: usize,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,26 +95,42 @@ pub enum Number {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Slice<InnerScope: ScopeApi> {
-    String(String),
-    List(MultiData<InnerScope>),
+    String {
+        value: String,
+        metadata: Metadata,
+    },
+    List {
+        value: MultiData<InnerScope>,
+        metadata: Metadata,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Vector<InnerScope: ScopeApi> {
-    Init(MultiData<InnerScope>),
-    Def { length: usize, capacity: usize },
+    Init {
+        value: MultiData<InnerScope>,
+        metadata: Metadata,
+    },
+    Def {
+        capacity: usize,
+        metadata: Metadata,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Tuple<InnerScope: ScopeApi>(pub MultiData<InnerScope>);
+pub struct Tuple<InnerScope: ScopeApi> {
+    pub value: MultiData<InnerScope>,
+    pub metadata: Metadata,
+}
 
 pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    env: Rc<RefCell<HashMap<ID, Rc<InnerScope::Var>>>>,
+    env: Rc<RefCell<HashMap<ID, Rc<Var>>>>,
     scope: ExprScope<InnerScope>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,7 +140,7 @@ pub enum ExprScope<InnerScope: ScopeApi> {
 }
 
 impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
-    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<InnerScope::Var>>, SemanticError> {
+    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<Var>>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.find_outer_vars(),
             ExprScope::Expr(scope) => scope.find_outer_vars(),
@@ -126,28 +155,40 @@ pub enum ClosureParam {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Address<InnerScope: ScopeApi>(pub Variable<InnerScope>);
+pub struct Address<InnerScope: ScopeApi> {
+    pub value: Variable<InnerScope>,
+    pub metadata: Metadata,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PtrAccess<InnerScope: ScopeApi>(pub Variable<InnerScope>);
+pub struct PtrAccess<InnerScope: ScopeApi> {
+    pub value: Variable<InnerScope>,
+    pub metadata: Metadata,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Channel<InnerScope: ScopeApi> {
     Receive {
         addr: Address<InnerScope>,
         timeout: usize,
+        metadata: Metadata,
     },
     Send {
         addr: Address<InnerScope>,
         msg: Box<Expression<InnerScope>>,
+        metadata: Metadata,
     },
-    Init(String),
+    Init {
+        value: String,
+        metadata: Metadata,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct<InnerScope: ScopeApi> {
     id: ID,
     fields: Vec<(String, Expression<InnerScope>)>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -155,22 +196,26 @@ pub struct Union<InnerScope: ScopeApi> {
     typename: ID,
     variant: ID,
     fields: Vec<(ID, Expression<InnerScope>)>,
+    pub metadata: Metadata,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
     typename: ID,
     value: ID,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Map<InnerScope: ScopeApi> {
     Init {
         fields: Vec<(KeyData<InnerScope>, Expression<InnerScope>)>,
+        metadata: Metadata,
     },
     Def {
         length: usize,
         capacity: usize,
+        metadata: Metadata,
     },
 }
 

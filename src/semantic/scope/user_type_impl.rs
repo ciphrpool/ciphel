@@ -9,12 +9,15 @@ use crate::{
         statements::definition::{self},
         utils::strings::ID,
     },
-    semantic::{CompatibleWith, EitherType, MergeType, SemanticError, SizeOf, TypeOf},
+    semantic::{CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf},
 };
 
 use super::{
+    chan_impl::Chan,
+    event_impl::Event,
     static_types::StaticType,
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
+    var_impl::Var,
     BuildUserType, ScopeApi,
 };
 
@@ -28,48 +31,42 @@ pub enum UserType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub id: ID,
-    pub fields: Vec<(ID, EitherType<UserType, StaticType>)>,
+    pub fields: Vec<(ID, Either<UserType, StaticType>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
     pub id: ID,
-    pub values: HashSet<ID>,
+    pub values: Vec<ID>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union {
     pub id: ID,
-    pub variants: HashMap<ID, Struct>,
+    pub variants: Vec<(ID, Struct)>,
 }
 
-impl<Scope: ScopeApi<UserType = UserType>> TypeOf<Scope> for Rc<UserType> {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<EitherType<UserType, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for Rc<UserType> {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
     {
-        Ok(EitherType::User(self.clone()))
+        Ok(Either::User(self.clone()))
     }
 }
 
-impl<Scope: ScopeApi<UserType = Self>> TypeOf<Scope> for UserType {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<EitherType<Self, Scope::StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for UserType {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<Self, StaticType>, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
     {
-        Ok(EitherType::User(self.clone().into()))
+        Ok(Either::User(self.clone().into()))
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> CompatibleWith<Scope> for UserType {
+impl<Scope: ScopeApi> CompatibleWith<Scope> for UserType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -82,7 +79,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> CompatibleWith<S
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> BuildUserType<Scope> for UserType {
+impl<Scope: ScopeApi> BuildUserType<Scope> for UserType {
     fn build_usertype(
         type_sig: &crate::ast::statements::definition::TypeDef,
         scope: &Ref<Scope>,
@@ -97,8 +94,8 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> BuildUserType<Sc
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scope> for UserType {
-    fn get_field(&self, field_id: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+impl GetSubTypes for UserType {
+    fn get_field(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             UserType::Struct(value) => value
                 .fields
@@ -109,30 +106,25 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scop
             UserType::Union(_) => None,
         }
     }
-    fn get_variant(&self, variant: &ID) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+    fn get_variant(&self, variant: &ID) -> Option<Either<UserType, StaticType>> {
         match self {
             UserType::Struct(_) => None,
             UserType::Enum(value) => {
                 if value.values.contains(variant) {
-                    Some(EitherType::Static(StaticType::Unit.into()))
+                    Some(Either::Static(StaticType::Unit.into()))
                 } else {
                     None
                 }
             }
             UserType::Union(value) => value
                 .variants
-                .get(variant)
-                .map(|field| EitherType::User(UserType::Struct(field.clone()).into())),
+                .iter()
+                .find(|(id, _)| id == variant)
+                .map(|(_, field)| field)
+                .map(|field| Either::User(UserType::Struct(field.clone()).into())),
         }
     }
-    fn get_fields(
-        &self,
-    ) -> Option<
-        Vec<(
-            Option<String>,
-            EitherType<Scope::UserType, Scope::StaticType>,
-        )>,
-    > {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         match self {
             UserType::Struct(value) => Some(
                 value
@@ -147,9 +139,9 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = Self>> GetSubTypes<Scop
     }
 }
 
-impl<Scope: ScopeApi<UserType = Self>> TypeChecking<Scope> for UserType {}
+impl TypeChecking for UserType {}
 
-impl<Scope: ScopeApi<UserType = Self>> OperandMerging<Scope> for UserType {}
+impl<Scope: ScopeApi> OperandMerging<Scope> for UserType {}
 
 impl IsEnum for UserType {
     fn is_enum(&self) -> bool {
@@ -161,36 +153,36 @@ impl IsEnum for UserType {
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> MergeType<Scope> for UserType {
+impl<Scope: ScopeApi> MergeType<Scope> for UserType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<EitherType<UserType, <Scope as ScopeApi>::StaticType>, SemanticError>
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(other_type) = other_type else {
+        let Either::User(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
             UserType::Struct(value) => match other_type.as_ref() {
                 UserType::Struct(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Struct(v).into())),
+                    .map(|v| Either::User(UserType::Struct(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             UserType::Enum(value) => match other_type.as_ref() {
                 UserType::Enum(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Enum(v).into())),
+                    .map(|v| Either::User(UserType::Enum(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             UserType::Union(value) => match other_type.as_ref() {
                 UserType::Union(other_type) => value
                     .merge(&other_type)
-                    .map(|v| EitherType::User(UserType::Union(v).into())),
+                    .map(|v| Either::User(UserType::Union(v).into())),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
         }
@@ -228,15 +220,13 @@ impl SizeOf for Enum {
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
-    for Struct
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Struct {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(other_type) = other_type else {
+        let Either::User(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let UserType::Struct(other_type) = other_type.as_ref() else {
@@ -257,15 +247,13 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
     }
 }
 
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope>
-    for Union
-{
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Union {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(other_type) = other_type else {
+        let Either::User(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let UserType::Union(other_type) = other_type.as_ref() else {
@@ -275,7 +263,12 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_variant_key, self_variant) in self.variants.iter() {
-            if let Some(other_variant) = other_type.variants.get(self_variant_key) {
+            if let Some(other_variant) = other_type
+                .variants
+                .iter()
+                .find(|(id, _)| id == self_variant_key)
+                .map(|(_, field)| field)
+            {
                 if self_variant.fields.len() != other_variant.fields.len() {
                     return Err(SemanticError::IncompatibleTypes);
                 }
@@ -295,13 +288,13 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
         Ok(())
     }
 }
-impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWith<Scope> for Enum {
+impl<Scope: ScopeApi> CompatibleWith<Scope> for Enum {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
-        let EitherType::User(other_type) = other_type else {
+        let Either::User(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
         let UserType::Enum(other_type) = other_type.as_ref() else {
@@ -320,7 +313,7 @@ impl<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>> CompatibleWi
 }
 
 impl Struct {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::StructDef,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
@@ -341,24 +334,24 @@ impl Struct {
 }
 
 impl Union {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::UnionDef,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let mut variants = HashMap::new();
+        let mut variants = Vec::new();
         for (id, variant) in &from.variants {
             let mut fields = Vec::with_capacity(variant.len());
             for (id, field) in variant {
                 let field_type = field.type_of(&scope)?;
                 fields.push((id.clone(), field_type));
             }
-            variants.insert(
+            variants.push((
                 id.clone(),
                 Struct {
                     id: id.clone(),
                     fields,
                 },
-            );
+            ));
         }
         Ok(Self {
             id: from.id.clone(),
@@ -371,13 +364,13 @@ impl Union {
 }
 
 impl Enum {
-    pub fn build<Scope: ScopeApi<StaticType = StaticType, UserType = UserType>>(
+    pub fn build<Scope: ScopeApi>(
         from: &definition::EnumDef,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let mut values = HashSet::new();
+        let mut values = Vec::new();
         for id in &from.values {
-            values.insert(id.clone());
+            values.push(id.clone());
         }
         Ok(Self {
             id: from.id.clone(),

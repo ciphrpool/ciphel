@@ -1,12 +1,15 @@
 use crate::semantic::{
-    scope::{type_traits::GetSubTypes, user_type_impl::UserType, ScopeApi},
-    EitherType,
+    scope::{
+        chan_impl::Chan, event_impl::Event, type_traits::GetSubTypes, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
+    Either,
 };
 
 use super::{AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType};
 
-impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope> for StaticType {
-    fn get_nth(&self, n: &usize) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+impl GetSubTypes for StaticType {
+    fn get_nth(&self, n: &usize) -> Option<Either<UserType, StaticType>> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
@@ -18,19 +21,19 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Any => None,
             StaticType::Error => None,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_nth(value, n)
+                <Either<UserType, StaticType> as GetSubTypes>::get_nth(value, n)
             }
             StaticType::Map(_) => None,
         }
     }
 
-    fn get_item(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+    fn get_item(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(value) => match value {
-                SliceType::String => Some(EitherType::Static(
-                    Self::Primitive(PrimitiveType::Char).into(),
-                )),
+                SliceType::String => {
+                    Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
+                }
                 SliceType::List(_, value) => Some(value.as_ref().clone()),
             },
             StaticType::Vec(value) => Some(value.0.as_ref().clone()),
@@ -39,62 +42,52 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
             StaticType::Any => None,
-            StaticType::Error => Some(EitherType::Static(Self::Error.into())),
+            StaticType::Error => Some(Either::Static(Self::Error.into())),
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_item(value)
+                <Either<UserType, StaticType> as GetSubTypes>::get_item(value)
             }
             StaticType::Map(value) => Some(value.values_type.as_ref().clone()),
         }
     }
 
-    fn get_key(
-        &self,
-    ) -> Option<EitherType<<Scope as ScopeApi>::UserType, <Scope as ScopeApi>::StaticType>> {
+    fn get_key(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             StaticType::Map(value) => match &value.keys_type {
-                KeyType::Primitive(value) => Some(EitherType::Static(
-                    StaticType::Primitive(value.clone()).into(),
-                )),
-                KeyType::Address(value) => Some(EitherType::Static(
-                    StaticType::Address(value.clone()).into(),
-                )),
+                KeyType::Primitive(value) => {
+                    Some(Either::Static(StaticType::Primitive(value.clone()).into()))
+                }
+                KeyType::Address(value) => {
+                    Some(Either::Static(StaticType::Address(value.clone()).into()))
+                }
                 KeyType::Slice(value) => {
-                    Some(EitherType::Static(StaticType::Slice(value.clone()).into()))
+                    Some(Either::Static(StaticType::Slice(value.clone()).into()))
                 }
-                KeyType::Enum(value) => {
-                    Some(EitherType::User(UserType::Enum(value.clone()).into()))
-                }
+                KeyType::Enum(value) => Some(Either::User(UserType::Enum(value.clone()).into())),
             },
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_key(value)
+                <Either<UserType, StaticType> as GetSubTypes>::get_key(value)
             }
-            StaticType::Slice(_) => Some(EitherType::Static(
+            StaticType::Slice(_) => Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
-            StaticType::Vec(_) => Some(EitherType::Static(
+            StaticType::Vec(_) => Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             _ => None,
         }
     }
 
-    fn get_return(&self) -> Option<EitherType<Scope::UserType, Scope::StaticType>> {
+    fn get_return(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             StaticType::Fn(value) => Some(value.ret.as_ref().clone()),
+            StaticType::Chan(value) => Some(value.0.as_ref().clone()),
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_return(value)
+                <Either<UserType, StaticType> as GetSubTypes>::get_return(value)
             }
             _ => None,
         }
     }
-    fn get_fields(
-        &self,
-    ) -> Option<
-        Vec<(
-            Option<String>,
-            EitherType<Scope::UserType, Scope::StaticType>,
-        )>,
-    > {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
@@ -120,7 +113,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Any => None,
             StaticType::Error => None,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_fields(value)
+                <Either<UserType, StaticType> as GetSubTypes>::get_fields(value)
             }
             StaticType::Map(_) => None,
         }
@@ -141,7 +134,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> GetSubTypes<Scope>
             StaticType::Any => None,
             StaticType::Error => None,
             StaticType::Address(AddrType(value)) => {
-                <EitherType<UserType, StaticType> as GetSubTypes<Scope>>::get_length(value)
+                <Either<UserType, StaticType> as GetSubTypes>::get_length(value)
             }
             StaticType::Map(_) => None,
         }

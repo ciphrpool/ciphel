@@ -10,7 +10,7 @@ use crate::{
             static_types::{NumberType, PrimitiveType, SliceType, StaticType},
             user_type_impl::UserType,
         },
-        EitherType, SizeOf,
+        Either, SizeOf,
     },
     vm::{
         allocator::{Memory, MemoryAddress},

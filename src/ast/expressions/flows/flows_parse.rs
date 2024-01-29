@@ -18,7 +18,13 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::{
+        scope::{
+            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+            var_impl::Var, ScopeApi,
+        },
+        Metadata,
+    },
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
@@ -60,6 +66,7 @@ impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
                 condition: Box::new(condition),
                 main_branch,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
@@ -179,6 +186,7 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
                 expr: Box::new(expr),
                 patterns,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
@@ -200,6 +208,7 @@ impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
                 else_branch,
+                metadata: Metadata::default(),
             },
         )(input)
     }
@@ -223,7 +232,11 @@ impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
                     wst(lexem::PAR_C),
                 ),
             ),
-            |(fn_var, params)| FnCall { fn_var, params },
+            |(fn_var, params)| FnCall {
+                fn_var,
+                params,
+                metadata: Metadata::default(),
+            },
         )(input)
     }
 }
@@ -241,7 +254,7 @@ mod tests {
             },
             statements::{scope::Scope, Return, Statement},
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -257,6 +270,7 @@ mod tests {
                     Primitive::Bool(true)
                 )))),
                 main_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
@@ -266,6 +280,7 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
@@ -274,6 +289,7 @@ mod tests {
 
                     inner_scope: RefCell::new(None),
                 }),
+                metadata: Metadata::default(),
             },
             value
         );
@@ -299,12 +315,17 @@ mod tests {
         assert_eq!(
             MatchExpr {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var(VarID("x".into()))
+                    Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })
                 )))),
+                metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
                         pattern: Pattern::Primitive(Primitive::Number(Number::U64(10))),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -317,6 +338,7 @@ mod tests {
                     PatternExpr {
                         pattern: Pattern::String("Hello world".into()),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -332,6 +354,7 @@ mod tests {
                             value: "Point".into()
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -348,6 +371,7 @@ mod tests {
                             vars: vec!["y".into()]
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -363,6 +387,7 @@ mod tests {
                             vars: vec!["y".into()]
                         },
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -375,6 +400,7 @@ mod tests {
                     PatternExpr {
                         pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
                         expr: ExprScope::Expr(Scope {
+                            metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                                     Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -386,6 +412,7 @@ mod tests {
                     }
                 ],
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Bool(true)))
@@ -407,6 +434,7 @@ mod tests {
         assert_eq!(
             TryExpr {
                 try_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
@@ -416,6 +444,7 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: ExprScope::Expr(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
                             Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
@@ -424,6 +453,7 @@ mod tests {
 
                     inner_scope: RefCell::new(None),
                 }),
+                metadata: Metadata::default(),
             },
             value
         );
@@ -436,15 +466,20 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnCall {
-                fn_var: Variable::Var(VarID("f".into())),
+                fn_var: Variable::Var(VarID {
+                    id: "f".into(),
+                    metadata: Metadata::default()
+                }),
                 params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID(
-                        "x".into()
-                    ))))),
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::U64(10)
                     ))))
-                ]
+                ],
+                metadata: Metadata::default(),
             },
             value
         );

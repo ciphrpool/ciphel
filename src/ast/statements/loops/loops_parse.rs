@@ -19,7 +19,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::ScopeApi,
+    semantic::scope::{
+        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        var_impl::Var, ScopeApi,
+    },
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
@@ -134,7 +137,7 @@ mod tests {
                 Statement,
             },
         },
-        semantic::scope::scope_impl::MockScope,
+        semantic::{scope::scope_impl::MockScope, Metadata},
     };
 
     use super::*;
@@ -156,12 +159,17 @@ mod tests {
                 item: ForItem::Id("i".into()),
                 iterator: ForIterator::Id("x".into()),
                 scope: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
@@ -190,12 +198,17 @@ mod tests {
                     Primitive::Bool(true)
                 )))),
                 scope: Box::new(Scope {
+                    metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
-                            fn_var: Variable::Var(VarID("f".into())),
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Number::U64(10))
-                            )))]
+                            )))],
+                            metadata: Metadata::default()
                         }
                     }))],
 
@@ -220,12 +233,17 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Loop::Loop(Box::new(Scope {
+                metadata: Metadata::default(),
                 instructions: vec![Statement::Flow(Flow::Call(CallStat {
                     call: FnCall {
-                        fn_var: Variable::Var(VarID("f".into())),
+                        fn_var: Variable::Var(VarID {
+                            id: "f".into(),
+                            metadata: Metadata::default()
+                        }),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                             Primitive::Number(Number::U64(10))
-                        )))]
+                        )))],
+                        metadata: Metadata::default()
                     }
                 }))],
 

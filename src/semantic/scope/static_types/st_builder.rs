@@ -3,8 +3,11 @@ use std::cell::Ref;
 use crate::{
     ast,
     semantic::{
-        scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
-        EitherType, SemanticError, TypeOf,
+        scope::{
+            chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var,
+            BuildStaticType, ScopeApi,
+        },
+        Either, SemanticError, TypeOf,
     },
 };
 
@@ -13,9 +16,7 @@ use super::{
     TupleType, VecType,
 };
 
-impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Scope>
-    for StaticType
-{
+impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
     fn build_primitive(
         type_sig: &ast::types::PrimitiveType,
         _scope: &Ref<Scope>,
@@ -72,7 +73,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
 
     fn build_slice_from(
         size: &usize,
-        type_sig: &EitherType<Scope::UserType, Scope::StaticType>,
+        type_sig: &Either<UserType, StaticType>,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Slice(SliceType::List(
@@ -94,7 +95,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_tuple_from(
-        type_sig: &Vec<EitherType<<Scope as ScopeApi>::UserType, Self>>,
+        type_sig: &Vec<Either<UserType, Self>>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.len());
@@ -114,7 +115,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_vec_from(
-        type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -139,8 +140,8 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_fn_from(
-        params: &Vec<EitherType<<Scope as ScopeApi>::UserType, Self>>,
-        ret: &EitherType<<Scope as ScopeApi>::UserType, Self>,
+        params: &Vec<Either<UserType, Self>>,
+        ret: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut out_params = Vec::with_capacity(params.len());
@@ -164,7 +165,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_chan_from(
-        type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -188,7 +189,7 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_addr_from(
-        type_sig: &EitherType<<Scope as ScopeApi>::UserType, Self>,
+        type_sig: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
@@ -265,19 +266,19 @@ impl<Scope: ScopeApi<StaticType = Self, UserType = UserType>> BuildStaticType<Sc
     }
 
     fn build_map_from(
-        key: &EitherType<<Scope as ScopeApi>::UserType, Self>,
-        value: &EitherType<<Scope as ScopeApi>::UserType, Self>,
+        key: &Either<UserType, Self>,
+        value: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         let key_type = {
             match key {
-                EitherType::Static(value) => match value.as_ref() {
+                Either::Static(value) => match value.as_ref() {
                     StaticType::Primitive(value) => KeyType::Primitive(value.clone()),
                     StaticType::Slice(value) => KeyType::Slice(value.clone()),
                     StaticType::Address(value) => KeyType::Address(value.clone()),
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },
-                EitherType::User(value) => match value.as_ref() {
+                Either::User(value) => match value.as_ref() {
                     UserType::Enum(value) => KeyType::Enum(value.clone()),
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },

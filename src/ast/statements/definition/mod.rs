@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::scope::ScopeApi,
+    semantic::scope::{var_impl::Var, ScopeApi},
 };
 
 use super::{declaration::TypedVar, scope::Scope};
@@ -48,7 +48,7 @@ pub struct FnDef<InnerScope: ScopeApi> {
     id: ID,
     params: Vec<TypedVar>,
     ret: Box<Type>,
-    env: Rc<RefCell<HashMap<ID, Rc<InnerScope::Var>>>>,
+    env: Rc<RefCell<HashMap<ID, Rc<Var>>>>,
     scope: Scope<InnerScope>,
 }
 
