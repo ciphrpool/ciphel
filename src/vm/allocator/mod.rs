@@ -1,8 +1,15 @@
-use self::{heap::Heap, stack::Stack};
+use self::{
+    heap::{Heap, ALIGNMENT},
+    stack::Stack,
+};
 
 pub mod heap;
 pub mod stack;
 pub mod vtable;
+
+pub fn align(size: usize) -> usize {
+    (size + (ALIGNMENT - 1)) & (!(ALIGNMENT - 1))
+}
 
 #[derive(Debug, Clone)]
 pub enum MemoryAddress {

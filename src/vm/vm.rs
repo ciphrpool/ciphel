@@ -21,13 +21,11 @@ pub enum RuntimeError {
 }
 
 pub trait GenerateCode<Scope: ScopeApi> {
-    type Context;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
         codes: &Rc<RefCell<Vec<Strip>>>,
         offset: usize,
-        context: &Self::Context,
     ) -> Result<(), CodeGenerationError>;
 }
 

@@ -6,9 +6,9 @@ use crate::{
         scope::{
             chan_impl::Chan,
             event_impl::Event,
-            static_types::StaticType,
+            static_types::{self, StaticType},
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
-            user_type_impl::UserType,
+            user_type_impl::{self, UserType},
             var_impl::Var,
             ScopeApi,
         },
@@ -228,6 +228,20 @@ impl GetSubTypes for Either<UserType, StaticType> {
         match self {
             Either::Static(static_type) => static_type.get_length(),
             Either::User(user_type) => user_type.get_length(),
+        }
+    }
+
+    fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
+        match self {
+            Either::Static(static_type) => None,
+            Either::User(user_type) => user_type.get_field_offset(field_id),
+        }
+    }
+
+    fn get_inline_field_offset(&self, index: usize) -> Option<usize> {
+        match self {
+            Either::Static(static_type) => static_type.get_inline_field_offset(index),
+            Either::User(_) => None,
         }
     }
 }

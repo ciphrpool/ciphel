@@ -1,6 +1,8 @@
+use core::borrow;
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::{Ref, RefCell},
+    ops::Deref,
     rc::Rc,
 };
 
@@ -45,6 +47,23 @@ pub enum SemanticError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
     pub info: Rc<RefCell<Info>>,
+}
+
+impl Metadata {
+    pub fn context(&self) -> Option<Either<UserType, StaticType>> {
+        let borrowed = self.info.as_ref().borrow();
+        match borrowed.deref() {
+            Info::Unresolved => None,
+            Info::Resolved { context, signature } => context.clone(),
+        }
+    }
+    pub fn signature(&self) -> Option<Either<UserType, StaticType>> {
+        let borrowed = self.info.as_ref().borrow();
+        match borrowed.deref() {
+            Info::Unresolved => None,
+            Info::Resolved { context, signature } => signature.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -4,6 +4,8 @@ use num_traits::ToBytes;
 
 use crate::vm::vm::RuntimeError;
 
+use super::align;
+
 pub const ALIGNMENT: usize = 8;
 pub const HEAP_SIZE: usize = 512;
 pub const HEAP_ADDRESS_SIZE: usize = 8;
@@ -353,10 +355,6 @@ impl Heap {
         res
     }
 
-    fn align(size: usize) -> usize {
-        (size + (ALIGNMENT - 1)) & (!(ALIGNMENT - 1))
-    }
-
     fn best_fit(&self, aligned_size: usize) -> Result<Option<Block>, HeapError> {
         let mut fitting_block = None;
         let mut min_fitting_size = HEAP_SIZE as u64 + 1;
@@ -398,7 +396,7 @@ impl Heap {
     }
 
     pub fn alloc(&self, size: usize) -> Result<Pointer, HeapError> {
-        let aligned_size = BlockData::fit(Heap::align(size));
+        let aligned_size = BlockData::fit(align(size));
 
         let Some(block) = self.best_fit(aligned_size)? else {
             return Err(HeapError::AllocationError);

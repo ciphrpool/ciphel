@@ -72,9 +72,38 @@ impl VarID {
     }
 }
 
-impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
+impl<InnerScope: ScopeApi> NumAccess<InnerScope> {
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = VarID::parse(input)?;
+        let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
+        if let Some(_) = index {
+            let (remainder, num) = digit1(remainder)?;
+
+            let index = num.parse::<usize>();
+            if index.is_err() {
+                return Err(nom::Err::Error(ErrorTree::Base {
+                    location: num,
+                    kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                }));
+            }
+            let index = index.unwrap();
+            return Ok((
+                remainder,
+                Variable::NumAccess(NumAccess {
+                    var: Box::new(var),
+                    index,
+                    metadata: Metadata::default(),
+                }),
+            ));
+        } else {
+            Ok((remainder, var))
+        }
+    }
+}
+
+impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
+    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+        let (remainder, var) = NumAccess::parse(input)?;
         let (remainder, index) = opt(delimited(
             wst(lexem::SQ_BRA_O),
             Expression::parse,

@@ -210,13 +210,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
 }
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
-    type Context = Either<UserType, StaticType>;
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
         codes: &Rc<RefCell<Vec<Strip>>>,
         offset: usize,
-        context: &Self::Context,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

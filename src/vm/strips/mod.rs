@@ -9,6 +9,7 @@ pub mod assign;
 pub mod call;
 pub mod declare;
 pub mod if_strip;
+pub mod locate;
 pub mod loop_strip;
 pub mod match_strip;
 mod math_operation;
@@ -38,6 +39,7 @@ pub enum Strip {
     Call(call::Call),
     Serialize(serialize::Serialized),
     Access(access::Access),
+    Locate(locate::Locate),
     If(if_strip::IfSrip),
     Match(match_strip::MatchStrip),
     Try(try_strip::TryStrip),
@@ -63,6 +65,7 @@ impl Executable for Strip {
             Strip::Scope(value) => value.execute(memory),
             Strip::Alloc(value) => value.execute(memory),
             Strip::MemCopy(value) => value.execute(memory),
+            Strip::Locate(value) => value.execute(memory),
         }
     }
 }

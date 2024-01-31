@@ -26,8 +26,8 @@ use super::math_operation::{
 
 #[derive(Debug, Clone)]
 pub struct Operation {
-    kind: OperationKind,
-    result: OpPrimitive,
+    pub kind: OperationKind,
+    pub result: OpPrimitive,
 }
 
 impl Executable for Operation {
@@ -268,8 +268,8 @@ impl Executable for Mod {
 
 #[derive(Debug, Clone)]
 pub struct Addition {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 #[derive(Debug, Clone)]

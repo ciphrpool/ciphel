@@ -3,10 +3,10 @@ use crate::semantic::{
         chan_impl::Chan, event_impl::Event, type_traits::GetSubTypes, user_type_impl::UserType,
         var_impl::Var, ScopeApi,
     },
-    Either,
+    Either, SizeOf,
 };
 
-use super::{AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType};
+use super::{AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType, TupleType};
 
 impl GetSubTypes for StaticType {
     fn get_nth(&self, n: &usize) -> Option<Either<UserType, StaticType>> {
@@ -136,6 +136,28 @@ impl GetSubTypes for StaticType {
             StaticType::Address(AddrType(value)) => {
                 <Either<UserType, StaticType> as GetSubTypes>::get_length(value)
             }
+            StaticType::Map(_) => None,
+        }
+    }
+
+    fn get_inline_field_offset(&self, index: usize) -> Option<usize> {
+        match self {
+            StaticType::Primitive(_) => None,
+            StaticType::Slice(_) => None,
+            StaticType::Vec(_) => None,
+            StaticType::Fn(_) => None,
+            StaticType::Chan(_) => None,
+            StaticType::Tuple(TupleType(fields)) => Some(
+                fields
+                    .iter()
+                    .take(index - 1)
+                    .map(|field| field.size_of())
+                    .sum(),
+            ),
+            StaticType::Unit => None,
+            StaticType::Any => None,
+            StaticType::Error => None,
+            StaticType::Address(_) => None,
             StaticType::Map(_) => None,
         }
     }

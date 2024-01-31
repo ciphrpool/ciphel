@@ -10,6 +10,7 @@ use crate::{
         utils::strings::ID,
     },
     semantic::{CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf},
+    vm::allocator::align,
 };
 
 use super::{
@@ -137,6 +138,20 @@ impl GetSubTypes for UserType {
             UserType::Union(_) => None,
         }
     }
+
+    fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
+        match self {
+            UserType::Struct(Struct { id, fields }) => Some(
+                fields
+                    .iter()
+                    .take_while(|(id, _)| id != field_id)
+                    .map(|(_, field)| align(field.size_of()))
+                    .sum(),
+            ),
+            UserType::Enum(_) => None,
+            UserType::Union(_) => None,
+        }
+    }
 }
 
 impl TypeChecking for UserType {}
@@ -201,7 +216,10 @@ impl SizeOf for UserType {
 
 impl SizeOf for Struct {
     fn size_of(&self) -> usize {
-        self.fields.iter().map(|(_, field)| field.size_of()).sum()
+        self.fields
+            .iter()
+            .map(|(_, field)| align(field.size_of()))
+            .sum()
     }
 }
 impl SizeOf for Union {

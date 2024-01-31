@@ -64,6 +64,13 @@ impl GetSubTypes for Var {
     fn get_item(&self) -> Option<Either<UserType, StaticType>> {
         <Either<UserType, StaticType> as GetSubTypes>::get_item(&self.type_sig)
     }
+    fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
+        self.type_sig.get_field_offset(field_id)
+    }
+
+    fn get_inline_field_offset(&self, index: usize) -> Option<usize> {
+        self.type_sig.get_inline_field_offset(index)
+    }
 }
 impl TypeChecking for Var {
     fn is_iterable(&self) -> bool {

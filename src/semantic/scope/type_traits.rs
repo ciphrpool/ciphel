@@ -35,8 +35,15 @@ pub trait GetSubTypes {
     fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
         None
     }
-}
 
+    fn get_field_offset(&self, _field_id: &ID) -> Option<usize> {
+        None
+    }
+
+    fn get_inline_field_offset(&self, index: usize) -> Option<usize> {
+        None
+    }
+}
 pub trait IsEnum {
     fn is_enum(&self) -> bool {
         false
