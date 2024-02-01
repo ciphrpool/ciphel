@@ -4,6 +4,7 @@ use std::{
 };
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
+use nom_supreme::parser_ext::Value;
 
 use crate::{
     ast::{
@@ -213,10 +214,41 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
     fn gencode(
         &self,
         scope: &Rc<RefCell<Scope>>,
-        codes: &Rc<RefCell<Vec<Strip>>>,
+        instructions: &Rc<RefCell<Vec<Strip>>>,
         offset: usize,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        match self {
+            Expression::Product(_) => todo!(),
+            Expression::Addition(_) => todo!(),
+            Expression::Substraction(_) => todo!(),
+            Expression::Shift(_) => todo!(),
+            Expression::BitwiseAnd(_) => todo!(),
+            Expression::BitwiseXOR(_) => todo!(),
+            Expression::BitwiseOR(_) => todo!(),
+            Expression::Cast(_) => todo!(),
+            Expression::Comparaison(_) => todo!(),
+            Expression::Equation(_) => todo!(),
+            Expression::Inclusion(_) => todo!(),
+            Expression::LogicalAnd(_) => todo!(),
+            Expression::LogicalOr(_) => todo!(),
+            Expression::Atomic(value) => value.gencode(scope, instructions, offset),
+        }
+    }
+}
+impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
+    fn gencode(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        instructions: &Rc<RefCell<Vec<Strip>>>,
+        offset: usize,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Atomic::Data(value) => value.gencode(scope, instructions, offset),
+            Atomic::UnaryOperation(_) => todo!(),
+            Atomic::Paren(value) => value.gencode(scope, instructions, offset),
+            Atomic::ExprFlow(_) => todo!(),
+            Atomic::Error(_) => todo!(),
+        }
     }
 }
 

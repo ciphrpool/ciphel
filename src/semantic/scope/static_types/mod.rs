@@ -10,6 +10,7 @@ use super::{
 
 pub mod st_builder;
 pub mod st_compatible_with;
+pub mod st_deserialize;
 pub mod st_merging;
 pub mod st_operand_merging;
 pub mod st_sizeof;

@@ -251,6 +251,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
             Vector::Init {
                 value: vec,
                 metadata,
+                length,
+                capacity,
             } => {
                 let Some(expr_type) = vec.first().map(|expr| expr.type_of(&scope)) else {
                     return Err(SemanticError::CantInferType);

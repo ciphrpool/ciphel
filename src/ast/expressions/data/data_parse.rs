@@ -25,6 +25,7 @@ use crate::{
         },
         Metadata,
     },
+    vm::allocator::align,
 };
 use nom::{
     branch::alt,
@@ -265,6 +266,8 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
                     ),
                 ),
                 |value| Vector::Init {
+                    capacity: align(*&value.len()),
+                    length: *&value.len(),
                     value,
                     metadata: Metadata::default(),
                 },
@@ -701,6 +704,8 @@ mod tests {
                         Number::U64(6)
                     ))))
                 ],
+                capacity: align(3),
+                length: 3,
                 metadata: Metadata::default(),
             },
             value,

@@ -110,6 +110,8 @@ pub enum Vector<InnerScope: ScopeApi> {
     Init {
         value: MultiData<InnerScope>,
         metadata: Metadata,
+        length: usize,
+        capacity: usize,
     },
     Def {
         capacity: usize,
@@ -186,23 +188,23 @@ pub enum Channel<InnerScope: ScopeApi> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct<InnerScope: ScopeApi> {
-    id: ID,
-    fields: Vec<(String, Expression<InnerScope>)>,
+    pub id: ID,
+    pub fields: Vec<(String, Expression<InnerScope>)>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Union<InnerScope: ScopeApi> {
-    typename: ID,
-    variant: ID,
-    fields: Vec<(ID, Expression<InnerScope>)>,
+    pub typename: ID,
+    pub variant: ID,
+    pub fields: Vec<(ID, Expression<InnerScope>)>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Enum {
-    typename: ID,
-    value: ID,
+    pub typename: ID,
+    pub value: ID,
     pub metadata: Metadata,
 }
 

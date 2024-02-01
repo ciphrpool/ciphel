@@ -78,39 +78,39 @@ impl OpPrimitive {
             .pop(PrimitiveType::Float.size_of())
             .map_err(|e| e.into())?;
 
-        let data =
-            TryInto::<&[u8; 8]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(f64::from_le_bytes(*data))
     }
 
     pub fn get_num16<N: FromBytes<Bytes = [u8; 16]>>(memory: &Memory) -> Result<N, RuntimeError> {
         let data = memory.stack.pop(16).map_err(|e| e.into())?;
-        let data =
-            TryInto::<&[u8; 16]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 16]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num8<N: FromBytes<Bytes = [u8; 8]>>(memory: &Memory) -> Result<N, RuntimeError> {
         let data = memory.stack.pop(8).map_err(|e| e.into())?;
-        let data =
-            TryInto::<&[u8; 8]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num4<N: FromBytes<Bytes = [u8; 4]>>(memory: &Memory) -> Result<N, RuntimeError> {
         let data = memory.stack.pop(4).map_err(|e| e.into())?;
-        let data =
-            TryInto::<&[u8; 4]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 4]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num2<N: FromBytes<Bytes = [u8; 2]>>(memory: &Memory) -> Result<N, RuntimeError> {
         let data = memory.stack.pop(2).map_err(|e| e.into())?;
-        let data =
-            TryInto::<&[u8; 2]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 2]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num1<N: FromBytes<Bytes = [u8; 1]>>(memory: &Memory) -> Result<N, RuntimeError> {
         let data = memory.stack.pop(1).map_err(|e| e.into())?;
-        let data =
-            TryInto::<&[u8; 1]>::try_into(data.as_slice()).map_err(|_| RuntimeError::Default)?;
+        let data = TryInto::<&[u8; 1]>::try_into(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
 
@@ -129,13 +129,13 @@ impl OpPrimitive {
             .map_err(|e| e.into())?;
         let data = data.first().map(|byte| *byte as char);
         let Some(data) = data else {
-            return Err(RuntimeError::Default);
+            return Err(RuntimeError::Deserialization);
         };
         Ok(data)
     }
     pub fn get_string(size: usize, memory: &Memory) -> Result<String, RuntimeError> {
         let data = memory.stack.pop(size).map_err(|e| e.into())?;
-        let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Default)?;
+        let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(data.to_string())
     }
 }

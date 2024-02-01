@@ -1,22 +1,29 @@
 use std::{
-    cell::Ref,
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     rc::Rc,
 };
 
 use crate::{
     ast::{
+        expressions::{
+            data::{self},
+            Atomic, Expression,
+        },
         statements::definition::{self},
         utils::strings::ID,
     },
-    semantic::{CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf},
-    vm::allocator::align,
+    semantic::{CompatibleWith, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
+    vm::{
+        allocator::align,
+        vm::{DeserializeFrom, RuntimeError},
+    },
 };
 
 use super::{
     chan_impl::Chan,
     event_impl::Event,
-    static_types::StaticType,
+    static_types::{st_deserialize::extract_u64, StaticType},
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
     var_impl::Var,
     BuildUserType, ScopeApi,
@@ -397,5 +404,85 @@ impl Enum {
     }
     pub fn merge(&self, _other: &Self) -> Result<Self, SemanticError> {
         Ok(self.clone())
+    }
+}
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
+    type Output = data::Struct<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let mut offset = 0;
+        let mut value = Vec::default();
+
+        for (field_id, field_type) in &self.fields {
+            let size = field_type.size_of();
+            let aligned_size = align(field_type.size_of());
+            if offset + aligned_size > bytes.len() {
+                return Err(RuntimeError::Deserialization);
+            }
+            let data = <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
+                &field_type,
+                &bytes[offset..offset + size],
+            )?;
+            value.push((field_id.clone(), Expression::Atomic(Atomic::Data(data))));
+            offset += aligned_size;
+        }
+
+        Ok(data::Struct {
+            id: self.id.clone(),
+            fields: value,
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::User(Rc::new(UserType::Struct(self.clone())))),
+                })),
+            },
+        })
+    }
+}
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
+    type Output = data::Union<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let (idx, bytes) = extract_u64(bytes)?;
+        let Some((variant, struct_type)) = self.variants.get(idx as usize) else {
+            return Err(RuntimeError::Deserialization);
+        };
+
+        let data: data::Struct<Scope> = struct_type.deserialize_from(bytes)?;
+
+        Ok(data::Union {
+            typename: self.id.clone(),
+            variant: variant.clone(),
+            fields: data.fields,
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::User(Rc::new(UserType::Union(self.clone())))),
+                })),
+            },
+        })
+    }
+}
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
+    type Output = data::Enum;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let (idx, bytes) = extract_u64(bytes)?;
+        let value = self
+            .values
+            .get(idx as usize)
+            .ok_or(RuntimeError::Deserialization)?;
+        Ok(data::Enum {
+            typename: self.id.clone(),
+            value: value.clone(),
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::User(Rc::new(UserType::Enum(self.clone())))),
+                })),
+            },
+        })
     }
 }

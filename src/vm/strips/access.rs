@@ -22,12 +22,14 @@ impl Executable for Access {
                     Ok(())
                 }
                 MemoryAddress::Stack { offset } => {
-                    let _data = memory
+                    let data = memory
                         .stack
                         .read(*offset, *size)
                         .map_err(|err| err.into())?;
-
-                    todo!("Copy data onto stack");
+                    // Copy data onto stack;
+                    let offset = memory.stack.top();
+                    let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
+                    let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
                     Ok(())
                 }
             },

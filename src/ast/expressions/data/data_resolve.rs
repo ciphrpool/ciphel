@@ -380,7 +380,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
         Scope: ScopeApi,
     {
         match self {
-            Vector::Init { value, metadata } => {
+            Vector::Init {
+                value,
+                metadata,
+                length,
+                capacity,
+            } => {
                 let param_context = match context {
                     Some(context) => {
                         <Either<UserType, StaticType> as GetSubTypes>::get_item(context)

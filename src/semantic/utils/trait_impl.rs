@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use crate::{
-    ast::utils::strings::ID,
+    ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
         scope::{
             chan_impl::Chan,
@@ -14,6 +14,7 @@ use crate::{
         },
         CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
+    vm::vm::{DeserializeFrom, RuntimeError},
 };
 
 impl<T, Scope: ScopeApi> CompatibleWith<Scope> for Option<T>
@@ -507,6 +508,43 @@ where
         match self {
             Either::Static(value) => value.merge_logical_or(other, scope),
             Either::User(value) => value.merge_logical_or(other, scope),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for Either<UserType, StaticType> {
+    type Output = Data<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        match self {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Primitive(value) => Ok(Data::Primitive(
+                    <static_types::PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+                        value, bytes,
+                    )?,
+                )),
+                StaticType::Slice(value) => todo!(),
+                StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
+                StaticType::Fn(value) => unimplemented!(),
+                StaticType::Chan(value) => unimplemented!(),
+                StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
+                StaticType::Unit => Ok(Data::Unit),
+                StaticType::Any => Err(RuntimeError::Deserialization),
+                StaticType::Error => Err(RuntimeError::Deserialization),
+                StaticType::Address(value) => todo!(),
+                StaticType::Map(value) => unimplemented!(),
+            },
+            Either::User(value) => match value.as_ref() {
+                UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),
+                UserType::Enum(value) => {
+                    Ok(Data::Enum(<user_type_impl::Enum as DeserializeFrom<
+                        Scope,
+                    >>::deserialize_from(
+                        value, bytes
+                    )?))
+                }
+                UserType::Union(value) => Ok(Data::Union(value.deserialize_from(bytes)?)),
+            },
         }
     }
 }

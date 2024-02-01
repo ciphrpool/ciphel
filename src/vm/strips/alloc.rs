@@ -10,6 +10,12 @@ pub struct Alloc {
 
 impl Executable for Alloc {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
-        todo!()
+        let address = memory.heap.alloc(self.size).map_err(|e| e.into())?;
+        let address = address + 8;
+        let offset = memory.stack.top();
+        let data = (address as u64).to_le_bytes().to_vec();
+        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
+        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        Ok(())
     }
 }
