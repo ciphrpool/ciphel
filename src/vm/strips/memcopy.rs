@@ -20,8 +20,8 @@ pub enum MemCopy {
 impl Executable for MemCopy {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
         match self {
-            MemCopy::Clone { from, to } => todo!(),
-            MemCopy::Take { offset, size } => {
+            MemCopy::Clone { from: _, to: _ } => todo!(),
+            MemCopy::Take { offset: _, size } => {
                 let heap_address = OpPrimitive::get_num8::<u64>(memory)?;
                 let data = memory.stack.pop(*size).map_err(|e| e.into())?;
                 let _ = memory

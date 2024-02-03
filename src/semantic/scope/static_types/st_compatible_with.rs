@@ -2,7 +2,7 @@ use std::cell::Ref;
 
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
+        ScopeApi,
     },
     CompatibleWith, Either, SemanticError, TypeOf,
 };

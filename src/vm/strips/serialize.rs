@@ -1,9 +1,4 @@
 use crate::{
-    ast::expressions::data,
-    semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType},
-        Either,
-    },
     vm::{
         allocator::Memory,
         vm::{Executable, RuntimeError},

@@ -1,15 +1,11 @@
 use crate::{
-    semantic::{
-        scope::static_types::{PrimitiveType, StaticType},
-        Either,
-    },
     vm::{
-        allocator::{Memory, MemoryAddress},
+        allocator::{Memory},
         vm::{Executable, RuntimeError},
     },
 };
 
-use super::{operation::OpPrimitive, serialize::Serialized, Strips};
+use super::{operation::OpPrimitive, Strips};
 
 #[derive(Debug, Clone)]
 pub struct IfSrip {

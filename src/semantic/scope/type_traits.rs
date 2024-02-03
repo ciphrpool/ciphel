@@ -6,8 +6,7 @@ use crate::{
 };
 
 use super::{
-    chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
-    var_impl::Var, ScopeApi,
+    static_types::StaticType, user_type_impl::UserType, ScopeApi,
 };
 
 pub trait GetSubTypes {
@@ -40,7 +39,7 @@ pub trait GetSubTypes {
         None
     }
 
-    fn get_inline_field_offset(&self, index: usize) -> Option<usize> {
+    fn get_inline_field_offset(&self, _index: usize) -> Option<usize> {
         None
     }
 }

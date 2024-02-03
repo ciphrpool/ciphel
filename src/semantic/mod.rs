@@ -1,6 +1,6 @@
-use core::borrow;
+
 use std::{
-    borrow::{Borrow, BorrowMut},
+    borrow::{Borrow},
     cell::{Ref, RefCell},
     ops::Deref,
     rc::Rc,
@@ -54,14 +54,14 @@ impl Metadata {
         let borrowed = self.info.as_ref().borrow();
         match borrowed.deref() {
             Info::Unresolved => None,
-            Info::Resolved { context, signature } => context.clone(),
+            Info::Resolved { context, signature: _ } => context.clone(),
         }
     }
     pub fn signature(&self) -> Option<Either<UserType, StaticType>> {
         let borrowed = self.info.as_ref().borrow();
         match borrowed.deref() {
             Info::Unresolved => None,
-            Info::Resolved { context, signature } => signature.clone(),
+            Info::Resolved { context: _, signature } => signature.clone(),
         }
     }
 }

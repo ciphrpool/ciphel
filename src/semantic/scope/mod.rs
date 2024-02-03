@@ -11,12 +11,11 @@ use self::{
     chan_impl::Chan,
     event_impl::Event,
     static_types::StaticType,
-    type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
     user_type_impl::UserType,
     var_impl::Var,
 };
 
-use super::{CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf};
+use super::{Either, SemanticError};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;

@@ -8,7 +8,7 @@ use crate::semantic::scope::BuildVar;
 use crate::semantic::Info;
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+        static_types::StaticType, user_type_impl::UserType,
         var_impl::Var, ScopeApi,
     },
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
@@ -60,13 +60,13 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
         match self {
             Variable::Var(VarID {
                 id: value,
-                metadata,
+                metadata: _,
             }) => <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
                 .ok_or(SemanticError::UnknownField),
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata,
+                metadata: _,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
                 field.resolve_based(scope, &var_type)
@@ -74,7 +74,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
             Variable::ListAccess(ListAccess {
                 var,
                 index,
-                metadata,
+                metadata: _,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
                 if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
@@ -92,7 +92,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
             Variable::NumAccess(NumAccess {
                 var,
                 index,
-                metadata,
+                metadata: _,
             }) => {
                 let _ = var.resolve_based(scope, context)?;
                 let var_type = var.type_of(&scope.borrow())?;
@@ -152,7 +152,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     where
         Self: Sized,
     {
-        let var = scope.borrow().find_var(&self.id)?;
+        let _var = scope.borrow().find_var(&self.id)?;
         {
             let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
             *borrowed_metadata = Info::Resolved {
@@ -383,8 +383,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
             Vector::Init {
                 value,
                 metadata,
-                length,
-                capacity,
+                length: _,
+                capacity: _,
             } => {
                 let param_context = match context {
                     Some(context) => {

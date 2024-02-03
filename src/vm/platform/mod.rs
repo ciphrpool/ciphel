@@ -51,7 +51,7 @@ pub mod api {
 
     use crate::{
         ast::{
-            expressions::{Atomic, Expression},
+            expressions::{Expression},
             utils::strings::ID,
         },
         semantic::{

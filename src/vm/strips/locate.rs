@@ -3,7 +3,7 @@ use crate::vm::{
     vm::{Executable, RuntimeError},
 };
 
-use super::operation::OpPrimitive;
+
 
 #[derive(Debug, Clone)]
 pub struct Locate {
@@ -11,7 +11,7 @@ pub struct Locate {
 }
 
 impl Executable for Locate {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, _memory: &Memory) -> Result<(), RuntimeError> {
         todo!()
     }
 }

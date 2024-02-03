@@ -4,12 +4,9 @@ use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
         scope::{
-            chan_impl::Chan,
-            event_impl::Event,
             static_types::{self, StaticType},
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
             user_type_impl::{self, UserType},
-            var_impl::Var,
             ScopeApi,
         },
         CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf,
@@ -234,7 +231,7 @@ impl GetSubTypes for Either<UserType, StaticType> {
 
     fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
         match self {
-            Either::Static(static_type) => None,
+            Either::Static(_static_type) => None,
             Either::User(user_type) => user_type.get_field_offset(field_id),
         }
     }
@@ -523,16 +520,16 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Either<UserType, StaticType> {
                         value, bytes,
                     )?,
                 )),
-                StaticType::Slice(value) => todo!(),
+                StaticType::Slice(_value) => todo!(),
                 StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
-                StaticType::Fn(value) => unimplemented!(),
-                StaticType::Chan(value) => unimplemented!(),
+                StaticType::Fn(_value) => unimplemented!(),
+                StaticType::Chan(_value) => unimplemented!(),
                 StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
                 StaticType::Unit => Ok(Data::Unit),
                 StaticType::Any => Err(RuntimeError::Deserialization),
                 StaticType::Error => Err(RuntimeError::Deserialization),
-                StaticType::Address(value) => todo!(),
-                StaticType::Map(value) => unimplemented!(),
+                StaticType::Address(_value) => todo!(),
+                StaticType::Map(_value) => unimplemented!(),
             },
             Either::User(value) => match value.as_ref() {
                 UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),

@@ -1,22 +1,14 @@
-use std::{
-    borrow::BorrowMut,
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 
-use nom::bytes;
 use num_traits::ToBytes;
 
 use crate::{
     ast::utils::strings::ID,
     semantic::{
         scope::{
-            chan_impl::Chan,
-            event_impl::Event,
-            static_types::{NumberType, StaticType, TupleType},
+            static_types::{NumberType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
-            var_impl::Var,
             ScopeApi,
         },
         Either, SizeOf,
@@ -70,9 +62,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        _scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         let mut borrowed = instructions.as_ref().borrow_mut();
         let strip = match self {
@@ -358,7 +350,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
         offset: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Variable::Var(VarID { id, metadata }) => {
+            Variable::Var(VarID { id, metadata: _ }) => {
                 let var = scope
                     .borrow()
                     .find_var(id)
@@ -383,7 +375,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata,
+                metadata: _,
             }) => {
                 // Locate the variable
                 let _ = var.locate(scope, instructions, offset)?;
@@ -476,20 +468,20 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
 impl<Scope: ScopeApi> Variable<Scope> {
     fn signature(&self) -> Option<Either<UserType, StaticType>> {
         match self {
-            Variable::Var(VarID { id, metadata }) => metadata.signature(),
+            Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
             Variable::FieldAccess(FieldAccess {
-                var,
-                field,
+                var: _,
+                field: _,
                 metadata,
             }) => metadata.signature(),
             Variable::NumAccess(NumAccess {
-                var,
-                index,
+                var: _,
+                index: _,
                 metadata,
             }) => metadata.signature(),
             Variable::ListAccess(ListAccess {
-                var,
-                index,
+                var: _,
+                index: _,
                 metadata,
             }) => metadata.signature(),
         }
@@ -497,35 +489,35 @@ impl<Scope: ScopeApi> Variable<Scope> {
 
     fn name(&self) -> &ID {
         match self {
-            Variable::Var(VarID { id, metadata }) => id,
+            Variable::Var(VarID { id, metadata: _ }) => id,
             Variable::FieldAccess(FieldAccess {
                 var,
-                field,
-                metadata,
+                field: _,
+                metadata: _,
             }) => var.name(),
             Variable::NumAccess(NumAccess {
                 var,
-                index,
-                metadata,
+                index: _,
+                metadata: _,
             }) => var.name(),
             Variable::ListAccess(ListAccess {
                 var,
-                index,
-                metadata,
+                index: _,
+                metadata: _,
             }) => var.name(),
         }
     }
 
     fn access_from(
         &self,
-        from_type: Either<UserType, StaticType>,
-        offset: usize,
+        _from_type: Either<UserType, StaticType>,
+        _offset: usize,
         scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
         start_offset: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Variable::Var(VarID { id, metadata }) => {
+            Variable::Var(VarID { id: _, metadata }) => {
                 let mut borrowed = instructions.as_ref().borrow_mut();
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -536,7 +528,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata,
+                metadata: _,
             }) => {
                 // Access the field
                 let Some(from_type) = var.signature() else {
@@ -591,7 +583,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 Ok(())
             }
             Variable::ListAccess(ListAccess {
-                var,
+                var: _,
                 index,
                 metadata,
             }) => {
@@ -622,7 +614,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
         start_offset: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Variable::Var(VarID { id, metadata }) => {
+            Variable::Var(VarID { id, metadata: _ }) => {
                 let var = scope
                     .borrow()
                     .find_var(id)
@@ -632,7 +624,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let var_type = &var.as_ref().type_sig;
-                let var_size = var_type.size_of();
+                let _var_size = var_type.size_of();
 
                 let mut borrowed = instructions.as_ref().borrow_mut();
                 borrowed.push(Strip::Locate(Locate {
@@ -644,14 +636,14 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 Ok(())
             }
             Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata,
+                var: _,
+                field: _,
+                metadata: _,
             }) => unreachable!(),
             Variable::NumAccess(NumAccess {
                 var,
                 index,
-                metadata,
+                metadata: _,
             }) => {
                 let _ = var.locate(scope, instructions, start_offset)?;
                 let Some(from_type) = var.signature() else {
@@ -678,7 +670,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
             Variable::ListAccess(ListAccess {
                 var,
                 index,
-                metadata,
+                metadata: _,
             }) => {
                 let _ = var.locate(scope, instructions, start_offset)?;
                 let _ = index.gencode(scope, instructions, start_offset)?;
@@ -720,7 +712,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
                 let Some(signature) = metadata.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let mut bytes = (data.len() as u64).to_le_bytes().as_slice().to_vec();
+                let bytes = (data.len() as u64).to_le_bytes().as_slice().to_vec();
 
                 let item_size = {
                     let Some(item_type) = signature.get_item() else {
@@ -780,7 +772,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
                 let cap_bytes = (*capacity as u64).to_le_bytes().as_slice().to_vec();
 
                 // Start of the Vec data
-                let data_offset = offset;
+                let _data_offset = offset;
                 // Push Length on stack
                 offset += len_bytes.len();
                 borrowed.push(Strip::Serialize(Serialized { data: len_bytes }));
@@ -865,9 +857,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Tuple<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _scope: &Rc<RefCell<Scope>>,
+        _instructions: &Rc<RefCell<Vec<Strip>>>,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -876,9 +868,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _scope: &Rc<RefCell<Scope>>,
+        _instructions: &Rc<RefCell<Vec<Strip>>>,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -887,9 +879,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _scope: &Rc<RefCell<Scope>>,
+        _instructions: &Rc<RefCell<Vec<Strip>>>,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -898,9 +890,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Channel<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _scope: &Rc<RefCell<Scope>>,
+        _instructions: &Rc<RefCell<Vec<Strip>>>,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -972,7 +964,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
             .variants
             .iter()
             .enumerate()
-            .find(|(idx, (id, _))| id == &self.variant)
+            .find(|(_idx, (id, _))| id == &self.variant)
             .map(|(idx, (_, st))| (idx, st))
         else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1016,9 +1008,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        _scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1050,9 +1042,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Map<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        _scope: &Rc<RefCell<Scope>>,
+        _instructions: &Rc<RefCell<Vec<Strip>>>,
+        _offset: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -1071,7 +1063,7 @@ mod tests {
         semantic::{
             scope::{
                 scope_impl::Scope,
-                static_types::{PrimitiveType, VecType},
+                static_types::{PrimitiveType, TupleType, VecType},
                 user_type_impl, ScopeApi,
             },
             Resolve, TypeOf,

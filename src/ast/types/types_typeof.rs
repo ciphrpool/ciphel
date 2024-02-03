@@ -6,11 +6,11 @@ use super::{
 use crate::semantic::scope::static_types::{self, StaticType};
 
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::var_impl::Var;
+
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::CompatibleWith;
 use crate::semantic::{
-    scope::{chan_impl::Chan, event_impl::Event, ScopeApi},
+    scope::{ScopeApi},
     Either, SemanticError, TypeOf,
 };
 

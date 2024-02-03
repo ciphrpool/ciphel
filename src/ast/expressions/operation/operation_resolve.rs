@@ -2,12 +2,12 @@ use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
     LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
-use crate::semantic::scope::chan_impl::Chan;
-use crate::semantic::scope::event_impl::Event;
+
+
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::var_impl::Var;
+
 use crate::semantic::Info;
 use crate::semantic::{
     scope::{type_traits::OperandMerging, ScopeApi},

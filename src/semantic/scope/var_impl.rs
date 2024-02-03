@@ -9,8 +9,6 @@ use crate::{
 };
 
 use super::{
-    chan_impl::Chan,
-    event_impl::Event,
     static_types::StaticType,
     type_traits::{GetSubTypes, TypeChecking},
     user_type_impl::UserType,

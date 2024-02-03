@@ -1,8 +1,8 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::TypeChecking,
-        user_type_impl::UserType, var_impl::Var, ScopeApi,
+        static_types::StaticType, type_traits::TypeChecking,
+        user_type_impl::UserType, ScopeApi,
     },
     Either, Resolve, SemanticError, TypeOf,
 };

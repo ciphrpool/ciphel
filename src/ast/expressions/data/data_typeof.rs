@@ -6,12 +6,12 @@ use super::{
     Variable, Vector,
 };
 use crate::ast::types::{NumberType, PrimitiveType};
-use crate::semantic::scope::chan_impl::Chan;
-use crate::semantic::scope::event_impl::Event;
+
+
 use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::scope::type_traits::TypeChecking;
+
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::var_impl::Var;
+
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::MergeType;
 use crate::{
@@ -61,13 +61,13 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
         match self {
             Variable::Var(VarID {
                 id: value,
-                metadata,
+                metadata: _,
             }) => <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
                 .ok_or(SemanticError::UnknownField),
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata,
+                metadata: _,
             }) => {
                 let var_type = var.typeof_based::<Scope>(context)?;
                 field.typeof_based::<Scope>(&var_type)
@@ -250,9 +250,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
         match self {
             Vector::Init {
                 value: vec,
-                metadata,
-                length,
-                capacity,
+                metadata: _,
+                length: _,
+                capacity: _,
             } => {
                 let Some(expr_type) = vec.first().map(|expr| expr.type_of(&scope)) else {
                     return Err(SemanticError::CantInferType);
@@ -362,7 +362,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
             Channel::Receive {
                 addr,
                 timeout: _,
-                metadata,
+                metadata: _,
             } => {
                 let addr_type = addr.type_of(&scope)?;
                 let msg_type =
@@ -376,7 +376,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
             Channel::Send {
                 addr: _,
                 msg: _,
-                metadata,
+                metadata: _,
             } => Ok(Either::Static(
                 <StaticType as BuildStaticType<Scope>>::build_unit().into(),
             )),
@@ -427,7 +427,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Map::Init { fields, metadata } => {
+            Map::Init { fields, metadata: _ } => {
                 let Some((key, value)) = fields.first() else {
                     return Err(SemanticError::CantInferType);
                 };
@@ -440,7 +440,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
             Map::Def {
                 length: _,
                 capacity: _,
-                metadata,
+                metadata: _,
             } => Ok(Either::Static(
                 <StaticType as BuildStaticType<Scope>>::build_any().into(),
             )),

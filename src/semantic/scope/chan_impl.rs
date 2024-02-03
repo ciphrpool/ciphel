@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    event_impl::Event, static_types::StaticType, user_type_impl::UserType, var_impl::Var,
+    static_types::StaticType, user_type_impl::UserType,
     BuildChan, ScopeApi,
 };
 

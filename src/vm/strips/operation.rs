@@ -1,16 +1,13 @@
-use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Rem, Sub};
+
 
 use nom::AsBytes;
 use num_traits::{FromBytes, ToBytes, Zero};
 
 use crate::{
-    ast::expressions::data::data_typeof,
     semantic::{
         scope::{
-            static_types::{NumberType, PrimitiveType, SliceType, StaticType},
-            user_type_impl::UserType,
-        },
-        Either, SizeOf,
+            static_types::{NumberType, PrimitiveType},
+        }, SizeOf,
     },
     vm::{
         allocator::{Memory, MemoryAddress},
@@ -724,7 +721,7 @@ pub struct Inclusion {
 
 impl Executable for Inclusion {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
-        let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
+        let _left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
         todo!()
     }

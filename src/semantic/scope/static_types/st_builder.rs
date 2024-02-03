@@ -4,7 +4,7 @@ use crate::{
     ast,
     semantic::{
         scope::{
-            chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var,
+            user_type_impl::UserType,
             BuildStaticType, ScopeApi,
         },
         Either, SemanticError, TypeOf,

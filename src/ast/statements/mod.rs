@@ -22,8 +22,7 @@ use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
         scope::{
-            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
-            var_impl::Var, ScopeApi,
+            static_types::StaticType, user_type_impl::UserType, ScopeApi,
         },
         Either, Resolve, SemanticError, TypeOf,
     },

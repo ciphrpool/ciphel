@@ -3,7 +3,7 @@ use std::cell::Ref;
 use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
 
 use super::{
-    chan_impl::Chan, static_types::StaticType, user_type_impl::UserType, var_impl::Var, BuildEvent,
+    static_types::StaticType, user_type_impl::UserType, BuildEvent,
     ScopeApi,
 };
 

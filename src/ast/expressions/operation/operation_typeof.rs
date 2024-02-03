@@ -2,8 +2,8 @@ use std::cell::Ref;
 
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::OperandMerging,
-        user_type_impl::UserType, var_impl::Var, ScopeApi,
+        static_types::StaticType, type_traits::OperandMerging,
+        user_type_impl::UserType, ScopeApi,
     },
     Either, Resolve, SemanticError, TypeOf,
 };
@@ -35,7 +35,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
             Product::Mult {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -44,7 +44,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
             Product::Div {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -53,7 +53,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
             Product::Mod {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -96,7 +96,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
             Shift::Left {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -105,7 +105,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
             Shift::Right {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -170,7 +170,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
             Comparaison::Less {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -179,7 +179,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
             Comparaison::LessEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -188,7 +188,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
             Comparaison::Greater {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -197,7 +197,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
             Comparaison::GreaterEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -217,7 +217,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
             Equation::Equal {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;
@@ -226,7 +226,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
             Equation::NotEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let left_type = left.type_of(&scope)?;
                 let right_type = right.type_of(&scope)?;

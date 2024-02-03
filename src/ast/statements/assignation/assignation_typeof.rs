@@ -5,8 +5,7 @@ use crate::semantic::scope::BuildStaticType;
 use crate::semantic::Either;
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
+        static_types::StaticType, user_type_impl::UserType, ScopeApi,
     },
     Resolve, SemanticError, TypeOf,
 };

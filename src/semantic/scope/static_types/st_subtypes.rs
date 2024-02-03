@@ -1,7 +1,6 @@
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, type_traits::GetSubTypes, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
+        type_traits::GetSubTypes, user_type_impl::UserType,
     },
     Either, SizeOf,
 };

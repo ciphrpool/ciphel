@@ -1,11 +1,10 @@
 use std::cell::Ref;
 
-use nom::combinator::value;
+
 
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, type_traits::OperandMerging, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
+        type_traits::OperandMerging, user_type_impl::UserType, ScopeApi,
     },
     Either, MergeType, SemanticError, TypeOf,
 };

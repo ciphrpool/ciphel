@@ -2,13 +2,13 @@ use std::cell::Ref;
 
 use crate::semantic::{
     scope::{
-        chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
+        user_type_impl::UserType, ScopeApi,
     },
     Either, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType,
     TupleType, VecType,
 };
 

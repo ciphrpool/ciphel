@@ -33,9 +33,9 @@ impl Executable for Access {
                     Ok(())
                 }
             },
-            Access::Runtime { size } => {
-                let address = OpPrimitive::get_num8::<u64>(memory)?;
-                let address = {
+            Access::Runtime { size: _ } => {
+                let _address = OpPrimitive::get_num8::<u64>(memory)?;
+                let _address = {
                     todo!("Convert u64 to memory address by differenting stack pointer and heap pointer")
                 };
                 // match address {

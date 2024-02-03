@@ -1,6 +1,5 @@
 use std::{
     cell::{Ref, RefCell},
-    collections::{HashMap, HashSet},
     rc::Rc,
 };
 
@@ -21,11 +20,8 @@ use crate::{
 };
 
 use super::{
-    chan_impl::Chan,
-    event_impl::Event,
     static_types::{st_deserialize::extract_u64, StaticType},
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
-    var_impl::Var,
     BuildUserType, ScopeApi,
 };
 
@@ -148,7 +144,7 @@ impl GetSubTypes for UserType {
 
     fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
         match self {
-            UserType::Struct(Struct { id, fields }) => Some(
+            UserType::Struct(Struct { id: _, fields }) => Some(
                 fields
                     .iter()
                     .take_while(|(id, _)| id != field_id)
@@ -469,7 +465,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
     type Output = data::Enum;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let (idx, bytes) = extract_u64(bytes)?;
+        let (idx, _bytes) = extract_u64(bytes)?;
         let value = self
             .values
             .get(idx as usize)

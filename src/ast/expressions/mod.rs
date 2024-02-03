@@ -1,10 +1,10 @@
 use std::{
-    cell::{Cell, Ref, RefCell},
+    cell::{Ref, RefCell},
     rc::Rc,
 };
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
-use nom_supreme::parser_ext::Value;
+
 
 use crate::{
     ast::{
@@ -17,8 +17,7 @@ use crate::{
     },
     semantic::{
         scope::{
-            chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
-            var_impl::Var, ScopeApi,
+            static_types::StaticType, user_type_impl::UserType, ScopeApi,
         },
         Either, Resolve, SemanticError, TypeOf,
     },

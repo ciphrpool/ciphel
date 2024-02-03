@@ -118,7 +118,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let (length, rest) = extract_u64(bytes)?;
         let (capacity, rest) = extract_u64(rest)?;
-        let mut rest = rest;
+        let rest = rest;
 
         let size = self.0.size_of();
         let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = rest

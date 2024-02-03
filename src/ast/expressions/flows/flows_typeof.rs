@@ -4,8 +4,8 @@ use crate::{
     ast::expressions::data::{VarID, Variable},
     semantic::{
         scope::{
-            chan_impl::Chan, event_impl::Event, static_types::StaticType, type_traits::GetSubTypes,
-            user_type_impl::UserType, var_impl::Var, ScopeApi,
+            static_types::StaticType, type_traits::GetSubTypes,
+            user_type_impl::UserType, ScopeApi,
         },
         Either, MergeType, Resolve, SemanticError, TypeOf,
     },
