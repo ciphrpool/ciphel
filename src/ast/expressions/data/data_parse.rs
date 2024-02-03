@@ -29,8 +29,9 @@ use crate::{
 };
 use nom::{
     branch::alt,
+    bytes::complete::take_while_m_n,
     character::complete::digit1,
-    combinator::{map, opt, value},
+    combinator::{map, opt, peek, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
@@ -76,26 +77,32 @@ impl VarID {
 impl<InnerScope: ScopeApi> NumAccess<InnerScope> {
     fn parse(input: Span) -> PResult<Variable<InnerScope>> {
         let (remainder, var) = VarID::parse(input)?;
-        let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
-        if let Some(_) = index {
-            let (remainder, num) = digit1(remainder)?;
+        let (_, peeked_result) = opt(peek(preceded(
+            wst(lexem::DOT),
+            take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
+        )))(remainder)?;
 
-            let index = num.parse::<usize>();
-            if index.is_err() {
-                return Err(nom::Err::Error(ErrorTree::Base {
-                    location: num,
-                    kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
-                }));
+        if let Some(_) = peeked_result {
+            let (remainder, (_, num)) = tuple((wst(lexem::DOT), digit1))(remainder)?;
+
+            match num.parse::<usize>() {
+                Ok(index) => {
+                    return Ok((
+                        remainder,
+                        Variable::NumAccess(NumAccess {
+                            var: Box::new(var),
+                            index,
+                            metadata: Metadata::default(),
+                        }),
+                    ));
+                }
+                Err(_) => {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: remainder,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
             }
-            let index = index.unwrap();
-            return Ok((
-                remainder,
-                Variable::NumAccess(NumAccess {
-                    var: Box::new(var),
-                    index,
-                    metadata: Metadata::default(),
-                }),
-            ));
         } else {
             Ok((remainder, var))
         }

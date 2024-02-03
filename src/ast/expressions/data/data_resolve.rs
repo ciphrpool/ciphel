@@ -1167,7 +1167,9 @@ mod tests {
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             variable_type
         );
-
+    }
+    #[test]
+    fn valid_variable_array() {
         let variable = Variable::parse("x[10]".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
@@ -1186,7 +1188,9 @@ mod tests {
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
         assert!(res.is_ok());
-
+    }
+    #[test]
+    fn valid_variable_array_complex() {
         let variable = Variable::parse("x[10 + 10]".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
@@ -1205,7 +1209,9 @@ mod tests {
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
         assert!(res.is_ok());
-
+    }
+    #[test]
+    fn robustness_variable_array() {
         let variable = Variable::parse("x[\"Test\"]".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
@@ -1227,7 +1233,9 @@ mod tests {
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
         assert!(res.is_err());
-
+    }
+    #[test]
+    fn valid_variable_tuple() {
         let variable = Variable::parse("x.0".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
@@ -1259,7 +1267,9 @@ mod tests {
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             variable_type
         );
-
+    }
+    #[test]
+    fn valid_variable_struct() {
         let variable = Variable::parse("point.x".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
