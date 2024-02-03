@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::expressions::{
-        data::{Number, Primitive, Tuple, Vector},
+        data::{Data, Number, Primitive, Slice, StringData, Tuple, Vector},
         Atomic, Expression,
     },
     semantic::{
@@ -12,7 +12,38 @@ use crate::{
     vm::vm::{DeserializeFrom, RuntimeError},
 };
 
-use super::{NumberType, PrimitiveType, TupleType, VecType};
+use super::{NumberType, PrimitiveType, SliceType, StringType, TupleType, VecType};
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
+    type Output = Data<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        match self {
+            StaticType::Primitive(value) => {
+                Ok(Data::Primitive(<PrimitiveType as DeserializeFrom<
+                    Scope,
+                >>::deserialize_from(
+                    value, bytes
+                )?))
+            }
+            StaticType::Slice(value) => Ok(Data::Slice(value.deserialize_from(bytes)?)),
+            StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
+            StaticType::Fn(_value) => unimplemented!(),
+            StaticType::Chan(_value) => unimplemented!(),
+            StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
+            StaticType::Unit => Ok(Data::Unit),
+            StaticType::Any => Err(RuntimeError::Deserialization),
+            StaticType::Error => Err(RuntimeError::Deserialization),
+            StaticType::Address(_value) => todo!(),
+            StaticType::Map(_value) => unimplemented!(),
+            StaticType::String(value) => {
+                Ok(Data::String(
+                    <StringType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
+                ))
+            }
+        }
+    }
+}
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for NumberType {
     type Output = Number;
@@ -125,7 +156,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
             .chunks(size)
             .enumerate()
             .map(|(idx, bytes)| {
-                if idx as u64 > length {
+                if idx as u64 >= length {
                     Ok(None)
                 } else {
                     <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
@@ -156,6 +187,29 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
     }
 }
 
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
+    type Output = StringData;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let (length, rest) = extract_u64(bytes)?;
+        let (capacity, rest) = extract_u64(rest)?;
+        let rest = rest;
+
+        let str_slice = std::str::from_utf8(&rest[0..length as usize])
+            .map_err(|_| RuntimeError::Deserialization)?;
+
+        Ok(StringData {
+            value: str_slice.to_string(),
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::Static(Rc::new(StaticType::String(self.clone())))),
+                })),
+            },
+        })
+    }
+}
+
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
     type Output = Tuple<Scope>;
 
@@ -181,6 +235,44 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
                 info: Rc::new(RefCell::new(Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::Tuple(self.clone())))),
+                })),
+            },
+        })
+    }
+}
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
+    type Output = Slice<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = bytes
+            .chunks(self.item_type.size_of())
+            .enumerate()
+            .map(|(idx, bytes)| {
+                if idx >= self.size {
+                    Ok(None)
+                } else {
+                    <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
+                        &self.item_type,
+                        bytes,
+                    )
+                    .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
+                }
+            })
+            .collect();
+        if !array.iter().all(|e| e.is_ok()) {
+            return Err(RuntimeError::Deserialization);
+        }
+        Ok(Slice {
+            value: array
+                .into_iter()
+                .take_while(|e| e.clone().ok().flatten().is_some())
+                .map(|e| e.ok().flatten().unwrap())
+                .collect(),
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::Static(Rc::new(StaticType::Slice(self.clone())))),
                 })),
             },
         })

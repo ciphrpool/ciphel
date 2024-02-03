@@ -521,35 +521,8 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Either<UserType, StaticType> {
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Primitive(value) => Ok(Data::Primitive(
-                    <static_types::PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-                        value, bytes,
-                    )?,
-                )),
-                StaticType::Slice(_value) => todo!(),
-                StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
-                StaticType::Fn(_value) => unimplemented!(),
-                StaticType::Chan(_value) => unimplemented!(),
-                StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
-                StaticType::Unit => Ok(Data::Unit),
-                StaticType::Any => Err(RuntimeError::Deserialization),
-                StaticType::Error => Err(RuntimeError::Deserialization),
-                StaticType::Address(_value) => todo!(),
-                StaticType::Map(_value) => unimplemented!(),
-                StaticType::String(value) => todo!(),
-            },
-            Either::User(value) => match value.as_ref() {
-                UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),
-                UserType::Enum(value) => {
-                    Ok(Data::Enum(<user_type_impl::Enum as DeserializeFrom<
-                        Scope,
-                    >>::deserialize_from(
-                        value, bytes
-                    )?))
-                }
-                UserType::Union(value) => Ok(Data::Union(value.deserialize_from(bytes)?)),
-            },
+            Either::Static(value) => value.as_ref().deserialize_from(bytes),
+            Either::User(value) => value.as_ref().deserialize_from(bytes),
         }
     }
 }

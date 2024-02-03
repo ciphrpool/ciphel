@@ -93,8 +93,8 @@ pub enum Number {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slice<InnerScope: ScopeApi> {
-    value: MultiData<InnerScope>,
-    metadata: Metadata,
+    pub value: MultiData<InnerScope>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]

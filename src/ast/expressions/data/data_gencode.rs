@@ -703,7 +703,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
 
         let item_size = {
             let Some(item_type) = signature.get_item() else {
@@ -711,9 +710,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
             };
             item_type.size_of()
         };
-
-        let mut offset = offset + bytes.len();
-        borrowed.push(Strip::Serialize(Serialized { data: bytes }));
+        let mut offset = offset;
+        // // Push the size of the slice
+        // let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
+        // offset += bytes.len();
+        // borrowed.push(Strip::Serialize(Serialized { data: bytes }));
 
         drop(borrowed);
         for element in &self.value {
@@ -733,10 +734,52 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
         offset: usize,
     ) -> Result<(), CodeGenerationError> {
         let mut borrowed = instructions.as_ref().borrow_mut();
+        let mut offset = offset;
 
-        let mut bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
-        bytes.extend_from_slice(self.value.as_bytes());
-        borrowed.push(Strip::Serialize(Serialized { data: bytes }));
+        let vec_stack_address = offset;
+        // Alloc and push heap address on stack
+        borrowed.push(Strip::Alloc(Alloc {
+            size: align(self.value.len()) + 16,
+        }));
+        offset += HEAP_ADDRESS_SIZE;
+
+        let len_bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
+        let cap_bytes = (align(self.value.len()) as u64)
+            .to_le_bytes()
+            .as_slice()
+            .to_vec();
+
+        // Start of the Vec data
+        let _data_offset = offset;
+        // Push Length on stack
+        offset += len_bytes.len();
+        borrowed.push(Strip::Serialize(Serialized { data: len_bytes }));
+        // Push Capacity on stack
+        offset += cap_bytes.len();
+        borrowed.push(Strip::Serialize(Serialized { data: cap_bytes }));
+
+        borrowed.push(Strip::Serialize(Serialized {
+            data: self.value.clone().into_bytes(),
+        }));
+
+        drop(borrowed);
+        // Copy data on stack to heap at address
+        let mut borrowed = instructions.as_ref().borrow_mut();
+        // Copy heap address on top of the stack
+        borrowed.push(Strip::Access(Access::Static {
+            address: MemoryAddress::Stack {
+                offset: vec_stack_address,
+            },
+            size: 8,
+        }));
+
+        // Take the address on the top of the stack
+        // and copy the data on the stack in the heap at given address and given offset
+        // ( removing the data from the stack )
+        borrowed.push(Strip::MemCopy(MemCopy::Take {
+            offset: vec_stack_address + 8,
+            size: self.value.len() + 16,
+        }));
 
         Ok(())
     }
@@ -771,7 +814,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
                 let vec_stack_address = offset;
                 // Alloc and push heap address on stack
                 borrowed.push(Strip::Alloc(Alloc {
-                    size: item_size * data.len() + 16,
+                    size: item_size * capacity + 16,
                 }));
                 offset += HEAP_ADDRESS_SIZE;
 
@@ -1064,13 +1107,16 @@ mod tests {
     use super::*;
     use crate::{
         ast::{
-            expressions::{data::Data, Atomic, Expression},
+            expressions::{
+                data::{Data, Number},
+                Atomic, Expression,
+            },
             TryParse,
         },
         semantic::{
             scope::{
                 scope_impl::Scope,
-                static_types::{PrimitiveType, TupleType, VecType},
+                static_types::{PrimitiveType, SliceType, StringType, TupleType, VecType},
                 user_type_impl, ScopeApi,
             },
             Resolve, TypeOf,
@@ -1459,8 +1505,34 @@ mod tests {
     }
 
     #[test]
+    fn valid_slice() {
+        let (expr, memory) = compile_expression!(Slice, "[1,2,3]");
+        let data = clear_stack!(memory);
+        let result: Slice<Scope> = SliceType {
+            size: 3,
+            item_type: Box::new(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+        }
+        .deserialize_from(&data)
+        .expect("Deserialization should have succeeded");
+
+        let result: Vec<Option<u64>> = result
+            .value
+            .iter()
+            .map(|e| match e {
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                    Number::U64(n),
+                )))) => Some(*n),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(result, vec![Some(1), Some(2), Some(3)])
+    }
+
+    #[test]
     fn valid_vector() {
-        let (expr, memory) = compile_expression!(Vector, "vec[1,2,3]");
+        let (expr, memory) = compile_expression!(Vector, "vec[1,2,3,4]");
         let data = clear_stack!(memory);
 
         let arr: [u8; 8] = data.try_into().expect("");
@@ -1468,7 +1540,7 @@ mod tests {
 
         let data = memory
             .heap
-            .read(heap_address as usize, 8 * 3 + 16)
+            .read(heap_address as usize, 8 * 4 + 16)
             .expect("Heap Read should have succeeded");
 
         let result: Vector<Scope> = VecType(Box::new(Either::Static(
@@ -1477,6 +1549,63 @@ mod tests {
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
 
-        dbg!(result);
+        let result: Vec<Option<u64>> = match result {
+            Vector::Init {
+                value,
+                metadata,
+                length,
+                capacity,
+            } => value
+                .iter()
+                .map(|e| match e {
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::U64(n),
+                    )))) => Some(*n),
+                    _ => None,
+                })
+                .collect(),
+            Vector::Def { capacity, metadata } => Vec::default(),
+        };
+        assert_eq!(result, vec![Some(1), Some(2), Some(3), Some(4)])
+    }
+
+    #[test]
+    fn valid_string() {
+        let (expr, memory) = compile_expression!(StringData, "\"Hello World\"");
+        let data = clear_stack!(memory);
+
+        let arr: [u8; 8] = data.try_into().expect("");
+        let heap_address = u64::from_le_bytes(arr);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, align("Hello World".len()) + 16)
+            .expect("Heap Read should have succeeded");
+
+        let result: StringData =
+            <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+                .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello World")
+    }
+
+    #[test]
+    fn valid_string_complex() {
+        let (expr, memory) = compile_expression!(StringData, "\"你好世界\"");
+        let data = clear_stack!(memory);
+
+        let arr: [u8; 8] = data.try_into().expect("");
+        let heap_address = u64::from_le_bytes(arr);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, align("你好世界".len()) + 16)
+            .expect("Heap Read should have succeeded");
+
+        let result: StringData =
+            <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+                .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "你好世界")
     }
 }

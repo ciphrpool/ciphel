@@ -6,7 +6,7 @@ use std::{
 use crate::{
     ast::{
         expressions::{
-            data::{self},
+            data::{self, Data},
             Atomic, Expression,
         },
         statements::definition::{self},
@@ -402,6 +402,21 @@ impl Enum {
         Ok(self.clone())
     }
 }
+
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for UserType {
+    type Output = Data<Scope>;
+
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        match self {
+            UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),
+            UserType::Enum(value) => Ok(Data::Enum(
+                <Enum as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
+            )),
+            UserType::Union(value) => Ok(Data::Union(value.deserialize_from(bytes)?)),
+        }
+    }
+}
+
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
     type Output = data::Struct<Scope>;
 
