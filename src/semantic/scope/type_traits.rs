@@ -5,9 +5,7 @@ use crate::{
     semantic::{Either, SemanticError, TypeOf},
 };
 
-use super::{
-    static_types::StaticType, user_type_impl::UserType, ScopeApi,
-};
+use super::{static_types::StaticType, user_type_impl::UserType, ScopeApi};
 
 pub trait GetSubTypes {
     fn get_nth(&self, _n: &usize) -> Option<Either<UserType, StaticType>> {
@@ -53,6 +51,9 @@ pub trait TypeChecking {
         false
     }
     fn is_indexable(&self) -> bool {
+        false
+    }
+    fn is_dotnum_indexable(&self) -> bool {
         false
     }
     fn is_channel(&self) -> bool {

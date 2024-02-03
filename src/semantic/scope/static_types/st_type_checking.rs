@@ -1,7 +1,5 @@
 use crate::semantic::{
-    scope::{
-        type_traits::TypeChecking, user_type_impl::UserType,
-    },
+    scope::{type_traits::TypeChecking, user_type_impl::UserType},
     Either,
 };
 
@@ -23,9 +21,28 @@ impl TypeChecking for StaticType {
                 <Either<UserType, StaticType> as TypeChecking>::is_iterable(value)
             }
             StaticType::Map(_) => true,
+            StaticType::String(_) => true,
         }
     }
     fn is_indexable(&self) -> bool {
+        match self {
+            StaticType::Primitive(_) => false,
+            StaticType::Slice(_) => true,
+            StaticType::Vec(_) => true,
+            StaticType::Fn(_) => false,
+            StaticType::Chan(_) => false,
+            StaticType::Tuple(_) => false,
+            StaticType::Unit => false,
+            StaticType::Any => false,
+            StaticType::Error => false,
+            StaticType::Address(AddrType(value)) => {
+                <Either<UserType, StaticType> as TypeChecking>::is_iterable(value)
+            }
+            StaticType::Map(_) => false,
+            StaticType::String(_) => true,
+        }
+    }
+    fn is_dotnum_indexable(&self) -> bool {
         match self {
             StaticType::Primitive(_) => false,
             StaticType::Slice(_) => false,
@@ -37,9 +54,10 @@ impl TypeChecking for StaticType {
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as TypeChecking>::is_indexable(value)
+                <Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(value)
             }
             StaticType::Map(_) => false,
+            StaticType::String(_) => false,
         }
     }
     fn is_channel(&self) -> bool {

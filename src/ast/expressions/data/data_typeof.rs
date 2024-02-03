@@ -2,11 +2,10 @@ use std::cell::Ref;
 
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, NumAccess, Number, Primitive, PtrAccess, Slice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    ListAccess, Map, NumAccess, Number, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
+    Union, VarID, Variable, Vector,
 };
-use crate::ast::types::{NumberType, PrimitiveType};
-
+use crate::ast::types::{NumberType, PrimitiveType, StringType};
 
 use crate::semantic::scope::static_types::StaticType;
 
@@ -45,6 +44,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
             Data::Struct(value) => value.type_of(&scope),
             Data::Union(value) => value.type_of(&scope),
             Data::Enum(value) => value.type_of(&scope),
+            Data::String(value) => value.type_of(&scope),
         }
     }
 }
@@ -149,16 +149,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for String {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized,
-    {
-        StaticType::build_slice(&SliceType::String, scope)
-            .map(|value| (Either::Static(value.into())))
-    }
-}
+// impl<Scope: ScopeApi> TypeOf<Scope> for String {
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+//     where
+//         Scope: ScopeApi,
+//         Self: Sized,
+//     {
+//         StaticType::build_slice(&SliceType::String, scope)
+//             .map(|value| (Either::Static(value.into())))
+//     }
+// }
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
@@ -224,23 +224,28 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        match self {
-            Slice::String { .. } => StaticType::build_slice(&SliceType::String, scope)
-                .map(|value| (Either::Static(value.into()))),
-            Slice::List { value: vec, .. } => {
-                let mut list_type =
-                    Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into());
-                for expr in vec {
-                    let expr_type = expr.type_of(&scope)?;
-                    list_type = list_type.merge(&expr_type, scope)?;
-                }
-
-                StaticType::build_slice_from(&vec.len(), &list_type, scope)
-                    .map(|value| (Either::Static(value.into())))
-            }
+        let mut list_type =
+            Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into());
+        for expr in &self.value {
+            let expr_type = expr.type_of(&scope)?;
+            list_type = list_type.merge(&expr_type, scope)?;
         }
+
+        StaticType::build_slice_from(&self.value.len(), &list_type, scope)
+            .map(|value| (Either::Static(value.into())))
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for StringData {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        StaticType::build_string(&StringType(), scope).map(|value| (Either::Static(value.into())))
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
     where
@@ -427,7 +432,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Map::Init { fields, metadata: _ } => {
+            Map::Init {
+                fields,
+                metadata: _,
+            } => {
                 let Some((key, value)) = fields.first() else {
                     return Err(SemanticError::CantInferType);
                 };
@@ -457,7 +465,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {
             KeyData::Address(value) => value.type_of(&scope),
             KeyData::Enum(value) => value.type_of(&scope),
             KeyData::Primitive(value) => value.type_of(&scope),
-            KeyData::Slice(value) => value.type_of(&scope),
+            KeyData::String(value) => value.type_of(&scope),
         }
     }
 }

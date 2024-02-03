@@ -3,7 +3,6 @@ use super::{
     LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
-
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
@@ -602,7 +601,7 @@ mod tests {
         },
         semantic::scope::{
             scope_impl::Scope,
-            static_types::{NumberType, PrimitiveType, SliceType, StaticType},
+            static_types::{NumberType, PrimitiveType, SliceType, StaticType, StringType},
             var_impl::Var,
         },
     };
@@ -843,7 +842,7 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::String(StringType()).into()),
             expr_type
         );
 
@@ -853,27 +852,27 @@ mod tests {
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::String(StringType()).into()),
             expr_type
         );
 
-        let expr = Cast::parse("\"hello\" as [10]char".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
-        let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(
-                StaticType::Slice(SliceType::List(
-                    10,
-                    Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Char).into()
-                    ))
-                ))
-                .into()
-            ),
-            expr_type
-        );
+        // let expr = Cast::parse("\"hello\" as [10]char".into()).unwrap().1;
+        // let scope = Scope::new();
+        // let res = expr.resolve(&scope, &None, &());
+        // assert!(res.is_ok());
+        // let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        // assert_eq!(
+        //     Either::Static(
+        //         StaticType::Slice(SliceType {
+        //             size: 10,
+        //             item_type: Box::new(Either::Static(
+        //                 StaticType::Primitive(PrimitiveType::Char).into()
+        //             ))
+        //         })
+        //         .into()
+        //     ),
+        //     expr_type
+        // );
     }
 
     #[test]

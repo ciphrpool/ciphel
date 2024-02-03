@@ -5,10 +5,7 @@ use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::Either;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
 use crate::vm::platform::api::PlatformApi;
@@ -237,7 +234,7 @@ mod tests {
         ast::TryParse,
         semantic::scope::{
             scope_impl,
-            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType},
+            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },
@@ -591,7 +588,7 @@ mod tests {
                         Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                         ),
-                        Either::Static(StaticType::Slice(SliceType::String).into())
+                        Either::Static(StaticType::String(StringType()).into())
                     ],
                     ret: Box::new(Either::Static(StaticType::Unit.into()))
                 })
@@ -621,7 +618,7 @@ mod tests {
             .find_var(&"text".into())
             .unwrap();
         assert_eq!(
-            Either::Static(StaticType::Slice(SliceType::String).into()),
+            Either::Static(StaticType::String(StringType()).into()),
             text_type.type_sig
         );
     }

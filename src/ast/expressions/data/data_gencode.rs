@@ -30,7 +30,7 @@ use crate::{
 
 use super::{
     Address, Channel, Closure, Data, Enum, FieldAccess, ListAccess, Map, NumAccess, Primitive,
-    PtrAccess, Slice, Struct, Tuple, Union, VarID, Variable, Vector,
+    PtrAccess, Slice, StringData, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
@@ -55,6 +55,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
             Data::Struct(value) => value.gencode(scope, instructions, offset),
             Data::Union(value) => value.gencode(scope, instructions, offset),
             Data::Enum(value) => value.gencode(scope, instructions, offset),
+            Data::String(value) => value.gencode(scope, instructions, offset),
         }
     }
 }
@@ -699,38 +700,44 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
     ) -> Result<(), CodeGenerationError> {
         let mut borrowed = instructions.as_ref().borrow_mut();
 
-        match self {
-            Slice::String { value, .. } => {
-                let mut bytes = (value.len() as u64).to_le_bytes().as_slice().to_vec();
-                bytes.extend_from_slice(value.as_bytes());
-                borrowed.push(Strip::Serialize(Serialized { data: bytes }));
-            }
-            Slice::List {
-                value: data,
-                metadata,
-            } => {
-                let Some(signature) = metadata.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let bytes = (data.len() as u64).to_le_bytes().as_slice().to_vec();
+        let Some(signature) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
 
-                let item_size = {
-                    let Some(item_type) = signature.get_item() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    item_type.size_of()
-                };
+        let item_size = {
+            let Some(item_type) = signature.get_item() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            item_type.size_of()
+        };
 
-                let mut offset = offset + bytes.len();
-                borrowed.push(Strip::Serialize(Serialized { data: bytes }));
+        let mut offset = offset + bytes.len();
+        borrowed.push(Strip::Serialize(Serialized { data: bytes }));
 
-                drop(borrowed);
-                for element in data {
-                    let _ = element.gencode(scope, instructions, offset)?;
-                    offset += item_size;
-                }
-            }
+        drop(borrowed);
+        for element in &self.value {
+            let _ = element.gencode(scope, instructions, offset)?;
+            offset += item_size;
         }
+
+        Ok(())
+    }
+}
+
+impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
+    fn gencode(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        instructions: &Rc<RefCell<Vec<Strip>>>,
+        offset: usize,
+    ) -> Result<(), CodeGenerationError> {
+        let mut borrowed = instructions.as_ref().borrow_mut();
+
+        let mut bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
+        bytes.extend_from_slice(self.value.as_bytes());
+        borrowed.push(Strip::Serialize(Serialized { data: bytes }));
+
         Ok(())
     }
 }

@@ -1,16 +1,14 @@
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
-    VarID, Variable, Vector,
+    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
+    Union, VarID, Variable, Vector,
 };
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::Info;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -43,6 +41,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
             Data::Struct(value) => value.resolve(scope, context, extra),
             Data::Union(value) => value.resolve(scope, context, extra),
             Data::Enum(value) => value.resolve(scope, context, extra),
+            Data::String(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -77,15 +76,16 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 metadata: _,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
                     Err(SemanticError::ExpectedIterable)
                 } else {
-                    let key_type =
-                        <Either<UserType, StaticType> as GetSubTypes>::get_key(&var_type);
-
-                    let _ = index.resolve(scope, &key_type, &())?;
-                    let index_type = index.type_of(&scope.borrow())?;
-                    let _ = key_type.compatible_with(&index_type, &scope.borrow())?;
+                    let _ = index.resolve(
+                        scope,
+                        &Some(Either::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        )),
+                        &(),
+                    )?;
                     Ok(var_type)
                 }
             }
@@ -96,7 +96,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
             }) => {
                 let _ = var.resolve_based(scope, context)?;
                 let var_type = var.type_of(&scope.borrow())?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
+                if !<Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&var_type) {
                     Err(SemanticError::ExpectedIndexable)
                 } else {
                     let Some(fields) =
@@ -208,7 +208,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
-        if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
+        if !<Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&var_type) {
             Err(SemanticError::ExpectedIndexable)
         } else {
             let Some(fields) = <Either<UserType, StaticType> as GetSubTypes>::get_fields(&var_type)
@@ -249,15 +249,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
 
-        if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&var_type)
-            && !<Either<UserType, StaticType> as TypeChecking>::is_map(&var_type)
-            && <Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type)
-        {
-            let key_type = match context {
-                Some(context) => <Either<UserType, StaticType> as GetSubTypes>::get_key(context),
-                None => None,
-            };
-            let _ = self.index.resolve(scope, &key_type, extra)?;
+        if <Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
+            let _ = self.index.resolve(
+                scope,
+                &Some(Either::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                )),
+                extra,
+            )?;
             let index_type = self.index.type_of(&scope.borrow())?;
             if <Either<UserType, StaticType> as TypeChecking>::is_u64(&index_type) {
                 {
@@ -315,56 +314,68 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Slice::String { metadata, .. } => {
-                match context {
-                    Some(context_type) => {
-                        let _ = context_type.compatible_with(self, &scope.borrow())?;
-                    }
-                    None => {}
+        let (param_context, maybe_length) = match context {
+            Some(context) => (
+                <Either<UserType, StaticType> as GetSubTypes>::get_item(context),
+                <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
+            ),
+            None => (None, None),
+        };
+        match maybe_length {
+            Some(length) => {
+                if length != self.value.len() {
+                    return Err(SemanticError::IncompatibleTypes);
                 }
-                {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
             }
-            Slice::List { value, metadata } => {
-                let (param_context, maybe_length) = match context {
-                    Some(context) => (
-                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context),
-                        <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
-                    ),
-                    None => (None, None),
-                };
-                match maybe_length {
-                    Some(length) => {
-                        if length != value.len() {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                    }
-                    None => {}
-                }
-                for expr in value {
-                    let _ = expr.resolve(scope, &param_context, &())?;
-                }
-                {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
+            None => {}
         }
+        for expr in &self.value {
+            let _ = expr.resolve(scope, &param_context, &())?;
+        }
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for StringData {
+    type Output = ();
+    type Context = Option<Either<UserType, StaticType>>;
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+        _extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        match context {
+            Some(context_type) => {
+                let _ = context_type.compatible_with(self, &scope.borrow())?;
+            }
+            None => {}
+        }
+        {
+            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
     type Output = ();
     type Context = Option<Either<UserType, StaticType>>;
@@ -953,7 +964,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
             KeyData::Address(value) => value.resolve(scope, context, extra),
             KeyData::Enum(value) => value.resolve(scope, context, extra),
             KeyData::Primitive(value) => value.resolve(scope, context, extra),
-            KeyData::Slice(value) => value.resolve(scope, context, extra),
+            KeyData::String(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -968,7 +979,7 @@ mod tests {
             scope_impl::Scope,
             static_types::{
                 AddrType, ChanType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-                StaticType, TupleType, VecType,
+                StaticType, StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},
             var_impl::Var,
@@ -1012,8 +1023,8 @@ mod tests {
     }
 
     #[test]
-    fn valid_slice() {
-        let string = Slice::parse(r##""Hello World""##.into()).unwrap().1;
+    fn valid_string() {
+        let string = StringData::parse(r##""Hello World""##.into()).unwrap().1;
 
         let scope = Scope::new();
         let res = string.resolve(&scope, &None, &());
@@ -1021,11 +1032,13 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(Either::Static(StaticType::Slice(SliceType::String).into())),
+            &Some(Either::Static(StaticType::String(StringType()).into())),
             &(),
         );
         assert!(res.is_ok());
-
+    }
+    #[test]
+    fn valid_slice() {
         let slice = Slice::parse("[1,2]".into()).unwrap().1;
 
         let scope = Scope::new();
@@ -1035,12 +1048,12 @@ mod tests {
         let res = slice.resolve(
             &scope,
             &Some(Either::Static(
-                StaticType::Slice(SliceType::List(
-                    2,
-                    Box::new(Either::Static(
+                StaticType::Slice(SliceType {
+                    size: 2,
+                    item_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
-                ))
+                })
                 .into(),
             )),
             &(),
@@ -1049,8 +1062,8 @@ mod tests {
     }
 
     #[test]
-    fn robustness_slice() {
-        let string = Slice::parse(r##""Hello World""##.into()).unwrap().1;
+    fn robustness_string() {
+        let string = StringData::parse(r##""Hello World""##.into()).unwrap().1;
         let scope = Scope::new();
 
         let res = string.resolve(
@@ -1061,18 +1074,21 @@ mod tests {
             &(),
         );
         assert!(res.is_err());
-
+    }
+    #[test]
+    fn robustness_slice() {
         let slice = Slice::parse("[1,2]".into()).unwrap().1;
+        let scope = Scope::new();
 
         let res = slice.resolve(
             &scope,
             &Some(Either::Static(
-                StaticType::Slice(SliceType::List(
-                    2,
-                    Box::new(Either::Static(
+                StaticType::Slice(SliceType {
+                    size: 2,
+                    item_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
-                ))
+                })
                 .into(),
             )),
             &(),
@@ -1084,12 +1100,12 @@ mod tests {
         let res = slice.resolve(
             &scope,
             &Some(Either::Static(
-                StaticType::Slice(SliceType::List(
-                    4,
-                    Box::new(Either::Static(
+                StaticType::Slice(SliceType {
+                    size: 4,
+                    item_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
-                ))
+                })
                 .into(),
             )),
             &(),
@@ -1213,6 +1229,7 @@ mod tests {
     #[test]
     fn robustness_variable_array() {
         let variable = Variable::parse("x[\"Test\"]".into()).unwrap().1;
+        dbg!(&variable);
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1222,7 +1239,7 @@ mod tests {
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::Slice(SliceType::String),
+                        keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),
@@ -1480,7 +1497,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::Map(MapType {
-                    keys_type: KeyType::Slice(SliceType::String),
+                    keys_type: KeyType::String(StringType()),
                     values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                     )),
@@ -1501,7 +1518,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::Map(MapType {
-                    keys_type: KeyType::Slice(SliceType::String),
+                    keys_type: KeyType::String(StringType()),
                     values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),

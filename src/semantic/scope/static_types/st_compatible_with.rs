@@ -1,11 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::{
-    scope::{
-        ScopeApi,
-    },
-    CompatibleWith, Either, SemanticError, TypeOf,
-};
+use crate::semantic::{scope::ScopeApi, CompatibleWith, Either, SemanticError, TypeOf};
 
 use super::StaticType;
 
@@ -37,6 +32,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
             StaticType::Map(value) => value.compatible_with(other, scope),
             StaticType::Any => Ok(()),
             StaticType::Error => Ok(()),
+            StaticType::String(value) => value.compatible_with(other, scope),
         }
     }
 }

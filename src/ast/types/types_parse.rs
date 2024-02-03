@@ -15,8 +15,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, TupleType,
-    Type, Types, VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StringType,
+    TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -30,6 +30,7 @@ impl TryParse for Type {
         alt((
             map(PrimitiveType::parse, |value| Type::Primitive(value)),
             map(SliceType::parse, |value| Type::Slice(value)),
+            map(StringType::parse, |value| Type::String(value)),
             value(Type::Unit, wst(lexem::UUNIT)),
             map(parse_id, |value| Type::UserType(value)),
             map(VecType::parse, |value| Type::Vec(value)),
@@ -87,20 +88,31 @@ impl TryParse for SliceType {
      *
      * @grammar
      * Slice :=
-     *  | string
      *  | [ num ] Type
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            value(SliceType::String, wst(lexem::STRING)),
-            map(
-                pair(
-                    delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
-                    Type::parse,
-                ),
-                |(size, value)| SliceType::List(size as usize, Box::new(value)),
+        map(
+            pair(
+                delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
+                Type::parse,
             ),
-        ))(input)
+            |(size, value)| SliceType {
+                size: size as usize,
+                item_type: Box::new(value),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for StringType {
+    /*
+     * @desc Parse Slice types
+     *
+     * @grammar
+     * String := string
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        value(StringType(), wst(lexem::STRING))(input)
     }
 }
 
@@ -240,7 +252,7 @@ impl TryParse for KeyType {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(PrimitiveType::parse, |value| KeyType::Primitive(value)),
-            map(SliceType::parse, |value| KeyType::Slice(value)),
+            map(StringType::parse, |value| KeyType::String(value)),
             map(AddrType::parse, |value| KeyType::Address(value)),
             map(parse_id, |value| KeyType::EnumID(value)),
         ))(input)
@@ -276,20 +288,23 @@ mod tests {
     }
 
     #[test]
-    fn valid_slice_type() {
-        let res = SliceType::parse("string".into());
+    fn valid_string() {
+        let res = StringType::parse("string".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(SliceType::String, value);
+        assert_eq!(StringType(), value);
+    }
 
+    #[test]
+    fn valid_slice_type() {
         let res = SliceType::parse("[8]u32".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            SliceType::List(
-                8,
-                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U32)))
-            ),
+            SliceType {
+                size: 8,
+                item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U32)))
+            },
             value
         );
 
@@ -297,13 +312,13 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            SliceType::List(
-                8,
-                Box::new(Type::Slice(SliceType::List(
-                    2,
-                    Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I32)))
-                )))
-            ),
+            SliceType {
+                size: 8,
+                item_type: Box::new(Type::Slice(SliceType {
+                    size: 2,
+                    item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I32)))
+                }))
+            },
             value
         );
     }
@@ -314,10 +329,10 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            VecType(Box::new(Type::Slice(SliceType::List(
-                8,
-                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U128)))
-            )))),
+            VecType(Box::new(Type::Slice(SliceType {
+                size: 8,
+                item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U128)))
+            }))),
             value
         );
     }
@@ -342,10 +357,10 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            ChanType(Box::new(Type::Slice(SliceType::List(
-                8,
-                Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I128)))
-            )))),
+            ChanType(Box::new(Type::Slice(SliceType {
+                size: 8,
+                item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I128)))
+            }))),
             value
         );
     }
@@ -370,7 +385,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             MapType {
-                keys_type: KeyType::Slice(SliceType::String),
+                keys_type: KeyType::String(StringType()),
                 values_type: Box::new(Type::Primitive(PrimitiveType::Bool))
             },
             value

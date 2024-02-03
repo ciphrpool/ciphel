@@ -139,6 +139,13 @@ impl TypeChecking for Either<UserType, StaticType> {
         }
     }
 
+    fn is_dotnum_indexable(&self) -> bool {
+        match self {
+            Either::Static(static_type) => static_type.is_dotnum_indexable(),
+            Either::User(_user_type) => false,
+        }
+    }
+
     fn is_addr(&self) -> bool {
         match self {
             Either::Static(static_type) => static_type.is_addr(),
@@ -530,6 +537,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Either<UserType, StaticType> {
                 StaticType::Error => Err(RuntimeError::Deserialization),
                 StaticType::Address(_value) => todo!(),
                 StaticType::Map(_value) => unimplemented!(),
+                StaticType::String(value) => todo!(),
             },
             Either::User(value) => match value.as_ref() {
                 UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),

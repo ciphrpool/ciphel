@@ -18,12 +18,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{
-        scope::{
-            ScopeApi,
-        },
-        Metadata,
-    },
+    semantic::{scope::ScopeApi, Metadata},
     vm::allocator::align,
 };
 use nom::{
@@ -38,14 +33,15 @@ use nom_supreme::error::ErrorTree;
 
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, Struct, Tuple, Union,
-    VarID, Variable, Vector,
+    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
+    Union, VarID, Variable, Vector,
 };
 impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
             map(Slice::parse, |value| Data::Slice(value)),
+            map(StringData::parse, |value| Data::String(value)),
             map(Vector::parse, |value| Data::Vec(value)),
             map(Closure::parse, |value| Data::Closure(value)),
             map(Channel::parse, |value| Data::Chan(value)),
@@ -226,29 +222,38 @@ impl TryParse for Primitive {
 
 impl<Scope: ScopeApi> TryParse for Slice<Scope> {
     /*
-     * @desc Parse List or Static string
+     * @desc Parse List
      *
      * @grammar
-     * Slice := \[ MultData \] | StaticString
+     * Slice := \[ MultData \]
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(
-                    wst(lexem::SQ_BRA_O),
-                    MultiData::parse,
-                    preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
-                ),
-                |value| Slice::List {
-                    value,
-                    metadata: Metadata::default(),
-                },
+        map(
+            delimited(
+                wst(lexem::SQ_BRA_O),
+                MultiData::parse,
+                preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
             ),
-            map(parse_string, |value| Slice::String {
+            |value| Slice {
                 value,
                 metadata: Metadata::default(),
-            }),
-        ))(input)
+            },
+        )(input)
+    }
+}
+
+impl TryParse for StringData {
+    /*
+     * @desc Parse Static string
+     *
+     * @grammar
+     * StringData := StaticString
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(parse_string, |value| StringData {
+            value,
+            metadata: Metadata::default(),
+        })(input)
     }
 }
 
@@ -601,7 +606,7 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
         alt((
             map(Address::parse, |value| KeyData::Address(value)),
             map(Enum::parse, |value| KeyData::Enum(value)),
-            map(Slice::parse, |value| KeyData::Slice(value)),
+            map(StringData::parse, |value| KeyData::String(value)),
             map(Primitive::parse, |value| KeyData::Primitive(value)),
         ))(input)
     }
@@ -663,7 +668,7 @@ mod tests {
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Slice::List {
+            Slice {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::U64(2)
@@ -679,12 +684,15 @@ mod tests {
             },
             value
         );
+    }
 
-        let res = Slice::<MockScope>::parse("\"Hello World\"".into());
+    #[test]
+    fn valid_string() {
+        let res = StringData::parse("\"Hello World\"".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
         assert_eq!(
-            Slice::String {
+            StringData {
                 value: "Hello World".to_string(),
                 metadata: Metadata::default()
             },
@@ -872,7 +880,7 @@ mod tests {
             Map::Init {
                 fields: vec![
                     (
-                        KeyData::Slice(Slice::String {
+                        KeyData::String(StringData {
                             value: "x".into(),
                             metadata: Metadata::default(),
                         }),
@@ -881,7 +889,7 @@ mod tests {
                         ))))
                     ),
                     (
-                        KeyData::Slice(Slice::String {
+                        KeyData::String(StringData {
                             value: "y".into(),
                             metadata: Metadata::default(),
                         }),

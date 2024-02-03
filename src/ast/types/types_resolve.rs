@@ -1,13 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, TupleType, Type, Types,
-    VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StringType, TupleType,
+    Type, Types, VecType,
 };
 use crate::semantic::{
-    scope::{
-        type_traits::IsEnum, ScopeApi,
-    },
+    scope::{type_traits::IsEnum, ScopeApi},
     Resolve, SemanticError,
 };
 
@@ -39,6 +37,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
             Type::Unit => Ok(()),
             Type::Address(value) => value.resolve(scope, context, extra),
             Type::Map(value) => value.resolve(scope, context, extra),
+            Type::String(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -73,10 +72,24 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     where
         Self: Sized,
     {
-        match self {
-            SliceType::String => Ok(()),
-            SliceType::List(_, subtype) => subtype.resolve(scope, context, extra),
-        }
+        self.item_type.resolve(scope, context, extra)
+    }
+}
+impl<Scope: ScopeApi> Resolve<Scope> for StringType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        Ok(())
     }
 }
 
@@ -230,7 +243,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
         match self {
             KeyType::Primitive(value) => value.resolve(scope, context, extra),
             KeyType::Address(value) => value.resolve(scope, context, extra),
-            KeyType::Slice(value) => value.resolve(scope, context, extra),
+            KeyType::String(value) => Ok(()),
             KeyType::EnumID(value) => {
                 let borrowed_scope = scope.borrow();
                 let enum_type = borrowed_scope.find_type(value)?;

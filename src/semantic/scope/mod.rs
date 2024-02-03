@@ -8,10 +8,7 @@ use std::{
 use crate::ast::{statements::definition, types, utils::strings::ID};
 
 use self::{
-    chan_impl::Chan,
-    event_impl::Event,
-    static_types::StaticType,
-    user_type_impl::UserType,
+    chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
     var_impl::Var,
 };
 
@@ -27,6 +24,11 @@ pub mod var_impl;
 pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_primitive(
         type_sig: &types::PrimitiveType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError>;
+
+    fn build_string(
+        type_sig: &types::StringType,
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
 

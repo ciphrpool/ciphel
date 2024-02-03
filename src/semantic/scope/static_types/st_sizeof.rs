@@ -1,7 +1,8 @@
 use crate::semantic::SizeOf;
 
 use super::{
-    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StaticType, TupleType, VecType,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StaticType, StringType,
+    TupleType, VecType,
 };
 
 impl SizeOf for StaticType {
@@ -18,6 +19,7 @@ impl SizeOf for StaticType {
             StaticType::Error => todo!(),
             StaticType::Address(value) => value.size_of(),
             StaticType::Map(value) => value.size_of(),
+            StaticType::String(value) => value.size_of(),
         }
     }
 }
@@ -46,13 +48,15 @@ impl SizeOf for PrimitiveType {
 
 impl SizeOf for SliceType {
     fn size_of(&self) -> usize {
-        match self {
-            SliceType::String => 8,
-            SliceType::List(size, subtype) => size * subtype.size_of(),
-        }
+        self.size * self.item_type.size_of()
     }
 }
 
+impl SizeOf for StringType {
+    fn size_of(&self) -> usize {
+        8
+    }
+}
 impl SizeOf for VecType {
     fn size_of(&self) -> usize {
         8

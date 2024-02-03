@@ -10,6 +10,7 @@ type SubType = Box<Type>;
 pub enum Type {
     Primitive(PrimitiveType),
     Slice(SliceType),
+    String(StringType),
     UserType(ID),
     Vec(VecType),
     Fn(FnType),
@@ -42,10 +43,14 @@ pub enum NumberType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SliceType {
-    String,
-    List(usize, SubType),
+pub struct SliceType {
+    pub size: usize,
+    pub item_type: SubType,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringType();
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct VecType(pub SubType);
 
@@ -75,6 +80,6 @@ pub struct MapType {
 pub enum KeyType {
     Primitive(PrimitiveType),
     Address(AddrType),
-    Slice(SliceType),
+    String(StringType),
     EnumID(ID),
 }

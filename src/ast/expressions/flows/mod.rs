@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    data::{ExprScope, Primitive, Variable},
+    data::{ExprScope, Primitive, StringData, Variable},
     Expression,
 };
 
@@ -38,7 +38,7 @@ pub struct MatchExpr<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Primitive(Primitive),
-    String(String),
+    String(StringData),
     Enum {
         typename: ID,
         value: ID,

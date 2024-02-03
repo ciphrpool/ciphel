@@ -8,7 +8,7 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{ExprScope, Primitive, Variable},
+            data::{ExprScope, Primitive, StringData, Variable},
             Expression,
         },
         utils::{
@@ -18,12 +18,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{
-        scope::{
-            ScopeApi,
-        },
-        Metadata,
-    },
+    semantic::{scope::ScopeApi, Metadata},
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
@@ -89,7 +84,7 @@ impl TryParse for Pattern {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Pattern::Primitive(value)),
-            map(parse_string, |value| Pattern::String(value)),
+            map(StringData::parse, |value| Pattern::String(value)),
             map(
                 pair(
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
@@ -300,7 +295,7 @@ mod tests {
             r#"
         match x { 
             case 10 => true,
-            case "Hello world" => true,
+            case "Hello World" => true,
             case Geo::Point => true,
             case Geo::Point{y} => true,
             case Point{y} => true,
@@ -335,7 +330,10 @@ mod tests {
                         })
                     },
                     PatternExpr {
-                        pattern: Pattern::String("Hello world".into()),
+                        pattern: Pattern::String(StringData {
+                            value: "Hello World".to_string(),
+                            metadata: Metadata::default()
+                        }),
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![

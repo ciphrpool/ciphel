@@ -3,9 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     ast::{self, utils::strings::ID},
     semantic::{
-        scope::{
-            var_impl::Var, ScopeApi,
-        },
+        scope::{var_impl::Var, ScopeApi},
         Metadata, SemanticError,
     },
 };
@@ -21,6 +19,7 @@ pub mod data_typeof;
 pub enum Data<InnerScope: ScopeApi> {
     Primitive(Primitive),
     Slice(Slice<InnerScope>),
+    String(StringData),
     Vec(Vector<InnerScope>),
     Closure(Closure<InnerScope>),
     Chan(Channel<InnerScope>),
@@ -93,17 +92,16 @@ pub enum Number {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Slice<InnerScope: ScopeApi> {
-    String {
-        value: String,
-        metadata: Metadata,
-    },
-    List {
-        value: MultiData<InnerScope>,
-        metadata: Metadata,
-    },
+pub struct Slice<InnerScope: ScopeApi> {
+    value: MultiData<InnerScope>,
+    metadata: Metadata,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringData {
+    pub value: String,
+    pub metadata: Metadata,
+}
 #[derive(Debug, Clone, PartialEq)]
 pub enum Vector<InnerScope: ScopeApi> {
     Init {
@@ -223,7 +221,7 @@ pub enum Map<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeyData<InnerScope: ScopeApi> {
     Primitive(Primitive),
-    Slice(Slice<InnerScope>),
+    String(StringData),
     Address(Address<InnerScope>),
     Enum(Enum),
 }

@@ -5,10 +5,7 @@ use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::Info;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::vm::platform::api::PlatformApi;
@@ -361,7 +358,7 @@ mod tests {
             scope_impl::Scope,
             static_types::{
                 AddrType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-                StaticType, VecType,
+                StaticType, StringType, VecType,
             },
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
@@ -523,7 +520,7 @@ mod tests {
                 captured: RefCell::new(false),
                 address: None,
                 id: "x".into(),
-                type_sig: Either::Static(StaticType::Slice(SliceType::String).into()),
+                type_sig: Either::Static(StaticType::String(StringType()).into()),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -918,7 +915,7 @@ mod tests {
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::Slice(SliceType::String),
+                        keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),
@@ -963,7 +960,7 @@ mod tests {
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::Slice(SliceType::String),
+                        keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),
@@ -1127,7 +1124,7 @@ mod tests {
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::Slice(SliceType::String),
+                        keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),
@@ -1172,7 +1169,7 @@ mod tests {
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::Slice(SliceType::String),
+                        keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                         )),

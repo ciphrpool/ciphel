@@ -1,15 +1,11 @@
 use std::cell::Ref;
 
-
-
 use crate::semantic::{
-    scope::{
-        type_traits::OperandMerging, user_type_impl::UserType, ScopeApi,
-    },
+    scope::{type_traits::OperandMerging, user_type_impl::UserType, ScopeApi},
     Either, MergeType, SemanticError, TypeOf,
 };
 
-use super::{PrimitiveType, SliceType, StaticType, VecType};
+use super::{PrimitiveType, SliceType, StaticType, StringType, VecType};
 
 impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
     fn can_substract(&self) -> Result<(), SemanticError> {
@@ -145,7 +141,7 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
             },
-            StaticType::Slice(SliceType::String) => Ok(()),
+            StaticType::String(_) => Ok(()),
             StaticType::Error => Ok(()),
             StaticType::Address(value) => {
                 <Either<UserType, StaticType> as OperandMerging<Scope>>::can_add(&value.0)
@@ -185,9 +181,9 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Slice(SliceType::String) => match other_type.as_ref() {
-                StaticType::Slice(SliceType::String) => {
-                    Ok(Either::Static(StaticType::Slice(SliceType::String).into()))
+            StaticType::String(_) => match other_type.as_ref() {
+                StaticType::String(_) => {
+                    Ok(Either::Static(StaticType::String(StringType()).into()))
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
@@ -424,8 +420,8 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                     Err(SemanticError::IncompatibleOperands)
                 }
                 StaticType::Primitive(to) => Ok(Either::Static(Self::Primitive(to.clone()).into())),
-                StaticType::Slice(SliceType::String) => {
-                    Ok(Either::Static(Self::Slice(SliceType::String).into()))
+                StaticType::String(_) => {
+                    Ok(Either::Static(StaticType::String(StringType()).into()))
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
@@ -437,19 +433,21 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
             },
 
             // SLICE
-            StaticType::Slice(SliceType::String) => match other_type.as_ref() {
-                Self::Slice(SliceType::String) => {
-                    Ok(Either::Static(Self::Slice(SliceType::String).into()))
-                }
-                StaticType::Slice(SliceType::List(size, subtype)) => {
-                    let casted = subtype.as_ref().cast(
-                        &Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
-                        scope,
-                    )?;
-                    Ok(Either::Static(
-                        StaticType::Slice(SliceType::List(*size, Box::new(casted))).into(),
-                    ))
-                }
+            StaticType::String(_) => match other_type.as_ref() {
+                Self::String(_) => Ok(Either::Static(Self::String(StringType()).into())),
+                // StaticType::Slice(SliceType { size, item_type }) => {
+                //     let casted = item_type.as_ref().cast(
+                //         &Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+                //         scope,
+                //     )?;
+                //     Ok(Either::Static(
+                //         StaticType::Slice(SliceType {
+                //             size: *size,
+                //             item_type: Box::new(casted),
+                //         })
+                //         .into(),
+                //     ))
+                // }
                 Self::Vec(other_subtype) => {
                     let casted = Either::<UserType, StaticType>::Static(
                         StaticType::Primitive(PrimitiveType::Char).into(),
@@ -461,25 +459,32 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Slice(SliceType::List(size, subtype)) => match other_type.as_ref() {
-                StaticType::Slice(SliceType::List(other_size, other_subtype)) => {
+            StaticType::Slice(SliceType { size, item_type }) => match other_type.as_ref() {
+                StaticType::Slice(SliceType {
+                    size: other_size,
+                    item_type: other_subtype,
+                }) => {
                     if size < &other_size {
                         return Err(SemanticError::IncompatibleOperands);
                     }
-                    let casted = subtype.as_ref().cast(other_subtype.as_ref(), scope)?;
+                    let casted = item_type.as_ref().cast(other_subtype.as_ref(), scope)?;
                     Ok(Either::Static(
-                        StaticType::Slice(SliceType::List(*other_size, Box::new(casted))).into(),
+                        StaticType::Slice(SliceType {
+                            size: *other_size,
+                            item_type: Box::new(casted),
+                        })
+                        .into(),
                     ))
                 }
-                StaticType::Slice(SliceType::String) => {
-                    let _ = subtype.as_ref().cast(
+                StaticType::String(_) => {
+                    let _ = item_type.as_ref().cast(
                         &Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
                         scope,
                     )?;
-                    Ok(Either::Static(StaticType::Slice(SliceType::String).into()))
+                    Ok(Either::Static(StaticType::String(StringType()).into()))
                 }
                 StaticType::Vec(other_subtype) => {
-                    let casted = subtype.cast(other_subtype.0.as_ref(), scope)?;
+                    let casted = item_type.cast(other_subtype.0.as_ref(), scope)?;
                     Ok(Either::Static(
                         StaticType::Vec(VecType(Box::new(casted))).into(),
                     ))
@@ -556,6 +561,7 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
     fn can_include_right(&self) -> Result<(), SemanticError> {
         match self {
             StaticType::Slice(_) => Ok(()),
+            StaticType::String(_) => Ok(()),
             StaticType::Map(_) => Ok(()),
             StaticType::Vec(_) => Ok(()),
             StaticType::Error => Ok(()),

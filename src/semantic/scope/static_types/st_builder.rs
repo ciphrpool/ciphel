@@ -3,10 +3,7 @@ use std::cell::Ref;
 use crate::{
     ast,
     semantic::{
-        scope::{
-            user_type_impl::UserType,
-            BuildStaticType, ScopeApi,
-        },
+        scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
         Either, SemanticError, TypeOf,
     },
 };
@@ -58,17 +55,22 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         }))
     }
 
+    fn build_string(
+        type_sig: &ast::types::StringType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        Ok(Self::String(super::StringType()))
+    }
+
     fn build_slice(
         type_sig: &ast::types::SliceType,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        match type_sig {
-            ast::types::SliceType::String => Ok(Self::Slice(SliceType::String)),
-            ast::types::SliceType::List(size, inner) => {
-                let inner = inner.type_of(&scope)?;
-                Ok(Self::Slice(SliceType::List(size.clone(), Box::new(inner))))
-            }
-        }
+        let inner = type_sig.item_type.type_of(&scope)?;
+        Ok(Self::Slice(SliceType {
+            size: type_sig.size.clone(),
+            item_type: Box::new(inner),
+        }))
     }
 
     fn build_slice_from(
@@ -76,10 +78,10 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         type_sig: &Either<UserType, StaticType>,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        Ok(Self::Slice(SliceType::List(
-            size.clone(),
-            Box::new(type_sig.clone()),
-        )))
+        Ok(Self::Slice(SliceType {
+            size: size.clone(),
+            item_type: Box::new(type_sig.clone()),
+        }))
     }
 
     fn build_tuple(
@@ -241,13 +243,7 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
                     let subtype = value.0.type_of(&scope)?;
                     KeyType::Address(AddrType(Box::new(subtype)))
                 }
-                ast::types::KeyType::Slice(value) => match value {
-                    ast::types::SliceType::String => KeyType::Slice(SliceType::String),
-                    ast::types::SliceType::List(size, inner) => {
-                        let inner = inner.type_of(&scope)?;
-                        KeyType::Slice(SliceType::List(size.clone(), Box::new(inner)))
-                    }
-                },
+                ast::types::KeyType::String(_) => KeyType::String(super::StringType()),
                 ast::types::KeyType::EnumID(value) => {
                     let binding = scope.find_type(&value)?;
                     let UserType::Enum(enum_type) = binding.as_ref() else {
@@ -274,7 +270,7 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
             match key {
                 Either::Static(value) => match value.as_ref() {
                     StaticType::Primitive(value) => KeyType::Primitive(value.clone()),
-                    StaticType::Slice(value) => KeyType::Slice(value.clone()),
+                    StaticType::String(_) => KeyType::String(super::StringType()),
                     StaticType::Address(value) => KeyType::Address(value.clone()),
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },

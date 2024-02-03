@@ -95,6 +95,9 @@ impl TypeChecking for Var {
     fn is_indexable(&self) -> bool {
         <Either<UserType, StaticType> as TypeChecking>::is_indexable(&self.type_sig)
     }
+    fn is_dotnum_indexable(&self) -> bool {
+        <Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&self.type_sig)
+    }
     fn is_map(&self) -> bool {
         <Either<UserType, StaticType> as TypeChecking>::is_map(&self.type_sig)
     }

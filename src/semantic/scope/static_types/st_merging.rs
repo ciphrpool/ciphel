@@ -1,14 +1,12 @@
 use std::cell::Ref;
 
 use crate::semantic::{
-    scope::{
-        user_type_impl::UserType, ScopeApi,
-    },
+    scope::{user_type_impl::UserType, ScopeApi},
     Either, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType,
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, StringType,
     TupleType, VecType,
 };
 
@@ -46,6 +44,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
+            StaticType::String(value) => value.merge(other, scope),
         }
     }
 }
@@ -118,28 +117,39 @@ impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
         let StaticType::Slice(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        match self {
-            SliceType::String => match other_type {
-                SliceType::String => {
-                    Ok(Either::Static(StaticType::Slice(SliceType::String).into()))
-                }
-                SliceType::List(_, _) => Err(SemanticError::IncompatibleTypes),
-            },
-            SliceType::List(size, subtype) => match other_type {
-                SliceType::String => Err(SemanticError::IncompatibleTypes),
-                SliceType::List(other_size, other_subtype) => {
-                    if size != other_size {
-                        Err(SemanticError::IncompatibleTypes)
-                    } else {
-                        let merged = subtype.merge(other_subtype.as_ref(), scope)?;
-                        Ok(Either::Static(
-                            StaticType::Slice(SliceType::List(size.clone(), Box::new(merged)))
-                                .into(),
-                        ))
-                    }
-                }
-            },
+
+        if self.size != other_type.size {
+            Err(SemanticError::IncompatibleTypes)
+        } else {
+            let merged = self.item_type.merge(other_type.item_type.as_ref(), scope)?;
+            Ok(Either::Static(
+                StaticType::Slice(SliceType {
+                    size: self.size.clone(),
+                    item_type: Box::new(merged),
+                })
+                .into(),
+            ))
         }
+    }
+}
+
+impl<Scope: ScopeApi> MergeType<Scope> for StringType {
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &Ref<Scope>,
+    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let Either::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::String(other_type) = other_type.as_ref() else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        Ok(Either::Static(StaticType::String(StringType()).into()))
     }
 }
 
@@ -345,20 +355,7 @@ impl KeyType {
                 let merged = value.0.merge(other_value.0.as_ref(), scope)?;
                 Ok(KeyType::Address(AddrType(Box::new(merged))))
             }
-            (KeyType::Slice(value), KeyType::Slice(other_value)) => match (value, other_value) {
-                (SliceType::String, SliceType::String) => Ok(KeyType::Slice(SliceType::String)),
-                (SliceType::List(size, subtype), SliceType::List(other_size, other_subtype)) => {
-                    if size != other_size {
-                        return Err(SemanticError::IncompatibleTypes);
-                    }
-                    let merged = subtype.merge(other_subtype.as_ref(), scope)?;
-                    Ok(KeyType::Slice(SliceType::List(
-                        size.clone(),
-                        Box::new(merged),
-                    )))
-                }
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
+            (KeyType::String(_), KeyType::String(_)) => Ok(KeyType::String(StringType())),
             (KeyType::Enum(value), KeyType::Enum(other_value)) => {
                 let merged = value.merge(other_value)?;
                 Ok(KeyType::Enum(merged))
