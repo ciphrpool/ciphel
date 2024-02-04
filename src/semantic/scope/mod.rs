@@ -164,6 +164,7 @@ where
 
     fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
     fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>>;
+    fn inner_vars(&self) -> &Vec<Rc<Var>>;
     fn find_chan(&self) -> Result<&Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;
     fn find_event(&self) -> Result<&Event, SemanticError>;

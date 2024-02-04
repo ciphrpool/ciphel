@@ -3,10 +3,7 @@ use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::Either;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -142,6 +139,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::TryParse,
         semantic::scope::{
@@ -170,7 +169,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -195,7 +194,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -223,7 +222,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -248,7 +247,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -260,7 +259,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "y".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -288,7 +287,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -316,7 +315,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -344,7 +343,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

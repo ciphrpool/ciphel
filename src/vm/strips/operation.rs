@@ -1,13 +1,10 @@
-
-
 use nom::AsBytes;
 use num_traits::{FromBytes, ToBytes, Zero};
 
 use crate::{
     semantic::{
-        scope::{
-            static_types::{NumberType, PrimitiveType},
-        }, SizeOf,
+        scope::static_types::{NumberType, PrimitiveType},
+        SizeOf,
     },
     vm::{
         allocator::{Memory, MemoryAddress},
@@ -168,18 +165,18 @@ impl Executable for OperationKind {
 
 #[derive(Debug, Clone)]
 pub struct Mult {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct Division {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct Mod {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for Mult {
@@ -271,8 +268,8 @@ pub struct Addition {
 
 #[derive(Debug, Clone)]
 pub struct Substraction {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for Addition {
@@ -335,13 +332,13 @@ impl Executable for Substraction {
 
 #[derive(Debug, Clone)]
 pub struct ShiftLeft {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct ShiftRight {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for ShiftLeft {
@@ -368,8 +365,8 @@ impl Executable for ShiftRight {
 
 #[derive(Debug, Clone)]
 pub struct BitwiseAnd {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for BitwiseAnd {
@@ -399,8 +396,8 @@ impl Executable for BitwiseAnd {
 
 #[derive(Debug, Clone)]
 pub struct BitwiseXOR {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for BitwiseXOR {
@@ -430,8 +427,8 @@ impl Executable for BitwiseXOR {
 
 #[derive(Debug, Clone)]
 pub struct BitwiseOR {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for BitwiseOR {
@@ -461,23 +458,23 @@ impl Executable for BitwiseOR {
 
 #[derive(Debug, Clone)]
 pub struct Less {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct LessEqual {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct Greater {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 #[derive(Debug, Clone)]
 pub struct GreaterEqual {
-    left: OpPrimitive,
-    right: OpPrimitive,
+    pub left: OpPrimitive,
+    pub right: OpPrimitive,
 }
 
 impl Executable for Less {

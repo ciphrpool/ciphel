@@ -230,6 +230,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
 #[cfg(test)]
 mod tests {
 
+    use std::cell::Cell;
+
     use crate::{
         ast::TryParse,
         semantic::scope::{
@@ -684,7 +686,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -708,7 +710,7 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
@@ -738,7 +740,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -749,7 +751,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "y".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -773,7 +775,7 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ),

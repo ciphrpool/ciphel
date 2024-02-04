@@ -971,7 +971,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        cell::Cell,
+        collections::{HashMap, HashSet},
+    };
 
     use crate::{
         ast::TryParse,
@@ -1166,7 +1169,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -1192,7 +1195,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1213,7 +1216,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1235,7 +1238,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -1259,7 +1262,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Tuple(TupleType(vec![
@@ -1293,7 +1296,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "point".into(),
                 type_sig: Either::User(
                     UserType::Struct(
@@ -1348,7 +1351,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -1380,7 +1383,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "chan1".into(),
                 type_sig: Either::Static(
                     StaticType::Chan(ChanType(Box::new(Either::Static(
@@ -1407,7 +1410,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "chan1".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

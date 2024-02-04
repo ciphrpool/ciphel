@@ -594,6 +594,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::{
             expressions::{operation::operation_parse::TryParseOperation, Expression},
@@ -641,7 +643,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -723,7 +725,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

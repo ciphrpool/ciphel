@@ -1,8 +1,7 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::{
     scope::{
-        static_types::StaticType, type_traits::TypeChecking,
-        user_type_impl::UserType, ScopeApi,
+        static_types::StaticType, type_traits::TypeChecking, user_type_impl::UserType, ScopeApi,
     },
     Either, Resolve, SemanticError, TypeOf,
 };
@@ -128,6 +127,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::scope::scope_impl::Scope;
@@ -186,7 +187,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

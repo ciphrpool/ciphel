@@ -8,6 +8,7 @@ use crate::{
 
 use super::scope::Scope;
 
+pub mod flows_gencode;
 pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;

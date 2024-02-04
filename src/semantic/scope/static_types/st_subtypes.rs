@@ -142,13 +142,9 @@ impl GetSubTypes for StaticType {
             StaticType::Vec(_) => None,
             StaticType::Fn(_) => None,
             StaticType::Chan(_) => None,
-            StaticType::Tuple(TupleType(fields)) => Some(
-                fields
-                    .iter()
-                    .take(index - 1)
-                    .map(|field| field.size_of())
-                    .sum(),
-            ),
+            StaticType::Tuple(TupleType(fields)) => {
+                Some(fields.iter().take(index).map(|field| field.size_of()).sum())
+            }
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,

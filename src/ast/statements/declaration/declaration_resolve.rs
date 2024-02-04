@@ -3,10 +3,7 @@ use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::Either;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType,
-        var_impl::Var, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
 use crate::vm::platform::api::PlatformApi;
@@ -127,44 +124,44 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
         Scope: ScopeApi,
     {
         match self {
-            PatternVar::UnionFields {
-                typename,
-                variant,
-                vars,
-            } => {
-                let borrowed_scope = scope.borrow();
-                let user_type = borrowed_scope.find_type(typename)?;
-                let variant_type: Option<Either<UserType, StaticType>> =
-                    user_type.get_variant(variant);
-                let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) =
-                    <Either<UserType, StaticType> as GetSubTypes>::get_fields(&variant_type)
-                else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (field_name, field_type) in fields.iter() {
-                    let Some(var_name) = vars.iter().find(|name| {
-                        field_name
-                            .clone()
-                            .map(|inner| if inner == **name { Some(()) } else { None })
-                            .flatten()
-                            .is_some()
-                    }) else {
-                        return Err(SemanticError::InvalidPattern);
-                    };
-                    if let Some(_api) = PlatformApi::from(var_name) {
-                        return Err(SemanticError::PlatformAPIOverriding);
-                    }
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
+            // PatternVar::UnionFields {
+            //     typename,
+            //     variant,
+            //     vars,
+            // } => {
+            //     let borrowed_scope = scope.borrow();
+            //     let user_type = borrowed_scope.find_type(typename)?;
+            //     let variant_type: Option<Either<UserType, StaticType>> =
+            //         user_type.get_variant(variant);
+            //     let Some(variant_type) = variant_type else {
+            //         return Err(SemanticError::CantInferType);
+            //     };
+            //     let mut scope_vars = Vec::with_capacity(vars.len());
+            //     let Some(fields) =
+            //         <Either<UserType, StaticType> as GetSubTypes>::get_fields(&variant_type)
+            //     else {
+            //         return Err(SemanticError::InvalidPattern);
+            //     };
+            //     if vars.len() != fields.len() {
+            //         return Err(SemanticError::InvalidPattern);
+            //     }
+            //     for (field_name, field_type) in fields.iter() {
+            //         let Some(var_name) = vars.iter().find(|name| {
+            //             field_name
+            //                 .clone()
+            //                 .map(|inner| if inner == **name { Some(()) } else { None })
+            //                 .flatten()
+            //                 .is_some()
+            //         }) else {
+            //             return Err(SemanticError::InvalidPattern);
+            //         };
+            //         if let Some(_api) = PlatformApi::from(var_name) {
+            //             return Err(SemanticError::PlatformAPIOverriding);
+            //         }
+            //         scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+            //     }
+            //     Ok(scope_vars)
+            // }
             PatternVar::StructFields { typename, vars } => {
                 let borrowed_scope = scope.borrow();
                 let user_type = borrowed_scope.find_type(typename)?;

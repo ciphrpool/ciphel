@@ -7,6 +7,7 @@ use crate::{
 
 use super::{declaration::TypedVar, scope::Scope};
 
+pub mod definition_gencode;
 pub mod definition_parse;
 pub mod definition_resolve;
 pub mod definition_typeof;

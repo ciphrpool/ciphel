@@ -3,15 +3,14 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     ast::utils::strings::ID,
     semantic::{
-        scope::{
-            var_impl::Var, ScopeApi,
-        },
+        scope::{var_impl::Var, ScopeApi},
         Metadata, SemanticError,
     },
 };
 
 use super::Statement;
 
+pub mod scope_gencode;
 pub mod scope_parse;
 pub mod scope_resolve;
 pub mod scope_typeof;

@@ -352,6 +352,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
 #[cfg(test)]
 mod tests {
 
+    use std::cell::Cell;
+
     use crate::{
         ast::TryParse,
         semantic::scope::{
@@ -413,7 +415,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -461,7 +463,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::User(
                     UserType::Enum(Enum {
@@ -518,7 +520,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(StaticType::String(StringType()).into()),
             })
@@ -564,7 +566,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -591,7 +593,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -679,7 +681,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::User(
                     UserType::Union(Union {
@@ -770,7 +772,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "f".into(),
                 type_sig: Either::Static(
                     StaticType::Fn(FnType {
@@ -813,7 +815,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "f".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -891,7 +893,7 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -911,7 +913,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -935,7 +937,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -956,7 +958,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -980,7 +982,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -998,7 +1000,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Address(AddrType(Box::new(Either::Static(
@@ -1099,7 +1101,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1120,7 +1122,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -1144,7 +1146,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1165,7 +1167,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -1189,7 +1191,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: None,
+                address: Cell::new(None),
                 captured: RefCell::new(false),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

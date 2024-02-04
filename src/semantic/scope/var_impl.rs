@@ -20,7 +20,7 @@ pub struct Var {
     pub id: ID,
     pub type_sig: Either<UserType, StaticType>,
     pub captured: RefCell<bool>,
-    pub address: Option<Rc<Cell<usize>>>,
+    pub address: Cell<Option<usize>>,
 }
 
 impl<Scope: ScopeApi> CompatibleWith<Scope> for Var {
@@ -48,7 +48,7 @@ impl<Scope: ScopeApi> BuildVar<Scope> for Var {
             id: id.clone(),
             type_sig: type_sig.clone(),
             captured: RefCell::new(false),
-            address: None,
+            address: Cell::new(None),
         }
     }
 }

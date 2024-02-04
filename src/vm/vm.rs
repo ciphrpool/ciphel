@@ -1,11 +1,11 @@
-use std::{
-    cell::{RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::semantic::scope::ScopeApi;
 
-use super::{allocator::Memory, strips::Strip};
+use super::{
+    allocator::{stack::StackError, Memory},
+    strips::Strip,
+};
 
 #[derive(Debug, Clone)]
 pub enum CodeGenerationError {
@@ -15,6 +15,7 @@ pub enum CodeGenerationError {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
+    StackError(StackError),
     Deserialization,
     UnsupportedOperation,
     MathError,

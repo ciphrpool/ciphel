@@ -8,13 +8,12 @@ use std::{
 use crate::{ast::utils::strings::ID, semantic::SemanticError};
 
 use super::{
-    chan_impl::Chan, event_impl::Event, user_type_impl::UserType,
-    var_impl::Var, ScopeApi,
+    chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
-    vars: HashMap<ID, Rc<Var>>,
+    vars: Vec<Rc<Var>>,
     types: HashMap<ID, Rc<UserType>>,
 }
 
@@ -36,7 +35,7 @@ pub enum Scope {
 impl ScopeData {
     pub fn new() -> Self {
         Self {
-            vars: HashMap::new(),
+            vars: Vec::new(),
             types: HashMap::new(),
         }
     }
@@ -133,11 +132,11 @@ impl ScopeApi for Scope {
     fn register_var(&mut self, reg: Var) -> Result<(), crate::semantic::SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.vars.insert(reg.id.clone(), reg.into());
+                data.vars.push(reg.into());
                 Ok(())
             }
             Scope::General { data, .. } => {
-                data.vars.insert(reg.id.clone(), reg.into());
+                data.vars.push(reg.into());
                 Ok(())
             }
         }
@@ -156,7 +155,8 @@ impl ScopeApi for Scope {
                 outer_vars,
             } => data
                 .vars
-                .get(id)
+                .iter()
+                .find(|var| &var.as_ref().id == id)
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
@@ -194,7 +194,8 @@ impl ScopeApi for Scope {
                 .ok_or(SemanticError::UnknownVar(id.clone())),
             Scope::General { data, .. } => data
                 .vars
-                .get(id)
+                .iter()
+                .find(|var| &var.as_ref().id == id)
                 .cloned()
                 .ok_or(SemanticError::UnknownVar(id.clone())),
         }
@@ -204,6 +205,13 @@ impl ScopeApi for Scope {
         match self {
             Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
             Scope::General { .. } => HashMap::default(),
+        }
+    }
+
+    fn inner_vars(&self) -> &Vec<Rc<Var>> {
+        match self {
+            Scope::Inner { data, .. } => &data.vars,
+            Scope::General { data, .. } => &data.vars,
         }
     }
 
@@ -292,6 +300,9 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
     fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
+        unimplemented!("Mock function call")
+    }
+    fn inner_vars(&self) -> &Vec<Rc<Var>> {
         unimplemented!("Mock function call")
     }
     fn find_chan(&self) -> Result<&Chan, SemanticError> {

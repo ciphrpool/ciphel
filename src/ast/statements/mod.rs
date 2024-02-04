@@ -14,18 +14,20 @@ use super::{
     utils::{lexem, strings::wst},
     TryParse,
 };
-use crate::semantic::{
-    scope::{type_traits::TypeChecking, BuildStaticType},
-    CompatibleWith,
-};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
-        scope::{
-            static_types::StaticType, user_type_impl::UserType, ScopeApi,
-        },
+        scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
         Either, Resolve, SemanticError, TypeOf,
     },
+    vm::{strips::Strip, vm::CodeGenerationError},
+};
+use crate::{
+    semantic::{
+        scope::{type_traits::TypeChecking, BuildStaticType},
+        CompatibleWith,
+    },
+    vm::vm::GenerateCode,
 };
 
 pub mod assignation;
@@ -110,6 +112,25 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
             )),
             Statement::Loops(value) => value.type_of(&scope),
             Statement::Return(value) => value.type_of(&scope),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
+    fn gencode(
+        &self,
+        scope: &Rc<RefCell<Scope>>,
+        instructions: &Rc<RefCell<Vec<Strip>>>,
+        offset: usize,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Statement::Scope(value) => value.gencode(scope, instructions, offset),
+            Statement::Flow(value) => value.gencode(scope, instructions, offset),
+            Statement::Assignation(value) => value.gencode(scope, instructions, offset),
+            Statement::Declaration(value) => value.gencode(scope, instructions, offset),
+            Statement::Definition(value) => value.gencode(scope, instructions, offset),
+            Statement::Loops(value) => value.gencode(scope, instructions, offset),
+            Statement::Return(_) => todo!(),
         }
     }
 }

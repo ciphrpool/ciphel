@@ -20,7 +20,7 @@ use crate::{
             alloc::Alloc,
             locate::Locate,
             memcopy::MemCopy,
-            operation::{Addition, OpPrimitive, Operation, OperationKind},
+            operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             serialize::Serialized,
             Strip,
         },
@@ -357,7 +357,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                let Some(address) = &var.as_ref().address else {
+                let address = &var.as_ref().address;
+                let Some(address) = address.get() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let var_type = &var.as_ref().type_sig;
@@ -365,9 +366,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
 
                 let mut borrowed = instructions.as_ref().borrow_mut();
                 borrowed.push(Strip::Access(Access::Static {
-                    address: MemoryAddress::Stack {
-                        offset: address.as_ref().get(),
-                    },
+                    address: MemoryAddress::Stack { offset: address },
                     size: var_size,
                 }));
 
@@ -467,7 +466,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
 }
 
 impl<Scope: ScopeApi> Variable<Scope> {
-    fn signature(&self) -> Option<Either<UserType, StaticType>> {
+    pub fn signature(&self) -> Option<Either<UserType, StaticType>> {
         match self {
             Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
             Variable::FieldAccess(FieldAccess {
@@ -608,7 +607,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
         }
     }
 
-    fn locate(
+    pub fn locate(
         &self,
         scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
@@ -621,7 +620,8 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                let Some(address) = &var.as_ref().address else {
+                let address = &var.as_ref().address;
+                let Some(address) = address.get() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let var_type = &var.as_ref().type_sig;
@@ -629,18 +629,39 @@ impl<Scope: ScopeApi> Variable<Scope> {
 
                 let mut borrowed = instructions.as_ref().borrow_mut();
                 borrowed.push(Strip::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: address.as_ref().get(),
-                    },
+                    address: MemoryAddress::Stack { offset: address },
                 }));
 
                 Ok(())
             }
             Variable::FieldAccess(FieldAccess {
-                var: _,
-                field: _,
-                metadata: _,
-            }) => unreachable!(),
+                var,
+                field,
+                metadata,
+            }) => {
+                let _ = var.locate(scope, instructions, start_offset)?;
+                // Locate the field
+                let Some(from_type) = var.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(offset) = from_type.get_field_offset(field.name()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                {
+                    let mut borrowed = instructions.as_ref().borrow_mut();
+                    borrowed.push(Strip::Serialize(Serialized {
+                        data: (offset as u64).to_le_bytes().to_vec(),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
+                }
+                field.locate_from(from_type, offset, scope, instructions, offset + 8)
+            }
             Variable::NumAccess(NumAccess {
                 var,
                 index,
@@ -675,6 +696,115 @@ impl<Scope: ScopeApi> Variable<Scope> {
             }) => {
                 let _ = var.locate(scope, instructions, start_offset)?;
                 let _ = index.gencode(scope, instructions, start_offset)?;
+                let item_size = {
+                    let Some(var_type) = var.signature() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    let Some(item_type) = var_type.get_item() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    item_type.size_of()
+                };
+                {
+                    let mut borrowed = instructions.as_ref().borrow_mut();
+                    borrowed.push(Strip::Serialize(Serialized {
+                        data: (item_size as u64).to_le_bytes().to_vec(),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Mult(Mult {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn locate_from(
+        &self,
+        _from_type: Either<UserType, StaticType>,
+        _offset: usize,
+        scope: &Rc<RefCell<Scope>>,
+        instructions: &Rc<RefCell<Vec<Strip>>>,
+        start_offset: usize,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Variable::Var(VarID { id: _, metadata }) => Ok(()),
+            Variable::FieldAccess(FieldAccess {
+                var,
+                field,
+                metadata: _,
+            }) => {
+                // Access the field
+                let Some(from_type) = var.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(offset) = from_type.get_field_offset(field.name()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                {
+                    let mut borrowed = instructions.as_ref().borrow_mut();
+                    borrowed.push(Strip::Serialize(Serialized {
+                        data: (offset as u64).to_le_bytes().to_vec(),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
+                }
+                field.locate_from(from_type, offset, scope, instructions, start_offset)
+            }
+            Variable::NumAccess(NumAccess {
+                var,
+                index,
+                metadata,
+            }) => {
+                let Some(from_type) = var.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(offset) = from_type.get_inline_field_offset(*index) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                {
+                    let mut borrowed = instructions.as_ref().borrow_mut();
+                    borrowed.push(Strip::Serialize(Serialized {
+                        data: (offset as u64).to_le_bytes().to_vec(),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
+                }
+                Ok(())
+            }
+            Variable::ListAccess(ListAccess {
+                var: _,
+                index,
+                metadata,
+            }) => {
+                let _ = index.gencode(scope, instructions, start_offset)?;
+                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
                 {
                     let mut borrowed = instructions.as_ref().borrow_mut();
                     borrowed.push(Strip::Operation(Operation {
@@ -738,7 +868,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
 
         let vec_stack_address = offset;
         // Alloc and push heap address on stack
-        borrowed.push(Strip::Alloc(Alloc {
+        borrowed.push(Strip::Alloc(Alloc::Heap {
             size: align(self.value.len()) + 16,
         }));
         offset += HEAP_ADDRESS_SIZE;
@@ -776,8 +906,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
         // ( removing the data from the stack )
-        borrowed.push(Strip::MemCopy(MemCopy::Take {
-            offset: vec_stack_address + 8,
+        borrowed.push(Strip::MemCopy(MemCopy::TakeToHeap {
+            //offset: vec_stack_address + 8,
             size: self.value.len() + 16,
         }));
 
@@ -813,7 +943,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
 
                 let vec_stack_address = offset;
                 // Alloc and push heap address on stack
-                borrowed.push(Strip::Alloc(Alloc {
+                borrowed.push(Strip::Alloc(Alloc::Heap {
                     size: item_size * capacity + 16,
                 }));
                 offset += HEAP_ADDRESS_SIZE;
@@ -849,8 +979,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
                 // Take the address on the top of the stack
                 // and copy the data on the stack in the heap at given address and given offset
                 // ( removing the data from the stack )
-                borrowed.push(Strip::MemCopy(MemCopy::Take {
-                    offset: vec_stack_address + 8,
+                borrowed.push(Strip::MemCopy(MemCopy::TakeToHeap {
+                    //offset: vec_stack_address + 8,
                     size: item_size * data.len() + 16,
                 }));
             }
@@ -866,7 +996,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
                 };
                 let mut borrowed = instructions.as_ref().borrow_mut();
                 // Alloc and push heap address on stack
-                borrowed.push(Strip::Alloc(Alloc {
+                borrowed.push(Strip::Alloc(Alloc::Heap {
                     size: item_size * capacity,
                 }));
             }
@@ -1153,7 +1283,7 @@ mod tests {
             let scope = Scope::new();
             // Perform semantic check.
             expr.resolve(&scope, &None, &())
-                .expect("Semantic check should have succeeded");
+                .expect("Semantic resolution should have succeeded");
 
             // Code generation.
             let instructions = Rc::new(RefCell::new(Vec::default()));
@@ -1195,7 +1325,7 @@ mod tests {
                 .expect("Type registering should have succeeded");
             // Perform semantic check.
             expr.resolve(&scope, &None, &())
-                .expect("Semantic check should have succeeded");
+                .expect("Semantic resolution should have succeeded");
 
             // Code generation.
             let instructions = Rc::new(RefCell::new(Vec::default()));

@@ -7,6 +7,7 @@ use crate::{
 };
 
 use super::scope::Scope;
+pub mod assignation_gencode;
 pub mod assignation_parse;
 pub mod assignation_resolve;
 pub mod assignation_typeof;

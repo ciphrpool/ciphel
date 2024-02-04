@@ -4,6 +4,7 @@ use crate::{
 };
 
 use super::{Atomic, Expression};
+pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
 pub mod operation_typeof;

@@ -1,8 +1,6 @@
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -92,6 +90,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::TryParse,
         semantic::scope::{
@@ -112,7 +112,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -139,7 +139,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 captured: RefCell::new(false),
-                address: None,
+                address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),

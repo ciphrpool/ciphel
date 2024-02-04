@@ -16,9 +16,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
@@ -93,21 +91,21 @@ impl TryParse for PatternVar {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::BRA_C),
-                    ),
-                ),
-                |((typename, variant), vars)| PatternVar::UnionFields {
-                    typename,
-                    variant,
-                    vars,
-                },
-            ),
+            // map(
+            //     pair(
+            //         separated_pair(parse_id, wst(lexem::SEP), parse_id),
+            //         delimited(
+            //             wst(lexem::BRA_O),
+            //             separated_list1(wst(lexem::COMA), parse_id),
+            //             wst(lexem::BRA_C),
+            //         ),
+            //     ),
+            //     |((typename, variant), vars)| PatternVar::UnionFields {
+            //         typename,
+            //         variant,
+            //         vars,
+            //     },
+            // ),
             map(
                 pair(
                     parse_id,

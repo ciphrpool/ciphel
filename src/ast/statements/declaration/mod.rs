@@ -5,6 +5,7 @@ use crate::{
 
 use super::assignation::AssignValue;
 
+pub mod declaration_gencode;
 pub mod declaration_parse;
 pub mod declaration_resolve;
 pub mod declaration_typeof;
@@ -30,14 +31,11 @@ pub enum DeclaredVar {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatternVar {
-    UnionFields {
-        typename: ID,
-        variant: ID,
-        vars: Vec<ID>,
-    },
-    StructFields {
-        typename: ID,
-        vars: Vec<ID>,
-    },
+    // UnionFields {
+    //     typename: ID,
+    //     variant: ID,
+    //     vars: Vec<ID>,
+    // },
+    StructFields { typename: ID, vars: Vec<ID> },
     Tuple(Vec<ID>),
 }

@@ -1,5 +1,5 @@
 use crate::vm::{
-    allocator::{Memory},
+    allocator::Memory,
     vm::{Executable, RuntimeError},
 };
 
@@ -11,6 +11,7 @@ pub struct Declare {
 impl Executable for Declare {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
         let _ = memory.stack.push(self.size).map_err(|e| e.into())?;
+        todo!();
         Ok(())
     }
 }

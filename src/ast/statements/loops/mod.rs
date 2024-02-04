@@ -11,6 +11,7 @@ use crate::{
 
 use super::{declaration::PatternVar, scope::Scope};
 
+pub mod loops_gencode;
 pub mod loops_parse;
 pub mod loops_resolve;
 pub mod loops_typeof;

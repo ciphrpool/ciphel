@@ -15,7 +15,7 @@ pub enum StackError {
 
 impl Into<RuntimeError> for StackError {
     fn into(self) -> RuntimeError {
-        todo!()
+        RuntimeError::StackError(self)
     }
 }
 

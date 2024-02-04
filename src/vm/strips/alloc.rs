@@ -4,18 +4,25 @@ use crate::vm::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Alloc {
-    pub size: usize,
+pub enum Alloc {
+    Heap { size: usize },
+    Stack { size: usize },
 }
 
 impl Executable for Alloc {
     fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
-        let address = memory.heap.alloc(self.size).map_err(|e| e.into())?;
-        let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
-        let offset = memory.stack.top();
-        let data = (address as u64).to_le_bytes().to_vec();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
-        Ok(())
+        match self {
+            Alloc::Heap { size } => {
+                let address = memory.heap.alloc(*size).map_err(|e| e.into())?;
+                let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                let data = (address as u64).to_le_bytes().to_vec();
+                let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
+                Ok(())
+            }
+            Alloc::Stack { size } => {
+                let _ = memory.stack.push(*size).map_err(|e| e.into())?;
+                Ok(())
+            }
+        }
     }
 }
