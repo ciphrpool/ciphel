@@ -471,7 +471,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
             Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
             Variable::FieldAccess(FieldAccess {
                 var: _,
-                field: _,
+                field,
                 metadata,
             }) => metadata.signature(),
             Variable::NumAccess(NumAccess {
@@ -510,8 +510,8 @@ impl<Scope: ScopeApi> Variable<Scope> {
 
     fn access_from(
         &self,
-        _from_type: Either<UserType, StaticType>,
-        _offset: usize,
+        from_type: Either<UserType, StaticType>,
+        offset: usize,
         scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
         start_offset: usize,
@@ -557,6 +557,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 index,
                 metadata,
             }) => {
+                let _ = var.locate_from(from_type, offset, scope, instructions, start_offset)?;
                 let Some(from_type) = var.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -583,10 +584,11 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 Ok(())
             }
             Variable::ListAccess(ListAccess {
-                var: _,
+                var,
                 index,
                 metadata,
             }) => {
+                let _ = var.locate_from(from_type, offset, scope, instructions, start_offset)?;
                 let _ = index.gencode(scope, instructions, start_offset)?;
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -692,18 +694,12 @@ impl<Scope: ScopeApi> Variable<Scope> {
             Variable::ListAccess(ListAccess {
                 var,
                 index,
-                metadata: _,
+                metadata,
             }) => {
                 let _ = var.locate(scope, instructions, start_offset)?;
                 let _ = index.gencode(scope, instructions, start_offset)?;
-                let item_size = {
-                    let Some(var_type) = var.signature() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    let Some(item_type) = var_type.get_item() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    item_type.size_of()
+                let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
                     let mut borrowed = instructions.as_ref().borrow_mut();
@@ -732,8 +728,8 @@ impl<Scope: ScopeApi> Variable<Scope> {
 
     fn locate_from(
         &self,
-        _from_type: Either<UserType, StaticType>,
-        _offset: usize,
+        from_type: Either<UserType, StaticType>,
+        offset: usize,
         scope: &Rc<RefCell<Scope>>,
         instructions: &Rc<RefCell<Vec<Strip>>>,
         start_offset: usize,
@@ -772,13 +768,11 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 index,
                 metadata,
             }) => {
+                let _ = var.locate_from(from_type, offset, scope, instructions, start_offset)?;
                 let Some(from_type) = var.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let Some(offset) = from_type.get_inline_field_offset(*index) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
@@ -797,16 +791,27 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 Ok(())
             }
             Variable::ListAccess(ListAccess {
-                var: _,
+                var,
                 index,
                 metadata,
             }) => {
+                let _ = var.locate_from(from_type, offset, scope, instructions, start_offset)?;
                 let _ = index.gencode(scope, instructions, start_offset)?;
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
+                let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
                     let mut borrowed = instructions.as_ref().borrow_mut();
+                    borrowed.push(Strip::Serialize(Serialized {
+                        data: (item_size as u64).to_le_bytes().to_vec(),
+                    }));
+                    borrowed.push(Strip::Operation(Operation {
+                        kind: OperationKind::Mult(Mult {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                        result: OpPrimitive::Number(NumberType::U64),
+                    }));
                     borrowed.push(Strip::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),

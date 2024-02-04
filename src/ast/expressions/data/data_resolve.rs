@@ -59,21 +59,40 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
         match self {
             Variable::Var(VarID {
                 id: value,
-                metadata: _,
-            }) => <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
-                .ok_or(SemanticError::UnknownField),
+                metadata,
+            }) => {
+                let var_type =
+                    <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
+                        .ok_or(SemanticError::UnknownField)?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    *borrowed_metadata = Info::Resolved {
+                        context: Some(var_type.clone()),
+                        signature: Some(var_type.clone()),
+                    };
+                }
+                Ok(var_type)
+            }
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata: _,
+                metadata,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
-                field.resolve_based(scope, &var_type)
+                let field_type = field.resolve_based(scope, &var_type)?;
+                {
+                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    *borrowed_metadata = Info::Resolved {
+                        context: Some(field_type.clone()),
+                        signature: Some(field_type.clone()),
+                    };
+                }
+                Ok(field_type)
             }
             Variable::ListAccess(ListAccess {
                 var,
                 index,
-                metadata: _,
+                metadata,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
                 if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
@@ -86,16 +105,27 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                         )),
                         &(),
                     )?;
-                    Ok(var_type)
+                    let Some(item_type) = var_type.get_item() else {
+                        return Err(SemanticError::ExpectedIndexable);
+                    };
+                    {
+                        let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                        *borrowed_metadata = Info::Resolved {
+                            context: Some(item_type.clone()),
+                            signature: Some(item_type.clone()),
+                        };
+                    }
+                    Ok(item_type)
                 }
             }
             Variable::NumAccess(NumAccess {
                 var,
                 index,
-                metadata: _,
+                metadata,
             }) => {
                 let _ = var.resolve_based(scope, context)?;
-                let var_type = var.type_of(&scope.borrow())?;
+                let var_type = var.typeof_based::<InnerScope>(&context)?;
+
                 if !<Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&var_type) {
                     Err(SemanticError::ExpectedIndexable)
                 } else {
@@ -107,6 +137,13 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                     if index >= &fields.len() {
                         Err(SemanticError::InvalidPattern)
                     } else {
+                        {
+                            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                            *borrowed_metadata = Info::Resolved {
+                                context: Some(fields[*index].1.clone()),
+                                signature: Some(fields[*index].1.clone()),
+                            };
+                        }
                         Ok(fields[*index].1.clone())
                     }
                 }
@@ -181,6 +218,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
         let _ = self.field.resolve_based(scope, &var_type)?;
+
         {
             let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
             *borrowed_metadata = Info::Resolved {
@@ -1232,7 +1270,6 @@ mod tests {
     #[test]
     fn robustness_variable_array() {
         let variable = Variable::parse("x[\"Test\"]".into()).unwrap().1;
-        dbg!(&variable);
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()

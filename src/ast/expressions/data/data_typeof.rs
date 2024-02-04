@@ -50,7 +50,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
 }
 
 impl<InnerScope: ScopeApi> Variable<InnerScope> {
-    fn typeof_based<Scope>(
+    pub fn typeof_based<Scope>(
         &self,
         context: &Either<UserType, StaticType>,
     ) -> Result<Either<UserType, StaticType>, SemanticError>
