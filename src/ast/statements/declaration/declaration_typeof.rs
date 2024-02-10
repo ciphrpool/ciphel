@@ -2,19 +2,14 @@ use std::cell::Ref;
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::Either;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
+use crate::semantic::{EType, Either};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -25,7 +20,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -34,7 +29,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -49,10 +44,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

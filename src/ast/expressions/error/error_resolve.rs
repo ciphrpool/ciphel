@@ -1,5 +1,5 @@
 use super::Error;
-use crate::semantic::{scope::ScopeApi, Resolve, SemanticError};
+use crate::semantic::{scope::ScopeApi, MutRc, Resolve, SemanticError};
 use std::{cell::RefCell, rc::Rc};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Error {
@@ -8,7 +8,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Error {
     type Extra = ();
     fn resolve(
         &self,
-        _scope: &Rc<RefCell<Scope>>,
+        _scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

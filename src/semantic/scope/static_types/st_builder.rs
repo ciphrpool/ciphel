@@ -4,7 +4,7 @@ use crate::{
     ast,
     semantic::{
         scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
-        Either, SemanticError, TypeOf,
+        EType, Either, SemanticError, TypeOf,
     },
 };
 
@@ -75,7 +75,7 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
 
     fn build_slice_from(
         size: &usize,
-        type_sig: &Either<UserType, StaticType>,
+        type_sig: &EType,
         _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Slice(SliceType {

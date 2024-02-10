@@ -6,7 +6,7 @@ use super::{
 };
 use crate::semantic::{
     scope::{type_traits::IsEnum, ScopeApi},
-    Resolve, SemanticError,
+    MutRc, Resolve, SemanticError,
 };
 
 impl<Scope: ScopeApi> Resolve<Scope> for Type {
@@ -16,7 +16,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -48,7 +48,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
     type Extra = ();
     fn resolve(
         &self,
-        _scope: &Rc<RefCell<Scope>>,
+        _scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -65,7 +65,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -82,7 +82,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StringType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -100,7 +100,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -118,7 +118,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -139,7 +139,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Types {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -160,7 +160,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -178,7 +178,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -196,7 +196,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -214,7 +214,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -233,7 +233,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

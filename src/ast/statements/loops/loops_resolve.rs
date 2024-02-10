@@ -1,19 +1,19 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
-use crate::semantic::Either;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
+use crate::semantic::{EType, Either, MutRc};
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -37,7 +37,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -51,7 +51,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
                 let var = borrowed_scope.find_var(value)?;
                 // check that the variable is iterable
                 let var_type = var.type_of(&scope.borrow())?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_iterable(&var_type) {
+                if !<EType as TypeChecking>::is_iterable(&var_type) {
                     return Err(SemanticError::ExpectedIterable);
                 }
                 Ok(())
@@ -65,11 +65,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
     type Output = Vec<Var>;
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -90,11 +90,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -104,7 +104,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     {
         let _ = self.iterator.resolve(scope, &(), &())?;
         let item_type = self.iterator.type_of(&scope.borrow())?;
-        let item_type = <Either<UserType, StaticType> as GetSubTypes>::get_item(&item_type);
+        let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type, &())?;
         // attach the item to the scope
@@ -114,11 +114,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -129,7 +129,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
         let _ = self.condition.resolve(scope, &None, &())?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<Either<UserType, StaticType> as TypeChecking>::is_boolean(&condition_type) {
+        if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         let _ = self.scope.resolve(scope, context, &Vec::default())?;

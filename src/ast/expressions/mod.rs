@@ -5,7 +5,6 @@ use std::{
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
-
 use crate::{
     ast::{
         expressions::operation::LogicalOr,
@@ -16,13 +15,11 @@ use crate::{
         },
     },
     semantic::{
-        scope::{
-            static_types::StaticType, user_type_impl::UserType, ScopeApi,
-        },
-        Either, Resolve, SemanticError, TypeOf,
+        scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
-        strips::Strip,
+        casm::{Casm, CasmProgram},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -93,11 +90,11 @@ impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -116,7 +113,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -153,11 +150,11 @@ impl<Scope: ScopeApi> TryParse for Expression<Scope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -185,7 +182,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -212,9 +209,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Product(_) => todo!(),
@@ -230,22 +226,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
             Expression::Inclusion(_) => todo!(),
             Expression::LogicalAnd(_) => todo!(),
             Expression::LogicalOr(_) => todo!(),
-            Expression::Atomic(value) => value.gencode(scope, instructions, offset),
+            Expression::Atomic(value) => value.gencode(scope, instructions),
         }
     }
 }
 impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Atomic::Data(value) => value.gencode(scope, instructions, offset),
+            Atomic::Data(value) => value.gencode(scope, instructions),
             Atomic::UnaryOperation(_) => todo!(),
-            Atomic::Paren(value) => value.gencode(scope, instructions, offset),
-            Atomic::ExprFlow(_) => todo!(),
+            Atomic::Paren(value) => value.gencode(scope, instructions),
+            Atomic::ExprFlow(value) => value.gencode(scope, instructions),
             Atomic::Error(_) => todo!(),
         }
     }

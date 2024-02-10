@@ -2,15 +2,14 @@ use std::cell::Ref;
 
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::scope::BuildStaticType;
+use crate::semantic::EType;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
     Either, MergeType, Resolve, SemanticError, TypeOf,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -24,12 +23,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let main_type = self.main_branch.type_of(&scope)?;
+        let main_type = self.then_branch.type_of(&scope)?;
         match &self.else_branch {
             Some(else_branch) => {
                 let else_type = else_branch.type_of(&scope)?;
@@ -42,7 +41,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -77,7 +76,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -96,10 +95,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
-    fn type_of(
-        &self,
-        _scope: &Ref<Scope>,
-    ) -> Result<crate::semantic::Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

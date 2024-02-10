@@ -3,22 +3,23 @@ use super::{
     ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
     Union, VarID, Variable, Vector,
 };
+use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
-use crate::semantic::Info;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
+use crate::semantic::{EType, Info, MutRc};
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -49,9 +50,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
 impl<InnerScope: ScopeApi> Variable<InnerScope> {
     fn resolve_based(
         &self,
-        scope: &Rc<RefCell<InnerScope>>,
-        context: &Either<UserType, StaticType>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+        scope: &MutRc<InnerScope>,
+        context: &EType,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized,
         InnerScope: ScopeApi,
@@ -61,11 +62,14 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 id: value,
                 metadata,
             }) => {
-                let var_type =
-                    <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
-                        .ok_or(SemanticError::UnknownField)?;
+                let var_type = <EType as GetSubTypes>::get_field(context, value)
+                    .ok_or(SemanticError::UnknownField)?;
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
                     *borrowed_metadata = Info::Resolved {
                         context: Some(var_type.clone()),
                         signature: Some(var_type.clone()),
@@ -81,7 +85,11 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 let var_type = var.resolve_based(scope, context)?;
                 let field_type = field.resolve_based(scope, &var_type)?;
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
                     *borrowed_metadata = Info::Resolved {
                         context: Some(field_type.clone()),
                         signature: Some(field_type.clone()),
@@ -95,7 +103,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 metadata,
             }) => {
                 let var_type = var.resolve_based(scope, context)?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
+                if !<EType as TypeChecking>::is_indexable(&var_type) {
                     Err(SemanticError::ExpectedIterable)
                 } else {
                     let _ = index.resolve(
@@ -109,7 +117,11 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                         return Err(SemanticError::ExpectedIndexable);
                     };
                     {
-                        let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                        let mut borrowed_metadata = metadata
+                            .info
+                            .as_ref()
+                            .try_borrow_mut()
+                            .map_err(|_| SemanticError::Default)?;
                         *borrowed_metadata = Info::Resolved {
                             context: Some(item_type.clone()),
                             signature: Some(item_type.clone()),
@@ -126,19 +138,21 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 let _ = var.resolve_based(scope, context)?;
                 let var_type = var.typeof_based::<InnerScope>(&context)?;
 
-                if !<Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&var_type) {
+                if !<EType as TypeChecking>::is_dotnum_indexable(&var_type) {
                     Err(SemanticError::ExpectedIndexable)
                 } else {
-                    let Some(fields) =
-                        <Either<UserType, StaticType> as GetSubTypes>::get_fields(&var_type)
-                    else {
+                    let Some(fields) = <EType as GetSubTypes>::get_fields(&var_type) else {
                         return Err(SemanticError::InvalidPattern);
                     };
                     if index >= &fields.len() {
                         Err(SemanticError::InvalidPattern)
                     } else {
                         {
-                            let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                            let mut borrowed_metadata = metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
                             *borrowed_metadata = Info::Resolved {
                                 context: Some(fields[*index].1.clone()),
                                 signature: Some(fields[*index].1.clone()),
@@ -154,11 +168,11 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -177,12 +191,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
 impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     type Output = ();
 
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
 
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -190,25 +204,20 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
         Self: Sized,
     {
         let _var = scope.borrow().find_var(&self.id)?;
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
 
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -219,25 +228,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
         let var_type = self.var.type_of(&scope.borrow())?;
         let _ = self.field.resolve_based(scope, &var_type)?;
 
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
 
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -246,23 +249,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
-        if !<Either<UserType, StaticType> as TypeChecking>::is_dotnum_indexable(&var_type) {
+        if !<EType as TypeChecking>::is_dotnum_indexable(&var_type) {
             Err(SemanticError::ExpectedIndexable)
         } else {
-            let Some(fields) = <Either<UserType, StaticType> as GetSubTypes>::get_fields(&var_type)
-            else {
+            let Some(fields) = <EType as GetSubTypes>::get_fields(&var_type) else {
                 return Err(SemanticError::InvalidPattern);
             };
             if self.index >= fields.len() {
                 Err(SemanticError::InvalidPattern)
             } else {
-                {
-                    let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
+                resolve_metadata!(self.metadata, self, scope, context);
                 Ok(())
             }
         }
@@ -272,12 +268,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
 impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
     type Output = ();
 
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
 
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -287,7 +283,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
         let _ = self.var.resolve(scope, context, extra)?;
         let var_type = self.var.type_of(&scope.borrow())?;
 
-        if <Either<UserType, StaticType> as TypeChecking>::is_indexable(&var_type) {
+        if <EType as TypeChecking>::is_indexable(&var_type) {
             let _ = self.index.resolve(
                 scope,
                 &Some(Either::Static(
@@ -296,15 +292,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
                 extra,
             )?;
             let index_type = self.index.type_of(&scope.borrow())?;
-            if <Either<UserType, StaticType> as TypeChecking>::is_u64(&index_type) {
-                {
-                    let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
+            if <EType as TypeChecking>::is_u64(&index_type) {
+                resolve_metadata!(self.metadata, self, scope, context);
                 Ok(())
             } else {
                 Err(SemanticError::ExpectedIndexable)
@@ -317,11 +306,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -340,11 +329,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -354,8 +343,8 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     {
         let (param_context, maybe_length) = match context {
             Some(context) => (
-                <Either<UserType, StaticType> as GetSubTypes>::get_item(context),
-                <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
+                <EType as GetSubTypes>::get_item(context),
+                <EType as GetSubTypes>::get_length(context),
             ),
             None => (None, None),
         };
@@ -370,25 +359,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
         for expr in &self.value {
             let _ = expr.resolve(scope, &param_context, &())?;
         }
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for StringData {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -402,25 +384,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for StringData {
             }
             None => {}
         }
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 
 impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -436,9 +411,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
                 capacity: _,
             } => {
                 let param_context = match context {
-                    Some(context) => {
-                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
-                    }
+                    Some(context) => <EType as GetSubTypes>::get_item(context),
                     None => None,
                 };
 
@@ -446,7 +419,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
                     let _ = expr.resolve(scope, &param_context, &())?;
                 }
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -460,7 +437,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
                 metadata,
             } => {
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -474,11 +455,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -487,24 +468,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -513,7 +487,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         Scope: ScopeApi,
     {
         let maybe_length = match context {
-            Some(context) => <Either<UserType, StaticType> as GetSubTypes>::get_length(context),
+            Some(context) => <EType as GetSubTypes>::get_length(context),
             None => None,
         };
         match maybe_length {
@@ -526,9 +500,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         }
         for (index, expr) in self.iter().enumerate() {
             let param_context = match context {
-                Some(context) => {
-                    <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index)
-                }
+                Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
                 None => None,
             };
             let _ = expr.resolve(scope, &param_context, &())?;
@@ -538,11 +510,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -554,8 +526,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             return Err(SemanticError::CantInferType);
         };
         for (index, expr) in self.params.iter().enumerate() {
-            let param_context =
-                <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index);
+            let param_context = <EType as GetSubTypes>::get_nth(context, &index);
             let _ = expr.resolve(scope, &param_context, &())?;
         }
 
@@ -577,15 +548,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             })
             .map(|(index, id, param)| {
                 let _param_type = param.type_of(&scope.borrow());
-                let param_type =
-                    <Either<UserType, StaticType> as GetSubTypes>::get_nth(context, &index);
+                let param_type = <EType as GetSubTypes>::get_nth(context, &index);
                 <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap())
             })
             .collect::<Vec<Var>>();
 
-        let Some(context_return) =
-            <Either<UserType, StaticType> as GetSubTypes>::get_return(context)
-        else {
+        let Some(context_return) = <EType as GetSubTypes>::get_return(context) else {
             return Err(SemanticError::CantInferType);
         };
 
@@ -597,7 +565,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             borrowed_env.extend(env_vars);
         }
         {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
+            let mut borrowed_metadata = self
+                .metadata
+                .info
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| SemanticError::Default)?;
 
             *borrowed_metadata = Info::Resolved {
                 context: Some(context.clone()),
@@ -609,11 +582,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = Vec<Var>;
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -629,11 +602,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -652,11 +625,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -665,24 +638,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -691,24 +657,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -720,11 +679,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
             Channel::Receive { addr, metadata, .. } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&addr_type) {
+                if !<EType as TypeChecking>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -740,12 +703,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
             } => {
                 let _ = addr.resolve(scope, context, extra)?;
                 let addr_type = addr.type_of(&scope.borrow())?;
-                if !<Either<UserType, StaticType> as TypeChecking>::is_channel(&addr_type) {
+                if !<EType as TypeChecking>::is_channel(&addr_type) {
                     return Err(SemanticError::ExpectedChannel);
                 }
                 let _ = msg.resolve(scope, context, extra)?;
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -760,7 +727,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
             } => {
                 let _ = scope.borrow_mut().register_chan(id)?;
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -774,11 +745,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -790,15 +761,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
         let user_type = borrowed_scope.find_type(&self.id)?;
         let user_type = user_type.type_of(&scope.borrow())?;
         for (field_name, expr) in &self.fields {
-            let field_context =
-                <Either<UserType, StaticType> as GetSubTypes>::get_field(&user_type, &field_name);
+            let field_context = <EType as GetSubTypes>::get_field(&user_type, &field_name);
 
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) =
-            <Either<UserType, StaticType> as GetSubTypes>::get_fields(&user_type)
-        else {
+        let Some(fields_type) = <EType as GetSubTypes>::get_fields(&user_type) else {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
@@ -818,24 +786,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -850,17 +811,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
             return Err(SemanticError::CantInferType);
         };
         for (field_name, expr) in &self.fields {
-            let field_context = <Either<UserType, StaticType> as GetSubTypes>::get_field(
-                &variant_type,
-                &field_name,
-            );
+            let field_context = <EType as GetSubTypes>::get_field(&variant_type, &field_name);
 
             let _ = expr.resolve(scope, &field_context, &())?;
         }
 
-        let Some(fields_type) =
-            <Either<UserType, StaticType> as GetSubTypes>::get_fields(&variant_type)
-        else {
+        let Some(fields_type) = <EType as GetSubTypes>::get_fields(&variant_type) else {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
@@ -880,24 +836,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -910,14 +859,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         let Some(_) = user_type.get_variant(&self.value) else {
             return Err(SemanticError::IncorrectVariant);
         };
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
         // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
         // Ok(())
@@ -925,11 +867,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -940,16 +882,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
         match self {
             Map::Init { fields, metadata } => {
                 let item_type = match context {
-                    Some(context) => {
-                        <Either<UserType, StaticType> as GetSubTypes>::get_item(context)
-                    }
+                    Some(context) => <EType as GetSubTypes>::get_item(context),
                     None => None,
                 };
 
                 let key_type = match context {
-                    Some(context) => {
-                        <Either<UserType, StaticType> as GetSubTypes>::get_key(context)
-                    }
+                    Some(context) => <EType as GetSubTypes>::get_key(context),
                     None => None,
                 };
                 for (key, value) in fields {
@@ -957,7 +895,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
                     let _ = value.resolve(scope, &item_type, &())?;
                 }
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -972,7 +914,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
                 metadata,
             } => {
                 {
-                    let mut borrowed_metadata = metadata.info.as_ref().borrow_mut();
+                    let mut borrowed_metadata = metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
 
                     *borrowed_metadata = Info::Resolved {
                         context: context.clone(),
@@ -986,11 +932,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

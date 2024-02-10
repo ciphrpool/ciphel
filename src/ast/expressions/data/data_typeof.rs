@@ -12,7 +12,7 @@ use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::MergeType;
+use crate::semantic::{EType, MergeType};
 use crate::{
     ast::types::SliceType,
     semantic::{
@@ -22,7 +22,7 @@ use crate::{
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -50,10 +50,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
 }
 
 impl<InnerScope: ScopeApi> Variable<InnerScope> {
-    pub fn typeof_based<Scope>(
-        &self,
-        context: &Either<UserType, StaticType>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    pub fn typeof_based<Scope>(&self, context: &EType) -> Result<EType, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
@@ -62,8 +59,9 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
             Variable::Var(VarID {
                 id: value,
                 metadata: _,
-            }) => <Either<UserType, StaticType> as GetSubTypes>::get_field(context, value)
-                .ok_or(SemanticError::UnknownField),
+            }) => {
+                <EType as GetSubTypes>::get_field(context, value).ok_or(SemanticError::UnknownField)
+            }
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
@@ -74,12 +72,11 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
             }
             Variable::ListAccess(ListAccess { var, .. }) => {
                 let var_type = var.typeof_based::<Scope>(context)?;
-                <Either<UserType, StaticType> as GetSubTypes>::get_item(&var_type)
-                    .ok_or(SemanticError::ExpectedIterable)
+                <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
             }
             Variable::NumAccess(NumAccess { var, index, .. }) => {
                 let var_type = var.typeof_based::<Scope>(context)?;
-                <Either<UserType, StaticType> as GetSubTypes>::get_nth(&var_type, index)
+                <EType as GetSubTypes>::get_nth(&var_type, index)
                     .ok_or(SemanticError::ExpectedIndexable)
             }
         }
@@ -87,7 +84,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Variable<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -102,7 +99,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Variable<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for VarID {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -113,7 +110,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for VarID {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -124,33 +121,32 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FieldAccess<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for NumAccess<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         let var_type = self.var.type_of(&scope)?;
 
-        <Either<UserType, StaticType> as GetSubTypes>::get_nth(&var_type, &self.index)
+        <EType as GetSubTypes>::get_nth(&var_type, &self.index)
             .ok_or(SemanticError::ExpectedIndexable)
     }
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
         let var_type = self.var.type_of(&scope)?;
 
-        <Either<UserType, StaticType> as GetSubTypes>::get_item(&var_type)
-            .ok_or(SemanticError::ExpectedIterable)
+        <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
     }
 }
 
 // impl<Scope: ScopeApi> TypeOf<Scope> for String {
-//     fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
 //     where
 //         Scope: ScopeApi,
 //         Self: Sized,
@@ -160,7 +156,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess<Scope> {
 //     }
 // }
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -219,7 +215,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -237,7 +233,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for StringData {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -247,7 +243,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StringData {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -276,7 +272,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -292,7 +288,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -309,7 +305,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -321,7 +317,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -335,7 +331,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Address<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -346,7 +342,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Address<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -358,7 +354,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -370,8 +366,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
                 metadata: _,
             } => {
                 let addr_type = addr.type_of(&scope)?;
-                let msg_type =
-                    <Either<UserType, StaticType> as GetSubTypes>::get_return(&addr_type);
+                let msg_type = <EType as GetSubTypes>::get_return(&addr_type);
                 let Some(msg_type) = msg_type else {
                     return Err(SemanticError::CantInferType);
                 };
@@ -395,7 +390,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Struct<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -405,7 +400,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Struct<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Union<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -416,7 +411,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Union<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Enum {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -426,7 +421,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Enum {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -456,7 +451,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

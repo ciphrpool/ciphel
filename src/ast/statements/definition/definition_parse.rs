@@ -18,9 +18,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
@@ -324,11 +322,12 @@ mod tests {
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
                     metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr(Box::new(
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(10)
-                        ))))
-                    )))],
+                    instructions: vec![Statement::Return(Return::Expr {
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(Number::U64(10))
+                        )))),
+                        metadata: Metadata::default()
+                    })],
 
                     inner_scope: RefCell::new(None),
                 }

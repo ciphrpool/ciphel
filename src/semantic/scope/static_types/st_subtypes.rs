@@ -1,6 +1,6 @@
 use crate::semantic::{
     scope::{type_traits::GetSubTypes, user_type_impl::UserType},
-    Either, SizeOf,
+    EType, Either, SizeOf,
 };
 
 use super::{
@@ -8,7 +8,7 @@ use super::{
 };
 
 impl GetSubTypes for StaticType {
-    fn get_nth(&self, n: &usize) -> Option<Either<UserType, StaticType>> {
+    fn get_nth(&self, n: &usize) -> Option<EType> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
@@ -19,15 +19,13 @@ impl GetSubTypes for StaticType {
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_nth(value, n)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_nth(value, n),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
         }
     }
 
-    fn get_item(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_item(&self) -> Option<EType> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(SliceType { size, item_type }) => Some(item_type.as_ref().clone()),
@@ -38,9 +36,7 @@ impl GetSubTypes for StaticType {
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => Some(Either::Static(Self::Error.into())),
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_item(value)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_item(value),
             StaticType::Map(value) => Some(value.values_type.as_ref().clone()),
             StaticType::String(_) => {
                 Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
@@ -48,7 +44,7 @@ impl GetSubTypes for StaticType {
         }
     }
 
-    fn get_key(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_key(&self) -> Option<EType> {
         match self {
             StaticType::Map(value) => match &value.keys_type {
                 KeyType::Primitive(value) => {
@@ -60,9 +56,7 @@ impl GetSubTypes for StaticType {
                 KeyType::String(_) => Some(Either::Static(StaticType::String(StringType()).into())),
                 KeyType::Enum(value) => Some(Either::User(UserType::Enum(value.clone()).into())),
             },
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_key(value)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_key(value),
             StaticType::Slice(_) => Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
@@ -73,17 +67,15 @@ impl GetSubTypes for StaticType {
         }
     }
 
-    fn get_return(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_return(&self) -> Option<EType> {
         match self {
             StaticType::Fn(value) => Some(value.ret.as_ref().clone()),
             StaticType::Chan(value) => Some(value.0.as_ref().clone()),
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_return(value)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_return(value),
             _ => None,
         }
     }
-    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
@@ -108,9 +100,7 @@ impl GetSubTypes for StaticType {
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_fields(value)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_fields(value),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
         }
@@ -127,9 +117,7 @@ impl GetSubTypes for StaticType {
             StaticType::Unit => None,
             StaticType::Any => None,
             StaticType::Error => None,
-            StaticType::Address(AddrType(value)) => {
-                <Either<UserType, StaticType> as GetSubTypes>::get_length(value)
-            }
+            StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_length(value),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
         }

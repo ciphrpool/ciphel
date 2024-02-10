@@ -1,11 +1,8 @@
 use std::cell::Ref;
 
-use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EType, Either, SemanticError, TypeOf};
 
-use super::{
-    static_types::StaticType, user_type_impl::UserType, BuildEvent,
-    ScopeApi,
-};
+use super::{static_types::StaticType, user_type_impl::UserType, BuildEvent, ScopeApi};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {}
@@ -24,7 +21,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for Event {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Event {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,

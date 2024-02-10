@@ -2,7 +2,7 @@ use std::cell::Ref;
 
 use crate::semantic::{
     scope::{user_type_impl::UserType, ScopeApi},
-    Either, MergeType, SemanticError, TypeOf,
+    EType, Either, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
@@ -50,11 +50,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -102,11 +98,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -134,11 +126,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for StringType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -154,11 +142,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StringType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for VecType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -177,11 +161,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for VecType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for FnType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -212,11 +192,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for FnType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for ChanType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -235,11 +211,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for ChanType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -267,11 +239,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for AddrType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -290,11 +258,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for AddrType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for MapType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {

@@ -9,11 +9,11 @@ use crate::semantic::scope::static_types::{self, StaticType};
 use crate::semantic::scope::user_type_impl::UserType;
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::CompatibleWith;
 use crate::semantic::{scope::ScopeApi, Either, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EType};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Type {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -42,7 +42,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PrimitiveType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -91,7 +91,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::PrimitiveType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -103,7 +103,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for StringType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -160,7 +160,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::StringType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for VecType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -192,7 +192,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::VecType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for FnType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -236,7 +236,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::FnType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for ChanType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -268,7 +268,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::ChanType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for TupleType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -306,7 +306,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::TupleType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for AddrType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -339,7 +339,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::AddrType {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for MapType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,

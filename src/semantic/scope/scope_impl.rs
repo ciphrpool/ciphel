@@ -5,7 +5,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::{ast::utils::strings::ID, semantic::SemanticError};
+use crate::{
+    ast::utils::strings::ID,
+    semantic::{MutRc, SemanticError},
+};
 
 use super::{
     chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
@@ -21,8 +24,8 @@ pub struct ScopeData {
 pub enum Scope {
     Inner {
         parent: Option<Weak<RefCell<Scope>>>,
-        general: Rc<RefCell<Scope>>,
-        outer_vars: Rc<RefCell<HashMap<ID, Rc<Var>>>>,
+        general: MutRc<Scope>,
+        outer_vars: MutRc<HashMap<ID, Rc<Var>>>,
         data: ScopeData,
     },
     General {
@@ -42,7 +45,7 @@ impl ScopeData {
 }
 
 impl Scope {
-    pub fn new() -> Rc<RefCell<Self>> {
+    pub fn new() -> MutRc<Self> {
         Rc::new(RefCell::new(Self::General {
             data: ScopeData::new(),
             events: HashMap::new(),
@@ -63,9 +66,9 @@ impl ScopeApi for Scope {
     // type Event = Event;
 
     fn child_scope_with(
-        parent: &Rc<RefCell<Self>>,
+        parent: &MutRc<Self>,
         vars: Vec<Var>,
-    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
+    ) -> Result<MutRc<Self>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
             Scope::Inner { general, .. } => {
@@ -160,8 +163,7 @@ impl ScopeApi for Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope =
-                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         match borrowed_scope.find_var(id) {
                             Ok(var) => {
@@ -178,7 +180,7 @@ impl ScopeApi for Scope {
                     }),
                     None => {
                         let borrowed_scope =
-                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.find_var(id) {
@@ -232,14 +234,13 @@ impl ScopeApi for Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope =
-                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         borrowed_scope.find_type(id).ok()
                     }),
                     None => {
                         let borrowed_scope =
-                            <Rc<RefCell<Scope>> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
                         borrowed_scope.find_type(id).ok()
@@ -274,9 +275,9 @@ impl ScopeApi for MockScope {
     // type Event = Event;
 
     fn child_scope_with(
-        _parent: &Rc<RefCell<Self>>,
+        _parent: &MutRc<Self>,
         _vars: Vec<Var>,
-    ) -> Result<Rc<RefCell<Self>>, SemanticError> {
+    ) -> Result<MutRc<Self>, SemanticError> {
         unimplemented!("Mock function call")
     }
 

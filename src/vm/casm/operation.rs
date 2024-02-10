@@ -1,6 +1,4 @@
-use nom::AsBytes;
-use num_traits::{FromBytes, ToBytes, Zero};
-
+use super::CasmProgram;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, PrimitiveType},
@@ -11,6 +9,9 @@ use crate::{
         vm::{Executable, RuntimeError},
     },
 };
+use nom::AsBytes;
+use num_traits::{FromBytes, ToBytes, Zero};
+use std::cell::Cell;
 
 use super::math_operation::{
     comparaison_operator, comparaison_operator_float_left, comparaison_operator_float_right,
@@ -25,8 +26,10 @@ pub struct Operation {
 }
 
 impl Executable for Operation {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
-        self.kind.execute(memory)
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+        let _ = self.kind.execute(program, memory)?;
+        program.cursor.set(program.cursor.get() + 1);
+        Ok(())
     }
 }
 
@@ -135,30 +138,30 @@ impl OpPrimitive {
 }
 
 impl Executable for OperationKind {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match self {
-            OperationKind::Mult(value) => value.execute(memory),
-            OperationKind::Div(value) => value.execute(memory),
-            OperationKind::Mod(value) => value.execute(memory),
-            OperationKind::Addition(value) => value.execute(memory),
-            OperationKind::Substraction(value) => value.execute(memory),
-            OperationKind::ShiftLeft(value) => value.execute(memory),
-            OperationKind::ShiftRight(value) => value.execute(memory),
-            OperationKind::BitwiseAnd(value) => value.execute(memory),
-            OperationKind::BitwiseXOR(value) => value.execute(memory),
-            OperationKind::BitwiseOR(value) => value.execute(memory),
-            OperationKind::Cast(value) => value.execute(memory),
-            OperationKind::Less(value) => value.execute(memory),
-            OperationKind::LessEqual(value) => value.execute(memory),
-            OperationKind::Greater(value) => value.execute(memory),
-            OperationKind::GreaterEqual(value) => value.execute(memory),
-            OperationKind::Equal(value) => value.execute(memory),
-            OperationKind::NotEqual(value) => value.execute(memory),
-            OperationKind::Inclusion(value) => value.execute(memory),
-            OperationKind::LogicalAnd(value) => value.execute(memory),
-            OperationKind::LogicalOr(value) => value.execute(memory),
-            OperationKind::Minus(value) => value.execute(memory),
-            OperationKind::Not(value) => value.execute(memory),
+            OperationKind::Mult(value) => value.execute(program, memory),
+            OperationKind::Div(value) => value.execute(program, memory),
+            OperationKind::Mod(value) => value.execute(program, memory),
+            OperationKind::Addition(value) => value.execute(program, memory),
+            OperationKind::Substraction(value) => value.execute(program, memory),
+            OperationKind::ShiftLeft(value) => value.execute(program, memory),
+            OperationKind::ShiftRight(value) => value.execute(program, memory),
+            OperationKind::BitwiseAnd(value) => value.execute(program, memory),
+            OperationKind::BitwiseXOR(value) => value.execute(program, memory),
+            OperationKind::BitwiseOR(value) => value.execute(program, memory),
+            OperationKind::Cast(value) => value.execute(program, memory),
+            OperationKind::Less(value) => value.execute(program, memory),
+            OperationKind::LessEqual(value) => value.execute(program, memory),
+            OperationKind::Greater(value) => value.execute(program, memory),
+            OperationKind::GreaterEqual(value) => value.execute(program, memory),
+            OperationKind::Equal(value) => value.execute(program, memory),
+            OperationKind::NotEqual(value) => value.execute(program, memory),
+            OperationKind::Inclusion(value) => value.execute(program, memory),
+            OperationKind::LogicalAnd(value) => value.execute(program, memory),
+            OperationKind::LogicalOr(value) => value.execute(program, memory),
+            OperationKind::Minus(value) => value.execute(program, memory),
+            OperationKind::Not(value) => value.execute(program, memory),
         }
     }
 }
@@ -180,7 +183,7 @@ pub struct Mod {
 }
 
 impl Executable for Mult {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Mult, memory)
@@ -205,7 +208,7 @@ impl Executable for Mult {
 }
 
 impl Executable for Division {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Div, memory)
@@ -233,7 +236,7 @@ impl Executable for Division {
 }
 
 impl Executable for Mod {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Mod, memory)
@@ -273,7 +276,7 @@ pub struct Substraction {
 }
 
 impl Executable for Addition {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Add, memory)
@@ -306,7 +309,7 @@ impl Executable for Addition {
 }
 
 impl Executable for Substraction {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Sub, memory)
@@ -342,7 +345,7 @@ pub struct ShiftRight {
 }
 
 impl Executable for ShiftLeft {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::ShiftLeft, memory)
@@ -353,7 +356,7 @@ impl Executable for ShiftLeft {
 }
 
 impl Executable for ShiftRight {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::ShiftRight, memory)
@@ -370,7 +373,7 @@ pub struct BitwiseAnd {
 }
 
 impl Executable for BitwiseAnd {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::BitAnd, memory)
@@ -401,7 +404,7 @@ pub struct BitwiseXOR {
 }
 
 impl Executable for BitwiseXOR {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::BitXor, memory)
@@ -432,7 +435,7 @@ pub struct BitwiseOR {
 }
 
 impl Executable for BitwiseOR {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::BitOr, memory)
@@ -478,7 +481,7 @@ pub struct GreaterEqual {
 }
 
 impl Executable for Less {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 comparaison_operator(&left, &right, ComparaisonOperator::Less, memory)
@@ -527,7 +530,7 @@ impl Executable for Less {
 }
 
 impl Executable for LessEqual {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 comparaison_operator(&left, &right, ComparaisonOperator::LessEqual, memory)
@@ -576,7 +579,7 @@ impl Executable for LessEqual {
 }
 
 impl Executable for Greater {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 comparaison_operator(&left, &right, ComparaisonOperator::Greater, memory)
@@ -625,7 +628,7 @@ impl Executable for Greater {
 }
 
 impl Executable for GreaterEqual {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 comparaison_operator(&left, &right, ComparaisonOperator::GreaterEqual, memory)
@@ -685,7 +688,7 @@ pub struct NotEqual {
 }
 
 impl Executable for Equal {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = {
             let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
@@ -698,7 +701,7 @@ impl Executable for Equal {
 }
 
 impl Executable for NotEqual {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = {
             let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
@@ -717,7 +720,7 @@ pub struct Inclusion {
 }
 
 impl Executable for Inclusion {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let _left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
         todo!()
@@ -728,7 +731,7 @@ impl Executable for Inclusion {
 pub struct LogicalAnd();
 
 impl Executable for LogicalAnd {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let left_data = OpPrimitive::get_bool(memory)?;
         let right_data = OpPrimitive::get_bool(memory)?;
         let data = [(left_data && right_data) as u8];
@@ -740,7 +743,7 @@ impl Executable for LogicalAnd {
 pub struct LogicalOr();
 
 impl Executable for LogicalOr {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let left_data = OpPrimitive::get_bool(memory)?;
         let right_data = OpPrimitive::get_bool(memory)?;
         let data = [(left_data || right_data) as u8];
@@ -754,7 +757,7 @@ pub struct Minus {
 }
 
 impl Executable for Minus {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match &self.data_type {
             OpPrimitive::Float => {
                 let data = OpPrimitive::get_float(memory)?;
@@ -846,7 +849,7 @@ impl Executable for Minus {
 pub struct Not();
 
 impl Executable for Not {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = OpPrimitive::get_bool(memory)?;
         let data = [(!data) as u8];
         memory.stack.push_with(&data).map_err(|e| e.into())
@@ -907,7 +910,7 @@ macro_rules! push_data_as_type {
 }
 
 impl Executable for Cast {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {
                 NumberType::U8 => {
@@ -1207,9 +1210,7 @@ mod tests {
 
     fn init_float(num: f64, memory: &Memory) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1218,9 +1219,7 @@ mod tests {
         memory: &Memory,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1229,9 +1228,7 @@ mod tests {
         memory: &Memory,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1240,9 +1237,7 @@ mod tests {
         memory: &Memory,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1251,9 +1246,7 @@ mod tests {
         memory: &Memory,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1262,32 +1255,24 @@ mod tests {
         memory: &Memory,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
     fn init_char(memory: &Memory) -> Result<(), RuntimeError> {
         let data = vec!['a' as u8];
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
     fn init_bool(state: bool, memory: &Memory) -> Result<(), RuntimeError> {
         let data = vec![state as u8];
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
     fn init_string(text: &str, memory: &Memory) -> Result<(), RuntimeError> {
         let data = text.as_bytes().to_vec();
-        let offset = memory.stack.top();
-        let _ = memory.stack.push(data.len()).map_err(|e| e.into())?;
-        let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+        let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
         Ok(())
     }
 
@@ -1315,7 +1300,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1331,7 +1316,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1347,7 +1332,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1363,7 +1348,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1379,7 +1364,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1395,7 +1380,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1411,7 +1396,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1427,7 +1412,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1443,7 +1428,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1459,7 +1444,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
@@ -1475,7 +1460,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1491,7 +1476,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1507,7 +1492,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1523,7 +1508,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1539,7 +1524,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1555,7 +1540,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1568,7 +1553,7 @@ mod tests {
         init_bool(true, &memory).expect("init should have succeeded");
         init_bool(true, &memory).expect("init should have succeeded");
         LogicalAnd()
-            .execute(&memory)
+            .execute(&CasmProgram::default(), &memory)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1581,7 +1566,7 @@ mod tests {
         init_bool(true, &memory).expect("init should have succeeded");
         init_bool(true, &memory).expect("init should have succeeded");
         LogicalOr()
-            .execute(&memory)
+            .execute(&CasmProgram::default(), &memory)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
@@ -1595,7 +1580,7 @@ mod tests {
         Minus {
             data_type: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&memory)
+        .execute(&CasmProgram::default(), &memory)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num8::<i64>(&memory).expect("result should be of valid type");
@@ -1607,7 +1592,7 @@ mod tests {
         let memory = Memory::new();
         init_bool(true, &memory).expect("init should have succeeded");
         Not()
-            .execute(&memory)
+            .execute(&CasmProgram::default(), &memory)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");

@@ -12,7 +12,9 @@ use crate::{
         statements::definition::{self},
         utils::strings::ID,
     },
-    semantic::{CompatibleWith, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
+    semantic::{
+        CompatibleWith, EType, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf,
+    },
     vm::{
         allocator::align,
         vm::{DeserializeFrom, RuntimeError},
@@ -35,7 +37,7 @@ pub enum UserType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub id: ID,
-    pub fields: Vec<(ID, Either<UserType, StaticType>)>,
+    pub fields: Vec<(ID, EType)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,7 +53,7 @@ pub struct Union {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Rc<UserType> {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: super::ScopeApi,
         Self: Sized,
@@ -99,7 +101,7 @@ impl<Scope: ScopeApi> BuildUserType<Scope> for UserType {
 }
 
 impl GetSubTypes for UserType {
-    fn get_field(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
+    fn get_field(&self, field_id: &ID) -> Option<EType> {
         match self {
             UserType::Struct(value) => value
                 .fields
@@ -110,7 +112,7 @@ impl GetSubTypes for UserType {
             UserType::Union(_) => None,
         }
     }
-    fn get_variant(&self, variant: &ID) -> Option<Either<UserType, StaticType>> {
+    fn get_variant(&self, variant: &ID) -> Option<EType> {
         match self {
             UserType::Struct(_) => None,
             UserType::Enum(value) => {
@@ -128,7 +130,7 @@ impl GetSubTypes for UserType {
                 .map(|field| Either::User(UserType::Struct(field.clone()).into())),
         }
     }
-    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
         match self {
             UserType::Struct(value) => Some(
                 value
@@ -172,11 +174,7 @@ impl IsEnum for UserType {
 }
 
 impl<Scope: ScopeApi> MergeType<Scope> for UserType {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -430,7 +428,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
             if offset + aligned_size > bytes.len() {
                 return Err(RuntimeError::Deserialization);
             }
-            let data = <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
+            let data = <EType as DeserializeFrom<Scope>>::deserialize_from(
                 &field_type,
                 &bytes[offset..offset + size],
             )?;

@@ -2,9 +2,14 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::statements::assignation::AssignValue,
-    semantic::{scope::ScopeApi, SizeOf},
+    semantic::{scope::ScopeApi, MutRc, SizeOf},
     vm::{
-        strips::{memcopy::MemCopy, Strip},
+        casm::{
+            alloc::StackFrame,
+            branch::{Call, Goto, Label},
+            memcopy::MemCopy,
+            Casm, CasmProgram,
+        },
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -14,38 +19,45 @@ use super::{Assignation, Assignee};
 impl<Scope: ScopeApi> GenerateCode<Scope> for Assignation<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
-        match &self.right {
-            AssignValue::Scope(value) => value.gencode(scope, instructions, offset)?,
-            AssignValue::Expr(value) => value.gencode(scope, instructions, offset)?,
-        }
+        let _ = &self.right.gencode(scope, instructions)?;
+        // match &self.right {
+        //     AssignValue::Scope(right) => {
 
-        self.left.gencode(scope, instructions, offset)
+        //     },
+        //     AssignValue::Expr(right) => {
+        //         let _ = right.gencode(scope, instructions)?;
+        //         self.left.gencode(scope, instructions)
+        //     }
+        // }
+
+        self.left.gencode(scope, instructions)
     }
 }
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Assignee::Variable(variable) => {
                 // Push the address of the variable on the stack
-                let _ = variable.locate(scope, instructions, offset)?;
-                let mut borrowed_instructions = instructions.as_ref().borrow_mut();
+                let _ = variable.locate(scope, instructions)?;
+                let mut borrowed_instructions = instructions
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| CodeGenerationError::Default)?;
                 let var_size = {
                     let Some(var_type) = variable.signature() else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
                     var_type.size_of()
                 };
-                borrowed_instructions.push(Strip::MemCopy(MemCopy::TakeToStack { size: var_size }))
+                borrowed_instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))
             }
             Assignee::PtrAccess(_) => todo!(),
         }
@@ -53,6 +65,52 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
     }
 }
 
+impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            AssignValue::Scope(value) => {
+                let mut borrowed_instructions = instructions
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| CodeGenerationError::Default)?;
+
+                let end_scope_label = Label::gen();
+                borrowed_instructions.push(Casm::Goto(Goto {
+                    label: end_scope_label,
+                }));
+                let scope_label = borrowed_instructions.push_label("Scope".into());
+                drop(borrowed_instructions);
+                value.gencode(scope, instructions)?;
+
+                let mut borrowed_instructions = instructions
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| CodeGenerationError::Default)?;
+
+                let size = value
+                    .metadata
+                    .signature()
+                    .map(|t| t.size_of())
+                    .ok_or(CodeGenerationError::UnresolvedError)?;
+
+                borrowed_instructions.push_label_id(end_scope_label, "End_Scope".into());
+                borrowed_instructions.push(Casm::StackFrame(StackFrame::Set {
+                    return_size: size,
+                    cursor_offset: 2,
+                }));
+                borrowed_instructions.push(Casm::Call(Call { label: scope_label }));
+
+                drop(borrowed_instructions);
+            }
+            AssignValue::Expr(value) => value.gencode(scope, instructions)?,
+        }
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     use num_traits::Zero;
@@ -87,10 +145,11 @@ mod tests {
     fn valid_assignation_in_scope() {
         let statement = Statement::parse(
             r##"
-        {
-            let x:u64;
-            x = 420;
-        }
+        let x = {
+            let y:u64;
+            y = 420;
+            return y;
+        };
         "##
             .into(),
         )
@@ -102,21 +161,18 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -153,23 +209,21 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         declaration
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -202,13 +256,14 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let point:Point;
             point = Point {
                 x : 420,
                 y : 69,
             };
-        }
+            return point;
+        };
         "##
             .into(),
         )
@@ -224,9 +279,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
@@ -234,11 +289,9 @@ mod tests {
 
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
@@ -263,10 +316,11 @@ mod tests {
     fn valid_assignation_tuple_access_in_scope() {
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let x:(u64,u64);
             x.1 = 420;
-        }
+            return x;
+        };
         "##
             .into(),
         )
@@ -278,9 +332,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
@@ -288,11 +342,9 @@ mod tests {
 
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
@@ -317,10 +369,11 @@ mod tests {
     fn valid_assignation_slice_access_in_scope() {
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let x:[4]u64;
             x[1] = 420;
-        }
+            return x;
+        };
         "##
             .into(),
         )
@@ -332,20 +385,18 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Slice<Scope> = SliceType {
             size: 4,
@@ -391,11 +442,12 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let point:Point;
             point.x = 420;
             point.y = 69;
-        }
+            return point;
+        };
         "##
             .into(),
         )
@@ -411,20 +463,18 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
@@ -489,10 +539,11 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let point:Point;
             point.y[1].1 = 69;
-        }
+            return point;
+        };
         "##
             .into(),
         )
@@ -509,9 +560,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
@@ -519,11 +570,9 @@ mod tests {
 
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
@@ -596,10 +645,11 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-        {
+        let x = {
             let point:Point;
             point.y.y = 69;
-        }
+            return point;
+        };
         "##
             .into(),
         )
@@ -623,9 +673,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(Vec::default()));
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
         statement
-            .gencode(&scope, &instructions, 0)
+            .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
         let instructions = instructions.as_ref().take();
@@ -633,11 +683,9 @@ mod tests {
 
         // Execute the instructions.
         let memory = Memory::new();
-        for instruction in instructions {
-            instruction
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-        }
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type_point
             .deserialize_from(&data)

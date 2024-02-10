@@ -2,16 +2,14 @@ use std::cell::Ref;
 
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::Either;
 use crate::semantic::{
-    scope::{
-        static_types::StaticType, user_type_impl::UserType, ScopeApi,
-    },
+    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
+use crate::semantic::{EType, Either};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Assignation<Scope> {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -22,7 +20,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Assignation<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -35,7 +33,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AssignValue<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Assignee<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,

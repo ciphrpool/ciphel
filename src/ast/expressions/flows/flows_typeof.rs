@@ -4,10 +4,9 @@ use crate::{
     ast::expressions::data::{VarID, Variable},
     semantic::{
         scope::{
-            static_types::StaticType, type_traits::GetSubTypes,
-            user_type_impl::UserType, ScopeApi,
+            static_types::StaticType, type_traits::GetSubTypes, user_type_impl::UserType, ScopeApi,
         },
-        Either, MergeType, Resolve, SemanticError, TypeOf,
+        EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
     vm::platform::api::PlatformApi,
 };
@@ -15,7 +14,7 @@ use crate::{
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -29,18 +28,18 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let main_branch_type = self.main_branch.type_of(&scope)?;
-        main_branch_type.merge(&self.else_branch, scope)
+        let then_branch_type = self.then_branch.type_of(&scope)?;
+        then_branch_type.merge(&self.else_branch, scope)
     }
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -49,7 +48,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -76,7 +75,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -86,7 +85,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -101,9 +100,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
         }
 
         let fn_var_type = self.fn_var.type_of(&scope)?;
-        let Some(return_type) =
-            <Either<UserType, StaticType> as GetSubTypes>::get_return(&fn_var_type)
-        else {
+        let Some(return_type) = <EType as GetSubTypes>::get_return(&fn_var_type) else {
             return Err(SemanticError::CantInferType);
         };
 

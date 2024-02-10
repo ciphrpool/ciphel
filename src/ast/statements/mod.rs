@@ -5,9 +5,11 @@ use std::{
 
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{map, opt, value},
     sequence::delimited,
 };
+
+use self::return_stat::Return;
 
 use super::{
     expressions::Expression,
@@ -18,9 +20,12 @@ use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
-        Either, Resolve, SemanticError, TypeOf,
+        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
-    vm::{strips::Strip, vm::CodeGenerationError},
+    vm::{
+        casm::{serialize::Serialized, Casm, CasmProgram},
+        vm::CodeGenerationError,
+    },
 };
 use crate::{
     semantic::{
@@ -35,6 +40,7 @@ pub mod declaration;
 pub mod definition;
 pub mod flows;
 pub mod loops;
+pub mod return_stat;
 pub mod scope;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +57,7 @@ pub enum Statement<InnerScope: ScopeApi> {
 impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
+            map(Return::parse, |value| Statement::Return(value)),
             map(scope::Scope::parse, |value| Statement::Scope(value)),
             map(flows::Flow::parse, |value| Statement::Flow(value)),
             map(assignation::Assignation::parse, |value| {
@@ -63,17 +70,16 @@ impl<InnerScope: ScopeApi> TryParse for Statement<InnerScope> {
                 Statement::Definition(value)
             }),
             map(loops::Loop::parse, |value| Statement::Loops(value)),
-            map(Return::parse, |value| Statement::Return(value)),
         ))(input)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -97,7 +103,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Statement<Scope> {
 }
 
 impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
@@ -119,184 +125,49 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Statement<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Statement::Scope(value) => value.gencode(scope, instructions, offset),
-            Statement::Flow(value) => value.gencode(scope, instructions, offset),
-            Statement::Assignation(value) => value.gencode(scope, instructions, offset),
-            Statement::Declaration(value) => value.gencode(scope, instructions, offset),
-            Statement::Definition(value) => value.gencode(scope, instructions, offset),
-            Statement::Loops(value) => value.gencode(scope, instructions, offset),
-            Statement::Return(_) => todo!(),
-        }
-    }
-}
+            Statement::Scope(value) => {
+                let scope_casm = Rc::new(RefCell::new(CasmProgram::default()));
+                let _ = value.gencode(scope, &scope_casm)?;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Return<InnerScope: ScopeApi> {
-    Unit,
-    Expr(Box<Expression<InnerScope>>),
-}
+                let scope_casm = scope_casm.take();
+                let next_instruction_idx =
+                    instructions.as_ref().borrow().len() + 1 + scope_casm.len();
+                let mut borrowed = instructions
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| CodeGenerationError::Default)?;
+                borrowed.push(Casm::Serialize(Serialized {
+                    data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
+                }));
+                borrowed.extend(scope_casm.main);
 
-impl<Scope: ScopeApi> TryParse for Return<Scope> {
-    /*
-     * @desc Parse return statements
-     *
-     * @grammar
-     * Return := return
-     *      | ID
-     *      | Expr
-     *      | Λ
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            delimited(
-                wst(lexem::RETURN),
-                opt(Expression::parse),
-                wst(lexem::SEMI_COLON),
-            ),
-            |value| match value {
-                Some(expr) => Return::Expr(Box::new(expr)),
-                None => Return::Unit,
-            },
-        )(input)
-    }
-}
-impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
-    type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &Rc<RefCell<Scope>>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            Return::Unit => {
-                match context {
-                    Some(context) => {
-                        if !<Either<UserType, StaticType> as TypeChecking>::is_unit(context) {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                    }
-                    None => {}
-                }
                 Ok(())
             }
-            Return::Expr(value) => {
-                let _ = value.resolve(scope, &context, extra)?;
-                match context {
-                    Some(context) => {
-                        let return_type = value.type_of(&scope.borrow())?;
-                        let _ = context.compatible_with(&return_type, &scope.borrow())?;
-                        Ok(())
-                    }
-                    None => Ok(()),
-                }
-            }
+            Statement::Flow(value) => value.gencode(scope, instructions),
+            Statement::Assignation(value) => value.gencode(scope, instructions),
+            Statement::Declaration(value) => value.gencode(scope, instructions),
+            Statement::Definition(value) => value.gencode(scope, instructions),
+            Statement::Loops(value) => value.gencode(scope, instructions),
+            Statement::Return(value) => value.gencode(scope, instructions),
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        match self {
-            Return::Unit => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
-            )),
-            Return::Expr(expr) => expr.type_of(&scope),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::semantic::scope::{
-        scope_impl::{self, MockScope},
-        static_types::{NumberType, PrimitiveType, StaticType},
-    };
-
-    use super::*;
-
-    #[test]
-    fn valid_return() {
-        let res = Return::<MockScope>::parse(
-            r#"
-            return ;
-        "#
-            .into(),
-        );
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(Return::Unit, value);
-    }
-
-    #[test]
-    fn valid_resolved_return() {
-        let return_statement = Return::<scope_impl::Scope>::parse(
-            r#"
-            return ;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope_impl::Scope::new();
-        let res = return_statement.resolve(&scope, &None, &());
-        assert!(res.is_ok());
-
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
-
-        let return_statement = Return::<scope_impl::Scope>::parse(
-            r#"
-            return 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope_impl::Scope::new();
-        let res = return_statement.resolve(&scope, &None, &());
-        assert!(res.is_ok());
-
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            return_type
-        );
-    }
-
-    #[test]
-    fn robustness_return() {
-        let return_statement = Return::<scope_impl::Scope>::parse(
-            r#"
-            return 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let scope = scope_impl::Scope::new();
-        let res = return_statement.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Char).into(),
-            )),
-            &(),
-        );
-        assert!(res.is_err());
-    }
+#[macro_export]
+macro_rules! resolve_metadata {
+    ($metadata:expr,$self:expr,$scope:expr,$context:expr) => {{
+        let mut borrowed_metadata = $metadata
+            .info
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| SemanticError::Default)?;
+        *borrowed_metadata = Info::Resolved {
+            context: $context.clone(),
+            signature: Some($self.type_of(&$scope.borrow())?),
+        };
+    }};
 }

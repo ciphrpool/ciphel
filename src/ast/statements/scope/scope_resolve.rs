@@ -3,20 +3,21 @@ use std::rc::Rc;
 
 use super::Scope;
 
+use crate::resolve_metadata;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::var_impl::Var;
 use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
-use crate::semantic::{CompatibleWith, Info, TypeOf};
+use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
 
 impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
-    //type Output = Rc<RefCell<OuterScope>>;
+    //type Output = MutRc<OuterScope>;
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = Vec<Var>;
     fn resolve(
         &self,
-        scope: &Rc<RefCell<OuterScope>>,
+        scope: &MutRc<OuterScope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -35,14 +36,7 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
 
         let return_type = self.type_of(&scope.borrow())?;
         let _ = context.compatible_with(&return_type, &scope.borrow())?;
-        {
-            let mut borrowed_metadata = self.metadata.info.as_ref().borrow_mut();
-
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
-        }
+        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }

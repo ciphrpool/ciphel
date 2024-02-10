@@ -24,7 +24,7 @@ pub enum Flow<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfStat<InnerScope: ScopeApi> {
     condition: Box<Expression<InnerScope>>,
-    main_branch: Box<Scope<InnerScope>>,
+    then_branch: Box<Scope<InnerScope>>,
     else_branch: Option<Box<Scope<InnerScope>>>,
 }
 

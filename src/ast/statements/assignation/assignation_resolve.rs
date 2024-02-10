@@ -1,17 +1,17 @@
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
-    CompatibleWith, Either, Resolve, SemanticError, TypeOf,
+    CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -27,11 +27,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -73,7 +73,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

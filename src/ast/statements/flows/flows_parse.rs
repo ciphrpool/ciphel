@@ -1,8 +1,6 @@
 use crate::{
     ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse},
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 use nom::{
     branch::alt,
@@ -46,9 +44,9 @@ impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
                 pair(preceded(wst(lexem::IF), Expression::parse), Scope::parse),
                 opt(preceded(wst(lexem::ELSE), Scope::parse)),
             ),
-            |((condition, main_branch), else_branch)| IfStat {
+            |((condition, then_branch), else_branch)| IfStat {
                 condition: Box::new(condition),
-                main_branch: Box::new(main_branch),
+                then_branch: Box::new(then_branch),
                 else_branch: else_branch.map(|value| Box::new(value)),
             },
         )(input)
@@ -188,7 +186,7 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                main_branch: Box::new(Scope {
+                then_branch: Box::new(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {

@@ -5,14 +5,11 @@ use crate::ast::statements::Statement;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::MergeType;
 use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError, TypeOf};
+use crate::semantic::{EType, MergeType};
 
 impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
-    fn type_of(
-        &self,
-        _scope: &Ref<OuterScope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &Ref<OuterScope>) -> Result<EType, SemanticError>
     where
         OuterScope: ScopeApi,
         Self: Sized + Resolve<OuterScope>,

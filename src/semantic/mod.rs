@@ -1,6 +1,5 @@
-
 use std::{
-    borrow::{Borrow},
+    borrow::Borrow,
     cell::{Ref, RefCell},
     ops::Deref,
     rc::Rc,
@@ -12,6 +11,8 @@ use self::scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi};
 
 pub mod scope;
 pub mod utils;
+
+pub type MutRc<T> = Rc<RefCell<T>>;
 
 #[derive(Debug, Clone)]
 pub enum SemanticError {
@@ -42,26 +43,33 @@ pub enum SemanticError {
     IncompatibleTypes,
     IncompatibleOperation,
     IncompatibleOperands,
+    Default,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
-    pub info: Rc<RefCell<Info>>,
+    pub info: MutRc<Info>,
 }
 
 impl Metadata {
-    pub fn context(&self) -> Option<Either<UserType, StaticType>> {
+    pub fn context(&self) -> Option<EType> {
         let borrowed = self.info.as_ref().borrow();
         match borrowed.deref() {
             Info::Unresolved => None,
-            Info::Resolved { context, signature: _ } => context.clone(),
+            Info::Resolved {
+                context,
+                signature: _,
+            } => context.clone(),
         }
     }
-    pub fn signature(&self) -> Option<Either<UserType, StaticType>> {
+    pub fn signature(&self) -> Option<EType> {
         let borrowed = self.info.as_ref().borrow();
         match borrowed.deref() {
             Info::Unresolved => None,
-            Info::Resolved { context: _, signature } => signature.clone(),
+            Info::Resolved {
+                context: _,
+                signature,
+            } => signature.clone(),
         }
     }
 }
@@ -70,8 +78,8 @@ impl Metadata {
 pub enum Info {
     Unresolved,
     Resolved {
-        context: Option<Either<UserType, StaticType>>,
-        signature: Option<Either<UserType, StaticType>>,
+        context: Option<EType>,
+        signature: Option<EType>,
     },
 }
 
@@ -89,13 +97,15 @@ pub enum Either<User, Static> {
     User(Rc<User>),
 }
 
+pub type EType = Either<UserType, StaticType>;
+
 pub trait Resolve<Scope: ScopeApi> {
     type Output;
     type Context: Default;
     type Extra: Default;
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -114,18 +124,14 @@ pub trait CompatibleWith<Scope: ScopeApi> {
 }
 
 pub trait TypeOf<Scope: ScopeApi> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized;
 }
 
 pub trait MergeType<Scope: ScopeApi> {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>;
 }

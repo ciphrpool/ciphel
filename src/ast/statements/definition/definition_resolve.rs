@@ -3,7 +3,9 @@ use crate::ast::types::FnType;
 use crate::ast::types::Types;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
+use crate::semantic::EType;
 use crate::semantic::Either;
+use crate::semantic::MutRc;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
@@ -12,11 +14,11 @@ use crate::vm::platform::api::PlatformApi;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -38,7 +40,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -71,7 +73,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -92,7 +94,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -116,7 +118,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     type Extra = ();
     fn resolve(
         &self,
-        _scope: &Rc<RefCell<Scope>>,
+        _scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -134,7 +136,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -197,7 +199,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
     type Extra = ();
     fn resolve(
         &self,
-        _scope: &Rc<RefCell<Scope>>,
+        _scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -215,7 +217,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     type Extra = ();
     fn resolve(
         &self,
-        _scope: &Rc<RefCell<Scope>>,
+        _scope: &MutRc<Scope>,
         _context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

@@ -3,17 +3,17 @@ use crate::semantic::{
     scope::{
         static_types::StaticType, type_traits::TypeChecking, user_type_impl::UserType, ScopeApi,
     },
-    Either, Resolve, SemanticError, TypeOf,
+    EType, Either, MutRc, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -31,11 +31,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -46,11 +46,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
         let _ = self.condition.resolve(scope, &None, extra)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
-        if !<Either<UserType, StaticType> as TypeChecking>::is_boolean(&condition_type) {
+        if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
-        let _ = self.main_branch.resolve(scope, &context, &Vec::default())?;
+        let _ = self.then_branch.resolve(scope, &context, &Vec::default())?;
         if let Some(else_branch) = &self.else_branch {
             let _ = else_branch.resolve(scope, &context, &Vec::default())?;
         }
@@ -59,11 +59,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
 }
 impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -88,11 +88,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
 
 impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
     type Output = ();
-    type Context = Option<Either<UserType, StaticType>>;
+    type Context = Option<EType>;
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -113,7 +113,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &Rc<RefCell<Scope>>,
+        scope: &MutRc<Scope>,
         _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>

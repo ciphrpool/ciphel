@@ -4,7 +4,7 @@ use crate::{
     ast::{self, utils::strings::ID},
     semantic::{
         scope::{var_impl::Var, ScopeApi},
-        Metadata, SemanticError,
+        Metadata, MutRc, SemanticError,
     },
 };
 
@@ -127,7 +127,7 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    env: Rc<RefCell<HashMap<ID, Rc<Var>>>>,
+    env: MutRc<HashMap<ID, Rc<Var>>>,
     scope: ExprScope<InnerScope>,
     pub metadata: Metadata,
 }

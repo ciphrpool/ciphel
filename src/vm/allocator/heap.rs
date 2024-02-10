@@ -1,8 +1,13 @@
-use std::{borrow::BorrowMut, cell::RefCell, fmt::Debug, rc::Rc};
+use std::{
+    borrow::BorrowMut,
+    cell::{Cell, RefCell},
+    fmt::Debug,
+    rc::Rc,
+};
 
 use num_traits::ToBytes;
 
-use crate::vm::vm::RuntimeError;
+use crate::{semantic::MutRc, vm::vm::RuntimeError};
 
 use super::align;
 
@@ -29,8 +34,8 @@ impl Into<RuntimeError> for HeapError {
 
 #[derive(Clone)]
 pub struct Heap {
-    heap: Rc<RefCell<[u8; HEAP_SIZE]>>,
-    first_freed_block_offset: Rc<RefCell<usize>>,
+    heap: MutRc<[u8; HEAP_SIZE]>,
+    first_freed_block_offset: Cell<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -339,7 +344,7 @@ impl Heap {
 
         let res = Self {
             heap: Rc::new(RefCell::new([0; HEAP_SIZE])),
-            first_freed_block_offset: Rc::new(RefCell::new(0)),
+            first_freed_block_offset: Cell::new(0),
         };
         {
             // Store the header and the footer of the heap as freed
@@ -362,7 +367,7 @@ impl Heap {
         let binding = self.heap.borrow();
         let borrowed = binding.as_ref();
 
-        let mut offset: usize = self.first_freed_block_offset.as_ref().borrow().clone();
+        let mut offset: usize = self.first_freed_block_offset.get();
         while offset < HEAP_SIZE {
             let block = Block::read(borrowed, offset)?;
             if block.header.allocated {
@@ -380,8 +385,12 @@ impl Heap {
         Ok(fitting_block)
     }
 
-    fn insert(&self, block: &Block) {
-        let mut borrowed = self.heap.as_ref().borrow_mut();
+    fn insert(&self, block: &Block) -> Result<(), HeapError> {
+        let mut borrowed = self
+            .heap
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| HeapError::Default)?;
         borrowed[block.range_header()].copy_from_slice(&block.header.to_buf());
 
         match block.data {
@@ -393,6 +402,7 @@ impl Heap {
         }
 
         borrowed[block.range_footer()].copy_from_slice(&block.header.to_buf());
+        Ok(())
     }
 
     pub fn alloc(&self, size: usize) -> Result<Pointer, HeapError> {
@@ -405,11 +415,15 @@ impl Heap {
         let next_free_block = block.next_free();
 
         let (block, opt_remaining_block) = block.cut_to_allocate(aligned_size)?;
-        self.insert(&block);
+        let _ = self.insert(&block)?;
         match opt_remaining_block {
             Some(remaining_block) => {
-                self.insert(&remaining_block);
-                let mut borrowed = self.heap.as_ref().borrow_mut();
+                let _ = self.insert(&remaining_block)?;
+                let mut borrowed = self
+                    .heap
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| HeapError::Default)?;
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
                     let previous_free_block = Block::read(borrowed.as_ref(), previous_free_block)?;
@@ -418,9 +432,8 @@ impl Heap {
                             .copy_from_slice(&remaining_block.pointer.to_be_bytes());
                     }
                 } else {
-                    let mut borrowed_mut_first_freed_block_offset =
-                        self.first_freed_block_offset.as_ref().borrow_mut();
-                    *borrowed_mut_first_freed_block_offset = remaining_block.pointer as usize;
+                    self.first_freed_block_offset
+                        .set(remaining_block.pointer as usize);
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
@@ -432,7 +445,11 @@ impl Heap {
                 }
             }
             None => {
-                let mut borrowed = self.heap.as_ref().borrow_mut();
+                let mut borrowed = self
+                    .heap
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| HeapError::Default)?;
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
                     let previous_free_block = Block::read(borrowed.as_ref(), previous_free_block)?;
@@ -447,11 +464,9 @@ impl Heap {
                         }
                     }
                 } else {
-                    let mut borrowed_mut_first_freed_block_offset =
-                        self.first_freed_block_offset.as_ref().borrow_mut();
                     if let Some(next_free_block) = next_free_block {
                         let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
-                        *borrowed_mut_first_freed_block_offset = next_free_block.pointer;
+                        self.first_freed_block_offset.set(next_free_block.pointer);
                     }
                 }
                 // update next free block to account the change of previous free block
@@ -486,7 +501,7 @@ impl Heap {
         let block = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();
-            let borrowed_first_freed_block_offset = self.first_freed_block_offset.borrow();
+            let borrowed_first_freed_block_offset = self.first_freed_block_offset.get();
             let left_block = match block.peak_left() {
                 Some(range) => Block::from_footer(borrowed, range).ok(),
                 None => None,
@@ -498,7 +513,7 @@ impl Heap {
                 Some(left_block) => {
                     if left_block.header.allocated {
                         // search for a previous free block to store in the current block
-                        let mut offset = *borrowed_first_freed_block_offset;
+                        let mut offset = borrowed_first_freed_block_offset;
                         if offset > left_block.pointer {
                             // no free block before the current block therefore set the current block previous pointer to invalid pointer
                             Block {
@@ -590,7 +605,7 @@ impl Heap {
                         if coalesced_left_block.next_free().is_some() {
                             coalesced_left_block
                         } else {
-                            let mut offset = *borrowed_first_freed_block_offset;
+                            let mut offset = borrowed_first_freed_block_offset;
                             if offset < coalesced_left_block.pointer {
                                 while offset < HEAP_SIZE {
                                     let searched_block = Block::read(borrowed.as_ref(), offset)?;
@@ -636,9 +651,13 @@ impl Heap {
 
             coalesced_right_block
         };
-        self.insert(&block);
+        let _ = self.insert(&block)?;
         {
-            let mut borrowed = self.heap.as_ref().borrow_mut();
+            let mut borrowed = self
+                .heap
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| HeapError::Default)?;
             let previous_free_block = block.previous_free();
             let next_free_block = block.next_free();
 
@@ -649,17 +668,13 @@ impl Heap {
                 if !previous_free_block.header.allocated {
                     borrowed[previous_free_block.range_next().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
-                    let mut borrowed_mut_first_freed_block_offset =
-                        self.first_freed_block_offset.as_ref().borrow_mut();
-                    if previous_free_block.pointer < *borrowed_mut_first_freed_block_offset {
-                        *borrowed_mut_first_freed_block_offset = block.pointer
+                    if previous_free_block.pointer < self.first_freed_block_offset.get() {
+                        self.first_freed_block_offset.set(block.pointer);
                     }
                 }
             } else {
-                let mut borrowed_mut_first_freed_block_offset =
-                    self.first_freed_block_offset.as_ref().borrow_mut();
-                if block.pointer < *borrowed_mut_first_freed_block_offset {
-                    *borrowed_mut_first_freed_block_offset = block.pointer
+                if block.pointer < self.first_freed_block_offset.get() {
+                    self.first_freed_block_offset.set(block.pointer);
                 }
             }
             // update next free block to account the change of previous free block
@@ -733,7 +748,11 @@ impl Heap {
         //     return Err(HeapError::InvalidPointer);
         // }
         {
-            let mut borrowed = self.heap.as_ref().borrow_mut();
+            let mut borrowed = self
+                .heap
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| HeapError::Default)?;
             // let Some(data_range) = block.range_data() else {
             //     return Err(HeapError::InvalidPointer);
             // };

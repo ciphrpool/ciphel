@@ -4,7 +4,7 @@ use crate::{
     ast::utils::strings::ID,
     semantic::{
         scope::{var_impl::Var, ScopeApi},
-        Metadata, SemanticError,
+        Metadata, MutRc, SemanticError,
     },
 };
 
@@ -18,7 +18,7 @@ pub mod scope_typeof;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scope<Inner: ScopeApi> {
     pub instructions: Vec<Statement<Inner>>,
-    pub inner_scope: RefCell<Option<Rc<RefCell<Inner>>>>,
+    pub inner_scope: RefCell<Option<MutRc<Inner>>>,
     pub metadata: Metadata,
 }
 

@@ -7,7 +7,7 @@ use crate::{
     },
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
-        Either, Info, Metadata, SizeOf,
+        EType, Either, Info, Metadata, SizeOf,
     },
     vm::vm::{DeserializeFrom, RuntimeError},
 };
@@ -159,10 +159,8 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
                 if idx as u64 >= length {
                     Ok(None)
                 } else {
-                    <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
-                        &self.0, bytes,
-                    )
-                    .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
+                    <EType as DeserializeFrom<Scope>>::deserialize_from(&self.0, bytes)
+                        .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
                 }
             })
             .collect();
@@ -221,7 +219,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
             if offset + size > bytes.len() {
                 return Err(RuntimeError::Deserialization);
             }
-            let data = <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
+            let data = <EType as DeserializeFrom<Scope>>::deserialize_from(
                 &element_type,
                 &bytes[offset..offset + size],
             )?;
@@ -252,11 +250,8 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
                 if idx >= self.size {
                     Ok(None)
                 } else {
-                    <Either<UserType, StaticType> as DeserializeFrom<Scope>>::deserialize_from(
-                        &self.item_type,
-                        bytes,
-                    )
-                    .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
+                    <EType as DeserializeFrom<Scope>>::deserialize_from(&self.item_type, bytes)
+                        .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
                 }
             })
             .collect();

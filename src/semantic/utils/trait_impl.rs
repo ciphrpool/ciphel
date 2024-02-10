@@ -9,7 +9,7 @@ use crate::{
             user_type_impl::{self, UserType},
             ScopeApi,
         },
-        CompatibleWith, Either, MergeType, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
     vm::vm::{DeserializeFrom, RuntimeError},
 };
@@ -29,7 +29,7 @@ where
 
                 // let other_type = other.type_of(&scope)?;
 
-                // if <Either<UserType, StaticType> as TypeChecking>::is_unit(&other_type) {
+                // if <EType as TypeChecking>::is_unit(&other_type) {
                 //     Ok(())
                 // } else {
                 //     Err(SemanticError::IncompatibleTypes)
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Either<UserType, StaticType> {
+impl<Scope: ScopeApi> CompatibleWith<Scope> for EType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf<Scope>,
@@ -62,8 +62,8 @@ impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Either<UserType, StaticType> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<Either<UserType, StaticType>, SemanticError>
+impl<Scope: ScopeApi> TypeOf<Scope> for EType {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
@@ -75,12 +75,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Either<UserType, StaticType> {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for Either<UserType, StaticType> {
-    fn merge<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+impl<Scope: ScopeApi> MergeType<Scope> for EType {
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -91,7 +87,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for Either<UserType, StaticType> {
     }
 }
 
-impl TypeChecking for Either<UserType, StaticType> {
+impl TypeChecking for EType {
     fn is_iterable(&self) -> bool {
         match self {
             Either::Static(static_type) => static_type.is_iterable(),
@@ -181,48 +177,48 @@ impl TypeChecking for Either<UserType, StaticType> {
     }
 }
 
-impl GetSubTypes for Either<UserType, StaticType> {
-    fn get_nth(&self, n: &usize) -> Option<Either<UserType, StaticType>> {
+impl GetSubTypes for EType {
+    fn get_nth(&self, n: &usize) -> Option<EType> {
         match self {
             Either::Static(static_type) => static_type.get_nth(n),
             Either::User(user_type) => user_type.get_nth(n),
         }
     }
 
-    fn get_field(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
+    fn get_field(&self, field_id: &ID) -> Option<EType> {
         match self {
             Either::Static(_) => None,
             Either::User(user_type) => user_type.get_field(field_id),
         }
     }
-    fn get_variant(&self, field_id: &ID) -> Option<Either<UserType, StaticType>> {
+    fn get_variant(&self, field_id: &ID) -> Option<EType> {
         match self {
             Either::Static(_) => None,
             Either::User(user_type) => user_type.get_variant(field_id),
         }
     }
-    fn get_item(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_item(&self) -> Option<EType> {
         match self {
             Either::Static(static_type) => static_type.get_item(),
             Either::User(_) => None,
         }
     }
 
-    fn get_key(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_key(&self) -> Option<EType> {
         match self {
             Either::Static(static_type) => static_type.get_key(),
             Either::User(_) => None,
         }
     }
 
-    fn get_return(&self) -> Option<Either<UserType, StaticType>> {
+    fn get_return(&self) -> Option<EType> {
         match self {
             Either::Static(static_type) => static_type.get_return(),
             Either::User(_) => None,
         }
     }
 
-    fn get_fields(&self) -> Option<Vec<(Option<String>, Either<UserType, StaticType>)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
         match self {
             Either::Static(static_type) => static_type.get_fields(),
             Either::User(user_type) => user_type.get_fields(),
@@ -267,7 +263,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -293,7 +289,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -313,7 +309,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -329,11 +325,7 @@ where
             Either::User(value) => value.can_shift(),
         }
     }
-    fn merge_shift<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn merge_shift<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -353,7 +345,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -373,7 +365,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -393,7 +385,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -402,11 +394,7 @@ where
             Either::User(value) => value.merge_bitwise_or(other, scope),
         }
     }
-    fn cast<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    fn cast<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -425,7 +413,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -445,7 +433,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -465,7 +453,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -485,7 +473,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -505,7 +493,7 @@ where
         &self,
         other: &Other,
         scope: &Ref<Scope>,
-    ) -> Result<Either<UserType, StaticType>, SemanticError>
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf<Scope>,
     {
@@ -516,7 +504,7 @@ where
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for Either<UserType, StaticType> {
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for EType {
     type Output = Data<Scope>;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {

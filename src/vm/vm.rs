@@ -1,10 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
-use crate::semantic::scope::ScopeApi;
+use crate::semantic::{scope::ScopeApi, MutRc};
 
 use super::{
     allocator::{stack::StackError, Memory},
-    strips::Strip,
+    casm::{Casm, CasmProgram},
 };
 
 #[derive(Debug, Clone)]
@@ -19,20 +22,21 @@ pub enum RuntimeError {
     Deserialization,
     UnsupportedOperation,
     MathError,
+    Exit,
+    CodeSegmentation,
     Default,
 }
 
 pub trait GenerateCode<Scope: ScopeApi> {
     fn gencode(
         &self,
-        scope: &Rc<RefCell<Scope>>,
-        instructions: &Rc<RefCell<Vec<Strip>>>,
-        offset: usize,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError>;
 }
 
 pub trait Executable {
-    fn execute(&self, memory: &Memory) -> Result<(), RuntimeError>;
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError>;
 }
 
 pub trait DeserializeFrom<Scope: ScopeApi> {

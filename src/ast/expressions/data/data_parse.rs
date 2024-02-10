@@ -4,7 +4,7 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::Statement,
+        statements::{return_stat::Return, Statement},
         types::NumberType,
         utils::{
             io::{PResult, Span},
@@ -356,9 +356,10 @@ impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
             map(Expression::parse, |value| {
                 ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(ast::statements::Return::Expr(Box::new(
-                        value,
-                    )))],
+                    instructions: vec![Statement::Return(Return::Expr {
+                        expr: Box::new(value),
+                        metadata: Metadata::default(),
+                    })],
                     inner_scope: RefCell::new(None),
                 })
             }),
@@ -615,10 +616,7 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{
-            expressions::{data::Number, Atomic},
-            statements::Return,
-        },
+        ast::expressions::{data::Number, Atomic},
         semantic::scope::scope_impl::MockScope,
     };
 
@@ -752,12 +750,15 @@ mod tests {
                 env: Rc::new(RefCell::new(HashMap::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr(Box::new(
-                        Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
-                            id: "x".into(),
-                            metadata: Metadata::default()
-                        }))))
-                    )))],
+                    instructions: vec![Statement::Return(Return::Expr {
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                            Variable::Var(VarID {
+                                id: "x".into(),
+                                metadata: Metadata::default()
+                            })
+                        )))),
+                        metadata: Metadata::default()
+                    })],
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()

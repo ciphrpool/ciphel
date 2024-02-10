@@ -24,7 +24,7 @@ pub enum ExprFlow<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfExpr<InnerScope: ScopeApi> {
     condition: Box<Expression<InnerScope>>,
-    main_branch: ExprScope<InnerScope>,
+    then_branch: ExprScope<InnerScope>,
     else_branch: ExprScope<InnerScope>,
     metadata: Metadata,
 }

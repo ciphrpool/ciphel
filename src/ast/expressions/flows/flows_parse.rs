@@ -56,9 +56,9 @@ impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
                 ),
                 preceded(wst(lexem::ELSE), ExprScope::<Scope>::parse),
             ),
-            |((condition, main_branch), else_branch)| IfExpr {
+            |((condition, then_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
-                main_branch,
+                then_branch,
                 else_branch,
                 metadata: Metadata::default(),
             },
@@ -246,7 +246,7 @@ mod tests {
                 flows::PatternExpr,
                 Atomic, Expression,
             },
-            statements::{scope::Scope, Return, Statement},
+            statements::{return_stat::Return, scope::Scope, Statement},
         },
         semantic::{scope::scope_impl::MockScope, Metadata},
     };
@@ -263,12 +263,15 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                main_branch: ExprScope::Expr(Scope {
+                then_branch: ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
-                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
-                        )))))
+                        (Statement::Return(Return::Expr {
+                            expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Number::U64(10))
+                            )))),
+                            metadata: Metadata::default()
+                        }))
                     ],
 
                     inner_scope: RefCell::new(None),
@@ -276,9 +279,12 @@ mod tests {
                 else_branch: ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
-                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
-                        )))))
+                        (Statement::Return(Return::Expr {
+                            expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Number::U64(20))
+                            )))),
+                            metadata: Metadata::default()
+                        }))
                     ],
 
                     inner_scope: RefCell::new(None),
@@ -321,9 +327,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -337,9 +346,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -353,9 +365,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -370,9 +385,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -386,9 +404,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -399,9 +420,12 @@ mod tests {
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
-                                (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                                    Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                                )))))
+                                (Statement::Return(Return::Expr {
+                                    expr: Box::new(Expression::Atomic(Atomic::Data(
+                                        Data::Primitive(Primitive::Bool(true))
+                                    ))),
+                                    metadata: Metadata::default()
+                                }))
                             ],
 
                             inner_scope: RefCell::new(None),
@@ -411,9 +435,12 @@ mod tests {
                 else_branch: ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
-                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Bool(true)))
-                        )))))
+                        (Statement::Return(Return::Expr {
+                            expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Bool(true)
+                            )))),
+                            metadata: Metadata::default()
+                        }))
                     ],
 
                     inner_scope: RefCell::new(None),
@@ -433,9 +460,12 @@ mod tests {
                 try_branch: ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
-                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))
-                        )))))
+                        (Statement::Return(Return::Expr {
+                            expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Number::U64(10))
+                            )))),
+                            metadata: Metadata::default()
+                        }))
                     ],
 
                     inner_scope: RefCell::new(None),
@@ -443,9 +473,12 @@ mod tests {
                 else_branch: ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
-                        (Statement::Return(Return::Expr(Box::new(Expression::Atomic(
-                            Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(20))))
-                        )))))
+                        (Statement::Return(Return::Expr {
+                            expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Number::U64(20))
+                            )))),
+                            metadata: Metadata::default()
+                        }))
                     ],
 
                     inner_scope: RefCell::new(None),

@@ -1,6 +1,6 @@
 use self::{
     heap::{Heap, ALIGNMENT},
-    stack::Stack,
+    stack::{Offset, Stack},
 };
 
 pub mod heap;
@@ -14,7 +14,7 @@ pub fn align(size: usize) -> usize {
 #[derive(Debug, Clone)]
 pub enum MemoryAddress {
     Heap,
-    Stack { offset: usize },
+    Stack { offset: Offset },
 }
 
 #[derive(Debug, Clone)]
