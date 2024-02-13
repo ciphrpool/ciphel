@@ -3,6 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use ulid::Ulid;
 
 use crate::{
+    ast::expressions::data::{Number, Primitive},
     semantic::{
         scope::{
             static_types::StaticType,
@@ -15,7 +16,7 @@ use crate::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{
             alloc::{Access, StackFrame},
-            branch::{BranchIf, BranchTable, Call, Goto, Label},
+            branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
             locate::Locate,
             memcopy::MemCopy,
             serialize::Serialized,
@@ -161,14 +162,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
             .map_err(|_| CodeGenerationError::Default)?;
 
         let end_match_label = Label::gen();
-        // borrowed.push(Casm::Goto(Goto {
-        //     label: end_match_label,
-        // }));
         let match_label = borrowed.push_label("Match".into());
         drop(borrowed);
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
         let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.patterns.len());
+        let mut switch: HashMap<Vec<u8>, Ulid> = HashMap::with_capacity(self.patterns.len());
 
         for PatternExpr { pattern, .. } in &self.patterns {
             let label: Ulid = Label::gen();
@@ -200,7 +199,30 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                         table.insert(idx as u64, label);
                     }
                 }
-                _ => {}
+                Pattern::Primitive(value) => {
+                    let data = match value {
+                        Primitive::Number(data) => match data {
+                            Number::U8(data) => data.to_le_bytes().to_vec(),
+                            Number::U16(data) => data.to_le_bytes().to_vec(),
+                            Number::U32(data) => data.to_le_bytes().to_vec(),
+                            Number::U64(data) => data.to_le_bytes().to_vec(),
+                            Number::U128(data) => data.to_le_bytes().to_vec(),
+                            Number::I8(data) => data.to_le_bytes().to_vec(),
+                            Number::I16(data) => data.to_le_bytes().to_vec(),
+                            Number::I32(data) => data.to_le_bytes().to_vec(),
+                            Number::I64(data) => data.to_le_bytes().to_vec(),
+                            Number::I128(data) => data.to_le_bytes().to_vec(),
+                        },
+                        Primitive::Float(data) => data.to_le_bytes().to_vec(),
+                        Primitive::Bool(data) => [*data as u8].to_vec(),
+                        Primitive::Char(data) => [*data as u8].to_vec(),
+                    };
+                    switch.insert(data, label);
+                }
+                Pattern::String(value) => {
+                    let data = value.value.as_bytes().to_vec();
+                    switch.insert(data, label);
+                }
             }
         }
         let else_label = match &self.else_branch {
@@ -212,6 +234,25 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
 
         if table.len() == 0 {
             // Switch with branch if statements
+
+            let info = match &expr_type {
+                Either::Static(ref value) => match value.as_ref() {
+                    StaticType::Primitive(value) => BranchTableExprInfo::Primitive(value.size_of()),
+                    StaticType::String(_) => BranchTableExprInfo::String,
+                    _ => return Err(CodeGenerationError::UnresolvedError),
+                },
+                Either::User(_) => return Err(CodeGenerationError::UnresolvedError),
+            };
+
+            let mut borrowed = instructions
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| CodeGenerationError::Default)?;
+            borrowed.push(Casm::Switch(BranchTable::Swith {
+                info,
+                table: switch,
+                else_label,
+            }))
         } else {
             // Switch with branch table statement
             // extrart variant from matched expression
@@ -219,13 +260,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 .as_ref()
                 .try_borrow_mut()
                 .map_err(|_| CodeGenerationError::Default)?;
-            // borrowed.push(Casm::Access(Access::Static {
-            //     address: MemoryAddress::Stack {
-            //         offset: Offset::ST(-8),
-            //     },
-            //     size: 8,
-            // }));
-            borrowed.push(Casm::Switch(BranchTable { table, else_label }))
+            borrowed.push(Casm::Switch(BranchTable::Table { table, else_label }))
         }
         for (idx, (PatternExpr { pattern, expr }, label)) in
             self.patterns.iter().zip(cases).enumerate()
@@ -253,13 +288,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 .map_err(|_| CodeGenerationError::Default)?;
 
             borrowed.push_label_id(end_scope_label, "End_Scope".into());
-            borrowed.push(Casm::Locate(Locate {
-                address: MemoryAddress::Stack {
-                    offset: Offset::FP(0),
-                    level: AccessLevel::Direct,
-                },
-            }));
-            borrowed.push(Casm::MemCopy(MemCopy::TakeToStack { size: param_size }));
             borrowed.push(Casm::Call(Call {
                 label: scope_label,
                 return_size,
@@ -276,8 +304,26 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                     .try_borrow_mut()
                     .map_err(|_| CodeGenerationError::Default)?;
                 borrowed.push_label_id(else_label.unwrap(), "else_case".into());
+                let end_scope_label = Label::gen();
+                borrowed.push(Casm::Goto(Goto {
+                    label: end_scope_label,
+                }));
+                let scope_label = borrowed.push_label("Scope".into());
                 drop(borrowed);
                 let _ = else_branch.gencode(scope, instructions)?;
+                let mut borrowed = instructions
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| CodeGenerationError::Default)?;
+                borrowed.push_label_id(end_scope_label, "End_Scope".into());
+                borrowed.push(Casm::Call(Call {
+                    label: scope_label,
+                    return_size,
+                    param_size: 0,
+                }));
+                borrowed.push(Casm::Goto(Goto {
+                    label: end_match_label,
+                }));
             }
             None => {}
         }
@@ -712,8 +758,106 @@ mod tests {
                 };
                 let z = 27;
                 return match geo {
-                    case Geo::Point {x,y} => z,
+                    case Geo::Point {x,y} => x,
+                    case Geo::Axe {x} => z,
+                };
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Geo".into(), UserType::Union(user_type))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        let instructions = instructions.as_ref().take();
+        assert!(instructions.len() > 0);
+        let memory = Memory::new();
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
+
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Number::U64(420)));
+    }
+
+    #[test]
+    fn valid_match_union_else() {
+        let user_type = user_type_impl::Union {
+            id: "Geo".into(),
+            variants: {
+                let mut res = Vec::new();
+                res.push((
+                    "Point".into(),
+                    user_type_impl::Struct {
+                        id: "Point".into(),
+                        fields: vec![
+                            (
+                                "x".into(),
+                                Either::Static(
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                        .into(),
+                                ),
+                            ),
+                            (
+                                "y".into(),
+                                Either::Static(
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                        .into(),
+                                ),
+                            ),
+                        ],
+                    },
+                ));
+                res.push((
+                    "Axe".into(),
+                    user_type_impl::Struct {
+                        id: "Axe".into(),
+                        fields: {
+                            let mut res = Vec::new();
+                            res.push((
+                                "x".into(),
+                                Either::Static(
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                        .into(),
+                                ),
+                            ));
+                            res
+                        },
+                    },
+                ));
+                res
+            },
+        };
+        let statement = Statement::parse(
+            r##"
+            let x:u64 = {
+                let geo = Geo::Point {
+                    x : 420,
+                    y: 69,
+                };
+                let z = 27;
+                return match geo {
                     case Geo::Axe {x} => x,
+                    else => z,
                 };
             };
         "##
@@ -751,5 +895,169 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Number(Number::U64(27)));
+    }
+
+    #[test]
+    fn valid_match_number() {
+        let statement = Statement::parse(
+            r##"
+            let x:u64 = match 69 {
+                case 69 => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        let instructions = instructions.as_ref().take();
+        assert!(instructions.len() > 0);
+        let memory = Memory::new();
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
+
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Number::U64(420)));
+    }
+
+    #[test]
+    fn valid_match_number_else() {
+        let statement = Statement::parse(
+            r##"
+            let x:u64 = match 420 {
+                case 69 => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        let instructions = instructions.as_ref().take();
+        assert!(instructions.len() > 0);
+        let memory = Memory::new();
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
+
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Number::U64(69)));
+    }
+
+    #[test]
+    fn valid_match_string() {
+        let statement = Statement::parse(
+            r##"
+            let x:u64 = match "Hello world" {
+                case "Hello world" => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        let instructions = instructions.as_ref().take();
+        assert!(instructions.len() > 0);
+        let memory = Memory::new();
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
+
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Number::U64(420)));
+    }
+
+    #[test]
+    fn valid_match_string_else() {
+        let statement = Statement::parse(
+            r##"
+            let x:u64 = match "CipherPool" {
+                case "Hello world" => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        let instructions = instructions.as_ref().take();
+        assert!(instructions.len() > 0);
+        let memory = Memory::new();
+        instructions
+            .execute(&memory)
+            .expect("Execution should have succeeded");
+
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Number::U64(69)));
     }
 }
