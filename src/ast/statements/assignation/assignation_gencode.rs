@@ -98,13 +98,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
                     .ok_or(CodeGenerationError::UnresolvedError)?;
 
                 borrowed_instructions.push_label_id(end_scope_label, "End_Scope".into());
-                borrowed_instructions.push(Casm::StackFrame(StackFrame::Set {
+                borrowed_instructions.push(Casm::Call(Call {
+                    label: scope_label,
                     return_size: size,
-                    cursor_offset: 2,
+                    param_size: 0,
                 }));
-                borrowed_instructions.push(Casm::Call(Call { label: scope_label }));
-
-                drop(borrowed_instructions);
             }
             AssignValue::Expr(value) => value.gencode(scope, instructions)?,
         }

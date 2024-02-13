@@ -26,7 +26,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 // When the variable is created in the general scope,
                 // the scope can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
-                let var = scope
+                let (var, level) = scope
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -62,7 +62,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     .map_err(|_| CodeGenerationError::Default)?;
                 let mut var_offset_idx = 0;
                 for id in &vars {
-                    let var = scope
+                    let (var, level) = scope
                         .borrow()
                         .find_var(&id)
                         .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -93,7 +93,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     .try_borrow_mut()
                     .map_err(|_| CodeGenerationError::Default)?;
                 for id in vars {
-                    let var = scope
+                    let (var, level) = scope
                         .borrow()
                         .find_var(&id)
                         .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -102,7 +102,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     };
                     let var_size = var.type_sig.size_of();
                     borrowed_instructions.push(Casm::Locate(Locate {
-                        address: MemoryAddress::Stack { offset: address },
+                        address: MemoryAddress::Stack {
+                            offset: address,
+                            level,
+                        },
                     }));
                     borrowed_instructions
                         .push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))

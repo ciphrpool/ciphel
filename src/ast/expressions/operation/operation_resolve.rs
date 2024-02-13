@@ -539,7 +539,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -621,7 +622,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(

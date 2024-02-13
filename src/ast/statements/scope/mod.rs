@@ -29,4 +29,11 @@ impl<InnerScope: ScopeApi> Scope<InnerScope> {
             None => Err(SemanticError::NotResolvedYet),
         }
     }
+
+    pub fn parameters_size(&self) -> Result<usize, SemanticError> {
+        match self.inner_scope.borrow().as_ref() {
+            Some(inner) => Ok(inner.as_ref().borrow().parameters_size()),
+            None => Err(SemanticError::NotResolvedYet),
+        }
+    }
 }

@@ -248,7 +248,7 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let (x_type, _) = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
@@ -260,7 +260,7 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let (x_type, _) = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Float).into()),
             x_type.type_sig
@@ -284,12 +284,12 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let (x_type, _) = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
-        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        let (y_type, _) = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
             y_type.type_sig
@@ -333,12 +333,12 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let (x_type, _) = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
-        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        let (y_type, _) = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             y_type.type_sig

@@ -104,25 +104,25 @@ impl TryParse for Pattern {
                 separated_pair(parse_id, wst(lexem::SEP), parse_id),
                 |(typename, value)| Pattern::Enum { typename, value },
             ),
-            map(
-                pair(
-                    parse_id,
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::BRA_C),
-                    ),
-                ),
-                |(typename, vars)| Pattern::Struct { typename, vars },
-            ),
-            map(
-                delimited(
-                    wst(lexem::PAR_O),
-                    separated_list1(wst(lexem::COMA), parse_id),
-                    wst(lexem::PAR_C),
-                ),
-                |value| Pattern::Tuple(value),
-            ),
+            // map(
+            //     pair(
+            //         parse_id,
+            //         delimited(
+            //             wst(lexem::BRA_O),
+            //             separated_list1(wst(lexem::COMA), parse_id),
+            //             wst(lexem::BRA_C),
+            //         ),
+            //     ),
+            //     |(typename, vars)| Pattern::Struct { typename, vars },
+            // ),
+            // map(
+            //     delimited(
+            //         wst(lexem::PAR_O),
+            //         separated_list1(wst(lexem::COMA), parse_id),
+            //         wst(lexem::PAR_C),
+            //     ),
+            //     |value| Pattern::Tuple(value),
+            // ),
         ))(input)
     }
 }
@@ -165,13 +165,13 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
                     wst(lexem::BRA_O),
                     pair(
                         separated_list1(wst(lexem::COMA), PatternExpr::parse),
-                        preceded(
+                        opt(preceded(
                             wst(lexem::COMA),
                             preceded(
                                 wst(lexem::ELSE),
                                 preceded(wst(lexem::BIGARROW), ExprScope::<Scope>::parse),
                             ),
-                        ),
+                        )),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
@@ -304,8 +304,8 @@ mod tests {
             case "Hello World" => true,
             case Geo::Point => true,
             case Geo::Point{y} => true,
-            case Point{y} => true,
-            case (y,z) => true,
+            // case Point{y} => true,
+            // case (y,z) => true,
             else => true
         }"#
             .into(),
@@ -396,43 +396,43 @@ mod tests {
                             inner_scope: RefCell::new(None),
                         })
                     },
-                    PatternExpr {
-                        pattern: Pattern::Struct {
-                            typename: "Point".into(),
-                            vars: vec!["y".into()]
-                        },
-                        expr: ExprScope::Expr(Scope {
-                            metadata: Metadata::default(),
-                            instructions: vec![
-                                (Statement::Return(Return::Expr {
-                                    expr: Box::new(Expression::Atomic(Atomic::Data(
-                                        Data::Primitive(Primitive::Bool(true))
-                                    ))),
-                                    metadata: Metadata::default()
-                                }))
-                            ],
+                    // PatternExpr {
+                    //     pattern: Pattern::Struct {
+                    //         typename: "Point".into(),
+                    //         vars: vec!["y".into()]
+                    //     },
+                    //     expr: ExprScope::Expr(Scope {
+                    //         metadata: Metadata::default(),
+                    //         instructions: vec![
+                    //             (Statement::Return(Return::Expr {
+                    //                 expr: Box::new(Expression::Atomic(Atomic::Data(
+                    //                     Data::Primitive(Primitive::Bool(true))
+                    //                 ))),
+                    //                 metadata: Metadata::default()
+                    //             }))
+                    //         ],
 
-                            inner_scope: RefCell::new(None),
-                        })
-                    },
-                    PatternExpr {
-                        pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
-                        expr: ExprScope::Expr(Scope {
-                            metadata: Metadata::default(),
-                            instructions: vec![
-                                (Statement::Return(Return::Expr {
-                                    expr: Box::new(Expression::Atomic(Atomic::Data(
-                                        Data::Primitive(Primitive::Bool(true))
-                                    ))),
-                                    metadata: Metadata::default()
-                                }))
-                            ],
+                    //         inner_scope: RefCell::new(None),
+                    //     })
+                    // },
+                    // PatternExpr {
+                    //     pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
+                    //     expr: ExprScope::Expr(Scope {
+                    //         metadata: Metadata::default(),
+                    //         instructions: vec![
+                    //             (Statement::Return(Return::Expr {
+                    //                 expr: Box::new(Expression::Atomic(Atomic::Data(
+                    //                     Data::Primitive(Primitive::Bool(true))
+                    //                 ))),
+                    //                 metadata: Metadata::default()
+                    //             }))
+                    //         ],
 
-                            inner_scope: RefCell::new(None),
-                        })
-                    }
+                    //         inner_scope: RefCell::new(None),
+                    //     })
+                    // }
                 ],
-                else_branch: ExprScope::Expr(Scope {
+                else_branch: Some(ExprScope::Expr(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -444,7 +444,7 @@ mod tests {
                     ],
 
                     inner_scope: RefCell::new(None),
-                })
+                }))
             },
             value
         );

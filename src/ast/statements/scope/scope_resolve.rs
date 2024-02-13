@@ -71,9 +71,9 @@ mod tests {
         assert!(res.is_ok());
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
-        let var_x = res_scope.borrow().find_var(&"x".into()).unwrap();
+        let (var_x, _) = res_scope.borrow().find_var(&"x".into()).unwrap();
         let x_type = var_x.type_of(&res_scope.borrow()).unwrap();
-        let var_y = res_scope.borrow().find_var(&"y".into()).unwrap();
+        let (var_y, _) = res_scope.borrow().find_var(&"y".into()).unwrap();
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(

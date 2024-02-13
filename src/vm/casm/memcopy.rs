@@ -1,8 +1,11 @@
 use super::operation::OpPrimitive;
 use super::CasmProgram;
-use crate::vm::{
-    allocator::{stack::Offset, Memory, MemoryAddress},
-    vm::{Executable, RuntimeError},
+use crate::{
+    semantic::AccessLevel,
+    vm::{
+        allocator::{stack::Offset, Memory, MemoryAddress},
+        vm::{Executable, RuntimeError},
+    },
 };
 use std::{cell::Cell, os::raw::c_uint};
 
@@ -39,7 +42,11 @@ impl Executable for MemCopy {
                 let data = memory.stack.pop(*size).map_err(|e| e.into())?;
                 let _ = memory
                     .stack
-                    .write(Offset::SB(stack_address as usize), &data)
+                    .write(
+                        Offset::SB(stack_address as usize),
+                        AccessLevel::General,
+                        &data,
+                    )
                     .map_err(|e| e.into())?;
             }
         }

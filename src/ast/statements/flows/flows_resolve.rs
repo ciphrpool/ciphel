@@ -76,6 +76,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
 
         for value in &self.patterns {
             let vars = value.pattern.resolve(scope, &expr_type, &())?;
+            for (index, var) in vars.iter().enumerate() {
+                var.is_parameter.set((index, true));
+            }
             // create a scope and Scope::child_scope())variable to it before resolving the expression
             let _ = value.scope.resolve(scope, &context, &vars)?;
         }
@@ -186,7 +189,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(

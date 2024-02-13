@@ -142,6 +142,17 @@ pub fn extract_u64(slice: &[u8]) -> Result<(u64, &[u8]), RuntimeError> {
         .map_err(|_| RuntimeError::Deserialization)?;
     Ok((u64::from_le_bytes(arr), rest))
 }
+// Helper function to extract a u64 value at the end from a byte slice.
+pub fn extract_end_u64(slice: &[u8]) -> Result<(u64, &[u8]), RuntimeError> {
+    if slice.len() < 8 {
+        return Err(RuntimeError::Deserialization);
+    }
+    let (rest, bytes) = slice.split_at(slice.len() - 8);
+    let arr: [u8; 8] = bytes
+        .try_into()
+        .map_err(|_| RuntimeError::Deserialization)?;
+    Ok((u64::from_le_bytes(arr), rest))
+}
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
     type Output = Vector<Scope>;

@@ -16,41 +16,18 @@ pub struct Locate {
 
 impl Executable for Locate {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        match self.address {
+        match &self.address {
             MemoryAddress::Heap => {
                 // let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
                 todo!();
                 program.cursor.set(program.cursor.get() + 1);
                 Ok(())
             }
-            MemoryAddress::Stack { offset } => {
-                let offset = match offset {
-                    Offset::SB(offset) => offset,
-                    Offset::ST(offset) => {
-                        if offset < 0 {
-                            memory
-                                .stack
-                                .top()
-                                .checked_sub(offset as usize)
-                                .ok_or(RuntimeError::Default)?
-                        } else {
-                            memory.stack.top() + (offset as usize)
-                        }
-                    }
-                    Offset::FB(offset) => {
-                        let bottom = memory.stack.frame_bottom();
-                        bottom + offset
-                    }
-                    Offset::FZ(offset) => {
-                        let zero = memory.stack.frame_zero();
-                        if offset < 0 {
-                            zero.checked_sub(offset as usize)
-                                .ok_or(RuntimeError::Default)?
-                        } else {
-                            zero + (offset as usize)
-                        }
-                    }
-                };
+            MemoryAddress::Stack { offset, level } => {
+                let offset = memory
+                    .stack
+                    .compute_absolute_address(*offset, *level)
+                    .map_err(|e| e.into())?;
                 let data = (offset as u64).to_le_bytes();
                 let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
                 program.cursor.set(program.cursor.get() + 1);

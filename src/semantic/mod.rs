@@ -99,6 +99,13 @@ pub enum Either<User, Static> {
 
 pub type EType = Either<UserType, StaticType>;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AccessLevel {
+    General,
+    Direct,
+    Backward(usize),
+}
+
 pub trait Resolve<Scope: ScopeApi> {
     type Output;
     type Context: Default;

@@ -3,8 +3,12 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     ast::{self, utils::strings::ID},
     semantic::{
-        scope::{var_impl::Var, ScopeApi},
-        Metadata, MutRc, SemanticError,
+        scope::{
+            static_types::{NumberType, PrimitiveType, StaticType},
+            var_impl::Var,
+            ScopeApi,
+        },
+        EType, Either, Metadata, MutRc, SemanticError,
     },
 };
 
@@ -145,6 +149,13 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
             ExprScope::Expr(scope) => scope.find_outer_vars(),
         }
     }
+
+    pub fn parameters_size(&self) -> Result<usize, SemanticError> {
+        match self {
+            ExprScope::Scope(value) => value.parameters_size(),
+            ExprScope::Expr(value) => value.parameters_size(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,4 +235,99 @@ pub enum KeyData<InnerScope: ScopeApi> {
     String(StringData),
     Address(Address<InnerScope>),
     Enum(Enum),
+}
+
+impl<Scope: ScopeApi> Data<Scope> {
+    pub fn signature(&self) -> Option<EType> {
+        match self {
+            Data::Primitive(value) => match value {
+                Primitive::Number(value) => match value {
+                    Number::U8(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U8)).into(),
+                    )),
+                    Number::U16(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U16)).into(),
+                    )),
+                    Number::U32(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U32)).into(),
+                    )),
+                    Number::U64(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    )),
+                    Number::U128(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U128)).into(),
+                    )),
+                    Number::I8(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I8)).into(),
+                    )),
+                    Number::I16(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I16)).into(),
+                    )),
+                    Number::I32(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I32)).into(),
+                    )),
+                    Number::I64(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                    )),
+                    Number::I128(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
+                    )),
+                },
+                Primitive::Float(_) => Some(Either::Static(
+                    StaticType::Primitive(PrimitiveType::Float).into(),
+                )),
+                Primitive::Bool(_) => Some(Either::Static(
+                    StaticType::Primitive(PrimitiveType::Bool).into(),
+                )),
+                Primitive::Char(_) => Some(Either::Static(
+                    StaticType::Primitive(PrimitiveType::Char).into(),
+                )),
+            },
+            Data::Slice(Slice { value, metadata }) => metadata.signature(),
+            Data::String(StringData { value, metadata }) => metadata.signature(),
+            Data::Vec(Vector::Def { capacity, metadata }) => metadata.signature(),
+            Data::Vec(Vector::Init {
+                value,
+                metadata,
+                length,
+                capacity,
+            }) => metadata.signature(),
+            Data::Closure(Closure {
+                params,
+                env,
+                scope,
+                metadata,
+            }) => metadata.signature(),
+            Data::Chan(Channel::Init { value, metadata }) => metadata.signature(),
+            Data::Chan(Channel::Receive { metadata, .. }) => metadata.signature(),
+            Data::Chan(Channel::Send { metadata, .. }) => metadata.signature(),
+            Data::Tuple(Tuple { value, metadata }) => metadata.signature(),
+            Data::Address(Address { value, metadata }) => metadata.signature(),
+            Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),
+            Data::Variable(v) => v.signature(),
+            Data::Unit => Some(Either::Static(StaticType::Unit.into())),
+            Data::Map(Map::Def {
+                length,
+                capacity,
+                metadata,
+            }) => metadata.signature(),
+            Data::Map(Map::Init { fields, metadata }) => metadata.signature(),
+            Data::Struct(Struct {
+                id,
+                fields,
+                metadata,
+            }) => metadata.signature(),
+            Data::Union(Union {
+                typename,
+                variant,
+                fields,
+                metadata,
+            }) => metadata.signature(),
+            Data::Enum(Enum {
+                typename,
+                value,
+                metadata,
+            }) => metadata.signature(),
+        }
+    }
 }

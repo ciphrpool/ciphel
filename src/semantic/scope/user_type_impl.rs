@@ -22,7 +22,10 @@ use crate::{
 };
 
 use super::{
-    static_types::{st_deserialize::extract_u64, StaticType},
+    static_types::{
+        st_deserialize::{extract_end_u64, extract_u64},
+        StaticType,
+    },
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
     BuildUserType, ScopeApi,
 };
@@ -453,7 +456,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
     type Output = data::Union<Scope>;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let (idx, bytes) = extract_u64(bytes)?;
+        let (idx, bytes) = extract_end_u64(bytes)?;
         let Some((variant, struct_type)) = self.variants.get(idx as usize) else {
             return Err(RuntimeError::Deserialization);
         };

@@ -20,7 +20,8 @@ use super::{
 pub struct Var {
     pub id: ID,
     pub type_sig: EType,
-    pub captured: RefCell<bool>,
+    pub captured: Cell<bool>,
+    pub is_parameter: Cell<(usize, bool)>,
     pub address: Cell<Option<Offset>>,
 }
 
@@ -48,7 +49,8 @@ impl<Scope: ScopeApi> BuildVar<Scope> for Var {
         Self {
             id: id.clone(),
             type_sig: type_sig.clone(),
-            captured: RefCell::new(false),
+            captured: Cell::new(false),
+            is_parameter: Cell::new((0, false)),
             address: Cell::new(None),
         }
     }

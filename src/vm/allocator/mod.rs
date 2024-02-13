@@ -1,3 +1,5 @@
+use crate::semantic::AccessLevel;
+
 use self::{
     heap::{Heap, ALIGNMENT},
     stack::{Offset, Stack},
@@ -14,7 +16,7 @@ pub fn align(size: usize) -> usize {
 #[derive(Debug, Clone)]
 pub enum MemoryAddress {
     Heap,
-    Stack { offset: Offset },
+    Stack { offset: Offset, level: AccessLevel },
 }
 
 #[derive(Debug, Clone)]

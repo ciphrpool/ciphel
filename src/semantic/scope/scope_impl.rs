@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{MutRc, SemanticError},
+    semantic::{AccessLevel, MutRc, SemanticError, SizeOf},
 };
 
 use super::{
@@ -102,11 +102,7 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_type(
-        &mut self,
-        id: &ID,
-        reg: UserType,
-    ) -> Result<(), crate::semantic::SemanticError> {
+    fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError> {
         match self {
             Scope::Inner {
                 parent: _,
@@ -128,11 +124,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_chan(&mut self, _reg: &ID) -> Result<(), crate::semantic::SemanticError> {
+    fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn register_var(&mut self, reg: Var) -> Result<(), crate::semantic::SemanticError> {
+    fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 data.vars.push(reg.into());
@@ -145,11 +141,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_event(&mut self, _reg: Event) -> Result<(), crate::semantic::SemanticError> {
+    fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<Rc<Var>, crate::semantic::SemanticError> {
+    fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -161,19 +157,22 @@ impl ScopeApi for Scope {
                 .iter()
                 .find(|var| &var.as_ref().id == id)
                 .cloned()
+                .map(|v| (v, AccessLevel::Direct))
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
                         let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         match borrowed_scope.find_var(id) {
-                            Ok(var) => {
-                                {
-                                    let mut captured = var.captured.borrow_mut();
-                                    *captured = true;
-                                }
+                            Ok((var, level)) => {
+                                let level = match level {
+                                    AccessLevel::General => AccessLevel::General,
+                                    AccessLevel::Direct => AccessLevel::Backward(1),
+                                    AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
+                                };
+                                var.captured.set(true);
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
                                 borrowerd_mut.insert(var.id.clone(), var.clone());
-                                Some(var)
+                                Some((var, level))
                             }
                             Err(_) => None,
                         }
@@ -184,10 +183,10 @@ impl ScopeApi for Scope {
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.find_var(id) {
-                            Ok(var) => {
+                            Ok((var, _)) => {
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
                                 borrowerd_mut.insert(var.id.clone(), var.clone());
-                                Some(var)
+                                Some((var, AccessLevel::General))
                             }
                             Err(_) => None,
                         }
@@ -199,7 +198,8 @@ impl ScopeApi for Scope {
                 .iter()
                 .find(|var| &var.as_ref().id == id)
                 .cloned()
-                .ok_or(SemanticError::UnknownVar(id.clone())),
+                .ok_or(SemanticError::UnknownVar(id.clone()))
+                .map(|v| (v, AccessLevel::General)),
         }
     }
 
@@ -217,11 +217,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_chan(&self) -> Result<&Chan, crate::semantic::SemanticError> {
+    fn find_chan(&self) -> Result<&Chan, SemanticError> {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<Rc<UserType>, crate::semantic::SemanticError> {
+    fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -255,7 +255,30 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_event(&self) -> Result<&Event, crate::semantic::SemanticError> {
+    fn parameters_size(&self) -> usize {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                outer_vars,
+                data,
+            } => data
+                .vars
+                .iter()
+                .filter_map(|v| v.is_parameter.get().1.then(|| v.type_sig.size_of()))
+                .sum(),
+            Scope::General {
+                data,
+                events,
+                channels,
+            } => data
+                .vars
+                .iter()
+                .filter_map(|v| v.is_parameter.get().1.then(|| v.type_sig.size_of()))
+                .sum(),
+        }
+    }
+    fn find_event(&self) -> Result<&Event, SemanticError> {
         todo!()
     }
 }
@@ -297,10 +320,13 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
 
-    fn find_var(&self, _id: &ID) -> Result<Rc<Var>, SemanticError> {
+    fn find_var(&self, _id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
         unimplemented!("Mock function call")
     }
     fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
+        unimplemented!("Mock function call")
+    }
+    fn parameters_size(&self) -> usize {
         unimplemented!("Mock function call")
     }
     fn inner_vars(&self) -> &Vec<Rc<Var>> {

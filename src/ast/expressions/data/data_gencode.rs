@@ -11,7 +11,7 @@ use crate::{
             user_type_impl::UserType,
             ScopeApi,
         },
-        EType, Either, MutRc, SizeOf,
+        AccessLevel, EType, Either, MutRc, SizeOf,
     },
     vm::{
         allocator::{align, heap::HEAP_ADDRESS_SIZE, stack::Offset, MemoryAddress},
@@ -366,7 +366,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let var = scope
+                let (var, level) = scope
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -383,7 +383,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     .try_borrow_mut()
                     .map_err(|_| CodeGenerationError::Default)?;
                 borrowed.push(Casm::Access(Access::Static {
-                    address: MemoryAddress::Stack { offset: address },
+                    address: MemoryAddress::Stack {
+                        offset: address,
+                        level,
+                    },
                     size: var_size,
                 }));
 
@@ -653,7 +656,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let var = scope
+                let (var, level) = scope
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -671,7 +674,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     .map_err(|_| CodeGenerationError::Default)?;
 
                 borrowed.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack { offset: address },
+                    address: MemoryAddress::Stack {
+                        offset: address,
+                        level,
+                    },
                 }));
 
                 Ok(())
@@ -958,6 +964,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
         borrowed.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-((bytes_len + 16 + 8) as isize)),
+                level: AccessLevel::Direct,
             },
             size: 8,
         }));
@@ -1027,6 +1034,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
                 borrowed.push(Casm::Access(Access::Static {
                     address: MemoryAddress::Stack {
                         offset: Offset::ST(-((data.len() * item_size + 16 + 8) as isize)),
+                        level: AccessLevel::Direct,
                     },
                     size: 8,
                 }));
@@ -1211,16 +1219,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push(Casm::Serialize(Serialized {
-                data: (idx as u64).to_le_bytes().to_vec(),
-            }));
-        }
-
         for (field_id, field) in &struct_type.fields {
             let field_size = field.size_of();
 
@@ -1245,6 +1243,15 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
                     data: vec![0; padding],
                 }));
             }
+        }
+        {
+            let mut borrowed = instructions
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| CodeGenerationError::Default)?;
+            borrowed.push(Casm::Serialize(Serialized {
+                data: (idx as u64).to_le_bytes().to_vec(),
+            }));
         }
         Ok(())
     }

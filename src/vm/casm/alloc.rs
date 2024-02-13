@@ -1,13 +1,16 @@
 use num_traits::ToBytes;
 
 use super::CasmProgram;
-use crate::vm::{
-    allocator::{
-        stack::{Offset, StackSlice},
-        Memory, MemoryAddress,
+use crate::{
+    semantic::AccessLevel,
+    vm::{
+        allocator::{
+            stack::{Offset, StackSlice},
+            Memory, MemoryAddress,
+        },
+        casm::operation::OpPrimitive,
+        vm::{Executable, RuntimeError},
     },
-    casm::operation::OpPrimitive,
-    vm::{Executable, RuntimeError},
 };
 use std::{cell::Cell, mem};
 #[derive(Debug, Clone)]
@@ -41,6 +44,7 @@ pub enum StackFrame {
     Clean,
     Set {
         return_size: usize,
+        params_size: usize,
         cursor_offset: usize,
     },
     Return {
@@ -52,23 +56,21 @@ impl Executable for StackFrame {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         match self {
             StackFrame::Clean => {
+                program.cursor.set(memory.stack.registers.link.get());
                 let _ = memory.stack.clean().map_err(|e| e.into())?;
-                let link = OpPrimitive::get_num8::<u64>(memory)?;
-
-                program.cursor.set(link as usize);
                 Ok(())
             }
             StackFrame::Set {
                 return_size,
+                params_size,
                 cursor_offset,
             } => {
-                let _ = memory.stack.frame(*return_size).map_err(|e| e.into())?;
-
                 let _ = memory
                     .stack
-                    .write(
-                        Offset::FZ(-24),
-                        &(program.cursor.get() + cursor_offset).to_le_bytes(),
+                    .frame(
+                        *return_size,
+                        *params_size,
+                        program.cursor.get() + cursor_offset,
                     )
                     .map_err(|e| e.into())?;
                 program.cursor.set(program.cursor.get() + 1);
@@ -79,14 +81,10 @@ impl Executable for StackFrame {
 
                 let _ = memory
                     .stack
-                    .write(Offset::FB(0), &return_data)
+                    .write(Offset::FB(0), AccessLevel::Direct, &return_data)
                     .map_err(|e| e.into())?;
-
+                program.cursor.set(memory.stack.registers.link.get());
                 let _ = memory.stack.clean().map_err(|e| e.into())?;
-
-                let link = OpPrimitive::get_num8::<u64>(memory)?;
-                // dbg!(link);
-                program.cursor.set(link as usize);
                 Ok(())
             }
         }
@@ -110,10 +108,10 @@ impl Executable for Access {
                     program.cursor.set(program.cursor.get() + 1);
                     Ok(())
                 }
-                MemoryAddress::Stack { offset } => {
+                MemoryAddress::Stack { offset, level } => {
                     let data = memory
                         .stack
-                        .read(*offset, *size)
+                        .read(*offset, *level, *size)
                         .map_err(|err| err.into())?;
                     // Copy data onto stack;
                     let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
@@ -143,7 +141,11 @@ impl Executable for Assign {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = memory
             .stack
-            .read(self.stack_slice.offset, self.stack_slice.size)
+            .read(
+                self.stack_slice.offset,
+                AccessLevel::Direct,
+                self.stack_slice.size,
+            )
             .map_err(|err| err.into())?;
 
         match self.address {
@@ -151,8 +153,11 @@ impl Executable for Assign {
                 let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
                 let _ = memory.heap.write(address, &data).map_err(|e| e.into())?;
             }
-            MemoryAddress::Stack { offset, .. } => {
-                let _ = memory.stack.write(offset, &data).map_err(|e| e.into())?;
+            MemoryAddress::Stack { offset, level } => {
+                let _ = memory
+                    .stack
+                    .write(offset, level, &data)
+                    .map_err(|e| e.into())?;
             }
         };
 

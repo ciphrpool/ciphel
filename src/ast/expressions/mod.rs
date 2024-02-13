@@ -24,7 +24,10 @@ use crate::{
     },
 };
 
-use self::operation::operation_parse::TryParseOperation;
+use self::operation::{
+    operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
+    Comparaison, Equation, Inclusion, LogicalAnd, Product, Shift, Substraction, UnaryOperation,
+};
 
 use super::TryParse;
 
@@ -280,5 +283,52 @@ mod tests {
             }),
             value
         );
+    }
+}
+
+impl<Scope: ScopeApi> Expression<Scope> {
+    pub fn signature(&self) -> Option<EType> {
+        match self {
+            Expression::Product(Product::Div { metadata, .. }) => metadata.signature(),
+            Expression::Product(Product::Mod { metadata, .. }) => metadata.signature(),
+            Expression::Product(Product::Mult { metadata, .. }) => metadata.signature(),
+            Expression::Addition(Addition { metadata, .. }) => todo!(),
+            Expression::Substraction(Substraction { metadata, .. }) => metadata.signature(),
+            Expression::Shift(Shift::Left { metadata, .. }) => metadata.signature(),
+            Expression::Shift(Shift::Right { metadata, .. }) => metadata.signature(),
+            Expression::BitwiseAnd(BitwiseAnd { metadata, .. }) => metadata.signature(),
+            Expression::BitwiseXOR(BitwiseXOR { metadata, .. }) => metadata.signature(),
+            Expression::BitwiseOR(BitwiseOR { metadata, .. }) => metadata.signature(),
+            Expression::Cast(Cast { metadata, .. }) => metadata.signature(),
+            Expression::Comparaison(Comparaison::Greater { metadata, .. }) => metadata.signature(),
+            Expression::Comparaison(Comparaison::GreaterEqual { metadata, .. }) => {
+                metadata.signature()
+            }
+            Expression::Comparaison(Comparaison::Less { metadata, .. }) => metadata.signature(),
+            Expression::Comparaison(Comparaison::LessEqual { metadata, .. }) => {
+                metadata.signature()
+            }
+            Expression::Equation(Equation::Equal { metadata, .. }) => metadata.signature(),
+            Expression::Equation(Equation::NotEqual { metadata, .. }) => metadata.signature(),
+            Expression::Inclusion(Inclusion { metadata, .. }) => metadata.signature(),
+            Expression::LogicalAnd(LogicalAnd { metadata, .. }) => metadata.signature(),
+            Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
+            Expression::Atomic(value) => value.signature(),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> Atomic<Scope> {
+    pub fn signature(&self) -> Option<EType> {
+        match self {
+            Atomic::Data(value) => value.signature(),
+            Atomic::UnaryOperation(UnaryOperation::Minus { value, metadata }) => {
+                metadata.signature()
+            }
+            Atomic::UnaryOperation(UnaryOperation::Not { value, metadata }) => metadata.signature(),
+            Atomic::Paren(value) => value.signature(),
+            Atomic::ExprFlow(value) => value.signature(),
+            Atomic::Error(value) => todo!(),
+        }
     }
 }

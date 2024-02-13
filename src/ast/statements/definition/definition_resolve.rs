@@ -163,7 +163,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
                     .ok()
                     .map(|p| (param.id.clone(), p))
             })
-            .map(|(id, param)| <Var as BuildVar<Scope>>::build_var(&id, &param))
+            .enumerate()
+            .map(|(index, (id, param))| {
+                let var = <Var as BuildVar<Scope>>::build_var(&id, &param);
+                var.is_parameter.set((index, true));
+                var
+            })
             .collect::<Vec<Var>>();
 
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
@@ -538,12 +543,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok());
 
-        let function_var = scope
-            .borrow()
-            .find_var(&"main".into())
-            .unwrap()
-            .as_ref()
-            .clone();
+        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
         assert_eq!(
@@ -576,12 +577,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok());
 
-        let function_var = scope
-            .borrow()
-            .find_var(&"main".into())
-            .unwrap()
-            .as_ref()
-            .clone();
+        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
         assert_eq!(
@@ -601,7 +598,7 @@ mod tests {
         );
 
         let function_scope = function.scope;
-        let x_type = function_scope
+        let (x_type, _) = function_scope
             .inner_scope
             .borrow()
             .clone()
@@ -613,7 +610,7 @@ mod tests {
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
-        let text_type = function_scope
+        let (text_type, _) = function_scope
             .inner_scope
             .borrow()
             .clone()
@@ -646,12 +643,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok());
 
-        let function_var = scope
-            .borrow()
-            .find_var(&"main".into())
-            .unwrap()
-            .as_ref()
-            .clone();
+        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
         assert_eq!(
@@ -687,7 +680,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -713,7 +707,8 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ),
@@ -741,7 +736,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -752,7 +748,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "y".into(),
                 type_sig: Either::Static(
@@ -776,7 +773,8 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()

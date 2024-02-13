@@ -67,7 +67,6 @@ impl CasmProgram {
     pub fn execute(&self, memory: &Memory) -> Result<(), vm::RuntimeError> {
         loop {
             let cursor = self.cursor.get();
-            // dbg!(&cursor);
             match self.main.get(cursor) {
                 Some(instruction) => {
                     // dbg!((cursor, instruction, memory.stack.top()));
@@ -102,6 +101,7 @@ pub enum Casm {
     Label(branch::Label),
     Call(branch::Call),
     Goto(branch::Goto),
+    Switch(branch::BranchTable),
 }
 
 impl Executable for Casm {
@@ -118,6 +118,7 @@ impl Executable for Casm {
             Casm::Goto(value) => value.execute(program, memory),
             Casm::Alloc(value) => value.execute(program, memory),
             Casm::MemCopy(value) => value.execute(program, memory),
+            Casm::Switch(value) => value.execute(program, memory),
             Casm::Locate(value) => value.execute(program, memory),
         }
     }

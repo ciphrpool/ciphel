@@ -104,7 +104,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for VarID {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let var = scope.find_var(&self.id)?;
+        let (var, _) = scope.find_var(&self.id)?;
         var.type_of(&scope)
     }
 }

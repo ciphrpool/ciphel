@@ -12,7 +12,7 @@ use self::{
     var_impl::Var,
 };
 
-use super::{EType, Either, MutRc, SemanticError};
+use super::{AccessLevel, EType, Either, MutRc, SemanticError};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;
@@ -114,35 +114,6 @@ pub trait ScopeApi
 where
     Self: Sized + Clone + Debug,
 {
-    // type UserType: Clone
-    //     + Debug
-    //     + CompatibleWith<Self>
-    //     + TypeOf<Self>
-    //     + BuildUserType<Self>
-    //     + GetSubTypes<Self>
-    //     + TypeChecking<Self>
-    //     + OperandMerging<Self>
-    //     + IsEnum
-    //     + MergeType<Self>
-    //     + PartialEq
-    //     + SizeOf;
-
-    // type StaticType: Clone
-    //     + Debug
-    //     + CompatibleWith<Self>
-    //     + TypeOf<Self>
-    //     + BuildStaticType<Self>
-    //     + GetSubTypes<Self>
-    //     + TypeChecking<Self>
-    //     + OperandMerging<Self>
-    //     + MergeType<Self>
-    //     + PartialEq
-    //     + SizeOf;
-
-    // type Var: Clone + Debug + CompatibleWith<Self> + TypeOf<Self> + BuildVar<Self> + PartialEq;
-    // type Chan: CompatibleWith<Self> + TypeOf<Self> + BuildChan<Self>;
-    // type Event: BuildEvent<Self>;
-
     fn child_scope_with(parent: &MutRc<Self>, vars: Vec<Var>)
         -> Result<MutRc<Self>, SemanticError>;
 
@@ -151,8 +122,9 @@ where
     fn register_var(&mut self, reg: Var) -> Result<(), SemanticError>;
     fn register_event(&mut self, reg: Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
+    fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;
     fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>>;
+    fn parameters_size(&self) -> usize;
     fn inner_vars(&self) -> &Vec<Rc<Var>>;
     fn find_chan(&self) -> Result<&Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;

@@ -5,7 +5,7 @@ pub mod flows_typeof;
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::{scope::ScopeApi, EType, Metadata},
 };
 
 use super::{
@@ -33,7 +33,7 @@ pub struct IfExpr<InnerScope: ScopeApi> {
 pub struct MatchExpr<InnerScope: ScopeApi> {
     expr: Box<Expression<InnerScope>>,
     patterns: Vec<PatternExpr<InnerScope>>,
-    else_branch: ExprScope<InnerScope>,
+    else_branch: Option<ExprScope<InnerScope>>,
     metadata: Metadata,
 }
 
@@ -50,11 +50,11 @@ pub enum Pattern {
         variant: ID,
         vars: Vec<ID>,
     },
-    Struct {
-        typename: ID,
-        vars: Vec<ID>,
-    },
-    Tuple(Vec<ID>),
+    // Struct {
+    //     typename: ID,
+    //     vars: Vec<ID>,
+    // },
+    // Tuple(Vec<ID>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,4 +75,15 @@ pub struct FnCall<InnerScope: ScopeApi> {
     pub fn_var: Variable<InnerScope>,
     pub params: Vec<Expression<InnerScope>>,
     pub metadata: Metadata,
+}
+
+impl<Scope: ScopeApi> ExprFlow<Scope> {
+    pub fn signature(&self) -> Option<EType> {
+        match self {
+            ExprFlow::If(IfExpr { metadata, .. }) => metadata.signature(),
+            ExprFlow::Match(MatchExpr { metadata, .. }) => metadata.signature(),
+            ExprFlow::Try(TryExpr { metadata, .. }) => metadata.signature(),
+            ExprFlow::Call(FnCall { metadata, .. }) => metadata.signature(),
+        }
+    }
 }

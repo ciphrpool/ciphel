@@ -70,8 +70,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
         let Some(pattern_type) = pattern_type else {
             return Err(SemanticError::CantInferType);
         };
-        let else_type = self.else_branch.type_of(&scope)?;
-        pattern_type.merge(&else_type, scope)
+        match &self.else_branch {
+            Some(else_branch) => {
+                let else_type = else_branch.type_of(&scope)?;
+                pattern_type.merge(&else_type, scope)
+            }
+            None => Ok(pattern_type),
+        }
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {

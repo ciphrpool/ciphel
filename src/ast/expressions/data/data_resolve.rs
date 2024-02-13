@@ -549,7 +549,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             .map(|(index, id, param)| {
                 let _param_type = param.type_of(&scope.borrow());
                 let param_type = <EType as GetSubTypes>::get_nth(context, &index);
-                <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap())
+                let var = <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap());
+                var.is_parameter.set((index, true));
+                var
             })
             .collect::<Vec<Var>>();
 
@@ -1152,7 +1154,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1178,7 +1181,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1199,7 +1203,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1220,7 +1225,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1244,7 +1250,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1278,7 +1285,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "point".into(),
                 type_sig: Either::User(
@@ -1333,7 +1341,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -1365,7 +1374,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "chan1".into(),
                 type_sig: Either::Static(
@@ -1392,7 +1402,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "chan1".into(),
                 type_sig: Either::Static(

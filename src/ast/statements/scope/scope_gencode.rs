@@ -2,7 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::statements,
-    semantic::{scope::ScopeApi, MutRc, SizeOf},
+    semantic::{
+        scope::{var_impl::Var, ScopeApi},
+        MutRc, SizeOf,
+    },
     vm::{
         allocator::stack::Offset,
         casm::{
@@ -28,23 +31,39 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         let borrowed = borrowed_scope.as_ref().borrow();
 
         let vars = borrowed.inner_vars();
-        let mut offset_idx = 0;
         let mut borrowed_instructions = instructions
             .as_ref()
             .try_borrow_mut()
             .map_err(|_| CodeGenerationError::Default)?;
 
         let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
-        // Start Stack Frame
-        // borrowed_instructions.push(Casm::StackFrame(StackFrame::Set { return_size }));
 
+        // Parameter allocation if any
+        let mut parameters = vars
+            .iter()
+            .filter(|v| v.is_parameter.get().1)
+            .collect::<Vec<&Rc<Var>>>();
+        parameters.sort_by_key(|v| v.is_parameter.get().0);
+
+        let mut offset_idx = 0;
+        for var in parameters {
+            let var = var.as_ref();
+            let var_size = var.type_sig.size_of();
+            // Already allocated
+            var.address.set(Some(Offset::FP(offset_idx)));
+            offset_idx += var_size;
+        }
+
+        let mut offset_idx = 0;
         for var in vars {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
-            var.address.set(Some(Offset::FZ(offset_idx)));
-            // Alloc and push heap address on stack
-            borrowed_instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-            offset_idx += (var_size as isize);
+            if !var.is_parameter.get().1 {
+                var.address.set(Some(Offset::FZ(offset_idx as isize)));
+                // Alloc and push heap address on stack
+                borrowed_instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+            }
+            offset_idx += var_size;
         }
         drop(borrowed_instructions);
 

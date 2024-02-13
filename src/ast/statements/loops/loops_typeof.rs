@@ -28,7 +28,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator<Scope> {
     {
         match self {
             ForIterator::Id(value) => {
-                let var = scope.find_var(value)?;
+                let (var, _) = scope.find_var(value)?;
                 var.type_of(&scope)
             }
             ForIterator::Vec(value) => value.type_of(&scope),

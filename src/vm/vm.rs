@@ -24,6 +24,7 @@ pub enum RuntimeError {
     MathError,
     Exit,
     CodeSegmentation,
+    IncorrectVariant,
     Default,
 }
 

@@ -48,7 +48,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
         match self {
             ForIterator::Id(value) => {
                 let borrowed_scope = scope.borrow();
-                let var = borrowed_scope.find_var(value)?;
+                let (var, _) = borrowed_scope.find_var(value)?;
                 // check that the variable is iterable
                 let var_type = var.type_of(&scope.borrow())?;
                 if !<EType as TypeChecking>::is_iterable(&var_type) {
@@ -168,7 +168,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -193,7 +194,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -221,7 +223,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -246,7 +249,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -258,7 +262,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "y".into(),
                 type_sig: Either::Static(
@@ -286,7 +291,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -314,7 +320,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -342,7 +349,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(

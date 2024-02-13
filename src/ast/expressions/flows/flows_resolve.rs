@@ -2,6 +2,7 @@ use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 use crate::ast::expressions::data::{VarID, Variable};
 use crate::resolve_metadata;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::user_type_impl::{Enum, Union};
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
@@ -10,6 +11,7 @@ use crate::semantic::{
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::vm::platform::api::PlatformApi;
+use std::collections::{HashMap, HashSet};
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
     type Output = ();
@@ -125,49 +127,48 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
-            }
-            Pattern::Struct { typename, vars } => {
-                let borrowed_scope = scope.borrow();
-                let user_type = borrowed_scope.find_type(typename)?;
-                let user_type = user_type.type_of(&scope.borrow())?;
-                let mut scope_vars = Vec::with_capacity(vars.len());
-                let Some(fields) = <EType as GetSubTypes>::get_fields(&user_type) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if vars.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (field_name, field_type) in fields.iter() {
-                    let Some(var_name) = vars.iter().find(|name| {
-                        field_name
-                            .clone()
-                            .map(|inner| if inner == **name { Some(()) } else { None })
-                            .flatten()
-                            .is_some()
-                    }) else {
-                        return Err(SemanticError::InvalidPattern);
-                    };
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
-            Pattern::Tuple(value) => {
-                let mut scope_vars = Vec::with_capacity(value.len());
-                let Some(use_type) = context else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let Some(fields) = <EType as GetSubTypes>::get_fields(&use_type) else {
-                    return Err(SemanticError::InvalidPattern);
-                };
-                if value.len() != fields.len() {
-                    return Err(SemanticError::InvalidPattern);
-                }
-                for (index, (_, field_type)) in fields.iter().enumerate() {
-                    let var_name = &value[index];
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
-                }
-                Ok(scope_vars)
-            }
+            } // Pattern::Struct { typename, vars } => {
+              //     let borrowed_scope = scope.borrow();
+              //     let user_type = borrowed_scope.find_type(typename)?;
+              //     let user_type = user_type.type_of(&scope.borrow())?;
+              //     let mut scope_vars = Vec::with_capacity(vars.len());
+              //     let Some(fields) = <EType as GetSubTypes>::get_fields(&user_type) else {
+              //         return Err(SemanticError::InvalidPattern);
+              //     };
+              //     if vars.len() != fields.len() {
+              //         return Err(SemanticError::InvalidPattern);
+              //     }
+              //     for (field_name, field_type) in fields.iter() {
+              //         let Some(var_name) = vars.iter().find(|name| {
+              //             field_name
+              //                 .clone()
+              //                 .map(|inner| if inner == **name { Some(()) } else { None })
+              //                 .flatten()
+              //                 .is_some()
+              //         }) else {
+              //             return Err(SemanticError::InvalidPattern);
+              //         };
+              //         scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+              //     }
+              //     Ok(scope_vars)
+              // }
+              // Pattern::Tuple(value) => {
+              //     let mut scope_vars = Vec::with_capacity(value.len());
+              //     let Some(use_type) = context else {
+              //         return Err(SemanticError::CantInferType);
+              //     };
+              //     let Some(fields) = <EType as GetSubTypes>::get_fields(&use_type) else {
+              //         return Err(SemanticError::InvalidPattern);
+              //     };
+              //     if value.len() != fields.len() {
+              //         return Err(SemanticError::InvalidPattern);
+              //     }
+              //     for (index, (_, field_type)) in fields.iter().enumerate() {
+              //         let var_name = &value[index];
+              //         scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+              //     }
+              //     Ok(scope_vars)
+              // }
         }
     }
 }
@@ -186,6 +187,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
         Scope: ScopeApi,
     {
         let vars = self.pattern.resolve(scope, &extra, &())?;
+        for (index, var) in vars.iter().enumerate() {
+            var.is_parameter.set((index, true));
+        }
         // create a scope and assign the pattern variable to it before resolving the expression
         let _ = self.expr.resolve(scope, context, &vars)?;
         Ok(())
@@ -208,35 +212,91 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
         let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
-        let _ = self.else_branch.resolve(scope, &context, &Vec::default())?;
-        let else_branch_type = Some(self.else_branch.type_of(&scope.borrow())?);
-        for pattern in &self.patterns {
-            let _ = pattern.resolve(scope, &else_branch_type, &expr_type)?;
-        }
-        let else_branch_type = else_branch_type.unwrap();
+        let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Primitive(_) => None,
+                StaticType::String(_) => None,
+                _ => return Err(SemanticError::InvalidPattern),
+            },
+            Either::User(value) => match value.as_ref() {
+                UserType::Struct(_) => return Err(SemanticError::InvalidPattern),
+                UserType::Enum(Enum { id, values }) => Some(values.clone()),
+                UserType::Union(Union { id, variants }) => {
+                    Some(variants.iter().map(|(v, _)| v).cloned().collect())
+                }
+            },
+        };
 
-        let (maybe_err, _) =
-            self.patterns
-                .iter()
-                .fold((None, else_branch_type), |mut previous, pattern| {
-                    if let Err(e) = previous.1.compatible_with(pattern, &scope.borrow()) {
-                        previous.0 = Some(e);
-                        previous
-                    } else {
-                        match pattern.type_of(&scope.borrow()) {
-                            Ok(pattern_type) => (None, pattern_type),
-                            Err(err) => (
-                                Some(err),
-                                Either::Static(
-                                    <StaticType as BuildStaticType<Scope>>::build_unit().into(),
-                                ),
-                            ),
+        match &self.else_branch {
+            Some(else_branch) => {
+                let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+                for pattern in &self.patterns {
+                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                }
+
+                if let Some(exhaustive_cases) = exhaustive_cases {
+                    let mut map = HashMap::new();
+                    for case in exhaustive_cases {
+                        *map.entry(case).or_insert(0) += 1;
+                    }
+                    for case in self.patterns.iter().map(|p| match &p.pattern {
+                        Pattern::Primitive(_) => None,
+                        Pattern::String(_) => None,
+                        Pattern::Enum { typename, value } => Some(value),
+                        Pattern::Union {
+                            typename,
+                            variant,
+                            vars,
+                        } => Some(variant),
+                    }) {
+                        match case {
+                            Some(case) => {
+                                *map.entry(case.clone()).or_insert(0) -= 1;
+                            }
+                            None => return Err(SemanticError::InvalidPattern),
                         }
                     }
-                });
-        if let Some(err) = maybe_err {
-            return Err(err);
+                    if map.values().all(|&count| count == 0) {
+                        return Err(SemanticError::InvalidPattern);
+                    }
+                }
+
+                let else_branch_type = else_branch.type_of(&scope.borrow())?;
+
+                let (maybe_err, _) =
+                    self.patterns
+                        .iter()
+                        .fold((None, else_branch_type), |mut previous, pattern| {
+                            if let Err(e) = previous.1.compatible_with(pattern, &scope.borrow()) {
+                                previous.0 = Some(e);
+                                previous
+                            } else {
+                                match pattern.type_of(&scope.borrow()) {
+                                    Ok(pattern_type) => (None, pattern_type),
+                                    Err(err) => (
+                                        Some(err),
+                                        Either::Static(
+                                            <StaticType as BuildStaticType<Scope>>::build_unit()
+                                                .into(),
+                                        ),
+                                    ),
+                                }
+                            }
+                        });
+                if let Some(err) = maybe_err {
+                    return Err(err);
+                }
+            }
+            None => {
+                let Some(exhaustive_cases) = exhaustive_cases else {
+                    return Err(SemanticError::InvalidPattern);
+                };
+                for pattern in &self.patterns {
+                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                }
+            }
         }
+
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -378,7 +438,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -400,7 +461,6 @@ mod tests {
             match x {
                 case Color::RED => 1,
                 case Color::GREEN => 2,
-                else => 3
             }
         "##
             .into(),
@@ -426,7 +486,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::User(
@@ -483,7 +544,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(StaticType::String(StringType()).into()),
@@ -529,7 +591,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -556,7 +619,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
@@ -575,7 +639,6 @@ mod tests {
             match x { 
                 case Geo::Point {x,y} => x + y,
                 case Geo::Axe{x} => x,
-                else => 3
             }
         "##
             .into(),
@@ -644,7 +707,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::User(
@@ -735,7 +799,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "f".into(),
                 type_sig: Either::Static(
@@ -778,7 +843,8 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "f".into(),
                 type_sig: Either::Static(
@@ -856,7 +922,8 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -878,7 +945,8 @@ mod tests {
             .register_var(Var {
                 id: "obj".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -902,7 +970,8 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -923,7 +992,8 @@ mod tests {
             .register_var(Var {
                 id: "obj".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -947,7 +1017,8 @@ mod tests {
             .register_var(Var {
                 id: "x".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
@@ -965,7 +1036,8 @@ mod tests {
             .register_var(Var {
                 id: "x".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Address(AddrType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -1066,7 +1138,8 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -1087,7 +1160,8 @@ mod tests {
             .register_var(Var {
                 id: "obj".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -1111,7 +1185,8 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -1132,7 +1207,8 @@ mod tests {
             .register_var(Var {
                 id: "obj".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -1156,7 +1232,8 @@ mod tests {
             .register_var(Var {
                 id: "x".into(),
                 address: Cell::new(None),
-                captured: RefCell::new(false),
+                captured: Cell::new(false),
+                is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
