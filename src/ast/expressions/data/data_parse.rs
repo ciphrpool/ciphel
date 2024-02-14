@@ -189,23 +189,44 @@ impl TryParse for Primitive {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(parse_float, |value| Primitive::Float(value)),
+            map(pair(parse_float, opt(wst(lexem::FLOAT))), |(value, _)| {
+                Primitive::Number(super::Number::F64(value as f64).into())
+            }),
             map(
                 pair(parse_number, opt(NumberType::parse)),
                 |(value, opt_type)| match opt_type {
                     Some(number_type) => match number_type {
-                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8)),
-                        NumberType::U16 => Primitive::Number(super::Number::U16(value as u16)),
-                        NumberType::U32 => Primitive::Number(super::Number::U32(value as u32)),
-                        NumberType::U64 => Primitive::Number(super::Number::U64(value as u64)),
-                        NumberType::U128 => Primitive::Number(super::Number::U128(value as u128)),
-                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8)),
-                        NumberType::I16 => Primitive::Number(super::Number::I16(value as i16)),
-                        NumberType::I32 => Primitive::Number(super::Number::I32(value as i32)),
-                        NumberType::I64 => Primitive::Number(super::Number::I64(value as i64)),
-                        NumberType::I128 => Primitive::Number(super::Number::I128(value as i128)),
+                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8).into()),
+                        NumberType::U16 => {
+                            Primitive::Number(super::Number::U16(value as u16).into())
+                        }
+                        NumberType::U32 => {
+                            Primitive::Number(super::Number::U32(value as u32).into())
+                        }
+                        NumberType::U64 => {
+                            Primitive::Number(super::Number::U64(value as u64).into())
+                        }
+                        NumberType::U128 => {
+                            Primitive::Number(super::Number::U128(value as u128).into())
+                        }
+                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8).into()),
+                        NumberType::I16 => {
+                            Primitive::Number(super::Number::I16(value as i16).into())
+                        }
+                        NumberType::I32 => {
+                            Primitive::Number(super::Number::I32(value as i32).into())
+                        }
+                        NumberType::I64 => {
+                            Primitive::Number(super::Number::I64(value as i64).into())
+                        }
+                        NumberType::I128 => {
+                            Primitive::Number(super::Number::I128(value as i128).into())
+                        }
+                        NumberType::F64 => {
+                            Primitive::Number(super::Number::F64(value as f64).into())
+                        }
                     },
-                    None => Primitive::Number(super::Number::U64(value)),
+                    None => Primitive::Number(super::Number::U64(value).into()),
                 },
             ),
             map(
@@ -615,6 +636,8 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::expressions::{data::Number, Atomic},
         semantic::scope::scope_impl::MockScope,
@@ -637,17 +660,17 @@ mod tests {
         let res = Primitive::parse("42".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Number::U64(42)), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::U64(42))), value);
 
         let res = Primitive::parse("42i16".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Number::I16(42)), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::I16(42))), value);
 
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Float(42.5), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::F64(42.5))), value);
 
         let res = Primitive::parse("'a'".into());
         assert!(res.is_ok());
@@ -669,13 +692,13 @@ mod tests {
             Slice {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::U64(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(5)
+                        Number::U64(5).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(6)
+                        Number::U64(6).into()
                     ))))
                 ],
                 metadata: Metadata::default(),
@@ -707,13 +730,13 @@ mod tests {
             Vector::Init {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::U64(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(5)
+                        Number::U64(5).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(6)
+                        Number::U64(6).into()
                     ))))
                 ],
                 capacity: align(3),
@@ -800,7 +823,7 @@ mod tests {
                     metadata: Metadata::default()
                 },
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default()
             },
@@ -828,7 +851,7 @@ mod tests {
             Tuple {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::U64(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
                 ],
@@ -886,7 +909,7 @@ mod tests {
                             metadata: Metadata::default(),
                         }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::U64(2).into()
                         ))))
                     ),
                     (
@@ -895,7 +918,7 @@ mod tests {
                             metadata: Metadata::default(),
                         }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(6)
+                            Number::U64(6).into()
                         ))))
                     )
                 ],
@@ -929,13 +952,13 @@ mod tests {
                     (
                         "x".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::U64(2).into()
                         ))))
                     ),
                     (
                         "y".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(8)
+                            Number::U64(8).into()
                         ))))
                     )
                 ],
@@ -958,13 +981,13 @@ mod tests {
                     (
                         "x".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::U64(2).into()
                         ))))
                     ),
                     (
                         "y".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(8)
+                            Number::U64(8).into()
                         ))))
                     )
                 ],
@@ -1012,7 +1035,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(3))
+                    Primitive::Number(Cell::new(Number::U64(3)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -1075,7 +1098,7 @@ mod tests {
                         metadata: Metadata::default()
                     })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(3))
+                        Primitive::Number(Cell::new(Number::U64(3)))
                     )))),
                     metadata: Metadata::default()
                 })),
@@ -1094,7 +1117,7 @@ mod tests {
                         metadata: Metadata::default()
                     })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(3))
+                        Primitive::Number(Cell::new(Number::U64(3)))
                     )))),
                     metadata: Metadata::default()
                 })),

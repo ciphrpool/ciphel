@@ -450,6 +450,8 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScop
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::expressions::data::{Data, Number, Primitive},
         semantic::scope::scope_impl::MockScope,
@@ -465,7 +467,7 @@ mod tests {
         assert_eq!(
             UnaryOperation::Minus {
                 value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default()
             },
@@ -494,10 +496,10 @@ mod tests {
         assert_eq!(
             Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default(),
             }),
@@ -510,10 +512,10 @@ mod tests {
         assert_eq!(
             Expression::Substraction(Substraction {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -526,10 +528,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Mult {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -542,10 +544,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Div {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -558,10 +560,10 @@ mod tests {
         assert_eq!(
             Expression::Product(Product::Mod {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::U64(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -574,10 +576,10 @@ mod tests {
         assert_eq!(
             Expression::Shift(Shift::Left {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::U64(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -590,10 +592,10 @@ mod tests {
         assert_eq!(
             Expression::Shift(Shift::Right {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::U64(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -676,10 +678,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::Less {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -692,10 +694,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::LessEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -708,10 +710,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::Greater {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -724,10 +726,10 @@ mod tests {
         assert_eq!(
             Expression::Comparaison(Comparaison::GreaterEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -740,10 +742,10 @@ mod tests {
         assert_eq!(
             Expression::Equation(Equation::Equal {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -756,10 +758,10 @@ mod tests {
         assert_eq!(
             Expression::Equation(Equation::NotEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::U64(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::U64(5)))
                 )))),
                 metadata: Metadata::default()
             }),

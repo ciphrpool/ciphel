@@ -162,7 +162,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            Primitive::Number(num) => match num {
+            Primitive::Number(num) => match num.get() {
                 Number::U8(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U8), scope)
                         .map(|value| (Either::Static(value.into())))
@@ -203,9 +203,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I128), scope)
                         .map(|value| (Either::Static(value.into())))
                 }
+                Number::F64(_) => {
+                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
+                        .map(|value| (Either::Static(value.into())))
+                }
             },
-            Primitive::Float(_) => StaticType::build_primitive(&PrimitiveType::Float, scope)
-                .map(|value| (Either::Static(value.into()))),
             Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
                 .map(|value| (Either::Static(value.into()))),
             Primitive::Char(_) => StaticType::build_primitive(&PrimitiveType::Char, scope)

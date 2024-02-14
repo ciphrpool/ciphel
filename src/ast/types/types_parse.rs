@@ -52,7 +52,6 @@ impl TryParse for PrimitiveType {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(NumberType::parse, |num| PrimitiveType::Number(num)),
-            value(PrimitiveType::Float, wst(lexem::FLOAT)),
             value(PrimitiveType::Char, wst(lexem::CHAR)),
             value(PrimitiveType::Bool, wst(lexem::BOOL)),
         ))(input)
@@ -78,6 +77,7 @@ impl TryParse for NumberType {
             value(NumberType::I32, wst(lexem::I32)),
             value(NumberType::I64, wst(lexem::I64)),
             value(NumberType::I128, wst(lexem::I128)),
+            value(NumberType::F64, wst(lexem::FLOAT)),
         ))(input)
     }
 }
@@ -281,10 +281,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Char, value);
 
-        let res = PrimitiveType::parse("float".into());
+        let res = PrimitiveType::parse("f64".into());
         assert!(res.is_ok());
         let value = res.unwrap().1;
-        assert_eq!(PrimitiveType::Float, value);
+        assert_eq!(PrimitiveType::Number(NumberType::F64), value);
     }
 
     #[test]

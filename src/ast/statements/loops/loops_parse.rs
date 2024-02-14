@@ -19,9 +19,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
@@ -122,7 +120,7 @@ impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use crate::{
         ast::{
@@ -166,7 +164,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::U64(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -205,7 +203,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::U64(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -240,7 +238,7 @@ mod tests {
                             metadata: Metadata::default()
                         }),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Number::U64(10))
+                            Primitive::Number(Cell::new(Number::U64(10)))
                         )))],
                         metadata: Metadata::default()
                     }

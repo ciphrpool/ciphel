@@ -251,6 +251,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use tests::{data::Number, operation::Addition};
 
     use crate::{
@@ -268,14 +270,14 @@ mod tests {
         assert_eq!(
             Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(1))
+                    Primitive::Number(Cell::new(Number::U64(1)))
                 )))),
                 right: Box::new(Expression::Product(operation::Product::Mult {
                     left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(2))
+                        Primitive::Number(Cell::new(Number::U64(2)))
                     )))),
                     right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(4))
+                        Primitive::Number(Cell::new(Number::U64(4)))
                     )))),
                     metadata: Metadata::default()
                 })),

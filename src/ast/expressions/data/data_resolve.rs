@@ -1,7 +1,7 @@
 use super::{
     Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
-    Union, VarID, Variable, Vector,
+    ListAccess, Map, MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StringData, Struct,
+    Tuple, Union, VarID, Variable, Vector,
 };
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
@@ -320,6 +320,33 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     {
         match context {
             Some(context_type) => {
+                match context_type {
+                    Either::Static(value) => {
+                        if let Primitive::Number(n) = self {
+                            if let Number::U64(v) = n.get() {
+                                match value.as_ref() {
+                                    StaticType::Primitive(PrimitiveType::Number(value)) => {
+                                        match value {
+                                            NumberType::U8 => n.set(Number::U8(v as u8)),
+                                            NumberType::U16 => n.set(Number::U16(v as u16)),
+                                            NumberType::U32 => n.set(Number::U32(v as u32)),
+                                            NumberType::U64 => n.set(Number::U64(v as u64)),
+                                            NumberType::U128 => n.set(Number::U128(v as u128)),
+                                            NumberType::I8 => n.set(Number::I8(v as i8)),
+                                            NumberType::I16 => n.set(Number::I16(v as i16)),
+                                            NumberType::I32 => n.set(Number::I32(v as i32)),
+                                            NumberType::I64 => n.set(Number::I64(v as i64)),
+                                            NumberType::I128 => n.set(Number::I128(v as i128)),
+                                            NumberType::F64 => n.set(Number::F64(v as f64)),
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    Either::User(_) => {}
+                }
                 let _ = context_type.compatible_with(self, &scope.borrow())?;
                 Ok(())
             }

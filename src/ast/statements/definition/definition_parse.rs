@@ -194,7 +194,10 @@ impl TryParse for EventCondition {
 #[cfg(test)]
 mod tests {
 
-    use std::{cell::RefCell, collections::HashMap};
+    use std::{
+        cell::{Cell, RefCell},
+        collections::HashMap,
+    };
 
     use crate::{
         ast::{
@@ -324,7 +327,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Number::U64(10))
+                            Primitive::Number(Cell::new(Number::U64(10)))
                         )))),
                         metadata: Metadata::default()
                     })],
@@ -356,7 +359,7 @@ mod tests {
         //         scope: Scope {
         //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
         //                 fn_id: "f".into(),
-        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))]
+        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Cell::new(Number::U64(10)))))]
         //             }))]
         //         }
         //     },

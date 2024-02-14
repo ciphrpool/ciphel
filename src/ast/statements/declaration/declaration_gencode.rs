@@ -118,6 +118,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use num_traits::Zero;
 
     use crate::{
@@ -182,7 +184,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -227,8 +229,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Number::U64(420)));
-        assert_eq!(y, Primitive::Number(Number::U64(69)));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -270,8 +272,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Number::U64(420)));
-        assert_eq!(y, Primitive::Number(Number::U64(69)));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -342,8 +344,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Number::U64(420)));
-        assert_eq!(y, Primitive::Number(Number::U64(69)));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -411,7 +413,7 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Number::U64(420)));
-        assert_eq!(y, Primitive::Number(Number::U64(69)));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
     }
 }

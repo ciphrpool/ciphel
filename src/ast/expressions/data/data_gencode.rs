@@ -70,7 +70,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
             .try_borrow_mut()
             .map_err(|_| CodeGenerationError::Default)?;
         let casm = match self {
-            Primitive::Number(data) => match data {
+            Primitive::Number(data) => match data.get() {
                 super::Number::U8(data) => Serialized {
                     data: data.to_le_bytes().to_vec(),
                 },
@@ -101,9 +101,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
                 super::Number::I128(data) => Serialized {
                     data: data.to_le_bytes().to_vec(),
                 },
-            },
-            Primitive::Float(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+                super::Number::F64(data) => Serialized {
+                    data: data.to_le_bytes().to_vec(),
+                },
             },
             Primitive::Bool(data) => Serialized {
                 data: [*data as u8].to_vec(),
@@ -1496,7 +1496,7 @@ mod tests {
         let (expr, memory) = compile_expression!(Primitive, "420.69");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Float,
+            &PrimitiveType::Number(NumberType::F64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1721,9 +1721,12 @@ mod tests {
             .value
             .iter()
             .map(|e| match e {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(n),
-                )))) => Some(*n),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(n) => Some(n),
+                        _ => None,
+                    }
+                }
                 _ => None,
             })
             .collect();
@@ -1758,9 +1761,12 @@ mod tests {
             } => value
                 .iter()
                 .map(|e| match e {
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(n),
-                    )))) => Some(*n),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                        match x.get() {
+                            Number::U64(n) => Some(n),
+                            _ => None,
+                        }
+                    }
                     _ => None,
                 })
                 .collect(),

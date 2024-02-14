@@ -99,6 +99,11 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for NumberType {
                     .map_err(|_| RuntimeError::Deserialization)?;
                 Ok(Number::I128(i128::from_le_bytes(*data)))
             }
+            NumberType::F64 => {
+                let data = TryInto::<&[u8; 8]>::try_into(bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
+                Ok(Number::F64(f64::from_le_bytes(*data)))
+            }
         }
     }
 }
@@ -110,12 +115,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
         match self {
             PrimitiveType::Number(number) => {
                 <NumberType as DeserializeFrom<Scope>>::deserialize_from(number, bytes)
-                    .map(|n| Primitive::Number(n))
-            }
-            PrimitiveType::Float => {
-                let data = TryInto::<&[u8; 8]>::try_into(bytes)
-                    .map_err(|_| RuntimeError::Deserialization)?;
-                Ok(Primitive::Float(f64::from_le_bytes(*data)))
+                    .map(|n| Primitive::Number(n.into()))
             }
             PrimitiveType::Char => {
                 let data = TryInto::<&[u8; 1]>::try_into(bytes)

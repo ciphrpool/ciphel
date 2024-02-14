@@ -28,7 +28,7 @@ pub const I32: &str = "i32";
 pub const I64: &str = "i64";
 pub const I128: &str = "i128";
 
-pub const FLOAT: &str = "float";
+pub const FLOAT: &str = "f64";
 pub const CHAR: &str = "char";
 pub const STRING: &str = "string";
 pub const BOOL: &str = "bool";

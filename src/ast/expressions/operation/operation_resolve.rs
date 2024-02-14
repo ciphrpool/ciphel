@@ -4,7 +4,7 @@ use super::{
 };
 
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
 
@@ -31,9 +31,36 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
     {
         match self {
             UnaryOperation::Minus { value, metadata } => {
-                let _ = value.resolve(scope, context, extra)?;
+                let binding = Some(Either::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
+                ));
+                let _ = value.resolve(
+                    scope,
+                    match context {
+                        Some(_) => context,
+                        None => &binding,
+                    },
+                    extra,
+                )?;
                 let value_type = value.type_of(&scope.borrow())?;
-                let _ = <EType as OperandMerging<Scope>>::can_substract(&value_type)?;
+                // let _ = <EType as OperandMerging<Scope>>::can_substract(&value_type)?;
+                match value_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Primitive(value) => match value {
+                            PrimitiveType::Number(
+                                NumberType::I128
+                                | NumberType::I64
+                                | NumberType::I32
+                                | NumberType::I16
+                                | NumberType::I8
+                                | NumberType::F64,
+                            ) => {}
+                            _ => return Err(SemanticError::IncompatibleOperation),
+                        },
+                        _ => return Err(SemanticError::IncompatibleOperation),
+                    },
+                    Either::User(_) => return Err(SemanticError::IncompatibleOperation),
+                }
                 {
                     let mut borrowed_metadata = metadata
                         .info
@@ -514,12 +541,7 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = Product::parse("10.0 * 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
-
-        let expr = Product::parse("10 * 10.0".into()).unwrap().1;
+        let expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
@@ -568,6 +590,11 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
+
+        let expr = Product::parse("10 * 10.0".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
     }
 
     #[test]
@@ -592,11 +619,6 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = Addition::parse("10.0 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
-
         let expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
@@ -607,12 +629,12 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = Product::parse("10.0 * 10 + 10".into()).unwrap().1;
+        let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
 
-        let expr = Product::parse("10 * 10.0 + 10".into()).unwrap().1;
+        let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
@@ -648,6 +670,11 @@ mod tests {
         assert!(res.is_err());
 
         let expr = Addition::parse("10 + x".into()).unwrap().1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_err());
+
+        let expr = Addition::parse("10.0 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
@@ -717,13 +744,13 @@ mod tests {
 
     #[test]
     fn valid_cast() {
-        let expr = Cast::parse("10 as float".into()).unwrap().1;
+        let expr = Cast::parse("10 as f64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok());
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Float).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into()),
             expr_type
         );
 

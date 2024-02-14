@@ -262,7 +262,7 @@ mod tests {
 
         let (x_type, _) = scope.borrow().find_var(&"x".into()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Float).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into()),
             x_type.type_sig
         );
     }

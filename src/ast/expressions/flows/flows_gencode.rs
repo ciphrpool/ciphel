@@ -201,7 +201,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 }
                 Pattern::Primitive(value) => {
                     let data = match value {
-                        Primitive::Number(data) => match data {
+                        Primitive::Number(data) => match data.get() {
                             Number::U8(data) => data.to_le_bytes().to_vec(),
                             Number::U16(data) => data.to_le_bytes().to_vec(),
                             Number::U32(data) => data.to_le_bytes().to_vec(),
@@ -212,8 +212,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                             Number::I32(data) => data.to_le_bytes().to_vec(),
                             Number::I64(data) => data.to_le_bytes().to_vec(),
                             Number::I128(data) => data.to_le_bytes().to_vec(),
+                            Number::F64(data) => data.to_le_bytes().to_vec(),
                         },
-                        Primitive::Float(data) => data.to_le_bytes().to_vec(),
                         Primitive::Bool(data) => [*data as u8].to_vec(),
                         Primitive::Char(data) => [*data as u8].to_vec(),
                     };
@@ -358,6 +358,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::{
             expressions::{
@@ -437,7 +439,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
 
         let memory = Memory::new();
         instructions_else
@@ -449,7 +451,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(69)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -511,7 +513,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
 
         let memory = Memory::new();
         instructions_else
@@ -523,7 +525,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(69)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -619,13 +621,16 @@ mod tests {
 
         for (r_id, res) in &result.fields {
             match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(res),
-                )))) => {
-                    if r_id == "x" {
-                        assert_eq!(420, *res);
-                    } else if r_id == "y" {
-                        assert_eq!(420, *res);
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(res) => {
+                            if r_id == "x" {
+                                assert_eq!(420, res);
+                            } else if r_id == "y" {
+                                assert_eq!(420, res);
+                            }
+                        }
+                        _ => assert!(false, "Expected u64"),
                     }
                 }
                 _ => assert!(false, "Expected u64"),
@@ -645,13 +650,16 @@ mod tests {
 
         for (r_id, res) in &result.fields {
             match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(res),
-                )))) => {
-                    if r_id == "x" {
-                        assert_eq!(69, *res);
-                    } else if r_id == "y" {
-                        assert_eq!(69, *res);
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(res) => {
+                            if r_id == "x" {
+                                assert_eq!(69, res);
+                            } else if r_id == "y" {
+                                assert_eq!(69, res);
+                            }
+                        }
+                        _ => assert!(false, "Expected u64"),
                     }
                 }
                 _ => assert!(false, "Expected u64"),
@@ -698,7 +706,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -796,7 +804,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -894,7 +902,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(27)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(27))));
     }
 
     #[test]
@@ -935,7 +943,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -976,7 +984,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(69)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -1017,7 +1025,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -1058,6 +1066,6 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(69)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
 }

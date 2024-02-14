@@ -18,9 +18,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 
 use super::{AssignValue, Assignation, Assignee};
@@ -82,6 +80,8 @@ impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::expressions::{
             data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
@@ -104,7 +104,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
                 ))))
             },
             value
@@ -123,7 +123,7 @@ mod tests {
                     metadata: Metadata::default()
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
                 ))))
             },
             value
@@ -146,7 +146,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
                 ))))
             },
             value

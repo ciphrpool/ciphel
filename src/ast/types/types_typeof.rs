@@ -66,15 +66,10 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::PrimitiveType {
             return Err(SemanticError::IncompatibleTypes);
         };
         match self {
-            static_types::PrimitiveType::Number(_) => match other_type {
-                static_types::PrimitiveType::Number(_) => Ok(()),
-                static_types::PrimitiveType::Float => Ok(()),
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
-
-            static_types::PrimitiveType::Float => match other_type {
-                static_types::PrimitiveType::Number(_) => Ok(()),
-                static_types::PrimitiveType::Float => Ok(()),
+            static_types::PrimitiveType::Number(self_n) => match other_type {
+                static_types::PrimitiveType::Number(other_n) => (self_n == other_n)
+                    .then_some(())
+                    .ok_or(SemanticError::IncompatibleTypes),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
 

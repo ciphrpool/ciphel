@@ -12,7 +12,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
         match self {
             StaticType::Primitive(value) => match value {
                 PrimitiveType::Number(_) => Ok(()),
-                PrimitiveType::Float => Ok(()),
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
             },
@@ -41,15 +40,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 num @ PrimitiveType::Number(_) => num
                     .merge(&other, scope)
                     .map_err(|_| SemanticError::IncompatibleOperands),
-                PrimitiveType::Float => match other_type.as_ref() {
-                    StaticType::Primitive(PrimitiveType::Number(_)) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    StaticType::Primitive(PrimitiveType::Float) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    _ => Err(SemanticError::IncompatibleOperands),
-                },
                 _ => Err(SemanticError::IncompatibleOperands),
             },
             StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
@@ -74,7 +64,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
         match self {
             StaticType::Primitive(value) => match value {
                 PrimitiveType::Number(_) => Ok(()),
-                PrimitiveType::Float => Ok(()),
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
             },
@@ -103,15 +92,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 num @ PrimitiveType::Number(_) => num
                     .merge(&other, scope)
                     .map_err(|_| SemanticError::IncompatibleOperands),
-                PrimitiveType::Float => match other_type.as_ref() {
-                    StaticType::Primitive(PrimitiveType::Number(_)) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    StaticType::Primitive(PrimitiveType::Float) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    _ => Err(SemanticError::IncompatibleOperands),
-                },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
@@ -127,7 +107,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
         match self {
             StaticType::Primitive(value) => match value {
                 PrimitiveType::Number(_) => Ok(()),
-                PrimitiveType::Float => Ok(()),
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperation),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperation),
             },
@@ -157,15 +136,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 num @ PrimitiveType::Number(_) => num
                     .merge(&other, scope)
                     .map_err(|_| SemanticError::IncompatibleOperands),
-                PrimitiveType::Float => match other_type.as_ref() {
-                    StaticType::Primitive(PrimitiveType::Number(_)) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    StaticType::Primitive(PrimitiveType::Float) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
-                    )),
-                    _ => Err(SemanticError::IncompatibleOperands),
-                },
                 PrimitiveType::Char => Err(SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => Err(SemanticError::IncompatibleOperands),
             },
@@ -256,7 +226,7 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                     .map_err(|_| SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Bool) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
+                        StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
@@ -306,7 +276,7 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                     .map_err(|_| SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Bool) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
+                        StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },
@@ -356,7 +326,7 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                     .map_err(|_| SemanticError::IncompatibleOperands),
                 PrimitiveType::Bool => match other_type.as_ref() {
                     StaticType::Primitive(PrimitiveType::Bool) => Ok(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Float).into(),
+                        StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                     _ => Err(SemanticError::IncompatibleOperands),
                 },

@@ -38,8 +38,8 @@ impl SizeOf for PrimitiveType {
                 super::NumberType::I32 => 4,
                 super::NumberType::I64 => 8,
                 super::NumberType::I128 => 16,
+                super::NumberType::F64 => 8,
             },
-            PrimitiveType::Float => 8,
             PrimitiveType::Char => 1,
             PrimitiveType::Bool => 1,
         }

@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::{
     ast::{self, utils::strings::ID},
@@ -75,13 +79,12 @@ pub struct NumAccess<InnerScope: ScopeApi> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
-    Number(Number),
-    Float(f64),
+    Number(Cell<Number>),
     Bool(bool),
     Char(char),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Number {
     U8(u8),
     U16(u16),
@@ -93,6 +96,7 @@ pub enum Number {
     I32(i32),
     I64(i64),
     I128(i128),
+    F64(f64),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,7 +245,7 @@ impl<Scope: ScopeApi> Data<Scope> {
     pub fn signature(&self) -> Option<EType> {
         match self {
             Data::Primitive(value) => match value {
-                Primitive::Number(value) => match value {
+                Primitive::Number(value) => match value.get() {
                     Number::U8(_) => Some(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U8)).into(),
                     )),
@@ -272,10 +276,10 @@ impl<Scope: ScopeApi> Data<Scope> {
                     Number::I128(_) => Some(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
                     )),
+                    Number::F64(_) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
+                    )),
                 },
-                Primitive::Float(_) => Some(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Float).into(),
-                )),
                 Primitive::Bool(_) => Some(Either::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 )),

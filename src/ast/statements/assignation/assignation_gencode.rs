@@ -111,6 +111,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
 }
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use num_traits::Zero;
 
     use crate::{
@@ -177,7 +179,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -228,7 +230,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Number::U64(420)));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 
     #[test]
@@ -296,13 +298,16 @@ mod tests {
             .expect("Deserialization should have succeeded");
         for (r_id, res) in &result.fields {
             match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(res),
-                )))) => {
-                    if r_id == "x" {
-                        assert_eq!(420, *res);
-                    } else if r_id == "y" {
-                        assert_eq!(69, *res);
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(res) => {
+                            if r_id == "x" {
+                                assert_eq!(420, res);
+                            } else if r_id == "y" {
+                                assert_eq!(69, res);
+                            }
+                        }
+                        _ => assert!(false, "Expected u64"),
                     }
                 }
                 _ => assert!(false, "Expected u64"),
@@ -354,9 +359,12 @@ mod tests {
             .value
             .into_iter()
             .map(|e| match e {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(n),
-                )))) => Some(n),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(n) => Some(n),
+                        _ => None,
+                    }
+                }
                 _ => None,
             })
             .collect();
@@ -408,9 +416,12 @@ mod tests {
             .value
             .into_iter()
             .map(|e| match e {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(n),
-                )))) => Some(n),
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(n) => Some(n),
+                        _ => None,
+                    }
+                }
                 _ => None,
             })
             .collect();
@@ -480,13 +491,16 @@ mod tests {
 
         for (r_id, res) in &result.fields {
             match res {
-                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                    Number::U64(res),
-                )))) => {
-                    if r_id == "x" {
-                        assert_eq!(420, *res);
-                    } else if r_id == "y" {
-                        assert_eq!(69, *res);
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::U64(res) => {
+                            if r_id == "x" {
+                                assert_eq!(420, res);
+                            } else if r_id == "y" {
+                                assert_eq!(69, res);
+                            }
+                        }
+                        _ => assert!(false, "Expected u64"),
                     }
                 }
                 _ => assert!(false, "Expected u64"),
@@ -585,15 +599,21 @@ mod tests {
                         Expression::Atomic(Atomic::Data(Data::Tuple(Tuple {
                             value,
                             metadata,
-                        }))) => match value[1] {
+                        }))) => match &value[1] {
                             Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(n)),
-                            ))) => Some(n),
+                                Primitive::Number(x),
+                            ))) => match x.get() {
+                                Number::U64(n) => Some(n),
+                                _ => None,
+                            },
                             _ => None,
                         },
-                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(n),
-                        )))) => Some(*n),
+                        Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                            match x.get() {
+                                Number::U64(n) => Some(n),
+                                _ => None,
+                            }
+                        }
                         _ => None,
                     })
                     .collect();
@@ -700,8 +720,11 @@ mod tests {
                             if r_id == "y" {
                                 match res {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
-                                        Primitive::Number(Number::U64(n)),
-                                    ))) => assert_eq!(*n, 69),
+                                        Primitive::Number(x),
+                                    ))) => match x.get() {
+                                        Number::U64(n) => assert_eq!(n, 69),
+                                        _ => assert!(false, "Expected u64"),
+                                    },
                                     _ => assert!(false, "Expected u64"),
                                 }
                             }

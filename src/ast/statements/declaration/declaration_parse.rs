@@ -130,6 +130,8 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::{
             expressions::{
@@ -169,7 +171,7 @@ mod tests {
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
                 ))))
             },
             value
@@ -182,7 +184,7 @@ mod tests {
             Declaration::Assigned {
                 left: DeclaredVar::Id("x".into()),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
                 ))))
             },
             value
@@ -198,10 +200,10 @@ mod tests {
                     Tuple {
                         value: vec![
                             Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                                Number::U64(10)
+                                Number::U64(10).into()
                             )))),
                             Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                                Number::U64(10)
+                                Number::U64(10).into()
                             ))))
                         ],
                         metadata: Metadata::default()

@@ -237,7 +237,7 @@ impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use crate::{
         ast::{
@@ -268,7 +268,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::U64(10)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -281,7 +281,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(20))
+                                Primitive::Number(Cell::new(Number::U64(20)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -323,7 +323,7 @@ mod tests {
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
-                        pattern: Pattern::Primitive(Primitive::Number(Number::U64(10))),
+                        pattern: Pattern::Primitive(Primitive::Number(Cell::new(Number::U64(10)))),
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
@@ -462,7 +462,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::U64(10)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -475,7 +475,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(20))
+                                Primitive::Number(Cell::new(Number::U64(20)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -506,7 +506,7 @@ mod tests {
                         metadata: Metadata::default()
                     })))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(10)
+                        Number::U64(10).into()
                     ))))
                 ],
                 metadata: Metadata::default(),
