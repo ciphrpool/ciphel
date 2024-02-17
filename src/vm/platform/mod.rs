@@ -53,12 +53,12 @@ pub mod api {
         ast::{expressions::Expression, utils::strings::ID},
         semantic::{
             scope::{
-                static_types::StaticType,
+                static_types::{NumberType, PrimitiveType, StaticType},
                 type_traits::{GetSubTypes, TypeChecking},
                 user_type_impl::UserType,
                 BuildStaticType, ScopeApi,
             },
-            CompatibleWith, EType, Either, MutRc, SemanticError, TypeOf,
+            CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
         },
     };
 
@@ -107,7 +107,7 @@ pub mod api {
         fn accept<Scope: ScopeApi>(
             &self,
             args: &Vec<Expression<Scope>>,
-            scope: &Ref<Scope>,
+            scope: &MutRc<Scope>,
         ) -> Result<(), SemanticError> {
             match self {
                 PlatformApi::LEFT
@@ -121,7 +121,14 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let arg = args.first().unwrap();
-                    let arg_type = arg.type_of(scope)?;
+                    let _ = arg.resolve(
+                        scope,
+                        &Some(Either::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        )),
+                        &(),
+                    )?;
+                    let arg_type = arg.type_of(&scope.borrow())?;
                     if !<EType as TypeChecking>::is_u64(&arg_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
@@ -132,12 +139,26 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let cell = &args[0];
-                    let cell_type = cell.type_of(scope)?;
+                    let _ = cell.resolve(
+                        scope,
+                        &Some(Either::Static(
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        )),
+                        &(),
+                    )?;
+                    let cell_type = cell.type_of(&scope.borrow())?;
                     if !<EType as TypeChecking>::is_u64(&cell_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let data = &args[1];
-                    let data_type = data.type_of(scope)?;
+                    let _ = data.resolve(
+                        scope,
+                        &Some(Either::Static(
+                            StaticType::Primitive(PrimitiveType::Char).into(),
+                        )),
+                        &(),
+                    )?;
+                    let data_type = data.type_of(&scope.borrow())?;
                     if !<EType as TypeChecking>::is_char(&data_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
@@ -148,14 +169,16 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let vector = &args[0];
-                    let vector_type = vector.type_of(scope)?;
+                    let _ = vector.resolve(scope, &None, &())?;
+                    let vector_type = vector.type_of(&scope.borrow())?;
                     let element = &args[1];
-                    let element_type = element.type_of(scope)?;
+                    let _ = element.resolve(scope, &None, &())?;
+                    let element_type = element.type_of(&scope.borrow())?;
                     if !<EType as TypeChecking>::is_vec(&vector_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let item_type = <EType as GetSubTypes>::get_item(&vector_type).unwrap();
-                    let _ = item_type.compatible_with(&element_type, scope)?;
+                    let _ = item_type.compatible_with(&element_type, &scope.borrow())?;
                     Ok(())
                 }
                 PlatformApi::INSERT => {
@@ -163,13 +186,16 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let map = &args[0];
-                    let map_type = map.type_of(scope)?;
+                    let _ = map.resolve(scope, &None, &())?;
+                    let map_type = map.type_of(&scope.borrow())?;
 
                     let expr_key = &args[1];
-                    let expr_key_type = expr_key.type_of(scope)?;
+                    let _ = expr_key.resolve(scope, &None, &())?;
+                    let expr_key_type = expr_key.type_of(&scope.borrow())?;
 
                     let expr_value = &args[2];
-                    let expr_value_type = expr_value.type_of(scope)?;
+                    let _ = expr_value.resolve(scope, &None, &())?;
+                    let expr_value_type = expr_value.type_of(&scope.borrow())?;
 
                     if !<EType as TypeChecking>::is_map(&map_type) {
                         return Err(SemanticError::IncorrectArguments);
@@ -178,8 +204,8 @@ pub mod api {
 
                     let key_type = <EType as GetSubTypes>::get_key(&map_type).unwrap();
 
-                    let _ = key_type.compatible_with(&expr_key_type, scope)?;
-                    let _ = value_type.compatible_with(&expr_value_type, scope)?;
+                    let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
+                    let _ = value_type.compatible_with(&expr_value_type, &scope.borrow())?;
                     Ok(())
                 }
                 PlatformApi::DELETE => {
@@ -187,16 +213,28 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let iterator = &args[0];
-                    let iterator_type = iterator.type_of(scope)?;
-
-                    let expr_key = &args[1];
-                    let expr_key_type = expr_key.type_of(scope)?;
+                    let _ = iterator.resolve(scope, &None, &())?;
+                    let iterator_type = iterator.type_of(&scope.borrow())?;
 
                     if <EType as TypeChecking>::is_map(&iterator_type) {
                         let key_type = <EType as GetSubTypes>::get_key(&iterator_type).unwrap();
 
-                        let _ = key_type.compatible_with(&expr_key_type, scope)?;
+                        let expr_key = &args[1];
+                        let _ = expr_key.resolve(scope, &Some(key_type), &())?;
+                        let expr_key_type = expr_key.type_of(&scope.borrow())?;
+                        // let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
                     } else if <EType as TypeChecking>::is_vec(&iterator_type) {
+                        let expr_key = &args[1];
+                        let _ = expr_key.resolve(
+                            scope,
+                            &Some(Either::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            )),
+                            &(),
+                        )?;
+                        let expr_key_type = expr_key.type_of(&scope.borrow())?;
+
                         if !<EType as TypeChecking>::is_u64(&expr_key_type) {
                             return Err(SemanticError::IncorrectArguments);
                         }
@@ -211,7 +249,8 @@ pub mod api {
                         return Err(SemanticError::IncorrectArguments);
                     }
                     let arg = args.first().unwrap();
-                    let arg_type = arg.type_of(scope)?;
+                    let _ = arg.resolve(scope, &None, &())?;
+                    let arg_type = arg.type_of(&scope.borrow())?;
                     if !<EType as TypeChecking>::is_addr(&arg_type) {
                         return Err(SemanticError::IncorrectArguments);
                     }
@@ -232,7 +271,7 @@ pub mod api {
             args: &Vec<Expression<Scope>>,
             scope: &MutRc<Scope>,
         ) -> Result<(), SemanticError> {
-            let _ = self.accept(args, &scope.borrow())?;
+            let _ = self.accept(args, scope)?;
             Ok(())
         }
 

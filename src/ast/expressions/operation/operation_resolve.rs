@@ -31,18 +31,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
     {
         match self {
             UnaryOperation::Minus { value, metadata } => {
-                let binding = Some(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
-                ));
-                let _ = value.resolve(
-                    scope,
-                    match context {
-                        Some(_) => context,
-                        None => &binding,
-                    },
-                    extra,
-                )?;
+                // let binding = Some(Either::Static(
+                //     StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
+                // ));
+                let _ = value.resolve(scope, context, extra)?;
                 let value_type = value.type_of(&scope.borrow())?;
+                dbg!(value);
                 // let _ = <EType as OperandMerging<Scope>>::can_substract(&value_type)?;
                 match value_type {
                     Either::Static(value) => match value.as_ref() {
@@ -539,22 +533,22 @@ mod tests {
         let expr = Product::parse("10 * 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * (10+10)".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("(10+10) * 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * x".into()).unwrap().1;
         let scope = Scope::new();
@@ -566,12 +560,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -602,42 +596,42 @@ mod tests {
         let expr = Addition::parse("10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 - 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + 10*10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + x".into()).unwrap().1;
         let scope = Scope::new();
@@ -649,12 +643,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -685,12 +679,12 @@ mod tests {
         let expr = Shift::parse("10 >> 1".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Shift::parse("10 << 1".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -711,17 +705,17 @@ mod tests {
         let expr = BitwiseAnd::parse("10 & 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = BitwiseOR::parse("10 | 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = BitwiseXOR::parse("10 ^ 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -747,7 +741,7 @@ mod tests {
         let expr = Cast::parse("10 as f64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into()),
@@ -757,7 +751,7 @@ mod tests {
         let expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
@@ -767,7 +761,7 @@ mod tests {
         let expr = Cast::parse("'a' as string".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::String(StringType()).into()),
@@ -777,7 +771,7 @@ mod tests {
         let expr = Cast::parse("['a'] as string".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::String(StringType()).into()),
@@ -787,7 +781,7 @@ mod tests {
         // let expr = Cast::parse("\"hello\" as [10]char".into()).unwrap().1;
         // let scope = Scope::new();
         // let res = expr.resolve(&scope, &None, &());
-        // assert!(res.is_ok());
+        // assert!(res.is_ok(), "{:?}", res);
         // let expr_type = expr.type_of(&scope.borrow()).unwrap();
         // assert_eq!(
         //     Either::Static(
@@ -808,12 +802,12 @@ mod tests {
         let expr = Expression::parse("10 < 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("'a' > 'b'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -829,12 +823,12 @@ mod tests {
         let expr = Expression::parse("10 == 10".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -850,14 +844,14 @@ mod tests {
         let expr = Expression::parse("10 in [10,2]".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse(r##"'o' in "Hello world""##.into())
             .unwrap()
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -880,31 +874,31 @@ mod tests {
         let expr = Expression::parse("true and false".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true or false".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("10 in [10,2] and false".into())
             .unwrap()
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true and true and true".into())
             .unwrap()
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -925,29 +919,29 @@ mod tests {
         let expr = UnaryOperation::parse("!true".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = UnaryOperation::parse("! ( true and false )".into())
             .unwrap()
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = UnaryOperation::parse("-1".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = UnaryOperation::parse("-1.0".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = UnaryOperation::parse("- ( 10 + 10 )".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]

@@ -97,6 +97,7 @@ pub enum Number {
     I64(i64),
     I128(i128),
     F64(f64),
+    Unresolved(i64),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -279,6 +280,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                     Number::F64(_) => Some(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
                     )),
+                    Number::Unresolved(_) => None,
                 },
                 Primitive::Bool(_) => Some(Either::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),

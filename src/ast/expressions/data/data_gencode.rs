@@ -104,6 +104,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
                 super::Number::F64(data) => Serialized {
                     data: data.to_le_bytes().to_vec(),
                 },
+                super::Number::Unresolved(_) => return Err(CodeGenerationError::UnresolvedError),
             },
             Primitive::Bool(data) => Serialized {
                 data: [*data as u8].to_vec(),
@@ -419,7 +420,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 field.access_from(from_type, scope, instructions)
@@ -455,7 +456,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Access(Access::Runtime { size }));
                 }
@@ -484,7 +485,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Access(Access::Runtime { size }));
                 }
@@ -581,7 +582,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 field.access_from(from_type, scope, instructions)
@@ -614,7 +615,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Access(Access::Runtime { size }));
                 }
@@ -640,7 +641,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Access(Access::Runtime { size }));
                 }
@@ -708,7 +709,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 field.locate_from(from_type, scope, instructions)
@@ -738,7 +739,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 Ok(())
@@ -766,14 +767,14 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 Ok(())
@@ -815,7 +816,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 field.locate_from(from_type, scope, instructions)
@@ -845,7 +846,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 Ok(())
@@ -873,14 +874,14 @@ impl<Scope: ScopeApi> Variable<Scope> {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                     borrowed.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
-                        result: OpPrimitive::Number(NumberType::U64),
+                        // result: OpPrimitive::Number(NumberType::U64),
                     }));
                 }
                 Ok(())
@@ -1429,9 +1430,9 @@ mod tests {
 
     #[test]
     fn valid_number() {
-        let (expr_u64, memory) = compile_expression!(Primitive, "420");
-        let data_u64 = clear_stack!(memory);
-        assert_number!(expr_u64, data_u64, U64);
+        let (expr_i64, memory) = compile_expression!(Primitive, "420");
+        let data_i64 = clear_stack!(memory);
+        assert_number!(expr_i64, data_i64, I64);
 
         let (expr_u128, memory) = compile_expression!(Primitive, "420u128");
         let data_u128 = clear_stack!(memory);
@@ -1509,7 +1510,7 @@ mod tests {
         let data = clear_stack!(memory);
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
         ])
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
@@ -1530,7 +1531,7 @@ mod tests {
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into()),
             Either::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
             Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
         ])
         .deserialize_from(&data)
@@ -1601,6 +1602,57 @@ mod tests {
     }
 
     #[test]
+    fn valid_struct_complex() {
+        let user_type = user_type_impl::Struct {
+            id: "Point".into(),
+            fields: {
+                let mut res = Vec::new();
+                res.push((
+                    "x".into(),
+                    Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I32)).into(),
+                    ),
+                ));
+                res.push((
+                    "y".into(),
+                    Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                    ),
+                ));
+                res
+            },
+        };
+        let (expr, memory) = compile_expression_with_type!(
+            Struct,
+            r##"
+        Point {
+            x : 420,
+            y : 69
+        }
+        "##,
+            user_type
+        );
+        let data = clear_stack!(memory);
+        let result: Struct<Scope> = user_type
+            .deserialize_from(&data)
+            .expect("Deserialization should have succeeded");
+        for ((e_id, expected), (r_id, res)) in expr.fields.into_iter().zip(result.fields) {
+            if e_id != r_id {
+                assert!(false, "Expected matching field ids")
+            }
+            match (expected, res) {
+                (
+                    Expression::Atomic(Atomic::Data(Data::Primitive(expected))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(res))),
+                ) => {
+                    assert_eq!(expected, res);
+                }
+                _ => assert!(false, "Expected primitives"),
+            }
+        }
+    }
+
+    #[test]
     fn valid_union() {
         let user_type = user_type_impl::Union {
             id: "Geo".into(),
@@ -1614,14 +1666,14 @@ mod tests {
                             (
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
                             (
                                 "y".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
@@ -1637,7 +1689,7 @@ mod tests {
                             res.push((
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ));
@@ -1711,19 +1763,19 @@ mod tests {
         let result: Slice<Scope> = SliceType {
             size: 3,
             item_type: Box::new(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
             )),
         }
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
 
-        let result: Vec<Option<u64>> = result
+        let result: Vec<Option<i64>> = result
             .value
             .iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
-                        Number::U64(n) => Some(n),
+                        Number::I64(n) => Some(n),
                         _ => None,
                     }
                 }
@@ -1747,12 +1799,12 @@ mod tests {
             .expect("Heap Read should have succeeded");
 
         let result: Vector<Scope> = VecType(Box::new(Either::Static(
-            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
         )))
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
 
-        let result: Vec<Option<u64>> = match result {
+        let result: Vec<Option<i64>> = match result {
             Vector::Init {
                 value,
                 metadata,
@@ -1763,7 +1815,7 @@ mod tests {
                 .map(|e| match e {
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                         match x.get() {
-                            Number::U64(n) => Some(n),
+                            Number::I64(n) => Some(n),
                             _ => None,
                         }
                     }

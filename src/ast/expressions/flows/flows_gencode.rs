@@ -213,6 +213,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                             Number::I64(data) => data.to_le_bytes().to_vec(),
                             Number::I128(data) => data.to_le_bytes().to_vec(),
                             Number::F64(data) => data.to_le_bytes().to_vec(),
+                            _ => return Err(CodeGenerationError::UnresolvedError),
                         },
                         Primitive::Bool(data) => [*data as u8].to_vec(),
                         Primitive::Char(data) => [*data as u8].to_vec(),
@@ -435,11 +436,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
 
         let memory = Memory::new();
         instructions_else
@@ -447,11 +448,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
@@ -509,11 +510,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
 
         let memory = Memory::new();
         instructions_else
@@ -521,11 +522,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
@@ -537,13 +538,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -623,17 +624,17 @@ mod tests {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
-                        Number::U64(res) => {
+                        Number::I64(res) => {
                             if r_id == "x" {
                                 assert_eq!(420, res);
                             } else if r_id == "y" {
                                 assert_eq!(420, res);
                             }
                         }
-                        _ => assert!(false, "Expected u64"),
+                        _ => assert!(false, "Expected i64"),
                     }
                 }
-                _ => assert!(false, "Expected u64"),
+                _ => assert!(false, "Expected i64"),
             }
         }
 
@@ -652,17 +653,17 @@ mod tests {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
-                        Number::U64(res) => {
+                        Number::I64(res) => {
                             if r_id == "x" {
                                 assert_eq!(69, res);
                             } else if r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
-                        _ => assert!(false, "Expected u64"),
+                        _ => assert!(false, "Expected i64"),
                     }
                 }
-                _ => assert!(false, "Expected u64"),
+                _ => assert!(false, "Expected i64"),
             }
         }
     }
@@ -702,11 +703,11 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
@@ -723,14 +724,14 @@ mod tests {
                             (
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
                             (
                                 "y".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
@@ -746,7 +747,7 @@ mod tests {
                             res.push((
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ));
@@ -759,7 +760,7 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-            let x:u64 = {
+            let x = {
                 let geo = Geo::Point {
                     x : 420,
                     y: 69,
@@ -800,11 +801,11 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
@@ -821,14 +822,14 @@ mod tests {
                             (
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
                             (
                                 "y".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ),
@@ -844,7 +845,7 @@ mod tests {
                             res.push((
                                 "x".into(),
                                 Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                         .into(),
                                 ),
                             ));
@@ -857,7 +858,7 @@ mod tests {
         };
         let statement = Statement::parse(
             r##"
-            let x:u64 = {
+            let x = {
                 let geo = Geo::Point {
                     x : 420,
                     y: 69,
@@ -898,18 +899,18 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(27))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(27))));
     }
 
     #[test]
     fn valid_match_number() {
         let statement = Statement::parse(
             r##"
-            let x:u64 = match 69 {
+            let x = match 69 {
                 case 69 => 420,
                 else => 69
             };
@@ -939,18 +940,18 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
     fn valid_match_number_else() {
         let statement = Statement::parse(
             r##"
-            let x:u64 = match 420 {
+            let x = match 420 {
                 case 69 => 420,
                 else => 69
             };
@@ -980,18 +981,18 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
     fn valid_match_string() {
         let statement = Statement::parse(
             r##"
-            let x:u64 = match "Hello world" {
+            let x = match "Hello world" {
                 case "Hello world" => 420,
                 else => 69
             };
@@ -1021,18 +1022,18 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
     fn valid_match_string_else() {
         let statement = Statement::parse(
             r##"
-            let x:u64 = match "CipherPool" {
+            let x = match "CipherPool" {
                 case "Hello world" => 420,
                 else => 69
             };
@@ -1062,10 +1063,10 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
     }
 }

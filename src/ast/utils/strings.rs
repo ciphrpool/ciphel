@@ -224,33 +224,33 @@ mod tests {
     #[test]
     fn valid_wst() {
         let res = wst("test")("   test   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = pair(wst("test"), wst("test"))("   test   test".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res = pair(wst("test"), wst("test"))("   test   test   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_comments() {
         let res = eater::ws(tag("test"))("   test   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))(" /* comments */  test   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))(" // comment \n  test   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))("  test /* comments */  ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))("  test // comment \n   ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))(" /* comments */  test  /* comments */  ".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = eater::ws(tag("test"))(
             " /* comments */ // comment \n  test  /* comments */ // comment \n  ".into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -262,22 +262,22 @@ mod tests {
     #[test]
     fn valid_string() {
         let res = parse_string(r#""Hello, World""#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, "Hello, World");
 
         let res = parse_string(r#""Hello, World\n""#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, "Hello, World\n");
 
         let res = parse_string(r#""unicode \u{0085}""#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, "unicode \u{0085}");
 
         let res = parse_string(r#""utf-8 Ɯ 😀""#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, "utf-8 Ɯ 😀");
     }
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn robustness_string() {
         let res = parse_string(r#""Hello," World""#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let remainder = res.unwrap().0;
         assert!(!remainder.is_empty());
 

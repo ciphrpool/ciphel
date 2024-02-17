@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn valid_if() {
         let res = IfExpr::<MockScope>::parse("if true then 10 else 20".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             IfExpr {
@@ -268,7 +268,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::U64(10)))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -281,7 +281,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::U64(20)))
+                                Primitive::Number(Cell::new(Number::Unresolved(20)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -310,7 +310,7 @@ mod tests {
         }"#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             MatchExpr {
@@ -323,7 +323,9 @@ mod tests {
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
-                        pattern: Pattern::Primitive(Primitive::Number(Cell::new(Number::U64(10)))),
+                        pattern: Pattern::Primitive(Primitive::Number(Cell::new(
+                            Number::Unresolved(10)
+                        ))),
                         expr: ExprScope::Expr(Scope {
                             metadata: Metadata::default(),
                             instructions: vec![
@@ -453,7 +455,7 @@ mod tests {
     #[test]
     fn valid_try() {
         let res = TryExpr::<MockScope>::parse("try 10 else 20".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             TryExpr {
@@ -462,7 +464,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::U64(10)))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -475,7 +477,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::U64(20)))
+                                Primitive::Number(Cell::new(Number::Unresolved(20)))
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -492,7 +494,7 @@ mod tests {
     #[test]
     fn valid_fn_call() {
         let res = FnCall::<MockScope>::parse("f(x,10)".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             FnCall {
@@ -506,7 +508,7 @@ mod tests {
                         metadata: Metadata::default()
                     })))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(10).into()
+                        Number::Unresolved(10).into()
                     ))))
                 ],
                 metadata: Metadata::default(),

@@ -1,12 +1,12 @@
 use super::CasmProgram;
 use crate::{
     semantic::{
-        scope::static_types::{NumberType, PrimitiveType},
-        SizeOf,
+        scope::static_types::{st_deserialize::extract_u64, NumberType, PrimitiveType, StaticType},
+        EType, Either, SizeOf,
     },
     vm::{
         allocator::{Memory, MemoryAddress},
-        vm::{Executable, RuntimeError},
+        vm::{CodeGenerationError, Executable, RuntimeError},
     },
 };
 use nom::AsBytes;
@@ -20,7 +20,7 @@ use super::math_operation::{
 #[derive(Debug, Clone)]
 pub struct Operation {
     pub kind: OperationKind,
-    pub result: OpPrimitive,
+    // pub result: OpPrimitive,
 }
 
 impl Executable for Operation {
@@ -62,7 +62,26 @@ pub enum OpPrimitive {
     Number(NumberType),
     Bool,
     Char,
-    String(usize),
+    String,
+}
+
+impl TryInto<OpPrimitive> for EType {
+    type Error = CodeGenerationError;
+
+    fn try_into(self) -> Result<OpPrimitive, Self::Error> {
+        match self {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Primitive(value) => match value {
+                    PrimitiveType::Number(value) => Ok(OpPrimitive::Number(*value)),
+                    PrimitiveType::Char => Ok(OpPrimitive::Char),
+                    PrimitiveType::Bool => Ok(OpPrimitive::Bool),
+                },
+                StaticType::String(_) => Ok(OpPrimitive::String),
+                _ => Err(CodeGenerationError::UnresolvedError),
+            },
+            Either::User(_) => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
 }
 
 impl OpPrimitive {
@@ -127,8 +146,18 @@ impl OpPrimitive {
         };
         Ok(data)
     }
-    pub fn get_string(size: usize, memory: &Memory) -> Result<String, RuntimeError> {
-        let data = memory.stack.pop(size).map_err(|e| e.into())?;
+    pub fn get_string(memory: &Memory) -> Result<String, RuntimeError> {
+        let heap_address = OpPrimitive::get_num8::<u64>(memory)?;
+        let data = memory
+            .heap
+            .read(heap_address as usize, 16)
+            .expect("Heap Read should have succeeded");
+        let (length, rest) = extract_u64(&data)?;
+        let (capacity, rest) = extract_u64(rest)?;
+        let data = memory
+            .heap
+            .read(heap_address as usize + 16, length as usize)
+            .expect("Heap Read should have succeeded");
         let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(data.to_string())
     }
@@ -230,9 +259,9 @@ impl Executable for Addition {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Add, memory)
             }
-            (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let left = OpPrimitive::get_string(left_size, memory)?;
-                let right = OpPrimitive::get_string(right_size, memory)?;
+            (OpPrimitive::String, OpPrimitive::String) => {
+                let right = OpPrimitive::get_string(memory)?;
+                let left = OpPrimitive::get_string(memory)?;
                 memory
                     .stack
                     .push_with(&(left + &right).as_bytes())
@@ -366,24 +395,24 @@ impl Executable for Less {
                 comparaison_operator(&left, &right, ComparaisonOperator::Less, memory)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let left = OpPrimitive::get_bool(memory)?;
                 let right = OpPrimitive::get_bool(memory)?;
+                let left = OpPrimitive::get_bool(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let left = OpPrimitive::get_char(memory)?;
                 let right = OpPrimitive::get_char(memory)?;
+                let left = OpPrimitive::get_char(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
-            (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let left = OpPrimitive::get_string(left_size, memory)?;
-                let right = OpPrimitive::get_string(right_size, memory)?;
+            (OpPrimitive::String, OpPrimitive::String) => {
+                let right = OpPrimitive::get_string(memory)?;
+                let left = OpPrimitive::get_string(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
@@ -401,24 +430,24 @@ impl Executable for LessEqual {
                 comparaison_operator(&left, &right, ComparaisonOperator::LessEqual, memory)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let left = OpPrimitive::get_bool(memory)?;
                 let right = OpPrimitive::get_bool(memory)?;
+                let left = OpPrimitive::get_bool(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let left = OpPrimitive::get_char(memory)?;
                 let right = OpPrimitive::get_char(memory)?;
+                let left = OpPrimitive::get_char(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
-            (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let left = OpPrimitive::get_string(left_size, memory)?;
-                let right = OpPrimitive::get_string(right_size, memory)?;
+            (OpPrimitive::String, OpPrimitive::String) => {
+                let right = OpPrimitive::get_string(memory)?;
+                let left = OpPrimitive::get_string(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
@@ -436,24 +465,24 @@ impl Executable for Greater {
                 comparaison_operator(&left, &right, ComparaisonOperator::Greater, memory)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let left = OpPrimitive::get_bool(memory)?;
                 let right = OpPrimitive::get_bool(memory)?;
+                let left = OpPrimitive::get_bool(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let left = OpPrimitive::get_char(memory)?;
                 let right = OpPrimitive::get_char(memory)?;
+                let left = OpPrimitive::get_char(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
-            (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let left = OpPrimitive::get_string(left_size, memory)?;
-                let right = OpPrimitive::get_string(right_size, memory)?;
+            (OpPrimitive::String, OpPrimitive::String) => {
+                let right = OpPrimitive::get_string(memory)?;
+                let left = OpPrimitive::get_string(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
@@ -471,24 +500,24 @@ impl Executable for GreaterEqual {
                 comparaison_operator(&left, &right, ComparaisonOperator::GreaterEqual, memory)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let left = OpPrimitive::get_bool(memory)?;
                 let right = OpPrimitive::get_bool(memory)?;
+                let left = OpPrimitive::get_bool(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let left = OpPrimitive::get_char(memory)?;
                 let right = OpPrimitive::get_char(memory)?;
+                let left = OpPrimitive::get_char(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
-            (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let left = OpPrimitive::get_string(left_size, memory)?;
-                let right = OpPrimitive::get_string(right_size, memory)?;
+            (OpPrimitive::String, OpPrimitive::String) => {
+                let right = OpPrimitive::get_string(memory)?;
+                let left = OpPrimitive::get_string(memory)?;
                 memory
                     .stack
                     .push_with(&[(left < right) as u8])
@@ -501,21 +530,21 @@ impl Executable for GreaterEqual {
 
 #[derive(Debug, Clone)]
 pub struct Equal {
-    left: usize,
-    right: usize,
+    pub left: usize,
+    pub right: usize,
 }
 #[derive(Debug, Clone)]
 pub struct NotEqual {
-    left: usize,
-    right: usize,
+    pub left: usize,
+    pub right: usize,
 }
 
 impl Executable for Equal {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = {
-            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
-
             let right_data = memory.stack.pop(self.right).map_err(|e| e.into())?;
+
+            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
             [(left_data == right_data) as u8]
         };
@@ -526,9 +555,9 @@ impl Executable for Equal {
 impl Executable for NotEqual {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let data = {
-            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
-
             let right_data = memory.stack.pop(self.right).map_err(|e| e.into())?;
+
+            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
 
             [(left_data != right_data) as u8]
         };
@@ -555,8 +584,8 @@ pub struct LogicalAnd();
 
 impl Executable for LogicalAnd {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let left_data = OpPrimitive::get_bool(memory)?;
         let right_data = OpPrimitive::get_bool(memory)?;
+        let left_data = OpPrimitive::get_bool(memory)?;
         let data = [(left_data && right_data) as u8];
         memory.stack.push_with(&data).map_err(|e| e.into())
     }
@@ -567,8 +596,8 @@ pub struct LogicalOr();
 
 impl Executable for LogicalOr {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let left_data = OpPrimitive::get_bool(memory)?;
         let right_data = OpPrimitive::get_bool(memory)?;
+        let left_data = OpPrimitive::get_bool(memory)?;
         let data = [(left_data || right_data) as u8];
         memory.stack.push_with(&data).map_err(|e| e.into())
     }
@@ -576,7 +605,7 @@ impl Executable for LogicalOr {
 
 #[derive(Debug, Clone)]
 pub struct Minus {
-    data_type: OpPrimitive,
+    pub data_type: OpPrimitive,
 }
 
 impl Executable for Minus {
@@ -663,7 +692,7 @@ impl Executable for Minus {
             },
             OpPrimitive::Char => Err(RuntimeError::UnsupportedOperation),
             OpPrimitive::Bool => Err(RuntimeError::UnsupportedOperation),
-            OpPrimitive::String(_) => Err(RuntimeError::UnsupportedOperation),
+            OpPrimitive::String => Err(RuntimeError::UnsupportedOperation),
         }
     }
 }
@@ -681,8 +710,8 @@ impl Executable for Not {
 
 #[derive(Debug, Clone)]
 pub struct Cast {
-    from: OpPrimitive,
-    to: OpPrimitive,
+    pub from: OpPrimitive,
+    pub to: OpPrimitive,
 }
 
 macro_rules! push_data_as_type {
@@ -866,7 +895,7 @@ impl Executable for Cast {
             },
             (OpPrimitive::Number(NumberType::U8), OpPrimitive::Char) => Ok(()),
             (OpPrimitive::Number(_), OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
-            (OpPrimitive::Number(_), OpPrimitive::String(_)) => {
+            (OpPrimitive::Number(_), OpPrimitive::String) => {
                 Err(RuntimeError::UnsupportedOperation)
             }
             (OpPrimitive::Bool, OpPrimitive::Number(number)) => {
@@ -920,7 +949,7 @@ impl Executable for Cast {
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => Ok(()),
             (OpPrimitive::Bool, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
-            (OpPrimitive::Bool, OpPrimitive::String(_)) => Err(RuntimeError::UnsupportedOperation),
+            (OpPrimitive::Bool, OpPrimitive::String) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::Number(number)) => {
                 let data = OpPrimitive::get_char(memory)? as u8;
                 match number {
@@ -949,13 +978,13 @@ impl Executable for Cast {
             }
             (OpPrimitive::Char, OpPrimitive::Bool) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::Char) => Ok(()),
-            (OpPrimitive::Char, OpPrimitive::String(_)) => Ok(()),
-            (OpPrimitive::String(_), OpPrimitive::Number(_)) => {
+            (OpPrimitive::Char, OpPrimitive::String) => Ok(()),
+            (OpPrimitive::String, OpPrimitive::Number(_)) => {
                 Err(RuntimeError::UnsupportedOperation)
             }
-            (OpPrimitive::String(_), OpPrimitive::Bool) => Err(RuntimeError::UnsupportedOperation),
-            (OpPrimitive::String(_), OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
-            (OpPrimitive::String(_), OpPrimitive::String(_)) => Ok(()),
+            (OpPrimitive::String, OpPrimitive::Bool) => Err(RuntimeError::UnsupportedOperation),
+            (OpPrimitive::String, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
+            (OpPrimitive::String, OpPrimitive::String) => Ok(()),
         }
     }
 }

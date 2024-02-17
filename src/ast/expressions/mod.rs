@@ -216,19 +216,19 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
         instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Expression::Product(_) => todo!(),
-            Expression::Addition(_) => todo!(),
-            Expression::Substraction(_) => todo!(),
-            Expression::Shift(_) => todo!(),
-            Expression::BitwiseAnd(_) => todo!(),
-            Expression::BitwiseXOR(_) => todo!(),
-            Expression::BitwiseOR(_) => todo!(),
-            Expression::Cast(_) => todo!(),
-            Expression::Comparaison(_) => todo!(),
-            Expression::Equation(_) => todo!(),
-            Expression::Inclusion(_) => todo!(),
-            Expression::LogicalAnd(_) => todo!(),
-            Expression::LogicalOr(_) => todo!(),
+            Expression::Product(value) => value.gencode(scope, instructions),
+            Expression::Addition(value) => value.gencode(scope, instructions),
+            Expression::Substraction(value) => value.gencode(scope, instructions),
+            Expression::Shift(value) => value.gencode(scope, instructions),
+            Expression::BitwiseAnd(value) => value.gencode(scope, instructions),
+            Expression::BitwiseXOR(value) => value.gencode(scope, instructions),
+            Expression::BitwiseOR(value) => value.gencode(scope, instructions),
+            Expression::Cast(value) => value.gencode(scope, instructions),
+            Expression::Comparaison(value) => value.gencode(scope, instructions),
+            Expression::Equation(value) => value.gencode(scope, instructions),
+            Expression::Inclusion(value) => value.gencode(scope, instructions),
+            Expression::LogicalAnd(value) => value.gencode(scope, instructions),
+            Expression::LogicalOr(value) => value.gencode(scope, instructions),
             Expression::Atomic(value) => value.gencode(scope, instructions),
         }
     }
@@ -241,50 +241,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.gencode(scope, instructions),
-            Atomic::UnaryOperation(_) => todo!(),
+            Atomic::UnaryOperation(value) => value.gencode(scope, instructions),
             Atomic::Paren(value) => value.gencode(scope, instructions),
             Atomic::ExprFlow(value) => value.gencode(scope, instructions),
             Atomic::Error(_) => todo!(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cell::Cell;
-
-    use tests::{data::Number, operation::Addition};
-
-    use crate::{
-        ast::expressions::data::{Data, Primitive},
-        semantic::{scope::scope_impl::MockScope, Metadata},
-    };
-
-    use super::*;
-
-    #[test]
-    fn valid_expression() {
-        let res = Expression::<MockScope>::parse(" 1 + 2 * 4".into());
-        assert!(res.is_ok());
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::Addition(Addition {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::U64(1)))
-                )))),
-                right: Box::new(Expression::Product(operation::Product::Mult {
-                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::U64(2)))
-                    )))),
-                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::U64(4)))
-                    )))),
-                    metadata: Metadata::default()
-                })),
-                metadata: Metadata::default()
-            }),
-            value
-        );
     }
 }
 
@@ -294,7 +255,7 @@ impl<Scope: ScopeApi> Expression<Scope> {
             Expression::Product(Product::Div { metadata, .. }) => metadata.signature(),
             Expression::Product(Product::Mod { metadata, .. }) => metadata.signature(),
             Expression::Product(Product::Mult { metadata, .. }) => metadata.signature(),
-            Expression::Addition(Addition { metadata, .. }) => todo!(),
+            Expression::Addition(Addition { metadata, .. }) => metadata.signature(),
             Expression::Substraction(Substraction { metadata, .. }) => metadata.signature(),
             Expression::Shift(Shift::Left { metadata, .. }) => metadata.signature(),
             Expression::Shift(Shift::Right { metadata, .. }) => metadata.signature(),

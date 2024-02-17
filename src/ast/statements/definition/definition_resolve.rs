@@ -256,8 +256,8 @@ mod tests {
         let type_def = TypeDef::parse(
             r#"
             struct Point {
-                x : u64,
-                y : u64
+                x : i64,
+                y : i64
             }
         "#
             .into(),
@@ -266,7 +266,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Point".into()).unwrap();
 
@@ -278,13 +278,13 @@ mod tests {
                     res.push((
                         "x".into(),
                         Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         ),
                     ));
                     res.push((
                         "y".into(),
                         Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         ),
                     ));
                     res
@@ -337,7 +337,7 @@ mod tests {
             )
             .unwrap();
         let res = type_def.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Line".into()).unwrap();
 
@@ -431,7 +431,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
 
@@ -508,7 +508,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
 
@@ -541,7 +541,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = function.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
@@ -575,7 +575,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = function.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
@@ -630,7 +630,7 @@ mod tests {
             r##"
 
         fn main() -> u64 {
-            let x = 10;
+            let x:u64 = 10;
             return x;
         }
 
@@ -641,7 +641,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = function.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
@@ -685,13 +685,13 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .expect("registering vars should succeed");
 
         let res = function.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let captured_vars = function
             .env
@@ -710,7 +710,7 @@ mod tests {
                 captured: Cell::new(false),
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
                 ),
             }]
         )
@@ -758,7 +758,7 @@ mod tests {
             })
             .expect("registering vars should succeed");
         let res = function.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let captured_vars = function
             .env

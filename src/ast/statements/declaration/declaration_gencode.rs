@@ -180,11 +180,11 @@ mod tests {
 
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
@@ -220,17 +220,17 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
         let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
@@ -263,17 +263,17 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
         let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
@@ -285,13 +285,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -335,17 +335,17 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
         let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
     }
 
     #[test]
@@ -357,13 +357,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -404,16 +404,16 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
         let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::U64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
     }
 }

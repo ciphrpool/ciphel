@@ -216,9 +216,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
         }
         let mut merged_vec = Vec::with_capacity(self.0.len());
         for (self_inner, other_inner) in self.0.iter().zip(other_type.0.iter()) {
-            let merged = self_inner.merge(other_inner, scope)? else {
-                return Err(SemanticError::CantInferType);
-            };
+            let merged = self_inner.merge(other_inner, scope)?;
             merged_vec.push(merged);
         }
         Ok(Either::Static(

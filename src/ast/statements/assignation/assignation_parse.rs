@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn valid_assignation() {
         let res = Assignation::<MockScope>::parse("x = 10;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
@@ -104,14 +104,14 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
                 ))))
             },
             value
         );
 
         let res = Assignation::<MockScope>::parse("*x = 10;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
@@ -123,14 +123,14 @@ mod tests {
                     metadata: Metadata::default()
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
                 ))))
             },
             value
         );
 
         let res = Assignation::<MockScope>::parse("x.y = 10;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
@@ -146,7 +146,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::U64(10))))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
                 ))))
             },
             value

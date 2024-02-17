@@ -207,6 +207,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
                         .map(|value| (Either::Static(value.into())))
                 }
+                Number::Unresolved(_) => Err(SemanticError::CantInferType),
             },
             Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
                 .map(|value| (Either::Static(value.into()))),

@@ -175,11 +175,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
@@ -226,11 +226,11 @@ mod tests {
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
     }
 
     #[test]
@@ -242,13 +242,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -300,17 +300,17 @@ mod tests {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
-                        Number::U64(res) => {
+                        Number::I64(res) => {
                             if r_id == "x" {
                                 assert_eq!(420, res);
                             } else if r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
-                        _ => assert!(false, "Expected u64"),
+                        _ => assert!(false, "Expected i64"),
                     }
                 }
-                _ => assert!(false, "Expected u64"),
+                _ => assert!(false, "Expected i64"),
             }
         }
     }
@@ -437,13 +437,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -493,17 +493,17 @@ mod tests {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
-                        Number::U64(res) => {
+                        Number::I64(res) => {
                             if r_id == "x" {
                                 assert_eq!(420, res);
                             } else if r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
-                        _ => assert!(false, "Expected u64"),
+                        _ => assert!(false, "Expected i64"),
                     }
                 }
-                _ => assert!(false, "Expected u64"),
+                _ => assert!(false, "Expected i64"),
             }
         }
     }
@@ -517,7 +517,7 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
@@ -632,13 +632,13 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
                     "y".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res
@@ -651,7 +651,7 @@ mod tests {
                 res.push((
                     "x".into(),
                     Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ),
                 ));
                 res.push((
@@ -722,15 +722,15 @@ mod tests {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
                                         Primitive::Number(x),
                                     ))) => match x.get() {
-                                        Number::U64(n) => assert_eq!(n, 69),
-                                        _ => assert!(false, "Expected u64"),
+                                        Number::I64(n) => assert_eq!(n, 69),
+                                        _ => assert!(false, "Expected i64"),
                                     },
-                                    _ => assert!(false, "Expected u64"),
+                                    _ => assert!(false, "Expected i64"),
                                 }
                             }
                         }
                     }
-                    _ => assert!(false, "Expected u64"),
+                    _ => assert!(false, "Expected i64"),
                 }
             }
         }

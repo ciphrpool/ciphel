@@ -23,7 +23,7 @@ mod tests {
     #[test]
     fn valid_error() {
         let res = Error::parse("error".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Error(), value);
     }
