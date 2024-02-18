@@ -114,32 +114,32 @@ mod tests {
     #[test]
     fn integer() {
         let res = parse_number("0".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0u32.into());
 
         let res = parse_number("0000_000_0".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0u32.into());
 
         let res = parse_number("12345".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 12345u32.into());
 
         let res = parse_number("0b101010".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 42u32.into());
 
         let res = parse_number("0x2a".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 42u32.into());
 
         let res = parse_number("0o52".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 42u32.into());
     }
@@ -147,45 +147,45 @@ mod tests {
     #[test]
     fn float() {
         let res = parse_float(".42".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0.42);
         let res = parse_float("41.43".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 41.43);
         let res = parse_float("42.".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 42.);
         let res = parse_float("6.0".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 6.);
 
         let res = parse_float(".42e10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0.42e10);
         let res = parse_float(".42e+10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0.42e10);
         let res = parse_float(".42e-10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 0.42e-10);
 
         let res = parse_float("41.43e10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 41.43e10);
         let res = parse_float("41.43e+10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 41.43e10);
         let res = parse_float("41.43e-10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(value, 41.43e-10);
     }

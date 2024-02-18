@@ -23,7 +23,6 @@ pub enum Type {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimitiveType {
     Number(NumberType),
-    Float,
     Char,
     Bool,
 }
@@ -40,6 +39,7 @@ pub enum NumberType {
     I32,
     I64,
     I128,
+    F64,
 }
 
 #[derive(Debug, Clone, PartialEq)]

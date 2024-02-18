@@ -31,6 +31,6 @@ mod tests {
         let error = Error::parse("error".into()).unwrap().1;
         let scope = Scope::new();
         let res = error.resolve(&scope, &(), &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 }

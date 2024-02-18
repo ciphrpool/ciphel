@@ -872,9 +872,9 @@ mod tests {
         let res = heap.alloc(32 * 5);
         assert!(res.is_err());
         let res = heap.alloc(32 * 3);
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let res = heap.alloc(32 * 1);
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]

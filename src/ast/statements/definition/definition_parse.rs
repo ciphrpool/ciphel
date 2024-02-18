@@ -194,7 +194,10 @@ impl TryParse for EventCondition {
 #[cfg(test)]
 mod tests {
 
-    use std::{cell::RefCell, collections::HashMap};
+    use std::{
+        cell::{Cell, RefCell},
+        collections::HashMap,
+    };
 
     use crate::{
         ast::{
@@ -221,7 +224,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             StructDef {
@@ -254,7 +257,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             UnionDef {
@@ -288,7 +291,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             EnumDef {
@@ -309,7 +312,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             FnDef {
@@ -324,7 +327,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Number::U64(10))
+                            Primitive::Number(Cell::new(Number::Unresolved(10)))
                         )))),
                         metadata: Metadata::default()
                     })],
@@ -347,7 +350,7 @@ mod tests {
         // "#
         //     .into(),
         // );
-        // assert!(res.is_ok());
+        // assert!(res.is_ok(), "{:?}", res);
         // let value = res.unwrap().1;
         // assert_eq!(
         //     EventDef {
@@ -356,7 +359,7 @@ mod tests {
         //         scope: Scope {
         //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
         //                 fn_id: "f".into(),
-        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Number::U64(10))))]
+        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Cell::new(Number::I64(10)))))]
         //             }))]
         //         }
         //     },

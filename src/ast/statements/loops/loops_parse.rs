@@ -19,9 +19,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::scope::{
-        ScopeApi,
-    },
+    semantic::scope::ScopeApi,
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
@@ -122,7 +120,7 @@ impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use crate::{
         ast::{
@@ -151,7 +149,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             ForLoop {
@@ -166,7 +164,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -189,7 +187,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             WhileLoop {
@@ -205,7 +203,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -228,7 +226,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Loop::Loop(Box::new(Scope {
@@ -240,7 +238,7 @@ mod tests {
                             metadata: Metadata::default()
                         }),
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Number::U64(10))
+                            Primitive::Number(Cell::new(Number::Unresolved(10)))
                         )))],
                         metadata: Metadata::default()
                     }

@@ -52,7 +52,6 @@ impl TryParse for PrimitiveType {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(NumberType::parse, |num| PrimitiveType::Number(num)),
-            value(PrimitiveType::Float, wst(lexem::FLOAT)),
             value(PrimitiveType::Char, wst(lexem::CHAR)),
             value(PrimitiveType::Bool, wst(lexem::BOOL)),
         ))(input)
@@ -78,6 +77,7 @@ impl TryParse for NumberType {
             value(NumberType::I32, wst(lexem::I32)),
             value(NumberType::I64, wst(lexem::I64)),
             value(NumberType::I128, wst(lexem::I128)),
+            value(NumberType::F64, wst(lexem::FLOAT)),
         ))(input)
     }
 }
@@ -267,30 +267,30 @@ mod tests {
     #[test]
     fn valid_primitive_type() {
         let res = PrimitiveType::parse("bool".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Bool, value);
 
         let res = PrimitiveType::parse("u8".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Number(NumberType::U8), value);
 
         let res = PrimitiveType::parse("char".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(PrimitiveType::Char, value);
 
-        let res = PrimitiveType::parse("float".into());
-        assert!(res.is_ok());
+        let res = PrimitiveType::parse("f64".into());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(PrimitiveType::Float, value);
+        assert_eq!(PrimitiveType::Number(NumberType::F64), value);
     }
 
     #[test]
     fn valid_string() {
         let res = StringType::parse("string".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(StringType(), value);
     }
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn valid_slice_type() {
         let res = SliceType::parse("[8]u32".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             SliceType {
@@ -309,7 +309,7 @@ mod tests {
         );
 
         let res = SliceType::parse("[8][2]i32".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             SliceType {
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn valid_vec_type() {
         let res = VecType::parse("Vec<[8]u128>".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             VecType(Box::new(Type::Slice(SliceType {
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn valid_fn_type() {
         let res = FnType::parse("fn(u16) -> bool".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             FnType {
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn valid_chan_type() {
         let res = ChanType::parse("Chan<[8]i128>".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             ChanType(Box::new(Type::Slice(SliceType {
@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn valid_address_type() {
         let res = AddrType::parse("&u64".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             AddrType(Box::new(Type::Primitive(PrimitiveType::Number(
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn valid_map_type() {
         let res = MapType::parse("Map<string,bool>".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             MapType {
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn valid_tuple_type() {
         let res = TupleType::parse("(i32,u16)".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             TupleType(vec![

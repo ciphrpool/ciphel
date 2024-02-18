@@ -173,12 +173,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr_loop = ForLoop::<scope_impl::Scope>::parse(
             r##"
@@ -199,12 +199,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -254,7 +254,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -267,7 +267,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "y".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -296,12 +296,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -325,7 +325,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -354,11 +354,11 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 }

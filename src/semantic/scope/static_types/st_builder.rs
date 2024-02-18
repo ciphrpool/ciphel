@@ -49,7 +49,9 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
             ast::types::PrimitiveType::Number(ast::types::NumberType::I128) => {
                 PrimitiveType::Number(NumberType::I128)
             }
-            ast::types::PrimitiveType::Float => PrimitiveType::Float,
+            ast::types::PrimitiveType::Number(ast::types::NumberType::F64) => {
+                PrimitiveType::Number(NumberType::F64)
+            }
             ast::types::PrimitiveType::Char => PrimitiveType::Char,
             ast::types::PrimitiveType::Bool => PrimitiveType::Bool,
         }))
@@ -235,7 +237,9 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
                     ast::types::PrimitiveType::Number(ast::types::NumberType::I128) => {
                         PrimitiveType::Number(NumberType::I128)
                     }
-                    ast::types::PrimitiveType::Float => PrimitiveType::Float,
+                    ast::types::PrimitiveType::Number(ast::types::NumberType::F64) => {
+                        PrimitiveType::Number(NumberType::F64)
+                    }
                     ast::types::PrimitiveType::Char => PrimitiveType::Char,
                     ast::types::PrimitiveType::Bool => PrimitiveType::Bool,
                 }),

@@ -63,22 +63,11 @@ impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
         };
         match self {
             PrimitiveType::Number(left) => match other_type {
-                PrimitiveType::Number(right) => Ok(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(left.merge(right))).into(),
-                )),
-                PrimitiveType::Float => Ok(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Float).into(),
-                )),
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
-
-            PrimitiveType::Float => match other_type {
-                PrimitiveType::Number(_) => Ok(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Float).into(),
-                )),
-                PrimitiveType::Float => Ok(Either::Static(
-                    StaticType::Primitive(PrimitiveType::Float).into(),
-                )),
+                PrimitiveType::Number(right) => (left == right)
+                    .then_some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(*left)).into(),
+                    ))
+                    .ok_or(SemanticError::IncompatibleTypes),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             PrimitiveType::Char => match other_type {
@@ -227,9 +216,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
         }
         let mut merged_vec = Vec::with_capacity(self.0.len());
         for (self_inner, other_inner) in self.0.iter().zip(other_type.0.iter()) {
-            let merged = self_inner.merge(other_inner, scope)? else {
-                return Err(SemanticError::CantInferType);
-            };
+            let merged = self_inner.merge(other_inner, scope)?;
             merged_vec.push(merged);
         }
         Ok(Either::Static(
@@ -294,18 +281,9 @@ impl KeyType {
         match (self, other) {
             (KeyType::Primitive(value), KeyType::Primitive(other_value)) => {
                 match (value, other_value) {
-                    (PrimitiveType::Number(left), PrimitiveType::Number(right)) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Number(left.merge(right))))
-                    }
-                    (PrimitiveType::Number(_), PrimitiveType::Float) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Float))
-                    }
-                    (PrimitiveType::Float, PrimitiveType::Number(_)) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Float))
-                    }
-                    (PrimitiveType::Float, PrimitiveType::Float) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Float))
-                    }
+                    (PrimitiveType::Number(left), PrimitiveType::Number(right)) => (left == right)
+                        .then_some(KeyType::Primitive(PrimitiveType::Number(*left)))
+                        .ok_or(SemanticError::IncompatibleTypes),
                     (PrimitiveType::Char, PrimitiveType::Char) => {
                         Ok(KeyType::Primitive(PrimitiveType::Char))
                     }

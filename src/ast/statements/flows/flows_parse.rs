@@ -148,7 +148,7 @@ impl<Scope: ScopeApi> TryParse for CallStat<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     use crate::{
         ast::{
@@ -179,7 +179,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             IfStat {
@@ -195,7 +195,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -212,7 +212,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -237,7 +237,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             TryStat {
@@ -250,7 +250,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }
@@ -267,7 +267,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Number::U64(10))
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
                             metadata: Metadata::default()
                         }

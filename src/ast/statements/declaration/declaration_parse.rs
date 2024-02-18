@@ -130,6 +130,8 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::{
             expressions::{
@@ -146,7 +148,7 @@ mod tests {
     #[test]
     fn valid_declaration_declared() {
         let res = Declaration::<MockScope>::parse("let x:u64;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Declared(TypedVar {
@@ -160,7 +162,7 @@ mod tests {
     #[test]
     fn valid_declaration_assigned() {
         let res = Declaration::<MockScope>::parse("let x:u64 = 10;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
@@ -169,27 +171,27 @@ mod tests {
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
                 ))))
             },
             value
         );
 
         let res = Declaration::<MockScope>::parse("let x = 10;".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
                 left: DeclaredVar::Id("x".into()),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Number::U64(10)))
+                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
                 ))))
             },
             value
         );
 
         let res = Declaration::<MockScope>::parse("let (x,y) = (10,10);".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
@@ -198,10 +200,10 @@ mod tests {
                     Tuple {
                         value: vec![
                             Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                                Number::U64(10)
+                                Number::Unresolved(10).into()
                             )))),
                             Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                                Number::U64(10)
+                                Number::Unresolved(10).into()
                             ))))
                         ],
                         metadata: Metadata::default()

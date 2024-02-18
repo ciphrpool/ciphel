@@ -151,7 +151,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = IfStat::parse(
             r##"
@@ -165,7 +165,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -194,12 +194,12 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -216,6 +216,6 @@ mod tests {
         .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 }

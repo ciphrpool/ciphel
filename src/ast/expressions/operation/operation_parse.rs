@@ -450,6 +450,8 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScop
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::expressions::data::{Data, Number, Primitive},
         semantic::scope::scope_impl::MockScope,
@@ -460,12 +462,12 @@ mod tests {
     #[test]
     fn valid_unary() {
         let res = UnaryOperation::<MockScope>::parse("-10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             UnaryOperation::Minus {
                 value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default()
             },
@@ -473,7 +475,7 @@ mod tests {
         );
 
         let res = UnaryOperation::<MockScope>::parse("!true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             UnaryOperation::Not {
@@ -489,15 +491,15 @@ mod tests {
     #[test]
     fn valid_binary_math() {
         let res = Addition::<MockScope>::parse("10 + 10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Addition(Addition {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default(),
             }),
@@ -505,15 +507,15 @@ mod tests {
         );
 
         let res = Addition::<MockScope>::parse("10 - 10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Substraction(Substraction {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -521,15 +523,15 @@ mod tests {
         );
 
         let res = Product::<MockScope>::parse("10 * 10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Mult {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -537,15 +539,15 @@ mod tests {
         );
 
         let res = Product::<MockScope>::parse("10 / 10".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Div {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -553,15 +555,15 @@ mod tests {
         );
 
         let res = Product::<MockScope>::parse("10 % 2".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Mod {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::Unresolved(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -569,15 +571,15 @@ mod tests {
         );
 
         let res = Shift::<MockScope>::parse("10 << 2".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Shift(Shift::Left {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::Unresolved(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -585,15 +587,15 @@ mod tests {
         );
 
         let res = Shift::<MockScope>::parse("10 >> 2".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Shift(Shift::Right {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(2))
+                    Primitive::Number(Cell::new(Number::Unresolved(2)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -604,7 +606,7 @@ mod tests {
     #[test]
     fn valid_binary_logical() {
         let res = LogicalAnd::<MockScope>::parse("true and true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::LogicalAnd(LogicalAnd {
@@ -620,7 +622,7 @@ mod tests {
         );
 
         let res = LogicalOr::<MockScope>::parse("true or true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::LogicalOr(LogicalOr {
@@ -636,7 +638,7 @@ mod tests {
         );
 
         let res = BitwiseXOR::<MockScope>::parse("true ^ true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::BitwiseXOR(BitwiseXOR {
@@ -655,7 +657,7 @@ mod tests {
     #[test]
     fn valid_binary_comparaison() {
         let res = Comparaison::<MockScope>::parse("true in true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Inclusion(Inclusion {
@@ -671,15 +673,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 < 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::Less {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -687,15 +689,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 <= 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::LessEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -703,15 +705,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 > 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::Greater {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -719,15 +721,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 >= 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::GreaterEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -735,15 +737,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 == 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Equation(Equation::Equal {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -751,15 +753,15 @@ mod tests {
         );
 
         let res = Comparaison::<MockScope>::parse("10 != 5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Equation(Equation::NotEqual {
                 left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(5))
+                    Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
                 metadata: Metadata::default()
             }),

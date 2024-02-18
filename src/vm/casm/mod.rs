@@ -69,7 +69,7 @@ impl CasmProgram {
             let cursor = self.cursor.get();
             match self.main.get(cursor) {
                 Some(instruction) => {
-                    dbg!((cursor, instruction, memory.stack.top()));
+                    // dbg!((cursor, instruction, memory.stack.top()));
 
                     match instruction.execute(&self, memory) {
                         Ok(_) => {}

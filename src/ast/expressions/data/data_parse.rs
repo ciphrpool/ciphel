@@ -189,23 +189,44 @@ impl TryParse for Primitive {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(parse_float, |value| Primitive::Float(value)),
+            map(pair(parse_float, opt(wst(lexem::FLOAT))), |(value, _)| {
+                Primitive::Number(super::Number::F64(value as f64).into())
+            }),
             map(
                 pair(parse_number, opt(NumberType::parse)),
                 |(value, opt_type)| match opt_type {
                     Some(number_type) => match number_type {
-                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8)),
-                        NumberType::U16 => Primitive::Number(super::Number::U16(value as u16)),
-                        NumberType::U32 => Primitive::Number(super::Number::U32(value as u32)),
-                        NumberType::U64 => Primitive::Number(super::Number::U64(value as u64)),
-                        NumberType::U128 => Primitive::Number(super::Number::U128(value as u128)),
-                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8)),
-                        NumberType::I16 => Primitive::Number(super::Number::I16(value as i16)),
-                        NumberType::I32 => Primitive::Number(super::Number::I32(value as i32)),
-                        NumberType::I64 => Primitive::Number(super::Number::I64(value as i64)),
-                        NumberType::I128 => Primitive::Number(super::Number::I128(value as i128)),
+                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8).into()),
+                        NumberType::U16 => {
+                            Primitive::Number(super::Number::U16(value as u16).into())
+                        }
+                        NumberType::U32 => {
+                            Primitive::Number(super::Number::U32(value as u32).into())
+                        }
+                        NumberType::U64 => {
+                            Primitive::Number(super::Number::U64(value as u64).into())
+                        }
+                        NumberType::U128 => {
+                            Primitive::Number(super::Number::U128(value as u128).into())
+                        }
+                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8).into()),
+                        NumberType::I16 => {
+                            Primitive::Number(super::Number::I16(value as i16).into())
+                        }
+                        NumberType::I32 => {
+                            Primitive::Number(super::Number::I32(value as i32).into())
+                        }
+                        NumberType::I64 => {
+                            Primitive::Number(super::Number::I64(value as i64).into())
+                        }
+                        NumberType::I128 => {
+                            Primitive::Number(super::Number::I128(value as i128).into())
+                        }
+                        NumberType::F64 => {
+                            Primitive::Number(super::Number::F64(value as f64).into())
+                        }
                     },
-                    None => Primitive::Number(super::Number::U64(value)),
+                    None => Primitive::Number(super::Number::Unresolved(value as i64).into()),
                 },
             ),
             map(
@@ -615,6 +636,8 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use crate::{
         ast::expressions::{data::Number, Atomic},
         semantic::scope::scope_impl::MockScope,
@@ -625,37 +648,37 @@ mod tests {
     #[test]
     fn valid_primitive() {
         let res = Primitive::parse("true".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Primitive::Bool(true), value);
 
         let res = Primitive::parse("false".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Primitive::Bool(false), value);
 
         let res = Primitive::parse("42".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Number::U64(42)), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::Unresolved(42))), value);
 
         let res = Primitive::parse("42i16".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Number::I16(42)), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::I16(42))), value);
 
         let res = Primitive::parse("42.5".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Float(42.5), value);
+        assert_eq!(Primitive::Number(Cell::new(Number::F64(42.5))), value);
 
         let res = Primitive::parse("'a'".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Primitive::Char('a'), value);
 
         let res = Primitive::parse("'\n'".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Primitive::Char('\n'), value);
     }
@@ -663,19 +686,19 @@ mod tests {
     #[test]
     fn valid_slice() {
         let res = Slice::<MockScope>::parse("[2,5,6]".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Slice {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::Unresolved(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(5)
+                        Number::Unresolved(5).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(6)
+                        Number::Unresolved(6).into()
                     ))))
                 ],
                 metadata: Metadata::default(),
@@ -687,7 +710,7 @@ mod tests {
     #[test]
     fn valid_string() {
         let res = StringData::parse("\"Hello World\"".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             StringData {
@@ -701,19 +724,19 @@ mod tests {
     #[test]
     fn valid_vector() {
         let res = Vector::<MockScope>::parse("vec[2,5,6]".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Vector::Init {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::Unresolved(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(5)
+                        Number::Unresolved(5).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(6)
+                        Number::Unresolved(6).into()
                     ))))
                 ],
                 capacity: align(3),
@@ -724,7 +747,7 @@ mod tests {
         );
 
         let res = Vector::<MockScope>::parse("vec(8)".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Vector::Def {
@@ -738,7 +761,7 @@ mod tests {
     #[test]
     fn valid_closure() {
         let res = Closure::<MockScope>::parse("(x,y) -> x".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
 
         assert_eq!(
@@ -770,7 +793,7 @@ mod tests {
     #[test]
     fn valid_chan() {
         let res = Channel::<MockScope>::parse("receive[&chan1](10)".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Receive {
@@ -788,7 +811,7 @@ mod tests {
         );
 
         let res = Channel::<MockScope>::parse("send[&chan1](10)".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Send {
@@ -800,7 +823,7 @@ mod tests {
                     metadata: Metadata::default()
                 },
                 msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(10))
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
                 )))),
                 metadata: Metadata::default()
             },
@@ -808,7 +831,7 @@ mod tests {
         );
 
         let res = Channel::<MockScope>::parse("chan(\"ID_CHAN\")".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Channel::Init {
@@ -822,13 +845,13 @@ mod tests {
     #[test]
     fn valid_tuple() {
         let res = Tuple::<MockScope>::parse("(2,'a')".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Tuple {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::U64(2)
+                        Number::Unresolved(2).into()
                     )))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Char('a'))))
                 ],
@@ -841,7 +864,7 @@ mod tests {
     #[test]
     fn valid_address() {
         let res = Address::<MockScope>::parse("&x".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Address {
@@ -858,7 +881,7 @@ mod tests {
     #[test]
     fn valid_access() {
         let res = PtrAccess::<MockScope>::parse("*x".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             PtrAccess {
@@ -875,7 +898,7 @@ mod tests {
     #[test]
     fn valid_map() {
         let res = Map::<MockScope>::parse(r#"map{"x":2,"y":6}"#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Map::Init {
@@ -886,7 +909,7 @@ mod tests {
                             metadata: Metadata::default(),
                         }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::Unresolved(2).into()
                         ))))
                     ),
                     (
@@ -895,7 +918,7 @@ mod tests {
                             metadata: Metadata::default(),
                         }),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(6)
+                            Number::Unresolved(6).into()
                         ))))
                     )
                 ],
@@ -905,7 +928,7 @@ mod tests {
         );
 
         let res = Map::<MockScope>::parse(r#"map(2,8)"#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Map::Def {
@@ -920,7 +943,7 @@ mod tests {
     #[test]
     fn valid_struct() {
         let res = Struct::<MockScope>::parse(r#"Point { x : 2, y : 8}"#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Struct {
@@ -929,13 +952,13 @@ mod tests {
                     (
                         "x".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::Unresolved(2).into()
                         ))))
                     ),
                     (
                         "y".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(8)
+                            Number::Unresolved(8).into()
                         ))))
                     )
                 ],
@@ -948,7 +971,7 @@ mod tests {
     #[test]
     fn valid_union() {
         let res = Union::<MockScope>::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Union {
@@ -958,13 +981,13 @@ mod tests {
                     (
                         "x".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(2)
+                            Number::Unresolved(2).into()
                         ))))
                     ),
                     (
                         "y".into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                            Number::U64(8)
+                            Number::Unresolved(8).into()
                         ))))
                     )
                 ],
@@ -977,7 +1000,7 @@ mod tests {
     #[test]
     fn valid_enum() {
         let res = Enum::parse(r#"Geo::Point"#.into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Enum {
@@ -992,7 +1015,7 @@ mod tests {
     #[test]
     fn valid_variable() {
         let res = Variable::<MockScope>::parse("x".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::Var(VarID {
@@ -1003,7 +1026,7 @@ mod tests {
         );
 
         let res = Variable::<MockScope>::parse("x[3]".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::ListAccess(ListAccess {
@@ -1012,7 +1035,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Number::U64(3))
+                    Primitive::Number(Cell::new(Number::Unresolved(3)))
                 )))),
                 metadata: Metadata::default()
             }),
@@ -1020,7 +1043,7 @@ mod tests {
         );
 
         let res = Variable::<MockScope>::parse("x.y".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
@@ -1037,7 +1060,7 @@ mod tests {
             value
         );
         let res = Variable::<MockScope>::parse("x.y.z".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
@@ -1061,7 +1084,7 @@ mod tests {
             value
         );
         let res = Variable::<MockScope>::parse("x.y[3]".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
@@ -1075,7 +1098,7 @@ mod tests {
                         metadata: Metadata::default()
                     })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(3))
+                        Primitive::Number(Cell::new(Number::Unresolved(3)))
                     )))),
                     metadata: Metadata::default()
                 })),
@@ -1084,7 +1107,7 @@ mod tests {
             value
         );
         let res = Variable::<MockScope>::parse("x[3].y".into());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             Variable::FieldAccess(FieldAccess {
@@ -1094,7 +1117,7 @@ mod tests {
                         metadata: Metadata::default()
                     })),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::U64(3))
+                        Primitive::Number(Cell::new(Number::Unresolved(3)))
                     )))),
                     metadata: Metadata::default()
                 })),

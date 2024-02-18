@@ -400,7 +400,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -443,16 +443,16 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
             match_type
         );
 
@@ -505,10 +505,10 @@ mod tests {
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
             match_type
         );
 
@@ -552,7 +552,7 @@ mod tests {
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
@@ -596,7 +596,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -624,7 +624,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "x".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -771,7 +771,7 @@ mod tests {
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
@@ -786,7 +786,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -807,16 +807,16 @@ mod tests {
                     StaticType::Fn(FnType {
                         params: vec![
                             Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                     .into(),
                             ),
                             Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
                                     .into(),
                             ),
                         ],
                         ret: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
                     })
                     .into(),
@@ -824,12 +824,12 @@ mod tests {
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let ret_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             ret_type,
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into())
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into())
         )
     }
 
@@ -848,7 +848,7 @@ mod tests {
                 address: Cell::new(None),
                 id: "f".into(),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .unwrap();
@@ -863,56 +863,56 @@ mod tests {
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("right(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("lock(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("unlock(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("show(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("hide(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("write(10,'a')".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("clear(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("append(tab,10)".into())
             .expect("Parsing should have succeeded")
@@ -927,14 +927,14 @@ mod tests {
                 address: Cell::new(None),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ))))
                     .into(),
                 ),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("insert(obj,\"id\",10)".into())
             .expect("Parsing should have succeeded")
@@ -951,7 +951,7 @@ mod tests {
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
                     })
                     .into(),
@@ -959,7 +959,7 @@ mod tests {
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("delete(tab,10)".into())
             .expect("Parsing should have succeeded")
@@ -974,14 +974,14 @@ mod tests {
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ))))
                     .into(),
                 ),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("delete(obj,\"id\")".into())
             .expect("Parsing should have succeeded")
@@ -998,7 +998,7 @@ mod tests {
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
                     })
                     .into(),
@@ -1006,7 +1006,7 @@ mod tests {
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("free(&x)".into())
             .expect("Parsing should have succeeded")
@@ -1020,12 +1020,12 @@ mod tests {
                 captured: Cell::new(false),
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("free(x)".into())
             .expect("Parsing should have succeeded")
@@ -1040,35 +1040,35 @@ mod tests {
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Address(AddrType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ))))
                     .into(),
                 ),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("spawn()".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("close()".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let expr = FnCall::parse("print(10)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
@@ -1142,7 +1142,7 @@ mod tests {
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ))))
                     .into(),
                 ),
@@ -1166,7 +1166,7 @@ mod tests {
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
                     })
                     .into(),
@@ -1189,7 +1189,7 @@ mod tests {
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                     ))))
                     .into(),
                 ),
@@ -1213,7 +1213,7 @@ mod tests {
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
                         values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
                     })
                     .into(),
@@ -1235,7 +1235,7 @@ mod tests {
                 captured: Cell::new(false),
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
             })
             .expect("Var registering should have succeeded");

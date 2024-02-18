@@ -173,7 +173,7 @@ mod tests {
         "#
             .into(),
         );
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Return::Unit, value);
     }
@@ -190,7 +190,7 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = return_statement.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
@@ -205,11 +205,11 @@ mod tests {
         .1;
         let scope = scope_impl::Scope::new();
         let res = return_statement.resolve(&scope, &None, &());
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
             return_type
         );
     }
