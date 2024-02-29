@@ -31,6 +31,7 @@ pub const I128: &str = "i128";
 pub const FLOAT: &str = "f64";
 pub const CHAR: &str = "char";
 pub const STRING: &str = "string";
+pub const STR: &str = "str";
 pub const BOOL: &str = "bool";
 pub const UNIT: &str = "unit";
 pub const UUNIT: &str = "Unit";
@@ -86,12 +87,3 @@ pub const GE: &str = ">";
 pub const EGE: &str = ">=";
 pub const EQ: &str = "==";
 pub const NEQ: &str = "!=";
-
-pub mod platform {
-    pub const RECEIVE: &str = "receive";
-    pub const SEND: &str = "send";
-    pub const VEC: &str = "vec";
-    pub const MAP: &str = "map";
-    pub const CHAN: &str = "chan";
-    pub const ERROR: &str = "error";
-}

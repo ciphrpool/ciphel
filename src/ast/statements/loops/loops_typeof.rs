@@ -26,15 +26,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        match self {
-            ForIterator::Id(value) => {
-                let (var, _) = scope.find_var(value)?;
-                var.type_of(&scope)
-            }
-            ForIterator::Vec(value) => value.type_of(&scope),
-            ForIterator::Slice(value) => value.type_of(&scope),
-            ForIterator::Receive { addr, timeout: _ } => addr.type_of(&scope),
-        }
+        self.expr.type_of(scope)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop<Scope> {

@@ -27,10 +27,9 @@ pub mod data_typeof;
 pub enum Data<InnerScope: ScopeApi> {
     Primitive(Primitive),
     Slice(Slice<InnerScope>),
-    String(StringData),
+    StrSlice(StrSlice),
     Vec(Vector<InnerScope>),
     Closure(Closure<InnerScope>),
-    Chan(Channel<InnerScope>),
     Tuple(Tuple<InnerScope>),
     Address(Address<InnerScope>),
     PtrAccess(PtrAccess<InnerScope>),
@@ -107,22 +106,17 @@ pub struct Slice<InnerScope: ScopeApi> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StringData {
+pub struct StrSlice {
     pub value: String,
     pub metadata: Metadata,
 }
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Vector<InnerScope: ScopeApi> {
-    Init {
-        value: MultiData<InnerScope>,
-        metadata: Metadata,
-        length: usize,
-        capacity: usize,
-    },
-    Def {
-        capacity: usize,
-        metadata: Metadata,
-    },
+pub struct Vector<InnerScope: ScopeApi> {
+    pub value: MultiData<InnerScope>,
+    pub metadata: Metadata,
+    pub length: usize,
+    pub capacity: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -182,24 +176,6 @@ pub struct PtrAccess<InnerScope: ScopeApi> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Channel<InnerScope: ScopeApi> {
-    Receive {
-        addr: Address<InnerScope>,
-        timeout: usize,
-        metadata: Metadata,
-    },
-    Send {
-        addr: Address<InnerScope>,
-        msg: Box<Expression<InnerScope>>,
-        metadata: Metadata,
-    },
-    Init {
-        value: String,
-        metadata: Metadata,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Struct<InnerScope: ScopeApi> {
     pub id: ID,
     pub fields: Vec<(String, Expression<InnerScope>)>,
@@ -222,22 +198,15 @@ pub struct Enum {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Map<InnerScope: ScopeApi> {
-    Init {
-        fields: Vec<(KeyData<InnerScope>, Expression<InnerScope>)>,
-        metadata: Metadata,
-    },
-    Def {
-        length: usize,
-        capacity: usize,
-        metadata: Metadata,
-    },
+pub struct Map<InnerScope: ScopeApi> {
+    pub fields: Vec<(KeyData<InnerScope>, Expression<InnerScope>)>,
+    pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeyData<InnerScope: ScopeApi> {
     Primitive(Primitive),
-    String(StringData),
+    StrSlice(StrSlice),
     Address(Address<InnerScope>),
     Enum(Enum),
 }
@@ -290,9 +259,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                 )),
             },
             Data::Slice(Slice { value, metadata }) => metadata.signature(),
-            Data::String(StringData { value, metadata }) => metadata.signature(),
-            Data::Vec(Vector::Def { capacity, metadata }) => metadata.signature(),
-            Data::Vec(Vector::Init {
+            Data::Vec(Vector {
                 value,
                 metadata,
                 length,
@@ -304,20 +271,12 @@ impl<Scope: ScopeApi> Data<Scope> {
                 scope,
                 metadata,
             }) => metadata.signature(),
-            Data::Chan(Channel::Init { value, metadata }) => metadata.signature(),
-            Data::Chan(Channel::Receive { metadata, .. }) => metadata.signature(),
-            Data::Chan(Channel::Send { metadata, .. }) => metadata.signature(),
             Data::Tuple(Tuple { value, metadata }) => metadata.signature(),
             Data::Address(Address { value, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),
             Data::Variable(v) => v.signature(),
             Data::Unit => Some(Either::Static(StaticType::Unit.into())),
-            Data::Map(Map::Def {
-                length,
-                capacity,
-                metadata,
-            }) => metadata.signature(),
-            Data::Map(Map::Init { fields, metadata }) => metadata.signature(),
+            Data::Map(Map { fields, metadata }) => metadata.signature(),
             Data::Struct(Struct {
                 id,
                 fields,
@@ -334,6 +293,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                 value,
                 metadata,
             }) => metadata.signature(),
+            Data::StrSlice(StrSlice { value, metadata }) => metadata.signature(),
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
 };
-use crate::vm::platform::api::PlatformApi;
+use crate::vm::platform::Lib;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     type Output = ();
@@ -144,7 +144,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(_api) = PlatformApi::from(&self.id) {
+        if let Some(_api) = Lib::from(&self.id) {
             return Err(SemanticError::PlatformAPIOverriding);
         }
         for value in &self.params {

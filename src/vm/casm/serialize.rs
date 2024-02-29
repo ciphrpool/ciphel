@@ -13,7 +13,7 @@ pub struct Serialized {
 impl Executable for Serialized {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
         let _ = memory.stack.push_with(&self.data).map_err(|e| e.into())?;
-        program.cursor.set(program.cursor.get() + 1);
+        program.incr();
         Ok(())
     }
 }

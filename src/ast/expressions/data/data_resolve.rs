@@ -1,7 +1,7 @@
 use super::{
-    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StringData, Struct,
-    Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
+    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
+    VarID, Variable, Vector,
 };
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
@@ -32,7 +32,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
             Data::Slice(value) => value.resolve(scope, context, extra),
             Data::Vec(value) => value.resolve(scope, context, extra),
             Data::Closure(value) => value.resolve(scope, context, extra),
-            Data::Chan(value) => value.resolve(scope, context, extra),
             Data::Tuple(value) => value.resolve(scope, context, extra),
             Data::Address(value) => value.resolve(scope, context, extra),
             Data::PtrAccess(value) => value.resolve(scope, context, extra),
@@ -42,7 +41,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
             Data::Struct(value) => value.resolve(scope, context, extra),
             Data::Union(value) => value.resolve(scope, context, extra),
             Data::Enum(value) => value.resolve(scope, context, extra),
-            Data::String(value) => value.resolve(scope, context, extra),
+            Data::StrSlice(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -399,7 +398,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StringData {
+impl<Scope: ScopeApi> Resolve<Scope> for StrSlice {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -438,54 +437,28 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Vector::Init {
-                value,
-                metadata,
-                length: _,
-                capacity: _,
-            } => {
-                let param_context = match context {
-                    Some(context) => <EType as GetSubTypes>::get_item(context),
-                    None => None,
-                };
+        let param_context = match context {
+            Some(context) => <EType as GetSubTypes>::get_item(context),
+            None => None,
+        };
 
-                for expr in value {
-                    let _ = expr.resolve(scope, &param_context, &())?;
-                }
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
-            Vector::Def {
-                capacity: _,
-                metadata,
-            } => {
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
+        for expr in &self.value {
+            let _ = expr.resolve(scope, &param_context, &())?;
         }
+        {
+            let mut borrowed_metadata = self
+                .metadata
+                .info
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| SemanticError::Default)?;
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
@@ -698,88 +671,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Channel<Scope> {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        match self {
-            Channel::Receive { addr, metadata, .. } => {
-                let _ = addr.resolve(scope, context, extra)?;
-                let addr_type = addr.type_of(&scope.borrow())?;
-                if !<EType as TypeChecking>::is_channel(&addr_type) {
-                    return Err(SemanticError::ExpectedChannel);
-                }
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
 
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
-            Channel::Send {
-                addr,
-                msg,
-                metadata,
-            } => {
-                let _ = addr.resolve(scope, context, extra)?;
-                let addr_type = addr.type_of(&scope.borrow())?;
-                if !<EType as TypeChecking>::is_channel(&addr_type) {
-                    return Err(SemanticError::ExpectedChannel);
-                }
-                let _ = msg.resolve(scope, context, extra)?;
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
-            Channel::Init {
-                value: id,
-                metadata,
-            } => {
-                let _ = scope.borrow_mut().register_chan(id)?;
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
-        }
-    }
-}
 impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     type Output = ();
     type Context = Option<EType>;
@@ -916,55 +808,33 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            Map::Init { fields, metadata } => {
-                let item_type = match context {
-                    Some(context) => <EType as GetSubTypes>::get_item(context),
-                    None => None,
-                };
+        let item_type = match context {
+            Some(context) => <EType as GetSubTypes>::get_item(context),
+            None => None,
+        };
 
-                let key_type = match context {
-                    Some(context) => <EType as GetSubTypes>::get_key(context),
-                    None => None,
-                };
-                for (key, value) in fields {
-                    let _ = key.resolve(scope, &key_type, &())?;
-                    let _ = value.resolve(scope, &item_type, &())?;
-                }
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
-            Map::Def {
-                length: _,
-                capacity: _,
-                metadata,
-            } => {
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-
-                    *borrowed_metadata = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(self.type_of(&scope.borrow())?),
-                    };
-                }
-                Ok(())
-            }
+        let key_type = match context {
+            Some(context) => <EType as GetSubTypes>::get_key(context),
+            None => None,
+        };
+        for (key, value) in &self.fields {
+            let _ = key.resolve(scope, &key_type, &())?;
+            let _ = value.resolve(scope, &item_type, &())?;
         }
+        {
+            let mut borrowed_metadata = self
+                .metadata
+                .info
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| SemanticError::Default)?;
+
+            *borrowed_metadata = Info::Resolved {
+                context: context.clone(),
+                signature: Some(self.type_of(&scope.borrow())?),
+            };
+        }
+        Ok(())
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
@@ -985,7 +855,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
             KeyData::Address(value) => value.resolve(scope, context, extra),
             KeyData::Enum(value) => value.resolve(scope, context, extra),
             KeyData::Primitive(value) => value.resolve(scope, context, extra),
-            KeyData::String(value) => value.resolve(scope, context, extra),
+            KeyData::StrSlice(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -1003,7 +873,7 @@ mod tests {
             scope_impl::Scope,
             static_types::{
                 AddrType, ChanType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-                StaticType, StringType, TupleType, VecType,
+                StaticType, StrSliceType, StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},
             var_impl::Var,
@@ -1048,7 +918,7 @@ mod tests {
 
     #[test]
     fn valid_string() {
-        let string = StringData::parse(r##""Hello World""##.into()).unwrap().1;
+        let string = StrSlice::parse(r##""Hello World""##.into()).unwrap().1;
 
         let scope = Scope::new();
         let res = string.resolve(&scope, &None, &());
@@ -1056,7 +926,12 @@ mod tests {
 
         let res = string.resolve(
             &scope,
-            &Some(Either::Static(StaticType::String(StringType()).into())),
+            &Some(Either::Static(
+                StaticType::StrSlice(StrSliceType {
+                    size: "Hello World".len(),
+                })
+                .into(),
+            )),
             &(),
         );
         assert!(res.is_ok(), "{:?}", res);
@@ -1087,7 +962,7 @@ mod tests {
 
     #[test]
     fn robustness_string() {
-        let string = StringData::parse(r##""Hello World""##.into()).unwrap().1;
+        let string = StrSlice::parse(r##""Hello World""##.into()).unwrap().1;
         let scope = Scope::new();
 
         let res = string.resolve(
@@ -1139,12 +1014,6 @@ mod tests {
 
     #[test]
     fn valid_vector() {
-        let vector = Vector::parse("vec(8)".into()).unwrap().1;
-
-        let scope = Scope::new();
-        let res = vector.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
         let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
 
         let scope = Scope::new();
@@ -1400,59 +1269,6 @@ mod tests {
             ),
             address_type
         )
-    }
-
-    #[test]
-    fn valid_channel() {
-        let channel = Channel::parse("receive[&chan1](10)".into()).unwrap().1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                captured: Cell::new(false),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
-                id: "chan1".into(),
-                type_sig: Either::Static(
-                    StaticType::Chan(ChanType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
-                ),
-            })
-            .unwrap();
-
-        let res = channel.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
-        let res = channel.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn robustness_channel() {
-        let channel = Channel::parse("receive[&chan1](10)".into()).unwrap().1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                captured: Cell::new(false),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
-                id: "chan1".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
-            })
-            .unwrap();
-
-        let res = channel.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let channel = Channel::parse("send[&chan1](10)".into()).unwrap().1;
-        let res = channel.resolve(&scope, &None, &());
-        assert!(res.is_err());
     }
 
     #[test]

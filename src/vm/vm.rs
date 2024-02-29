@@ -6,8 +6,9 @@ use std::{
 use crate::semantic::{scope::ScopeApi, MutRc};
 
 use super::{
-    allocator::{stack::StackError, Memory},
+    allocator::{heap::HeapError, stack::StackError, Memory},
     casm::{Casm, CasmProgram},
+    platform::stdlib::io::PrintCasm,
 };
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,7 @@ pub enum CodeGenerationError {
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
     StackError(StackError),
+    HeapError(HeapError),
     Deserialization,
     UnsupportedOperation,
     MathError,
@@ -43,4 +45,8 @@ pub trait Executable {
 pub trait DeserializeFrom<Scope: ScopeApi> {
     type Output;
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;
+}
+
+pub trait Printer {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError>;
 }

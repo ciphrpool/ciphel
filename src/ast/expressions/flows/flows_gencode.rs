@@ -3,10 +3,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use ulid::Ulid;
 
 use crate::{
-    ast::expressions::data::{Number, Primitive},
+    ast::expressions::data::{Number, Primitive, VarID, Variable},
     semantic::{
         scope::{
-            static_types::StaticType,
+            static_types::{StaticType, StrSliceType},
             user_type_impl::{Enum, Union, UserType},
             ScopeApi,
         },
@@ -22,6 +22,7 @@ use crate::{
             serialize::Serialized,
             Casm, CasmProgram,
         },
+        platform::{self, GenerateCodePlatform, Lib},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -146,6 +147,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
             Either::Static(ref value) => match value.as_ref() {
                 StaticType::Primitive(_) => None,
                 StaticType::String(_) => None,
+                StaticType::StrSlice(_) => None,
                 _ => return Err(CodeGenerationError::UnresolvedError),
             },
             Either::User(ref value) => match value.as_ref() {
@@ -239,6 +241,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
             let info = match &expr_type {
                 Either::Static(ref value) => match value.as_ref() {
                     StaticType::Primitive(value) => BranchTableExprInfo::Primitive(value.size_of()),
+                    StaticType::StrSlice(value) => BranchTableExprInfo::Primitive(value.size_of()),
                     StaticType::String(_) => BranchTableExprInfo::String,
                     _ => return Err(CodeGenerationError::UnresolvedError),
                 },
@@ -353,7 +356,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
         scope: &MutRc<Scope>,
         instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let params_size: usize = self
+            .params
+            .iter()
+            .map(|p| p.signature().map_or(0, |s| s.size_of()))
+            .sum();
+
+        for param in &self.params {
+            let _ = param.gencode(scope, instructions)?;
+        }
+
+        if let Some(platform_api) = self.platform.as_ref().borrow().as_ref() {
+            platform_api.gencode(scope, instructions, params_size)
+        } else {
+            todo!()
+        }
     }
 }
 

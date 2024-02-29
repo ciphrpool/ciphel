@@ -11,6 +11,7 @@ pub enum Type {
     Primitive(PrimitiveType),
     Slice(SliceType),
     String(StringType),
+    StrSlice(StrSliceType),
     UserType(ID),
     Vec(VecType),
     Fn(FnType),
@@ -46,6 +47,11 @@ pub enum NumberType {
 pub struct SliceType {
     pub size: usize,
     pub item_type: SubType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrSliceType {
+    pub size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]

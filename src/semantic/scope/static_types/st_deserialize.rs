@@ -2,17 +2,34 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::expressions::{
-        data::{Data, Number, Primitive, Slice, StringData, Tuple, Vector},
+        data::{Data, Number, Primitive, Slice, StrSlice, Tuple, Vector},
         Atomic, Expression,
     },
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
-        EType, Either, Info, Metadata, SizeOf,
+        AccessLevel, EType, Either, Info, Metadata, SizeOf,
     },
-    vm::vm::{DeserializeFrom, RuntimeError},
+    vm::{
+        allocator::{stack::Offset, MemoryAddress},
+        casm::{
+            alloc::Access,
+            memcopy::MemCopy,
+            operation::{Addition, OpPrimitive, Operation, OperationKind},
+            serialize::Serialized,
+            Casm,
+        },
+        platform::{
+            stdlib::{
+                io::{IOCasm, PrintCasm},
+                StdCasm,
+            },
+            LibCasm,
+        },
+        vm::{DeserializeFrom, Printer, RuntimeError},
+    },
 };
 
-use super::{NumberType, PrimitiveType, SliceType, StringType, TupleType, VecType};
+use super::{NumberType, PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType};
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
     type Output = Data<Scope>;
@@ -37,10 +54,35 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
             StaticType::Address(_value) => todo!(),
             StaticType::Map(_value) => unimplemented!(),
             StaticType::String(value) => {
-                Ok(Data::String(
+                Ok(Data::StrSlice(
                     <StringType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
                 ))
             }
+            StaticType::StrSlice(value) => {
+                Ok(Data::StrSlice(
+                    <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
+                ))
+            }
+        }
+    }
+}
+
+impl Printer for StaticType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        match self {
+            StaticType::Primitive(value) => value.build_printer(),
+            StaticType::Slice(value) => value.build_printer(),
+            StaticType::String(value) => value.build_printer(),
+            StaticType::StrSlice(value) => value.build_printer(),
+            StaticType::Vec(value) => value.build_printer(),
+            StaticType::Fn(value) => todo!(),
+            StaticType::Chan(value) => todo!(),
+            StaticType::Tuple(value) => value.build_printer(),
+            StaticType::Unit => todo!(),
+            StaticType::Any => todo!(),
+            StaticType::Error => todo!(),
+            StaticType::Address(value) => todo!(),
+            StaticType::Map(value) => todo!(),
         }
     }
 }
@@ -108,6 +150,46 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for NumberType {
     }
 }
 
+impl Printer for NumberType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        match self {
+            NumberType::U8 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintU8),
+            )))]),
+            NumberType::U16 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintU16),
+            )))]),
+            NumberType::U32 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintU32),
+            )))]),
+            NumberType::U64 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintU64),
+            )))]),
+            NumberType::U128 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintU128),
+            )))]),
+            NumberType::I8 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintI8),
+            )))]),
+            NumberType::I16 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintI16),
+            )))]),
+            NumberType::I32 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintI32),
+            )))]),
+            NumberType::I64 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintI64),
+            )))]),
+            NumberType::I128 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintI128),
+            )))]),
+            NumberType::F64 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintF64),
+            )))]),
+        }
+    }
+}
+
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
     type Output = Primitive;
 
@@ -130,7 +212,19 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
         }
     }
 }
-
+impl Printer for PrimitiveType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        match self {
+            PrimitiveType::Number(value) => value.build_printer(),
+            PrimitiveType::Char => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintChar),
+            )))]),
+            PrimitiveType::Bool => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintBool),
+            )))]),
+        }
+    }
+}
 // Helper function to extract a u64 value from a byte slice.
 pub fn extract_u64(slice: &[u8]) -> Result<(u64, &[u8]), RuntimeError> {
     if slice.len() < 8 {
@@ -178,7 +272,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
         if !array.iter().all(|e| e.is_ok()) {
             return Err(RuntimeError::Deserialization);
         }
-        Ok(Vector::Init {
+        Ok(Vector {
             value: array
                 .into_iter()
                 .take_while(|e| e.clone().ok().flatten().is_some())
@@ -195,9 +289,53 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
         })
     }
 }
+impl Printer for VecType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
+    }
+}
+// impl ToStr for VecType {
+//     fn to_str(&self, bytes: &[u8]) -> Result<String, RuntimeError> {
+//         let (length, rest) = extract_u64(bytes)?;
+//         let (capacity, rest) = extract_u64(rest)?;
+//         let rest = rest;
+
+//         let size = self.0.size_of();
+//         let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = rest
+//             .chunks(size)
+//             .enumerate()
+//             .map(|(idx, bytes)| {
+//                 if idx as u64 >= length {
+//                     Ok(None)
+//                 } else {
+//                     <EType as DeserializeFrom<Scope>>::deserialize_from(&self.0, bytes)
+//                         .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
+//                 }
+//             })
+//             .collect();
+//         if !array.iter().all(|e| e.is_ok()) {
+//             return Err(RuntimeError::Deserialization);
+//         }
+//         Ok(Vector {
+//             value: array
+//                 .into_iter()
+//                 .take_while(|e| e.clone().ok().flatten().is_some())
+//                 .map(|e| e.ok().flatten().unwrap())
+//                 .collect(),
+//             metadata: Metadata {
+//                 info: Rc::new(RefCell::new(Info::Resolved {
+//                     context: None,
+//                     signature: Some(Either::Static(Rc::new(StaticType::Vec(self.clone())))),
+//                 })),
+//             },
+//             length: length as usize,
+//             capacity: capacity as usize,
+//         })
+//     }
+// }
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
-    type Output = StringData;
+    type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let (length, rest) = extract_u64(bytes)?;
@@ -207,7 +345,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
         let str_slice = std::str::from_utf8(&rest[0..length as usize])
             .map_err(|_| RuntimeError::Deserialization)?;
 
-        Ok(StringData {
+        Ok(StrSlice {
             value: str_slice.to_string(),
             metadata: Metadata {
                 info: Rc::new(RefCell::new(Info::Resolved {
@@ -218,7 +356,40 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
         })
     }
 }
+impl Printer for StringType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        let mut instructions = Vec::default();
+        instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintString,
+        )))));
+        Ok(instructions)
+    }
+}
+impl<Scope: ScopeApi> DeserializeFrom<Scope> for StrSliceType {
+    type Output = StrSlice;
 
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+        let str_slice = std::str::from_utf8(&bytes).map_err(|_| RuntimeError::Deserialization)?;
+
+        Ok(StrSlice {
+            value: str_slice.to_string(),
+            metadata: Metadata {
+                info: Rc::new(RefCell::new(Info::Resolved {
+                    context: None,
+                    signature: Some(Either::Static(Rc::new(StaticType::StrSlice(self.clone())))),
+                })),
+            },
+        })
+    }
+}
+impl Printer for StrSliceType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+            IOCasm::Print(PrintCasm::PrintStr(self.size)),
+        )))])
+    }
+}
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
     type Output = Tuple<Scope>;
 
@@ -249,7 +420,11 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
         })
     }
 }
-
+impl Printer for TupleType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
+    }
+}
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
     type Output = Slice<Scope>;
 
@@ -282,5 +457,10 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
                 })),
             },
         })
+    }
+}
+impl Printer for SliceType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
     }
 }

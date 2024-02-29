@@ -20,7 +20,7 @@ impl Executable for Locate {
             MemoryAddress::Heap => {
                 // let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
                 todo!();
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
@@ -30,7 +30,7 @@ impl Executable for Locate {
                     .map_err(|e| e.into())?;
                 let data = (offset as u64).to_le_bytes();
                 let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
         }

@@ -11,7 +11,11 @@ use crate::{
         },
         CompatibleWith, EType, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
-    vm::vm::{DeserializeFrom, RuntimeError},
+    vm::{
+        allocator::Memory,
+        casm::Casm,
+        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
+    },
 };
 
 impl<T, Scope: ScopeApi> CompatibleWith<Scope> for Option<T>
@@ -509,8 +513,17 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for EType {
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
-            Either::Static(value) => value.as_ref().deserialize_from(bytes),
-            Either::User(value) => value.as_ref().deserialize_from(bytes),
+            Either::Static(value) => value.deserialize_from(bytes),
+            Either::User(value) => value.deserialize_from(bytes),
+        }
+    }
+}
+
+impl Printer for EType {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
+        match self {
+            Either::Static(value) => value.build_printer(),
+            Either::User(value) => value.build_printer(),
         }
     }
 }

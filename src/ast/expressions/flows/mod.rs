@@ -3,13 +3,16 @@ pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
 
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     ast::utils::strings::ID,
     semantic::{scope::ScopeApi, EType, Metadata},
+    vm::platform::Lib,
 };
 
 use super::{
-    data::{ExprScope, Primitive, StringData, Variable},
+    data::{ExprScope, Primitive, StrSlice, Variable},
     Expression,
 };
 
@@ -40,7 +43,7 @@ pub struct MatchExpr<InnerScope: ScopeApi> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     Primitive(Primitive),
-    String(StringData),
+    String(StrSlice),
     Enum {
         typename: ID,
         value: ID,
@@ -75,6 +78,7 @@ pub struct FnCall<InnerScope: ScopeApi> {
     pub fn_var: Variable<InnerScope>,
     pub params: Vec<Expression<InnerScope>>,
     pub metadata: Metadata,
+    pub platform: Rc<RefCell<Option<Lib>>>,
 }
 
 impl<Scope: ScopeApi> ExprFlow<Scope> {

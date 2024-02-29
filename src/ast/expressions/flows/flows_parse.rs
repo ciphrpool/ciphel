@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -8,7 +10,7 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{ExprScope, Primitive, StringData, Variable},
+            data::{ExprScope, Primitive, StrSlice, Variable},
             Expression,
         },
         utils::{
@@ -84,7 +86,7 @@ impl TryParse for Pattern {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Pattern::Primitive(value)),
-            map(StringData::parse, |value| Pattern::String(value)),
+            map(StrSlice::parse, |value| Pattern::String(value)),
             map(
                 pair(
                     separated_pair(parse_id, wst(lexem::SEP), parse_id),
@@ -230,6 +232,7 @@ impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
                 fn_var,
                 params,
                 metadata: Metadata::default(),
+                platform: Rc::default(),
             },
         )(input)
     }
@@ -242,7 +245,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, VarID, Variable},
+                data::{Data, Number, Primitive, StrSlice, VarID, Variable},
                 flows::PatternExpr,
                 Atomic, Expression,
             },
@@ -341,7 +344,7 @@ mod tests {
                         })
                     },
                     PatternExpr {
-                        pattern: Pattern::String(StringData {
+                        pattern: Pattern::String(StrSlice {
                             value: "Hello World".to_string(),
                             metadata: Metadata::default()
                         }),
@@ -512,6 +515,7 @@ mod tests {
                     ))))
                 ],
                 metadata: Metadata::default(),
+                platform: Rc::default(),
             },
             value
         );

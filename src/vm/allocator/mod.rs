@@ -1,4 +1,4 @@
-use crate::semantic::AccessLevel;
+use crate::semantic::{AccessLevel, MutRc};
 
 use self::{
     heap::{Heap, ALIGNMENT},
@@ -23,6 +23,8 @@ pub enum MemoryAddress {
 pub struct Memory {
     pub heap: Heap,
     pub stack: Stack,
+    pub stdout: MutRc<String>,
+    pub stdin: MutRc<String>,
 }
 
 impl Memory {
@@ -30,6 +32,8 @@ impl Memory {
         Self {
             heap: Heap::new(),
             stack: Stack::new(),
+            stdout: Default::default(),
+            stdin: Default::default(),
         }
     }
 }

@@ -27,12 +27,12 @@ impl Executable for Alloc {
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                 let data = (address as u64).to_le_bytes().to_vec();
                 let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
             Alloc::Stack { size } => {
                 let _ = memory.stack.push(*size).map_err(|e| e.into())?;
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
         }
@@ -73,7 +73,7 @@ impl Executable for StackFrame {
                         program.cursor.get() + cursor_offset,
                     )
                     .map_err(|e| e.into())?;
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
             StackFrame::Return { return_size } => {
@@ -105,7 +105,7 @@ impl Executable for Access {
                     let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
                     let _data = memory.heap.read(address, *size).map_err(|err| err.into())?;
                     todo!("Copy data onto stack");
-                    program.cursor.set(program.cursor.get() + 1);
+                    program.incr();
                     Ok(())
                 }
                 MemoryAddress::Stack { offset, level } => {
@@ -115,7 +115,7 @@ impl Executable for Access {
                         .map_err(|err| err.into())?;
                     // Copy data onto stack;
                     let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                    program.cursor.set(program.cursor.get() + 1);
+                    program.incr();
                     Ok(())
                 }
             },
@@ -124,7 +124,7 @@ impl Executable for Access {
                 let _address = {
                     todo!("Convert u64 to memory address by differenting stack pointer and heap pointer");
                 };
-                program.cursor.set(program.cursor.get() + 1);
+                program.incr();
                 Ok(())
             }
         }
@@ -161,7 +161,7 @@ impl Executable for Assign {
             }
         };
 
-        program.cursor.set(program.cursor.get() + 1);
+        program.incr();
         Ok(())
     }
 }

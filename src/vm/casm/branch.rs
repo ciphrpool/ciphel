@@ -24,7 +24,7 @@ impl Label {
 
 impl Executable for Label {
     fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        program.cursor.set(program.cursor.get() + 1);
+        program.incr();
         Ok(())
     }
 }

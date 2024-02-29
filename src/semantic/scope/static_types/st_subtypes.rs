@@ -1,10 +1,14 @@
-use crate::semantic::{
-    scope::{type_traits::GetSubTypes, user_type_impl::UserType},
-    EType, Either, SizeOf,
+use crate::{
+    ast::expressions::data::StrSlice,
+    semantic::{
+        scope::{type_traits::GetSubTypes, user_type_impl::UserType},
+        EType, Either, SizeOf,
+    },
 };
 
 use super::{
-    AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType, StringType, TupleType,
+    AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
+    TupleType,
 };
 
 impl GetSubTypes for StaticType {
@@ -22,6 +26,7 @@ impl GetSubTypes for StaticType {
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_nth(value, n),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
+            StaticType::StrSlice(_) => None,
         }
     }
 
@@ -39,6 +44,9 @@ impl GetSubTypes for StaticType {
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_item(value),
             StaticType::Map(value) => Some(value.values_type.as_ref().clone()),
             StaticType::String(_) => {
+                Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
+            }
+            StaticType::StrSlice(_) => {
                 Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
             }
         }
@@ -61,6 +69,12 @@ impl GetSubTypes for StaticType {
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             StaticType::Vec(_) => Some(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            StaticType::String(_) => Some(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            StaticType::StrSlice(_) => Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
             )),
             _ => None,
@@ -103,6 +117,7 @@ impl GetSubTypes for StaticType {
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_fields(value),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
+            StaticType::StrSlice(_) => None,
         }
     }
 
@@ -120,6 +135,7 @@ impl GetSubTypes for StaticType {
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_length(value),
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
+            StaticType::StrSlice(StrSliceType { size }) => Some(size.clone()),
         }
     }
 
@@ -139,6 +155,7 @@ impl GetSubTypes for StaticType {
             StaticType::Address(_) => None,
             StaticType::Map(_) => None,
             StaticType::String(_) => None,
+            StaticType::StrSlice(_) => None,
         }
     }
 }

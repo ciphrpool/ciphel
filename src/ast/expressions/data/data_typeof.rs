@@ -1,11 +1,11 @@
 use std::cell::Ref;
 
 use super::{
-    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, NumAccess, Number, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
-    Union, VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
+    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
+    Variable, Vector,
 };
-use crate::ast::types::{NumberType, PrimitiveType, StringType};
+use crate::ast::types::{NumberType, PrimitiveType, StrSliceType, StringType};
 
 use crate::semantic::scope::static_types::StaticType;
 
@@ -32,7 +32,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
             Data::Slice(value) => value.type_of(&scope),
             Data::Vec(value) => value.type_of(&scope),
             Data::Closure(value) => value.type_of(&scope),
-            Data::Chan(value) => value.type_of(&scope),
             Data::Tuple(value) => value.type_of(&scope),
             Data::Address(value) => value.type_of(&scope),
             Data::PtrAccess(value) => value.type_of(&scope),
@@ -44,7 +43,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
             Data::Struct(value) => value.type_of(&scope),
             Data::Union(value) => value.type_of(&scope),
             Data::Enum(value) => value.type_of(&scope),
-            Data::String(value) => value.type_of(&scope),
+            Data::StrSlice(value) => value.type_of(&scope),
         }
     }
 }
@@ -235,13 +234,19 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for StringData {
+impl<Scope: ScopeApi> TypeOf<Scope> for StrSlice {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        StaticType::build_string(&StringType(), scope).map(|value| (Either::Static(value.into())))
+        StaticType::build_str_slice(
+            &StrSliceType {
+                size: self.value.len(),
+            },
+            scope,
+        )
+        .map(|value| (Either::Static(value.into())))
     }
 }
 
@@ -251,27 +256,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        match self {
-            Vector::Init {
-                value: vec,
-                metadata: _,
-                length: _,
-                capacity: _,
-            } => {
-                let Some(expr_type) = vec.first().map(|expr| expr.type_of(&scope)) else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let expr_type = expr_type?;
+        let Some(expr_type) = self.value.first().map(|expr| expr.type_of(&scope)) else {
+            return Err(SemanticError::CantInferType);
+        };
+        let expr_type = expr_type?;
 
-                StaticType::build_vec_from(&expr_type, scope)
-                    .map(|value| Either::Static(value.into()))
-            }
-            Vector::Def { .. } => {
-                let any_type: StaticType = <StaticType as BuildStaticType<Scope>>::build_any();
-                StaticType::build_vec_from(&Either::Static(any_type.into()), scope)
-                    .map(|value| Either::Static(value.into()))
-            }
-        }
+        StaticType::build_vec_from(&expr_type, scope).map(|value| Either::Static(value.into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
@@ -356,42 +346,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
         ))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Channel<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        match self {
-            Channel::Receive {
-                addr,
-                timeout: _,
-                metadata: _,
-            } => {
-                let addr_type = addr.type_of(&scope)?;
-                let msg_type = <EType as GetSubTypes>::get_return(&addr_type);
-                let Some(msg_type) = msg_type else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let result_type = msg_type.type_of(&scope)?;
-                Ok(result_type)
-            }
-            Channel::Send {
-                addr: _,
-                msg: _,
-                metadata: _,
-            } => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
-            )),
-            Channel::Init { .. } => {
-                let any_type: StaticType = <StaticType as BuildStaticType<Scope>>::build_any();
-
-                StaticType::build_chan_from(&Either::Static(any_type.into()), scope)
-                    .map(|value| Either::Static(value.into()))
-            }
-        }
-    }
-}
 impl<Scope: ScopeApi> TypeOf<Scope> for Struct<Scope> {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
@@ -429,28 +383,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        match self {
-            Map::Init {
-                fields,
-                metadata: _,
-            } => {
-                let Some((key, value)) = fields.first() else {
-                    return Err(SemanticError::CantInferType);
-                };
-                let key_type = key.type_of(&scope)?;
-                let value_type = value.type_of(&scope)?;
+        let Some((key, value)) = self.fields.first() else {
+            return Err(SemanticError::CantInferType);
+        };
+        let key_type = key.type_of(&scope)?;
+        let value_type = value.type_of(&scope)?;
 
-                StaticType::build_map_from(&key_type, &value_type, scope)
-                    .map(|value| Either::Static(value.into()))
-            }
-            Map::Def {
-                length: _,
-                capacity: _,
-                metadata: _,
-            } => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_any().into(),
-            )),
-        }
+        StaticType::build_map_from(&key_type, &value_type, scope)
+            .map(|value| Either::Static(value.into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {
@@ -463,7 +403,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {
             KeyData::Address(value) => value.type_of(&scope),
             KeyData::Enum(value) => value.type_of(&scope),
             KeyData::Primitive(value) => value.type_of(&scope),
-            KeyData::String(value) => value.type_of(&scope),
+            KeyData::StrSlice(value) => Ok(Either::Static(
+                StaticType::String(crate::semantic::scope::static_types::StringType()).into(),
+            )),
         }
     }
 }

@@ -10,6 +10,7 @@ use self::branch::Label;
 
 use super::{
     allocator::Memory,
+    platform,
     vm::{self, Executable, RuntimeError},
 };
 pub mod alloc;
@@ -40,6 +41,10 @@ impl Default for CasmProgram {
 impl CasmProgram {
     pub fn push(&mut self, value: Casm) {
         self.main.push(value);
+    }
+
+    pub fn incr(&self) {
+        self.cursor.set(self.cursor.get() + 1)
     }
 
     pub fn push_label(&mut self, label: String) -> Ulid {
@@ -89,6 +94,7 @@ impl CasmProgram {
 
 #[derive(Debug, Clone)]
 pub enum Casm {
+    Platform(platform::LibCasm),
     StackFrame(alloc::StackFrame),
     Alloc(alloc::Alloc),
     MemCopy(memcopy::MemCopy),
@@ -120,6 +126,7 @@ impl Executable for Casm {
             Casm::MemCopy(value) => value.execute(program, memory),
             Casm::Switch(value) => value.execute(program, memory),
             Casm::Locate(value) => value.execute(program, memory),
+            Casm::Platform(value) => value.execute(program, memory),
         }
     }
 }

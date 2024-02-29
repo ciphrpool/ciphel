@@ -1,10 +1,13 @@
-use crate::ast::{
-    utils::{
-        io::{PResult, Span},
-        lexem,
-        strings::wst,
+use crate::{
+    ast::{
+        utils::{
+            io::{PResult, Span},
+            lexem,
+            strings::wst,
+        },
+        TryParse,
     },
-    TryParse,
+    vm::platform,
 };
 use nom::combinator::value;
 
@@ -12,7 +15,7 @@ use super::Error;
 
 impl TryParse for Error {
     fn parse(input: Span) -> PResult<Self> {
-        value(Error(), wst(lexem::platform::ERROR))(input)
+        value(Error(), wst(platform::utils::lexem::ERROR))(input)
     }
 }
 #[cfg(test)]

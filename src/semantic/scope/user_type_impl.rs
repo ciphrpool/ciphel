@@ -1,5 +1,6 @@
 use std::{
     cell::{Ref, RefCell},
+    fmt::format,
     rc::Rc,
 };
 
@@ -9,7 +10,7 @@ use crate::{
             data::{self, Data},
             Atomic, Expression,
         },
-        statements::definition::{self},
+        statements::definition,
         utils::strings::ID,
     },
     semantic::{
@@ -17,7 +18,8 @@ use crate::{
     },
     vm::{
         allocator::align,
-        vm::{DeserializeFrom, RuntimeError},
+        casm::{operation::OpPrimitive, Casm},
+        vm::{DeserializeFrom, Printer, RuntimeError},
     },
 };
 
@@ -214,6 +216,16 @@ impl SizeOf for UserType {
             UserType::Struct(value) => value.size_of(),
             UserType::Enum(value) => value.size_of(),
             UserType::Union(value) => value.size_of(),
+        }
+    }
+}
+
+impl Printer for UserType {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        match self {
+            UserType::Struct(value) => value.build_printer(),
+            UserType::Enum(value) => value.build_printer(),
+            UserType::Union(value) => value.build_printer(),
         }
     }
 }
@@ -452,6 +464,12 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
     }
 }
 
+impl Printer for Struct {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
+    }
+}
+
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
     type Output = data::Union<Scope>;
 
@@ -477,6 +495,12 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
     }
 }
 
+impl Printer for Union {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
+    }
+}
+
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
     type Output = data::Enum;
 
@@ -496,5 +520,11 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
                 })),
             },
         })
+    }
+}
+
+impl Printer for Enum {
+    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+        todo!()
     }
 }

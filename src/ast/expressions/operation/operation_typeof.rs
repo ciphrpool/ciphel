@@ -19,10 +19,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            UnaryOperation::Minus { value, .. } => {
-                dbg!(value.type_of(&scope));
-                value.type_of(&scope)
-            }
+            UnaryOperation::Minus { value, .. } => value.type_of(&scope),
             UnaryOperation::Not { value, .. } => value.type_of(&scope),
         }
     }

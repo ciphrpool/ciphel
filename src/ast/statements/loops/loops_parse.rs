@@ -47,22 +47,7 @@ impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
 
 impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(parse_id, |value| ForIterator::Id(value)),
-            map(Vector::parse, |value| ForIterator::Vec(value)),
-            map(Slice::parse, |value| ForIterator::Slice(value)),
-            map(
-                tuple((
-                    wst(lexem::platform::RECEIVE),
-                    delimited(wst(lexem::SQ_BRA_O), Address::parse, wst(lexem::SQ_BRA_C)),
-                    delimited(wst(lexem::PAR_O), parse_number, wst(lexem::PAR_C)),
-                )),
-                |(_, addr, timeout)| ForIterator::Receive {
-                    addr,
-                    timeout: timeout as usize,
-                },
-            ),
-        ))(input)
+        map(Expression::parse, |expr| ForIterator { expr })(input)
     }
 }
 
@@ -120,7 +105,10 @@ impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Cell, RefCell};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     use crate::{
         ast::{
@@ -154,7 +142,12 @@ mod tests {
         assert_eq!(
             ForLoop {
                 item: ForItem::Id("i".into()),
-                iterator: ForIterator::Id("x".into()),
+                iterator: ForIterator {
+                    expr: Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    }))))
+                },
                 scope: Box::new(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
@@ -166,7 +159,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 
@@ -205,7 +199,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 
@@ -240,7 +235,8 @@ mod tests {
                         params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                             Primitive::Number(Cell::new(Number::Unresolved(10)))
                         )))],
-                        metadata: Metadata::default()
+                        metadata: Metadata::default(),
+                        platform: Rc::default(),
                     }
                 }))],
 

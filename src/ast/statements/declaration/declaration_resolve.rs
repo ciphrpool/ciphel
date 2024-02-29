@@ -6,7 +6,7 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Either, MutRc};
-use crate::vm::platform::api::PlatformApi;
+use crate::vm::platform::Lib;
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     type Output = ();
@@ -69,7 +69,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(_api) = PlatformApi::from(&self.id) {
+        if let Some(_api) = Lib::from(&self.id) {
             return Err(SemanticError::PlatformAPIOverriding);
         }
         self.signature.resolve(scope, context, extra)
@@ -91,7 +91,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     {
         match self {
             DeclaredVar::Id(id) => {
-                if let Some(_api) = PlatformApi::from(id) {
+                if let Some(_api) = Lib::from(&id) {
                     return Err(SemanticError::PlatformAPIOverriding);
                 }
                 let mut vars = Vec::with_capacity(1);
@@ -101,7 +101,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
                 if var_type.is_any() || var_type.is_unit() {
                     return Err(SemanticError::CantInferType);
                 }
-                if let Some(_api) = PlatformApi::from(id) {
+                if let Some(_api) = Lib::from(&id) {
                     return Err(SemanticError::PlatformAPIOverriding);
                 }
                 let var = <Var as BuildVar<Scope>>::build_var(id, var_type);
@@ -192,7 +192,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
                     }
-                    if let Some(_api) = PlatformApi::from(var_name) {
+                    if let Some(_api) = Lib::from(&var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
                     scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
@@ -215,7 +215,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
                     }
-                    if let Some(_api) = PlatformApi::from(var_name) {
+                    if let Some(_api) = Lib::from(&var_name) {
                         return Err(SemanticError::PlatformAPIOverriding);
                     }
                     scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));

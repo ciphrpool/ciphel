@@ -652,7 +652,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Number, Primitive, StringData},
+                data::{Number, Primitive, StrSlice},
                 Expression,
             },
             TryParse,
@@ -661,7 +661,7 @@ mod tests {
         semantic::{
             scope::{
                 scope_impl::Scope,
-                static_types::{PrimitiveType, StringType},
+                static_types::{PrimitiveType, StrSliceType, StringType},
             },
             Resolve,
         },
@@ -1468,7 +1468,7 @@ mod tests {
     fn valid_addition_string() {
         let expr = Expression::parse(
             r##"
-           "Hello " + "world"
+           "Hello " + "World"
         "##
             .into(),
         )
@@ -1493,9 +1493,13 @@ mod tests {
             .execute(&memory)
             .expect("Execution should have succeeded");
         let data = clear_stack!(memory);
-        let result: StringData =
-            <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
-                .expect("Deserialization should have succeeded");
+        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+            &StrSliceType {
+                size: "Hello ".len() + "world".len(),
+            },
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World")
     }

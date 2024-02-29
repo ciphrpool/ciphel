@@ -24,6 +24,7 @@ pub enum StaticType {
     Primitive(PrimitiveType),
     Slice(SliceType),
     String(StringType),
+    StrSlice(StrSliceType),
     Vec(VecType),
     Fn(FnType),
     Chan(ChanType),
@@ -62,6 +63,10 @@ pub struct SliceType {
     pub item_type: SubType,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrSliceType {
+    pub size: usize,
+}
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringType();
 

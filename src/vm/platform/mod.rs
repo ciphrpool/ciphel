@@ -1,282 +1,383 @@
-use crate::semantic::scope::static_types::FnType;
+use std::cell::Ref;
 
-use super::{allocator::Memory, vm::RuntimeError};
+use crate::{
+    ast::expressions::Expression,
+    semantic::{
+        scope::{static_types::FnType, ScopeApi},
+        EType, MutRc, Resolve, SemanticError, TypeOf,
+    },
+};
 
-pub mod names {
-    pub const LEFT: &str = "left";
-    pub const RIGHT: &str = "right";
-    pub const LOCK: &str = "lock";
-    pub const UNLOCK: &str = "unlock";
-    pub const SHOW: &str = "show";
-    pub const HIDE: &str = "hide";
-    pub const WRITE: &str = "write";
-    pub const CLEAR: &str = "clear";
-    pub const APPEND: &str = "append";
-    pub const INSERT: &str = "insert";
-    pub const DELETE: &str = "delete";
-    pub const FREE: &str = "free";
-    pub const SPAWN: &str = "spawn";
-    pub const CLOSE: &str = "close";
-    pub const PRINT: &str = "print";
+use self::{
+    core::{CoreCasm, CoreFn},
+    stdlib::{StdCasm, StdFn},
+};
+
+use super::{
+    allocator::Memory,
+    casm::CasmProgram,
+    vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
+};
+
+pub mod core;
+pub mod stdlib;
+pub mod utils;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Lib {
+    Core(CoreFn),
+    Std(StdFn),
 }
 
-pub struct PlatformFunction {
-    name: &'static str,
-    signature: FnType,
+#[derive(Debug, Clone, PartialEq)]
+pub enum LibCasm {
+    Core(CoreCasm),
+    Std(StdCasm),
 }
 
-pub trait PlatformExecutor {
-    fn left(memory: &Memory) -> Result<(), RuntimeError>;
-    fn right(memory: &Memory) -> Result<(), RuntimeError>;
-    fn lock(memory: &Memory) -> Result<(), RuntimeError>;
-    fn unlock(memory: &Memory) -> Result<(), RuntimeError>;
-    fn show(memory: &Memory) -> Result<(), RuntimeError>;
-    fn hide(memory: &Memory) -> Result<(), RuntimeError>;
-    fn write(memory: &Memory) -> Result<(), RuntimeError>;
-    fn clear(memory: &Memory) -> Result<(), RuntimeError>;
-    fn append(memory: &Memory) -> Result<(), RuntimeError>;
-    fn insert(memory: &Memory) -> Result<(), RuntimeError>;
-    fn delete(memory: &Memory) -> Result<(), RuntimeError>;
-    fn free(memory: &Memory) -> Result<(), RuntimeError>;
-    fn spawn(memory: &Memory) -> Result<(), RuntimeError>;
-    fn close(memory: &Memory) -> Result<(), RuntimeError>;
-    fn print(memory: &Memory) -> Result<(), RuntimeError>;
-}
-
-pub mod api {
-    use std::{
-        cell::{Ref, RefCell},
-        rc::Rc,
-    };
-
-    use crate::{
-        ast::{expressions::Expression, utils::strings::ID},
-        semantic::{
-            scope::{
-                static_types::{NumberType, PrimitiveType, StaticType},
-                type_traits::{GetSubTypes, TypeChecking},
-                user_type_impl::UserType,
-                BuildStaticType, ScopeApi,
-            },
-            CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
-        },
-    };
-
-    use super::names;
-
-    pub enum PlatformApi {
-        LEFT,
-        RIGHT,
-        LOCK,
-        UNLOCK,
-        SHOW,
-        HIDE,
-        WRITE,
-        CLEAR,
-        APPEND,
-        INSERT,
-        DELETE,
-        FREE,
-        SPAWN,
-        CLOSE,
-        PRINT,
+impl Lib {
+    pub fn from(id: &String) -> Option<Self> {
+        if let Some(value) = CoreFn::from(id) {
+            return Some(Lib::Core(value));
+        }
+        if let Some(value) = StdFn::from(id) {
+            return Some(Lib::Std(value));
+        }
+        None
     }
+}
 
-    impl PlatformApi {
-        pub fn from(id: &ID) -> Option<Self> {
-            match id.as_str() {
-                names::LEFT => Some(Self::LEFT),
-                names::RIGHT => Some(Self::RIGHT),
-                names::LOCK => Some(Self::LOCK),
-                names::UNLOCK => Some(Self::UNLOCK),
-                names::SHOW => Some(Self::SHOW),
-                names::HIDE => Some(Self::HIDE),
-                names::WRITE => Some(Self::WRITE),
-                names::CLEAR => Some(Self::CLEAR),
-                names::APPEND => Some(Self::APPEND),
-                names::INSERT => Some(Self::INSERT),
-                names::DELETE => Some(Self::DELETE),
-                names::FREE => Some(Self::FREE),
-                names::SPAWN => Some(Self::SPAWN),
-                names::CLOSE => Some(Self::CLOSE),
-                names::PRINT => Some(Self::PRINT),
-                _ => None,
-            }
-        }
-
-        fn accept<Scope: ScopeApi>(
-            &self,
-            args: &Vec<Expression<Scope>>,
-            scope: &MutRc<Scope>,
-        ) -> Result<(), SemanticError> {
-            match self {
-                PlatformApi::LEFT
-                | PlatformApi::RIGHT
-                | PlatformApi::LOCK
-                | PlatformApi::UNLOCK
-                | PlatformApi::SHOW
-                | PlatformApi::HIDE
-                | PlatformApi::CLEAR => {
-                    if args.len() != 1 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let arg = args.first().unwrap();
-                    let _ = arg.resolve(
-                        scope,
-                        &Some(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                        )),
-                        &(),
-                    )?;
-                    let arg_type = arg.type_of(&scope.borrow())?;
-                    if !<EType as TypeChecking>::is_u64(&arg_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    Ok(())
-                }
-                PlatformApi::WRITE => {
-                    if args.len() != 2 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let cell = &args[0];
-                    let _ = cell.resolve(
-                        scope,
-                        &Some(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                        )),
-                        &(),
-                    )?;
-                    let cell_type = cell.type_of(&scope.borrow())?;
-                    if !<EType as TypeChecking>::is_u64(&cell_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let data = &args[1];
-                    let _ = data.resolve(
-                        scope,
-                        &Some(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Char).into(),
-                        )),
-                        &(),
-                    )?;
-                    let data_type = data.type_of(&scope.borrow())?;
-                    if !<EType as TypeChecking>::is_char(&data_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    Ok(())
-                }
-                PlatformApi::APPEND => {
-                    if args.len() != 2 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let vector = &args[0];
-                    let _ = vector.resolve(scope, &None, &())?;
-                    let vector_type = vector.type_of(&scope.borrow())?;
-                    let element = &args[1];
-                    let _ = element.resolve(scope, &None, &())?;
-                    let element_type = element.type_of(&scope.borrow())?;
-                    if !<EType as TypeChecking>::is_vec(&vector_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let item_type = <EType as GetSubTypes>::get_item(&vector_type).unwrap();
-                    let _ = item_type.compatible_with(&element_type, &scope.borrow())?;
-                    Ok(())
-                }
-                PlatformApi::INSERT => {
-                    if args.len() != 3 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let map = &args[0];
-                    let _ = map.resolve(scope, &None, &())?;
-                    let map_type = map.type_of(&scope.borrow())?;
-
-                    let expr_key = &args[1];
-                    let _ = expr_key.resolve(scope, &None, &())?;
-                    let expr_key_type = expr_key.type_of(&scope.borrow())?;
-
-                    let expr_value = &args[2];
-                    let _ = expr_value.resolve(scope, &None, &())?;
-                    let expr_value_type = expr_value.type_of(&scope.borrow())?;
-
-                    if !<EType as TypeChecking>::is_map(&map_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let value_type = <EType as GetSubTypes>::get_item(&map_type).unwrap();
-
-                    let key_type = <EType as GetSubTypes>::get_key(&map_type).unwrap();
-
-                    let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
-                    let _ = value_type.compatible_with(&expr_value_type, &scope.borrow())?;
-                    Ok(())
-                }
-                PlatformApi::DELETE => {
-                    if args.len() != 2 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let iterator = &args[0];
-                    let _ = iterator.resolve(scope, &None, &())?;
-                    let iterator_type = iterator.type_of(&scope.borrow())?;
-
-                    if <EType as TypeChecking>::is_map(&iterator_type) {
-                        let key_type = <EType as GetSubTypes>::get_key(&iterator_type).unwrap();
-
-                        let expr_key = &args[1];
-                        let _ = expr_key.resolve(scope, &Some(key_type), &())?;
-                        let expr_key_type = expr_key.type_of(&scope.borrow())?;
-                        // let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
-                    } else if <EType as TypeChecking>::is_vec(&iterator_type) {
-                        let expr_key = &args[1];
-                        let _ = expr_key.resolve(
-                            scope,
-                            &Some(Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
-                                    .into(),
-                            )),
-                            &(),
-                        )?;
-                        let expr_key_type = expr_key.type_of(&scope.borrow())?;
-
-                        if !<EType as TypeChecking>::is_u64(&expr_key_type) {
-                            return Err(SemanticError::IncorrectArguments);
-                        }
-                    } else {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-
-                    Ok(())
-                }
-                PlatformApi::FREE => {
-                    if args.len() != 1 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    let arg = args.first().unwrap();
-                    let _ = arg.resolve(scope, &None, &())?;
-                    let arg_type = arg.type_of(&scope.borrow())?;
-                    if !<EType as TypeChecking>::is_addr(&arg_type) {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    Ok(())
-                }
-                PlatformApi::SPAWN | PlatformApi::CLOSE => {
-                    if args.len() != 0 {
-                        return Err(SemanticError::IncorrectArguments);
-                    }
-                    Ok(())
-                }
-                PlatformApi::PRINT => Ok(()),
-            }
-        }
-
-        pub fn resolve<Scope: ScopeApi>(
-            &self,
-            args: &Vec<Expression<Scope>>,
-            scope: &MutRc<Scope>,
-        ) -> Result<(), SemanticError> {
-            let _ = self.accept(args, scope)?;
-            Ok(())
-        }
-
-        pub fn returns<Scope: ScopeApi>(self) -> EType {
-            Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into())
+impl<Scope: ScopeApi> Resolve<Scope> for Lib {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = Vec<Expression<Scope>>;
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError> {
+        match self {
+            Lib::Core(value) => value.resolve(scope, context, extra),
+            Lib::Std(value) => value.resolve(scope, context, extra),
         }
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Lib {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        match self {
+            Lib::Core(value) => value.type_of(scope),
+            Lib::Std(value) => value.type_of(scope),
+        }
+    }
+}
+
+pub trait GenerateCodePlatform<Scope: ScopeApi> {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
+        params_size: usize,
+    ) -> Result<(), CodeGenerationError>;
+}
+
+impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for Lib {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
+        params_size: usize,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Lib::Core(value) => value.gencode(scope, instructions, params_size),
+            Lib::Std(value) => value.gencode(scope, instructions, params_size),
+        }
+    }
+}
+impl Executable for LibCasm {
+    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+        match self {
+            LibCasm::Core(_) => todo!(),
+            LibCasm::Std(value) => value.execute(program, memory),
+        }
+    }
+}
+
+// pub mod lexem {
+//     pub const LEFT: &str = "left";
+//     pub const RIGHT: &str = "right";
+//     pub const LOCK: &str = "lock";
+//     pub const UNLOCK: &str = "unlock";
+//     pub const SHOW: &str = "show";
+//     pub const HIDE: &str = "hide";
+//     pub const WRITE: &str = "write";
+//     pub const CLEAR: &str = "clear";
+//     pub const APPEND: &str = "append";
+//     pub const INSERT: &str = "insert";
+//     pub const DELETE: &str = "delete";
+//     pub const FREE: &str = "free";
+//     pub const SPAWN: &str = "spawn";
+//     pub const CLOSE: &str = "close";
+//     pub const PRINT: &str = "print";
+// }
+
+// pub trait PlatformExecutor {
+//     fn left(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn right(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn lock(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn unlock(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn show(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn hide(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn write(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn clear(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn append(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn insert(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn delete(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn free(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn spawn(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn close(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn print(memory: &Memory) -> Result<(), RuntimeError>;
+// }
+
+// pub mod api {
+//     use std::{
+//         cell::{Ref, RefCell},
+//         rc::Rc,
+//     };
+
+//     use crate::{
+//         ast::{expressions::Expression, utils::strings::ID},
+//         semantic::{
+//             scope::{
+//                 static_types::{NumberType, PrimitiveType, StaticType},
+//                 type_traits::{GetSubTypes, TypeChecking},
+//                 user_type_impl::UserType,
+//                 BuildStaticType, ScopeApi,
+//             },
+//             CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+//         },
+//     };
+
+//     use super::lexem;
+
+//     pub enum PlatformApi {
+//         LEFT,
+//         RIGHT,
+//         LOCK,
+//         UNLOCK,
+//         SHOW,
+//         HIDE,
+//         WRITE,
+//         CLEAR,
+//         APPEND,
+//         INSERT,
+//         DELETE,
+//         FREE,
+//         SPAWN,
+//         CLOSE,
+//         PRINT,
+//     }
+
+//     impl PlatformApi {
+//         pub fn from(id: &ID) -> Option<Self> {
+//             match id.as_str() {
+//                 lexem::LEFT => Some(Self::LEFT),
+//                 lexem::RIGHT => Some(Self::RIGHT),
+//                 lexem::LOCK => Some(Self::LOCK),
+//                 lexem::UNLOCK => Some(Self::UNLOCK),
+//                 lexem::SHOW => Some(Self::SHOW),
+//                 lexem::HIDE => Some(Self::HIDE),
+//                 lexem::WRITE => Some(Self::WRITE),
+//                 lexem::CLEAR => Some(Self::CLEAR),
+//                 lexem::APPEND => Some(Self::APPEND),
+//                 lexem::INSERT => Some(Self::INSERT),
+//                 lexem::DELETE => Some(Self::DELETE),
+//                 lexem::FREE => Some(Self::FREE),
+//                 lexem::SPAWN => Some(Self::SPAWN),
+//                 lexem::CLOSE => Some(Self::CLOSE),
+//                 lexem::PRINT => Some(Self::PRINT),
+//                 _ => None,
+//             }
+//         }
+
+//         fn accept<Scope: ScopeApi>(
+//             &self,
+//             args: &Vec<Expression<Scope>>,
+//             scope: &MutRc<Scope>,
+//         ) -> Result<(), SemanticError> {
+//             match self {
+//                 PlatformApi::LEFT
+//                 | PlatformApi::RIGHT
+//                 | PlatformApi::LOCK
+//                 | PlatformApi::UNLOCK
+//                 | PlatformApi::SHOW
+//                 | PlatformApi::HIDE
+//                 | PlatformApi::CLEAR => {
+//                     if args.len() != 1 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let arg = args.first().unwrap();
+//                     let _ = arg.resolve(
+//                         scope,
+//                         &Some(Either::Static(
+//                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+//                         )),
+//                         &(),
+//                     )?;
+//                     let arg_type = arg.type_of(&scope.borrow())?;
+//                     if !<EType as TypeChecking>::is_u64(&arg_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     Ok(())
+//                 }
+//                 PlatformApi::WRITE => {
+//                     if args.len() != 2 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let cell = &args[0];
+//                     let _ = cell.resolve(
+//                         scope,
+//                         &Some(Either::Static(
+//                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+//                         )),
+//                         &(),
+//                     )?;
+//                     let cell_type = cell.type_of(&scope.borrow())?;
+//                     if !<EType as TypeChecking>::is_u64(&cell_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let data = &args[1];
+//                     let _ = data.resolve(
+//                         scope,
+//                         &Some(Either::Static(
+//                             StaticType::Primitive(PrimitiveType::Char).into(),
+//                         )),
+//                         &(),
+//                     )?;
+//                     let data_type = data.type_of(&scope.borrow())?;
+//                     if !<EType as TypeChecking>::is_char(&data_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     Ok(())
+//                 }
+//                 PlatformApi::APPEND => {
+//                     if args.len() != 2 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let vector = &args[0];
+//                     let _ = vector.resolve(scope, &None, &())?;
+//                     let vector_type = vector.type_of(&scope.borrow())?;
+//                     let element = &args[1];
+//                     let _ = element.resolve(scope, &None, &())?;
+//                     let element_type = element.type_of(&scope.borrow())?;
+//                     if !<EType as TypeChecking>::is_vec(&vector_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let item_type = <EType as GetSubTypes>::get_item(&vector_type).unwrap();
+//                     let _ = item_type.compatible_with(&element_type, &scope.borrow())?;
+//                     Ok(())
+//                 }
+//                 PlatformApi::INSERT => {
+//                     if args.len() != 3 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let map = &args[0];
+//                     let _ = map.resolve(scope, &None, &())?;
+//                     let map_type = map.type_of(&scope.borrow())?;
+
+//                     let expr_key = &args[1];
+//                     let _ = expr_key.resolve(scope, &None, &())?;
+//                     let expr_key_type = expr_key.type_of(&scope.borrow())?;
+
+//                     let expr_value = &args[2];
+//                     let _ = expr_value.resolve(scope, &None, &())?;
+//                     let expr_value_type = expr_value.type_of(&scope.borrow())?;
+
+//                     if !<EType as TypeChecking>::is_map(&map_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let value_type = <EType as GetSubTypes>::get_item(&map_type).unwrap();
+
+//                     let key_type = <EType as GetSubTypes>::get_key(&map_type).unwrap();
+
+//                     let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
+//                     let _ = value_type.compatible_with(&expr_value_type, &scope.borrow())?;
+//                     Ok(())
+//                 }
+//                 PlatformApi::DELETE => {
+//                     if args.len() != 2 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let iterator = &args[0];
+//                     let _ = iterator.resolve(scope, &None, &())?;
+//                     let iterator_type = iterator.type_of(&scope.borrow())?;
+
+//                     if <EType as TypeChecking>::is_map(&iterator_type) {
+//                         let key_type = <EType as GetSubTypes>::get_key(&iterator_type).unwrap();
+
+//                         let expr_key = &args[1];
+//                         let _ = expr_key.resolve(scope, &Some(key_type), &())?;
+//                         let expr_key_type = expr_key.type_of(&scope.borrow())?;
+//                         // let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
+//                     } else if <EType as TypeChecking>::is_vec(&iterator_type) {
+//                         let expr_key = &args[1];
+//                         let _ = expr_key.resolve(
+//                             scope,
+//                             &Some(Either::Static(
+//                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+//                                     .into(),
+//                             )),
+//                             &(),
+//                         )?;
+//                         let expr_key_type = expr_key.type_of(&scope.borrow())?;
+
+//                         if !<EType as TypeChecking>::is_u64(&expr_key_type) {
+//                             return Err(SemanticError::IncorrectArguments);
+//                         }
+//                     } else {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+
+//                     Ok(())
+//                 }
+//                 PlatformApi::FREE => {
+//                     if args.len() != 1 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     let arg = args.first().unwrap();
+//                     let _ = arg.resolve(scope, &None, &())?;
+//                     let arg_type = arg.type_of(&scope.borrow())?;
+//                     if !<EType as TypeChecking>::is_addr(&arg_type) {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     Ok(())
+//                 }
+//                 PlatformApi::SPAWN | PlatformApi::CLOSE => {
+//                     if args.len() != 0 {
+//                         return Err(SemanticError::IncorrectArguments);
+//                     }
+//                     Ok(())
+//                 }
+//                 PlatformApi::PRINT => Ok(()),
+//             }
+//         }
+
+//         pub fn resolve<Scope: ScopeApi>(
+//             &self,
+//             args: &Vec<Expression<Scope>>,
+//             scope: &MutRc<Scope>,
+//         ) -> Result<(), SemanticError> {
+//             let _ = self.accept(args, scope)?;
+//             Ok(())
+//         }
+
+//         pub fn returns<Scope: ScopeApi>(self) -> EType {
+//             Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into())
+//         }
+//     }
+// }

@@ -10,7 +10,7 @@ use crate::semantic::{
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
-use crate::vm::platform::api::PlatformApi;
+use crate::vm::platform::Lib;
 use std::collections::{HashMap, HashSet};
 use std::{cell::RefCell, rc::Rc};
 impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
@@ -85,7 +85,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                 Ok(Vec::default())
             }
             Pattern::String(value) => {
-                let _ = context.compatible_with(value, &scope.borrow())?;
+                match context {
+                    Some(context) => match context {
+                        Either::Static(context) => match context.as_ref() {
+                            StaticType::String(_) => {}
+                            StaticType::StrSlice(_) => {}
+                            _ => return Err(SemanticError::IncompatibleTypes),
+                        },
+                        _ => return Err(SemanticError::IncompatibleTypes),
+                    },
+                    _ => return Err(SemanticError::IncompatibleTypes),
+                }
+                let _ = value.resolve(scope, &None, extra)?;
                 Ok(Vec::default())
             }
             Pattern::Enum { typename, value } => {
@@ -216,6 +227,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
             Either::Static(value) => match value.as_ref() {
                 StaticType::Primitive(_) => None,
                 StaticType::String(_) => None,
+                StaticType::StrSlice(_) => None,
                 _ => return Err(SemanticError::InvalidPattern),
             },
             Either::User(value) => match value.as_ref() {
@@ -340,8 +352,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {
-                if let Some(api) = PlatformApi::from(id) {
-                    let _ = api.resolve(&self.params, scope)?;
+                if let Some(api) = Lib::from(id) {
+                    let _ = api.resolve(scope, context, &self.params)?;
+                    *self.platform.as_ref().borrow_mut() = Some(api);
                     return Ok(());
                 }
             }

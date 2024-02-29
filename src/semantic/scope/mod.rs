@@ -27,6 +27,11 @@ pub trait BuildStaticType<Scope: ScopeApi> {
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
 
+    fn build_str_slice(
+        type_sig: &types::StrSliceType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError>;
+
     fn build_string(
         type_sig: &types::StringType,
         scope: &Ref<Scope>,

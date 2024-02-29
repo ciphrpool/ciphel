@@ -6,8 +6,8 @@ use crate::semantic::{
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType, StringType,
-    TupleType, VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType,
+    StrSliceType, StringType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
@@ -45,6 +45,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
             StaticType::String(value) => value.merge(other, scope),
+            StaticType::StrSlice(value) => value.merge(other, scope),
         }
     }
 }
@@ -127,6 +128,29 @@ impl<Scope: ScopeApi> MergeType<Scope> for StringType {
             return Err(SemanticError::IncompatibleTypes);
         };
         Ok(Either::Static(StaticType::String(StringType()).into()))
+    }
+}
+
+impl<Scope: ScopeApi> MergeType<Scope> for StrSliceType {
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        if let Either::Static(other_type) = other_type {
+            if let StaticType::StrSlice(StrSliceType { size: other_size }) = other_type.as_ref() {
+                return Ok(Either::Static(
+                    StaticType::StrSlice(StrSliceType {
+                        size: self.size + other_size,
+                    })
+                    .into(),
+                ));
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
     }
 }
 

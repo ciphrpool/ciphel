@@ -129,7 +129,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_product(&right_type)?;
 
-        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         resolve_metadata!(metadata, self, scope, context);
         Ok(())
     }
@@ -156,7 +156,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_add(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -184,7 +184,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_substract(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -224,7 +224,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_shift(&right_type)?;
 
-        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         resolve_metadata!(metadata, self, scope, context);
         Ok(())
     }
@@ -251,7 +251,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_and(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -278,7 +278,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_xor(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -305,7 +305,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_or(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        // let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }

@@ -57,6 +57,15 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         }))
     }
 
+    fn build_str_slice(
+        type_sig: &ast::types::StrSliceType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        Ok(Self::StrSlice(super::StrSliceType {
+            size: type_sig.size,
+        }))
+    }
+
     fn build_string(
         type_sig: &ast::types::StringType,
         scope: &Ref<Scope>,

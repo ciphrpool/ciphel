@@ -8,7 +8,7 @@ use crate::{
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
-    vm::platform::api::PlatformApi,
+    vm::platform::Lib,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
@@ -97,8 +97,8 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {
-                if let Some(api) = PlatformApi::from(id) {
-                    return Ok(api.returns::<Scope>());
+                if let Some(api) = Lib::from(id) {
+                    return api.type_of(scope);
                 }
             }
             _ => {}

@@ -33,6 +33,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
             StaticType::Any => Ok(()),
             StaticType::Error => Ok(()),
             StaticType::String(value) => value.compatible_with(other, scope),
+            StaticType::StrSlice(value) => value.compatible_with(other, scope),
         }
     }
 }

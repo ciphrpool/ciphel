@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StringType, TupleType,
-    Type, Types, VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StrSliceType,
+    StringType, TupleType, Type, Types, VecType,
 };
 use crate::semantic::{
     scope::{type_traits::IsEnum, ScopeApi},
@@ -26,6 +26,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
         match self {
             Type::Primitive(value) => value.resolve(scope, context, extra),
             Type::Slice(value) => value.resolve(scope, context, extra),
+            Type::StrSlice(value) => value.resolve(scope, context, extra),
             Type::UserType(value) => {
                 let _ = scope.borrow().find_type(value)?;
                 Ok(())
@@ -75,6 +76,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
         self.item_type.resolve(scope, context, extra)
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for StrSliceType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for StringType {
     type Output = ();
     type Context = ();

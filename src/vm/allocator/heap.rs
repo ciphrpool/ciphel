@@ -21,6 +21,7 @@ type Pointer = usize;
 pub enum HeapError {
     AllocationError,
     WriteError,
+    ReadError,
     FreeError,
     InvalidPointer,
     Default,
@@ -28,7 +29,7 @@ pub enum HeapError {
 
 impl Into<RuntimeError> for HeapError {
     fn into(self) -> RuntimeError {
-        todo!()
+        RuntimeError::HeapError(self)
     }
 }
 
@@ -706,6 +707,9 @@ impl Heap {
         // if block.data_size() < size + offset {
         //     return Err(HeapError::InvalidPointer);
         // }
+        if address + size >= HEAP_SIZE {
+            return Err(HeapError::ReadError);
+        }
         let res = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();

@@ -29,8 +29,8 @@ use crate::{
 };
 
 use super::{
-    Address, Channel, Closure, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess,
-    Primitive, PtrAccess, Slice, StringData, Struct, Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess, Primitive,
+    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
@@ -44,7 +44,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
             Data::Slice(value) => value.gencode(scope, instructions),
             Data::Vec(value) => value.gencode(scope, instructions),
             Data::Closure(value) => value.gencode(scope, instructions),
-            Data::Chan(value) => value.gencode(scope, instructions),
             Data::Tuple(value) => value.gencode(scope, instructions),
             Data::Address(value) => value.gencode(scope, instructions),
             Data::PtrAccess(value) => value.gencode(scope, instructions),
@@ -54,7 +53,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
             Data::Struct(value) => value.gencode(scope, instructions),
             Data::Union(value) => value.gencode(scope, instructions),
             Data::Enum(value) => value.gencode(scope, instructions),
-            Data::String(value) => value.gencode(scope, instructions),
+            Data::StrSlice(value) => value.gencode(scope, instructions),
         }
     }
 }
@@ -925,7 +924,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
+impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -935,50 +934,58 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StringData {
             .as_ref()
             .try_borrow_mut()
             .map_err(|_| CodeGenerationError::Default)?;
-
-        // Alloc and push heap address on stack
-        borrowed.push(Casm::Alloc(Alloc::Heap {
-            size: align(self.value.len()) + 16,
-        }));
-
-        let len_bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
-        let cap_bytes = (align(self.value.len()) as u64)
-            .to_le_bytes()
-            .as_slice()
-            .to_vec();
-
-        // Push Length on stack
-        borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
-        // Push Capacity on stack
-        borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
         let str_bytes = self.value.clone().into_bytes();
         let bytes_len = str_bytes.len();
         borrowed.push(Casm::Serialize(Serialized { data: str_bytes }));
-
-        drop(borrowed);
-        // Copy data on stack to heap at address
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        // Copy heap address on top of the stack
-        borrowed.push(Casm::Access(Access::Static {
-            address: MemoryAddress::Stack {
-                offset: Offset::ST(-((bytes_len + 16 + 8) as isize)),
-                level: AccessLevel::Direct,
-            },
-            size: 8,
-        }));
-
-        // Take the address on the top of the stack
-        // and copy the data on the stack in the heap at given address and given offset
-        // ( removing the data from the stack )
-        borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
-            //offset: vec_stack_address + 8,
-            size: self.value.len() + 16,
-        }));
-
         Ok(())
+        // let mut borrowed = instructions
+        //     .as_ref()
+        //     .try_borrow_mut()
+        //     .map_err(|_| CodeGenerationError::Default)?;
+
+        // // Alloc and push heap address on stack
+        // borrowed.push(Casm::Alloc(Alloc::Heap {
+        //     size: align(self.value.len()) + 16,
+        // }));
+
+        // let len_bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
+        // let cap_bytes = (align(self.value.len()) as u64)
+        //     .to_le_bytes()
+        //     .as_slice()
+        //     .to_vec();
+
+        // // Push Length on stack
+        // borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
+        // // Push Capacity on stack
+        // borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
+        // let str_bytes = self.value.clone().into_bytes();
+        // let bytes_len = str_bytes.len();
+        // borrowed.push(Casm::Serialize(Serialized { data: str_bytes }));
+
+        // drop(borrowed);
+        // // Copy data on stack to heap at address
+        // let mut borrowed = instructions
+        //     .as_ref()
+        //     .try_borrow_mut()
+        //     .map_err(|_| CodeGenerationError::Default)?;
+        // // Copy heap address on top of the stack
+        // borrowed.push(Casm::Access(Access::Static {
+        //     address: MemoryAddress::Stack {
+        //         offset: Offset::ST(-((bytes_len + 16 + 8) as isize)),
+        //         level: AccessLevel::Direct,
+        //     },
+        //     size: 8,
+        // }));
+
+        // // Take the address on the top of the stack
+        // // and copy the data on the stack in the heap at given address and given offset
+        // // ( removing the data from the stack )
+        // borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+        //     //offset: vec_stack_address + 8,
+        //     size: self.value.len() + 16,
+        // }));
+
+        // Ok(())
     }
 }
 
@@ -988,86 +995,57 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
         scope: &MutRc<Scope>,
         instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
-        match self {
-            Vector::Init {
-                value: data,
-                metadata,
-                length,
-                capacity,
-            } => {
-                let Some(signature) = metadata.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let item_size = {
-                    let Some(item_type) = signature.get_item() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    item_type.size_of()
-                };
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                // Alloc and push heap address on stack
-                borrowed.push(Casm::Alloc(Alloc::Heap {
-                    size: item_size * capacity + 16,
-                }));
+        let Some(signature) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let item_size = {
+            let Some(item_type) = signature.get_item() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            item_type.size_of()
+        };
+        let mut borrowed = instructions
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| CodeGenerationError::Default)?;
 
-                let len_bytes = (*length as u64).to_le_bytes().as_slice().to_vec();
-                let cap_bytes = (*capacity as u64).to_le_bytes().as_slice().to_vec();
+        let len_bytes = (self.length as u64).to_le_bytes().as_slice().to_vec();
+        let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().to_vec();
 
-                // Push Length on stack
-                borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
-                // Push Capacity on stack
-                borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
+        // Push Length on stack
+        borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
+        // Push Capacity on stack
+        borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
 
-                drop(borrowed);
-                for element in data {
-                    let _ = element.gencode(scope, instructions)?;
-                }
-
-                // Copy data on stack to heap at address
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                // Copy heap address on top of the stack
-                borrowed.push(Casm::Access(Access::Static {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-((data.len() * item_size + 16 + 8) as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                    size: 8,
-                }));
-
-                // Take the address on the top of the stack
-                // and copy the data on the stack in the heap at given address and given offset
-                // ( removing the data from the stack )
-                borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
-                    //offset: vec_stack_address + 8,
-                    size: item_size * data.len() + 16,
-                }));
-            }
-            Vector::Def { capacity, metadata } => {
-                let Some(signature) = metadata.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let item_size = {
-                    let Some(item_type) = signature.get_item() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    item_type.size_of()
-                };
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                // Alloc and push heap address on stack
-                borrowed.push(Casm::Alloc(Alloc::Heap {
-                    size: item_size * capacity,
-                }));
-            }
+        drop(borrowed);
+        for element in &self.value {
+            let _ = element.gencode(scope, instructions)?;
         }
+
+        // Copy data on stack to heap at address
+        let mut borrowed = instructions
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| CodeGenerationError::Default)?;
+        // // Copy heap address on top of the stack
+        // borrowed.push(Casm::Access(Access::Static {
+        //     address: MemoryAddress::Stack {
+        //         offset: Offset::ST(-((self.value.len() * item_size + 16 + 8) as isize)),
+        //         level: AccessLevel::Direct,
+        //     },
+        //     size: 8,
+        // }));
+        // Alloc and push heap address on stack
+        borrowed.push(Casm::Alloc(Alloc::Heap {
+            size: item_size * self.capacity + 16,
+        }));
+        // Take the address on the top of the stack
+        // and copy the data on the stack in the heap at given address and given offset
+        // ( removing the data from the stack )
+        borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+            //offset: vec_stack_address + 8,
+            size: item_size * self.value.len() + 16,
+        }));
 
         Ok(())
     }
@@ -1132,16 +1110,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
 }
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
-    fn gencode(
-        &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &MutRc<CasmProgram>,
-    ) -> Result<(), CodeGenerationError> {
-        todo!()
-    }
-}
-
-impl<Scope: ScopeApi> GenerateCode<Scope> for Channel<Scope> {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
@@ -1320,7 +1288,9 @@ mod tests {
         semantic::{
             scope::{
                 scope_impl::Scope,
-                static_types::{PrimitiveType, SliceType, StringType, TupleType, VecType},
+                static_types::{
+                    PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
+                },
                 user_type_impl, ScopeApi,
             },
             Resolve, TypeOf,
@@ -1804,63 +1774,50 @@ mod tests {
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
 
-        let result: Vec<Option<i64>> = match result {
-            Vector::Init {
-                value,
-                metadata,
-                length,
-                capacity,
-            } => value
-                .iter()
-                .map(|e| match e {
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                        match x.get() {
-                            Number::I64(n) => Some(n),
-                            _ => None,
-                        }
+        let result: Vec<Option<i64>> = result
+            .value
+            .iter()
+            .map(|e| match e {
+                Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
+                    match x.get() {
+                        Number::I64(n) => Some(n),
+                        _ => None,
                     }
-                    _ => None,
-                })
-                .collect(),
-            Vector::Def { capacity, metadata } => Vec::default(),
-        };
+                }
+                _ => None,
+            })
+            .collect();
         assert_eq!(result, vec![Some(1), Some(2), Some(3), Some(4)])
     }
 
     #[test]
     fn valid_string() {
-        let (expr, memory) = compile_expression!(StringData, "\"Hello World\"");
+        let (expr, memory) = compile_expression!(StrSlice, "\"Hello World\"");
         let data = clear_stack!(memory);
-        let arr: [u8; 8] = data.try_into().expect("");
-        let heap_address = u64::from_le_bytes(arr);
 
-        let data = memory
-            .heap
-            .read(heap_address as usize, align("Hello World".len()) + 16)
-            .expect("Heap Read should have succeeded");
-        let result: StringData =
-            <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
-                .expect("Deserialization should have succeeded");
+        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+            &&StrSliceType {
+                size: "Hello World".len(),
+            },
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World")
     }
 
     #[test]
     fn valid_string_complex() {
-        let (expr, memory) = compile_expression!(StringData, "\"你好世界\"");
+        let (expr, memory) = compile_expression!(StrSlice, "\"你好世界\"");
         let data = clear_stack!(memory);
 
-        let arr: [u8; 8] = data.try_into().expect("");
-        let heap_address = u64::from_le_bytes(arr);
-
-        let data = memory
-            .heap
-            .read(heap_address as usize, align("你好世界".len()) + 16)
-            .expect("Heap Read should have succeeded");
-
-        let result: StringData =
-            <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
-                .expect("Deserialization should have succeeded");
+        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+            &StrSliceType {
+                size: "你好世界".len(),
+            },
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "你好世界")
     }

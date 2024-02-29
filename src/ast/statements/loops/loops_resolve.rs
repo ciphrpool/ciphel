@@ -38,28 +38,34 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
-        _context: &Self::Context,
-        _extra: &Self::Extra,
+        context: &Self::Context,
+        extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
         Scope: ScopeApi,
     {
-        match self {
-            ForIterator::Id(value) => {
-                let borrowed_scope = scope.borrow();
-                let (var, _) = borrowed_scope.find_var(value)?;
-                // check that the variable is iterable
-                let var_type = var.type_of(&scope.borrow())?;
-                if !<EType as TypeChecking>::is_iterable(&var_type) {
-                    return Err(SemanticError::ExpectedIterable);
-                }
-                Ok(())
-            }
-            ForIterator::Vec(value) => value.resolve(scope, &None, &()),
-            ForIterator::Slice(value) => value.resolve(scope, &None, &()),
-            ForIterator::Receive { addr, .. } => addr.resolve(scope, &None, &()),
+        let _ = self.expr.resolve(scope, &None, extra)?;
+        let expr_type = self.expr.type_of(&scope.borrow())?;
+        if !expr_type.is_iterable() {
+            return Err(SemanticError::ExpectedIterable);
         }
+        Ok(())
+        // match self {
+        //     ForIterator::Id(value) => {
+        //         let borrowed_scope = scope.borrow();
+        //         let (var, _) = borrowed_scope.find_var(value)?;
+        //         // check that the variable is iterable
+        //         let var_type = var.type_of(&scope.borrow())?;
+        //         if !<EType as TypeChecking>::is_iterable(&var_type) {
+        //             return Err(SemanticError::ExpectedIterable);
+        //         }
+        //         Ok(())
+        //     }
+        //     ForIterator::Vec(value) => value.resolve(scope, &None, &()),
+        //     ForIterator::Slice(value) => value.resolve(scope, &None, &()),
+        //     ForIterator::Receive { addr, .. } => addr.resolve(scope, &None, &()),
+        // }
     }
 }
 

@@ -23,7 +23,11 @@ use crate::{
         EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
-        casm::{serialize::Serialized, Casm, CasmProgram},
+        casm::{
+            branch::{Call, Goto, Label},
+            serialize::Serialized,
+            Casm, CasmProgram,
+        },
         vm::CodeGenerationError,
     },
 };
@@ -130,21 +134,45 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                let scope_casm = Rc::new(RefCell::new(CasmProgram::default()));
-                let _ = value.gencode(scope, &scope_casm)?;
+                // let scope_casm = Rc::new(RefCell::new(CasmProgram::default()));
+                // let _ = value.gencode(scope, &scope_casm)?;
 
-                let scope_casm = scope_casm.take();
-                let next_instruction_idx =
-                    instructions.as_ref().borrow().len() + 1 + scope_casm.len();
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Serialize(Serialized {
-                    data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
-                }));
-                borrowed.extend(scope_casm.main);
-
+                // let scope_casm = scope_casm.take();
+                // let next_instruction_idx =
+                //     instructions.as_ref().borrow().len() + 1 + scope_casm.len();
+                // let mut borrowed = instructions
+                //     .as_ref()
+                //     .try_borrow_mut()
+                //     .map_err(|_| CodeGenerationError::Default)?;
+                // borrowed.push(Casm::Serialize(Serialized {
+                //     data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
+                // }));
+                // borrowed.extend(scope_casm.main);
+                let scope_label = Label::gen();
+                let end_scope_label = Label::gen();
+                {
+                    let mut borrowed = instructions
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| CodeGenerationError::Default)?;
+                    borrowed.push(Casm::Goto(Goto {
+                        label: end_scope_label,
+                    }));
+                    borrowed.push_label_id(scope_label, "scope".into());
+                }
+                let _ = value.gencode(scope, &instructions)?;
+                {
+                    let mut borrowed = instructions
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| CodeGenerationError::Default)?;
+                    borrowed.push_label_id(end_scope_label, "end_scope".into());
+                    borrowed.push(Casm::Call(Call {
+                        label: scope_label,
+                        return_size: 0,
+                        param_size: 0,
+                    }))
+                }
                 Ok(())
             }
             Statement::Flow(value) => value.gencode(scope, instructions),

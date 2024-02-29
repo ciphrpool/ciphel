@@ -148,7 +148,10 @@ impl<Scope: ScopeApi> TryParse for CallStat<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::{Cell, RefCell};
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
 
     use crate::{
         ast::{
@@ -197,7 +200,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 
@@ -214,7 +218,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 
@@ -252,7 +257,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 
@@ -269,7 +275,8 @@ mod tests {
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(Cell::new(Number::Unresolved(10)))
                             )))],
-                            metadata: Metadata::default()
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
                         }
                     }))],
 

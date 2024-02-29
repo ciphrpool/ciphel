@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
 use super::{
-    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StringType, TupleType, Type,
-    VecType,
+    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StrSliceType, StringType,
+    TupleType, Type, VecType,
 };
 use crate::semantic::scope::static_types::{self, StaticType};
 
@@ -21,6 +21,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
         match self {
             Type::Primitive(value) => value.type_of(&scope),
             Type::Slice(value) => value.type_of(&scope),
+            Type::StrSlice(value) => value.type_of(&scope),
             Type::UserType(value) => {
                 let user_type = scope.find_type(value)?;
                 let user_type = user_type.type_of(&scope)?;
@@ -96,6 +97,17 @@ impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
         Ok(static_type)
     }
 }
+impl<Scope: ScopeApi> TypeOf<Scope> for StrSliceType {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized,
+    {
+        let static_type: StaticType = StaticType::build_str_slice(&self, scope)?;
+        let static_type = static_type.type_of(&scope)?;
+        Ok(static_type)
+    }
+}
 
 impl<Scope: ScopeApi> TypeOf<Scope> for StringType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
@@ -143,8 +155,30 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::StringType {
     {
         let other_type = other.type_of(&scope)?;
         if let Either::Static(other_type) = other_type {
-            if let StaticType::String(static_types::StringType()) = other_type.as_ref() {
-                Ok(())
+            match other_type.as_ref() {
+                StaticType::String(_) => Ok(()),
+                StaticType::StrSlice(_) => Ok(()),
+                _ => Err(SemanticError::IncompatibleTypes),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+    }
+}
+
+impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::StrSliceType {
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        if let Either::Static(other_type) = other_type {
+            if let StaticType::StrSlice(static_types::StrSliceType { size: other_size }) =
+                other_type.as_ref()
+            {
+                return (other_size == &self.size)
+                    .then_some(())
+                    .ok_or(SemanticError::IncompatibleTypes);
             } else {
                 return Err(SemanticError::IncompatibleTypes);
             }

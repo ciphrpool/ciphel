@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-use super::Flow;
+use super::{CallStat, Flow};
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Flow<Scope> {
     fn gencode(
@@ -16,6 +16,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Flow<Scope> {
         scope: &MutRc<Scope>,
         instructions: &MutRc<CasmProgram>,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        match self {
+            Flow::If(_) => todo!(),
+            Flow::Match(_) => todo!(),
+            Flow::Try(_) => todo!(),
+            Flow::Call(value) => value.gencode(scope, instructions),
+        }
+    }
+}
+
+impl<Scope: ScopeApi> GenerateCode<Scope> for CallStat<Scope> {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &MutRc<CasmProgram>,
+    ) -> Result<(), CodeGenerationError> {
+        self.call.gencode(scope, instructions)
     }
 }

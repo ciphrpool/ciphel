@@ -15,8 +15,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StringType,
-    TupleType, Type, Types, VecType,
+    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -99,6 +99,27 @@ impl TryParse for SliceType {
             |(size, value)| SliceType {
                 size: size as usize,
                 item_type: Box::new(value),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for StrSliceType {
+    /*
+     * @desc Parse Slice types
+     *
+     * @grammar
+     * Slice :=
+     *  | [ num ] str
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
+                wst(lexem::STR),
+            ),
+            |(size, value)| StrSliceType {
+                size: size as usize,
             },
         )(input)
     }

@@ -19,7 +19,7 @@ use crate::{
         TryParse,
     },
     semantic::{scope::ScopeApi, Metadata},
-    vm::allocator::align,
+    vm::{allocator::align, platform},
 };
 use nom::{
     branch::alt,
@@ -32,19 +32,18 @@ use nom::{
 use nom_supreme::error::ErrorTree;
 
 use super::{
-    Address, Channel, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Primitive, PtrAccess, Slice, StringData, Struct, Tuple,
-    Union, VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
+    MultiData, NumAccess, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
+    Variable, Vector,
 };
 impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
+            map(StrSlice::parse, |value| Data::StrSlice(value)),
             map(Slice::parse, |value| Data::Slice(value)),
-            map(StringData::parse, |value| Data::String(value)),
             map(Vector::parse, |value| Data::Vec(value)),
             map(Closure::parse, |value| Data::Closure(value)),
-            map(Channel::parse, |value| Data::Chan(value)),
             map(Tuple::parse, |value| Data::Tuple(value)),
             map(Address::parse, |value| Data::Address(value)),
             map(PtrAccess::parse, |value| Data::PtrAccess(value)),
@@ -263,15 +262,15 @@ impl<Scope: ScopeApi> TryParse for Slice<Scope> {
     }
 }
 
-impl TryParse for StringData {
+impl TryParse for StrSlice {
     /*
      * @desc Parse Static string
      *
      * @grammar
-     * StringData := StaticString
+     * StrSlice := StaticString
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(parse_string, |value| StringData {
+        map(parse_string, |value| StrSlice {
             value,
             metadata: Metadata::default(),
         })(input)
@@ -287,34 +286,22 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
      *
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                preceded(
-                    wst(lexem::platform::VEC),
-                    delimited(
-                        wst(lexem::SQ_BRA_O),
-                        MultiData::parse,
-                        preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
-                    ),
+        map(
+            preceded(
+                wst(platform::utils::lexem::VEC),
+                delimited(
+                    wst(lexem::SQ_BRA_O),
+                    MultiData::parse,
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
                 ),
-                |value| Vector::Init {
-                    capacity: align(*&value.len()),
-                    length: *&value.len(),
-                    value,
-                    metadata: Metadata::default(),
-                },
             ),
-            map(
-                preceded(
-                    wst(lexem::platform::VEC),
-                    delimited(wst(lexem::PAR_O), parse_number, wst(lexem::PAR_C)),
-                ),
-                |capacity| Vector::Def {
-                    capacity: capacity as usize,
-                    metadata: Metadata::default(),
-                },
-            ),
-        ))(input)
+            |value| Vector {
+                capacity: align(*&value.len()),
+                length: *&value.len(),
+                value,
+                metadata: Metadata::default(),
+            },
+        )(input)
     }
 }
 
@@ -440,53 +427,6 @@ impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Channel<Scope> {
-    /*
-     * @desc Parse grammar
-     *
-     * @grammar
-     * ChanData := receive\[ Addr \]\(  UNumber \) | send\[ Addr \] \(  Expr \) | channel \(  StaticString \)
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                tuple((
-                    wst(lexem::platform::RECEIVE),
-                    delimited(wst(lexem::SQ_BRA_O), Address::parse, wst(lexem::SQ_BRA_C)),
-                    delimited(wst(lexem::PAR_O), parse_number, wst(lexem::PAR_C)),
-                )),
-                |(_, addr, timeout)| Channel::Receive {
-                    addr,
-                    timeout: timeout as usize,
-                    metadata: Metadata::default(),
-                },
-            ),
-            map(
-                tuple((
-                    wst(lexem::platform::SEND),
-                    delimited(wst(lexem::SQ_BRA_O), Address::parse, wst(lexem::SQ_BRA_C)),
-                    delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
-                )),
-                |(_, addr, msg)| Channel::Send {
-                    addr,
-                    msg: Box::new(msg),
-                    metadata: Metadata::default(),
-                },
-            ),
-            map(
-                preceded(
-                    wst(lexem::platform::CHAN),
-                    delimited(wst(lexem::PAR_O), parse_string, wst(lexem::PAR_C)),
-                ),
-                |id| Channel::Init {
-                    value: id,
-                    metadata: Metadata::default(),
-                },
-            ),
-        ))(input)
-    }
-}
-
 impl<Scope: ScopeApi> TryParse for Struct<Scope> {
     /*
      * @desc Parse an object
@@ -580,40 +520,23 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
      * KeyData := Number | Bool | Char | String | Addr | EnumData | StaticString
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                preceded(
-                    wst(lexem::platform::MAP),
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(
-                            wst(lexem::COMA),
-                            separated_pair(KeyData::parse, wst(lexem::COLON), Expression::parse),
-                        ),
-                        preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
+        map(
+            preceded(
+                wst(platform::utils::lexem::MAP),
+                delimited(
+                    wst(lexem::BRA_O),
+                    separated_list1(
+                        wst(lexem::COMA),
+                        separated_pair(KeyData::parse, wst(lexem::COLON), Expression::parse),
                     ),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
-                |value| Map::Init {
-                    fields: value,
-                    metadata: Metadata::default(),
-                },
             ),
-            map(
-                preceded(
-                    wst(lexem::platform::MAP),
-                    delimited(
-                        wst(lexem::PAR_O),
-                        separated_pair(parse_number, wst(lexem::COMA), parse_number),
-                        wst(lexem::PAR_C),
-                    ),
-                ),
-                |(length, capacity)| Map::Def {
-                    length: length as usize,
-                    capacity: capacity as usize,
-                    metadata: Metadata::default(),
-                },
-            ),
-        ))(input)
+            |value| Map {
+                fields: value,
+                metadata: Metadata::default(),
+            },
+        )(input)
     }
 }
 
@@ -628,8 +551,8 @@ impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
         alt((
             map(Address::parse, |value| KeyData::Address(value)),
             map(Enum::parse, |value| KeyData::Enum(value)),
-            map(StringData::parse, |value| KeyData::String(value)),
             map(Primitive::parse, |value| KeyData::Primitive(value)),
+            map(StrSlice::parse, |value| KeyData::StrSlice(value)),
         ))(input)
     }
 }
@@ -708,12 +631,12 @@ mod tests {
     }
 
     #[test]
-    fn valid_string() {
-        let res = StringData::parse("\"Hello World\"".into());
+    fn valid_str_slice() {
+        let res = StrSlice::parse("\"Hello World\"".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            StringData {
+            StrSlice {
                 value: "Hello World".to_string(),
                 metadata: Metadata::default()
             },
@@ -727,7 +650,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Vector::Init {
+            Vector {
                 value: vec![
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::Unresolved(2).into()
@@ -745,17 +668,6 @@ mod tests {
             },
             value,
         );
-
-        let res = Vector::<MockScope>::parse("vec(8)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Vector::Def {
-                capacity: 8,
-                metadata: Metadata::default()
-            },
-            value
-        )
     }
 
     #[test]
@@ -788,58 +700,6 @@ mod tests {
             },
             value
         )
-    }
-
-    #[test]
-    fn valid_chan() {
-        let res = Channel::<MockScope>::parse("receive[&chan1](10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Channel::Receive {
-                addr: Address {
-                    value: Variable::Var(VarID {
-                        id: "chan1".into(),
-                        metadata: Metadata::default()
-                    }),
-                    metadata: Metadata::default()
-                },
-                timeout: 10,
-                metadata: Metadata::default()
-            },
-            value
-        );
-
-        let res = Channel::<MockScope>::parse("send[&chan1](10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Channel::Send {
-                addr: Address {
-                    value: Variable::Var(VarID {
-                        id: "chan1".into(),
-                        metadata: Metadata::default()
-                    }),
-                    metadata: Metadata::default()
-                },
-                msg: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                metadata: Metadata::default()
-            },
-            value
-        );
-
-        let res = Channel::<MockScope>::parse("chan(\"ID_CHAN\")".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Channel::Init {
-                value: "ID_CHAN".into(),
-                metadata: Metadata::default(),
-            },
-            value
-        );
     }
 
     #[test]
@@ -901,10 +761,10 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Map::Init {
+            Map {
                 fields: vec![
                     (
-                        KeyData::String(StringData {
+                        KeyData::StrSlice(StrSlice {
                             value: "x".into(),
                             metadata: Metadata::default(),
                         }),
@@ -913,7 +773,7 @@ mod tests {
                         ))))
                     ),
                     (
-                        KeyData::String(StringData {
+                        KeyData::StrSlice(StrSlice {
                             value: "y".into(),
                             metadata: Metadata::default(),
                         }),
@@ -926,18 +786,6 @@ mod tests {
             },
             value
         );
-
-        let res = Map::<MockScope>::parse(r#"map(2,8)"#.into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Map::Def {
-                length: 2,
-                capacity: 8,
-                metadata: Metadata::default()
-            },
-            value
-        )
     }
 
     #[test]
