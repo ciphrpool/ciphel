@@ -22,7 +22,7 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
     fn gencode(
         &self,
         scope: &MutRc<OuterScope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let borrowed = self.inner_scope.borrow();
         let Some(borrowed_scope) = borrowed.as_ref() else {
@@ -31,10 +31,6 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         let borrowed = borrowed_scope.as_ref().borrow();
 
         let vars = borrowed.inner_vars();
-        let mut borrowed_instructions = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
 
         let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
@@ -61,11 +57,10 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             if !var.is_parameter.get().1 {
                 var.address.set(Some(Offset::FZ(offset_idx as isize)));
                 // Alloc and push heap address on stack
-                borrowed_instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+                instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
             }
             offset_idx += var_size;
         }
-        drop(borrowed_instructions);
 
         let inner_scope = self.inner_scope.borrow();
         let Some(inner_scope) = inner_scope.as_ref() else {
@@ -76,13 +71,9 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             let _ = statement.gencode(inner_scope, instructions)?;
         }
 
-        let mut borrowed_instructions = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
         // End Stack Frame
         if return_size == 0 {
-            borrowed_instructions.push(Casm::StackFrame(StackFrame::Clean));
+            instructions.push(Casm::StackFrame(StackFrame::Clean));
         }
         Ok(())
     }

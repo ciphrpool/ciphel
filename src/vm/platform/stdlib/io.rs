@@ -9,7 +9,8 @@ use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::{GenerateCodePlatform, LibCasm};
-use crate::vm::vm::{DeserializeFrom, Executable, Printer, RuntimeError};
+use crate::vm::scheduler::Thread;
+use crate::vm::vm::{DeserializeFrom, Executable, Printer, Runtime, RuntimeError};
 use crate::{
     ast::expressions::Expression,
     semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError},
@@ -32,8 +33,11 @@ pub enum IOCasm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrintCasm {
+    StdOutBufOpen,
+    StdOutBufRevFlush,
+    StdOutBufFlush,
     PrintID(ID),
-    PrintSep,
+    PrintLexem(&'static str),
     PrintU8,
     PrintU16,
     PrintU32,
@@ -99,7 +103,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for IOFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -111,8 +115,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for IOFn {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let printers = param_type.build_printer()?;
-                let mut borrowed = instructions.as_ref().borrow_mut();
-                borrowed.extend(printers);
+                instructions.extend(printers);
 
                 Ok(())
             }
@@ -121,153 +124,98 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for IOFn {
 }
 
 impl Executable for IOCasm {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::Print(print) => print.execute(program, memory),
+            IOCasm::Print(print) => print.execute(thread),
         }
     }
 }
 
 impl Executable for PrintCasm {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             PrintCasm::PrintID(id) => {
-                memory.stdout.as_ref().borrow_mut().push_str(&id);
+                thread.runtime.stdio.stdout.push(&id);
             }
-            PrintCasm::PrintSep => {
-                memory.stdout.as_ref().borrow_mut().push_str("::");
+            PrintCasm::PrintLexem(lexem) => {
+                thread.runtime.stdio.stdout.push(lexem);
             }
             PrintCasm::PrintU8 => {
-                let n = OpPrimitive::get_num1::<u8>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num1::<u8>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU16 => {
-                let n = OpPrimitive::get_num2::<u16>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num2::<u16>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU32 => {
-                let n = OpPrimitive::get_num4::<u32>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num4::<u32>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU64 => {
-                let n = OpPrimitive::get_num8::<u64>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU128 => {
-                let n = OpPrimitive::get_num16::<u128>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num16::<u128>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI8 => {
-                let n = OpPrimitive::get_num1::<i8>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num1::<i8>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI16 => {
-                let n = OpPrimitive::get_num2::<i16>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num2::<i16>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI32 => {
-                let n = OpPrimitive::get_num4::<i32>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num4::<i32>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI64 => {
-                let n = OpPrimitive::get_num8::<i64>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<i64>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI128 => {
-                let n = OpPrimitive::get_num16::<i128>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num16::<i128>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintF64 => {
-                let n = OpPrimitive::get_num8::<f64>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintAddr => {
-                let n = OpPrimitive::get_num8::<u64>(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{:X}", n));
+                let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{:X}", n));
             }
             PrintCasm::PrintChar => {
-                let n = OpPrimitive::get_char(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("'{}'", n));
+                let n = OpPrimitive::get_char(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("'{}'", n));
             }
             PrintCasm::PrintBool => {
-                let n = OpPrimitive::get_bool(memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("{}", n));
+                let n = OpPrimitive::get_bool(&thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintStr(size) => {
-                let n = OpPrimitive::get_str_slice(*size, memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("\"{}\"", n));
+                let n = OpPrimitive::get_str_slice(*size, &thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
             }
             PrintCasm::PrintString => {
-                let size = OpPrimitive::get_num8::<u64>(memory)?;
-                let n = OpPrimitive::get_str_slice(size as usize, memory)?;
-                memory
-                    .stdout
-                    .as_ref()
-                    .borrow_mut()
-                    .push_str(&format!("\"{}\"", n));
+                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let n = OpPrimitive::get_str_slice(size as usize, &thread.memory())?;
+                thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
+            }
+            PrintCasm::StdOutBufOpen => {
+                thread.runtime.stdio.stdout.open_buffer();
+            }
+            PrintCasm::StdOutBufRevFlush => {
+                thread.runtime.stdio.stdout.rev_flush_buffer();
+            }
+            PrintCasm::StdOutBufFlush => {
+                thread.runtime.stdio.stdout.flush_buffer();
             }
         }
-        program.incr();
+        thread.env.program.incr();
         Ok(())
     }
 }
@@ -302,19 +250,23 @@ mod tests {
                 .resolve(&scope, &None, &())
                 .expect("Resolution should have succeeded");
             // Code generation.
-            let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             statement
                 .gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
 
-            let instructions = instructions.as_ref().take();
             assert!(instructions.len() > 0, "No instructions generated");
+
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-            let output = memory.stdout.as_ref().take();
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+
+            thread.run().expect("Execution should have succeeded");
+            let output = runtime.stdio.stdout.take();
             assert_eq!(&output, "64");
         }
     }
@@ -329,19 +281,22 @@ mod tests {
             .resolve(&scope, &None, &())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-        let output = memory.stdout.as_ref().take();
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
         assert_eq!(&output, "'a'");
     }
     #[test]
@@ -355,19 +310,22 @@ mod tests {
                 .resolve(&scope, &None, &())
                 .expect("Resolution should have succeeded");
             // Code generation.
-            let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             statement
                 .gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
 
-            let instructions = instructions.as_ref().take();
             assert!(instructions.len() > 0, "No instructions generated");
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-            let output = memory.stdout.as_ref().take();
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+
+            thread.run().expect("Execution should have succeeded");
+            let output = runtime.stdio.stdout.take();
             assert_eq!(&output, text);
         }
     }
@@ -382,23 +340,62 @@ mod tests {
                 .resolve(&scope, &None, &())
                 .expect("Resolution should have succeeded");
             // Code generation.
-            let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             statement
                 .gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
 
-            let instructions = instructions.as_ref().take();
             assert!(instructions.len() > 0, "No instructions generated");
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-            let output = memory.stdout.as_ref().take();
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+
+            thread.run().expect("Execution should have succeeded");
+            let output = runtime.stdio.stdout.take();
             assert_eq!(&output, text);
         }
     }
 
+    #[test]
+    fn valid_print_strslice_complex() {
+        let statement = Statement::parse(
+            r##"
+        {
+            let x = "Hello World";
+            print(x);
+        }
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
+        assert_eq!(&output, "\"Hello World\"");
+    }
     #[test]
     fn valid_print_string() {
         let statement = Statement::parse(
@@ -417,19 +414,57 @@ mod tests {
             .resolve(&scope, &None, &())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-        let output = memory.stdout.as_ref().take();
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
         assert_eq!(&output, "\"Hello World\"");
+    }
+
+    #[test]
+    fn valid_print_tuple() {
+        let statement = Statement::parse(
+            r##"
+            print((420,true));
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
+        assert_eq!(&output, "(420,true)");
+        // assert_eq!(&output, "\"Hello World\"");
     }
 }

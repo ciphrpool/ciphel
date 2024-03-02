@@ -126,15 +126,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Return::Unit => {
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::StackFrame(StackFrame::Return { return_size: 0 }));
+                instructions.push(Casm::StackFrame(StackFrame::Return { return_size: 0 }));
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
@@ -142,11 +138,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let _ = expr.gencode(scope, instructions)?;
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::StackFrame(StackFrame::Return { return_size }));
+
+                instructions.push(Casm::StackFrame(StackFrame::Return { return_size }));
                 Ok(())
             }
         }

@@ -4,6 +4,7 @@ use crate::{
     semantic::{scope::static_types::st_deserialize::extract_u64, AccessLevel},
     vm::{
         allocator::{stack::Offset, Memory},
+        scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
@@ -23,8 +24,8 @@ impl Label {
 }
 
 impl Executable for Label {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        program.incr();
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        thread.env.program.incr();
         Ok(())
     }
 }
@@ -37,28 +38,43 @@ pub struct Call {
 }
 
 impl Executable for Call {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         if self.param_size != 0 {
-            let data = memory.stack.pop(self.param_size).map_err(|e| e.into())?;
-
-            let _ = memory
+            let data = thread
+                .env
                 .stack
-                .frame(self.return_size, self.param_size, program.cursor.get() + 1)
+                .pop(self.param_size)
                 .map_err(|e| e.into())?;
-            let _ = memory
+
+            let _ = thread
+                .env
+                .stack
+                .frame(
+                    self.return_size,
+                    self.param_size,
+                    thread.env.program.cursor.get() + 1,
+                )
+                .map_err(|e| e.into())?;
+            let _ = thread
+                .env
                 .stack
                 .write(Offset::FP(0), AccessLevel::Direct, &data)
                 .map_err(|e| e.into())?;
         } else {
-            let _ = memory
+            let _ = thread
+                .env
                 .stack
-                .frame(self.return_size, self.param_size, program.cursor.get() + 1)
+                .frame(
+                    self.return_size,
+                    self.param_size,
+                    thread.env.program.cursor.get() + 1,
+                )
                 .map_err(|e| e.into())?;
         }
-        let Some(idx) = program.labels.get(&self.label) else {
+        let Some(idx) = thread.env.program.get(&self.label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        program.cursor.set(*idx);
+        thread.env.program.cursor.set(idx);
         Ok(())
     }
 }
@@ -69,11 +85,11 @@ pub struct Goto {
 }
 
 impl Executable for Goto {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let Some(idx) = program.labels.get(&self.label) else {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let Some(idx) = thread.env.program.get(&self.label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        program.cursor.set(*idx);
+        thread.env.program.cursor.set(idx);
         Ok(())
     }
 }
@@ -84,15 +100,15 @@ pub struct BranchIf {
 }
 
 impl Executable for BranchIf {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let condition = OpPrimitive::get_bool(memory)?;
-        let Some(else_label) = program.labels.get(&self.else_label) else {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let condition = OpPrimitive::get_bool(&thread.memory())?;
+        let Some(else_label) = thread.env.program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        program.cursor.set(if condition {
-            program.cursor.get() + 1
+        thread.env.program.cursor.set(if condition {
+            thread.env.program.cursor.get() + 1
         } else {
-            *else_label
+            else_label
         });
         Ok(())
     }
@@ -118,7 +134,7 @@ pub enum BranchTable {
 }
 
 impl Executable for BranchTable {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             BranchTable::Swith {
                 info,
@@ -127,17 +143,19 @@ impl Executable for BranchTable {
             } => {
                 let data: Vec<u8> = match info {
                     BranchTableExprInfo::Primitive(size) => {
-                        memory.stack.pop(*size).map_err(|e| e.into())?
+                        thread.env.stack.pop(*size).map_err(|e| e.into())?
                     }
                     BranchTableExprInfo::String => {
-                        let heap_address = OpPrimitive::get_num8::<u64>(memory)?;
-                        let data = memory
+                        let heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let data = thread
+                            .runtime
                             .heap
                             .read(heap_address as usize, 16)
                             .expect("Heap Read should have succeeded");
                         let (length, rest) = extract_u64(&data)?;
                         let (capacity, rest) = extract_u64(rest)?;
-                        let data = memory
+                        let data = thread
+                            .runtime
                             .heap
                             .read(heap_address as usize + 16, length as usize)
                             .expect("Heap Read should have succeeded");
@@ -147,37 +165,37 @@ impl Executable for BranchTable {
                 match (table.get(&data), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
-                        let Some(idx) = program.labels.get(&else_label) else {
+                        let Some(idx) = thread.env.program.get(&else_label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        program.cursor.set(*idx);
+                        thread.env.program.cursor.set(idx);
                         Ok(())
                     }
                     (Some(label), _) => {
-                        let Some(idx) = program.labels.get(label) else {
+                        let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        program.cursor.set(*idx);
+                        thread.env.program.cursor.set(idx);
                         Ok(())
                     }
                 }
             }
             BranchTable::Table { table, else_label } => {
-                let variant = OpPrimitive::get_num8::<u64>(memory)?;
+                let variant = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 match (table.get(&variant), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
-                        let Some(idx) = program.labels.get(&else_label) else {
+                        let Some(idx) = thread.env.program.get(&else_label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        program.cursor.set(*idx);
+                        thread.env.program.cursor.set(idx);
                         Ok(())
                     }
                     (Some(label), _) => {
-                        let Some(idx) = program.labels.get(label) else {
+                        let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        program.cursor.set(*idx);
+                        thread.env.program.cursor.set(idx);
                         Ok(())
                     }
                 }

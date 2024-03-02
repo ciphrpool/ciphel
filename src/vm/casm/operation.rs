@@ -8,7 +8,8 @@ use crate::{
     },
     vm::{
         allocator::{Memory, MemoryAddress},
-        vm::{CodeGenerationError, Executable, RuntimeError},
+        scheduler::Thread,
+        vm::{CodeGenerationError, Executable, Runtime, RuntimeError},
     },
 };
 use nom::AsBytes;
@@ -26,9 +27,9 @@ pub struct Operation {
 }
 
 impl Executable for Operation {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let _ = self.kind.execute(program, memory)?;
-        program.incr();
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let _ = self.kind.execute(thread)?;
+        thread.env.program.incr();
         Ok(())
     }
 }
@@ -171,30 +172,30 @@ impl OpPrimitive {
 }
 
 impl Executable for OperationKind {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            OperationKind::Mult(value) => value.execute(program, memory),
-            OperationKind::Div(value) => value.execute(program, memory),
-            OperationKind::Mod(value) => value.execute(program, memory),
-            OperationKind::Addition(value) => value.execute(program, memory),
-            OperationKind::Substraction(value) => value.execute(program, memory),
-            OperationKind::ShiftLeft(value) => value.execute(program, memory),
-            OperationKind::ShiftRight(value) => value.execute(program, memory),
-            OperationKind::BitwiseAnd(value) => value.execute(program, memory),
-            OperationKind::BitwiseXOR(value) => value.execute(program, memory),
-            OperationKind::BitwiseOR(value) => value.execute(program, memory),
-            OperationKind::Cast(value) => value.execute(program, memory),
-            OperationKind::Less(value) => value.execute(program, memory),
-            OperationKind::LessEqual(value) => value.execute(program, memory),
-            OperationKind::Greater(value) => value.execute(program, memory),
-            OperationKind::GreaterEqual(value) => value.execute(program, memory),
-            OperationKind::Equal(value) => value.execute(program, memory),
-            OperationKind::NotEqual(value) => value.execute(program, memory),
-            OperationKind::Inclusion(value) => value.execute(program, memory),
-            OperationKind::LogicalAnd(value) => value.execute(program, memory),
-            OperationKind::LogicalOr(value) => value.execute(program, memory),
-            OperationKind::Minus(value) => value.execute(program, memory),
-            OperationKind::Not(value) => value.execute(program, memory),
+            OperationKind::Mult(value) => value.execute(thread),
+            OperationKind::Div(value) => value.execute(thread),
+            OperationKind::Mod(value) => value.execute(thread),
+            OperationKind::Addition(value) => value.execute(thread),
+            OperationKind::Substraction(value) => value.execute(thread),
+            OperationKind::ShiftLeft(value) => value.execute(thread),
+            OperationKind::ShiftRight(value) => value.execute(thread),
+            OperationKind::BitwiseAnd(value) => value.execute(thread),
+            OperationKind::BitwiseXOR(value) => value.execute(thread),
+            OperationKind::BitwiseOR(value) => value.execute(thread),
+            OperationKind::Cast(value) => value.execute(thread),
+            OperationKind::Less(value) => value.execute(thread),
+            OperationKind::LessEqual(value) => value.execute(thread),
+            OperationKind::Greater(value) => value.execute(thread),
+            OperationKind::GreaterEqual(value) => value.execute(thread),
+            OperationKind::Equal(value) => value.execute(thread),
+            OperationKind::NotEqual(value) => value.execute(thread),
+            OperationKind::Inclusion(value) => value.execute(thread),
+            OperationKind::LogicalAnd(value) => value.execute(thread),
+            OperationKind::LogicalOr(value) => value.execute(thread),
+            OperationKind::Minus(value) => value.execute(thread),
+            OperationKind::Not(value) => value.execute(thread),
         }
     }
 }
@@ -216,10 +217,10 @@ pub struct Mod {
 }
 
 impl Executable for Mult {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::Mult, memory)
+                math_operator(&left, &right, MathOperator::Mult, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -227,10 +228,10 @@ impl Executable for Mult {
 }
 
 impl Executable for Division {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::Div, memory)
+                math_operator(&left, &right, MathOperator::Div, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -238,10 +239,10 @@ impl Executable for Division {
 }
 
 impl Executable for Mod {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::Mod, memory)
+                math_operator(&left, &right, MathOperator::Mod, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -261,15 +262,16 @@ pub struct Substraction {
 }
 
 impl Executable for Addition {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::Add, memory)
+                math_operator(&left, &right, MathOperator::Add, &thread.memory())
             }
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let right = OpPrimitive::get_str_slice(left_size, memory)?;
-                let left = OpPrimitive::get_str_slice(right_size, memory)?;
-                memory
+                let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
+                let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&(left + &right).as_bytes())
                     .map_err(|e| e.into())
@@ -280,10 +282,10 @@ impl Executable for Addition {
 }
 
 impl Executable for Substraction {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::Sub, memory)
+                math_operator(&left, &right, MathOperator::Sub, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -302,10 +304,10 @@ pub struct ShiftRight {
 }
 
 impl Executable for ShiftLeft {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::ShiftLeft, memory)
+                math_operator(&left, &right, MathOperator::ShiftLeft, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -313,10 +315,10 @@ impl Executable for ShiftLeft {
 }
 
 impl Executable for ShiftRight {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::ShiftRight, memory)
+                math_operator(&left, &right, MathOperator::ShiftRight, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -330,10 +332,10 @@ pub struct BitwiseAnd {
 }
 
 impl Executable for BitwiseAnd {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::BitAnd, memory)
+                math_operator(&left, &right, MathOperator::BitAnd, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -347,10 +349,10 @@ pub struct BitwiseXOR {
 }
 
 impl Executable for BitwiseXOR {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::BitXor, memory)
+                math_operator(&left, &right, MathOperator::BitXor, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -364,10 +366,10 @@ pub struct BitwiseOR {
 }
 
 impl Executable for BitwiseOR {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                math_operator(&left, &right, MathOperator::BitOr, memory)
+                math_operator(&left, &right, MathOperator::BitOr, &thread.memory())
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -396,31 +398,34 @@ pub struct GreaterEqual {
 }
 
 impl Executable for Less {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                comparaison_operator(&left, &right, ComparaisonOperator::Less, memory)
+                comparaison_operator(&left, &right, ComparaisonOperator::Less, &thread.memory())
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(memory)?;
-                let left = OpPrimitive::get_bool(memory)?;
-                memory
+                let right = OpPrimitive::get_bool(&thread.memory())?;
+                let left = OpPrimitive::get_bool(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(memory)?;
-                let left = OpPrimitive::get_char(memory)?;
-                memory
+                let right = OpPrimitive::get_char(&thread.memory())?;
+                let left = OpPrimitive::get_char(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let right = OpPrimitive::get_str_slice(left_size, memory)?;
-                let left = OpPrimitive::get_str_slice(right_size, memory)?;
-                memory
+                let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
+                let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
@@ -431,31 +436,37 @@ impl Executable for Less {
 }
 
 impl Executable for LessEqual {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
-            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                comparaison_operator(&left, &right, ComparaisonOperator::LessEqual, memory)
-            }
+            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => comparaison_operator(
+                &left,
+                &right,
+                ComparaisonOperator::LessEqual,
+                &thread.memory(),
+            ),
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(memory)?;
-                let left = OpPrimitive::get_bool(memory)?;
-                memory
+                let right = OpPrimitive::get_bool(&thread.memory())?;
+                let left = OpPrimitive::get_bool(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(memory)?;
-                let left = OpPrimitive::get_char(memory)?;
-                memory
+                let right = OpPrimitive::get_char(&thread.memory())?;
+                let left = OpPrimitive::get_char(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let right = OpPrimitive::get_str_slice(left_size, memory)?;
-                let left = OpPrimitive::get_str_slice(right_size, memory)?;
-                memory
+                let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
+                let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
@@ -466,31 +477,37 @@ impl Executable for LessEqual {
 }
 
 impl Executable for Greater {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
-            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                comparaison_operator(&left, &right, ComparaisonOperator::Greater, memory)
-            }
+            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => comparaison_operator(
+                &left,
+                &right,
+                ComparaisonOperator::Greater,
+                &thread.memory(),
+            ),
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(memory)?;
-                let left = OpPrimitive::get_bool(memory)?;
-                memory
+                let right = OpPrimitive::get_bool(&thread.memory())?;
+                let left = OpPrimitive::get_bool(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(memory)?;
-                let left = OpPrimitive::get_char(memory)?;
-                memory
+                let right = OpPrimitive::get_char(&thread.memory())?;
+                let left = OpPrimitive::get_char(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let right = OpPrimitive::get_str_slice(left_size, memory)?;
-                let left = OpPrimitive::get_str_slice(right_size, memory)?;
-                memory
+                let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
+                let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
@@ -501,31 +518,37 @@ impl Executable for Greater {
 }
 
 impl Executable for GreaterEqual {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.left, self.right) {
-            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
-                comparaison_operator(&left, &right, ComparaisonOperator::GreaterEqual, memory)
-            }
+            (OpPrimitive::Number(left), OpPrimitive::Number(right)) => comparaison_operator(
+                &left,
+                &right,
+                ComparaisonOperator::GreaterEqual,
+                &thread.memory(),
+            ),
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(memory)?;
-                let left = OpPrimitive::get_bool(memory)?;
-                memory
+                let right = OpPrimitive::get_bool(&thread.memory())?;
+                let left = OpPrimitive::get_bool(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(memory)?;
-                let left = OpPrimitive::get_char(memory)?;
-                memory
+                let right = OpPrimitive::get_char(&thread.memory())?;
+                let left = OpPrimitive::get_char(&thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
             }
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
-                let right = OpPrimitive::get_str_slice(left_size, memory)?;
-                let left = OpPrimitive::get_str_slice(right_size, memory)?;
-                memory
+                let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
+                let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
+                thread
+                    .env
                     .stack
                     .push_with(&[(left < right) as u8])
                     .map_err(|e| e.into())
@@ -547,28 +570,28 @@ pub struct NotEqual {
 }
 
 impl Executable for Equal {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         let data = {
-            let right_data = memory.stack.pop(self.right).map_err(|e| e.into())?;
+            let right_data = thread.env.stack.pop(self.right).map_err(|e| e.into())?;
 
-            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
+            let left_data = thread.env.stack.pop(self.left).map_err(|e| e.into())?;
 
             [(left_data == right_data) as u8]
         };
-        memory.stack.push_with(&data).map_err(|e| e.into())
+        thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
 
 impl Executable for NotEqual {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         let data = {
-            let right_data = memory.stack.pop(self.right).map_err(|e| e.into())?;
+            let right_data = thread.env.stack.pop(self.right).map_err(|e| e.into())?;
 
-            let left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
+            let left_data = thread.env.stack.pop(self.left).map_err(|e| e.into())?;
 
             [(left_data != right_data) as u8]
         };
-        memory.stack.push_with(&data).map_err(|e| e.into())
+        thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
 #[derive(Debug, Clone)]
@@ -579,8 +602,8 @@ pub struct Inclusion {
 }
 
 impl Executable for Inclusion {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let _left_data = memory.stack.pop(self.left).map_err(|e| e.into())?;
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let _left_data = thread.env.stack.pop(self.left).map_err(|e| e.into())?;
 
         todo!()
     }
@@ -590,11 +613,11 @@ impl Executable for Inclusion {
 pub struct LogicalAnd();
 
 impl Executable for LogicalAnd {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let right_data = OpPrimitive::get_bool(memory)?;
-        let left_data = OpPrimitive::get_bool(memory)?;
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let right_data = OpPrimitive::get_bool(&thread.memory())?;
+        let left_data = OpPrimitive::get_bool(&thread.memory())?;
         let data = [(left_data && right_data) as u8];
-        memory.stack.push_with(&data).map_err(|e| e.into())
+        thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
 
@@ -602,11 +625,11 @@ impl Executable for LogicalAnd {
 pub struct LogicalOr();
 
 impl Executable for LogicalOr {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let right_data = OpPrimitive::get_bool(memory)?;
-        let left_data = OpPrimitive::get_bool(memory)?;
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let right_data = OpPrimitive::get_bool(&thread.memory())?;
+        let left_data = OpPrimitive::get_bool(&thread.memory())?;
         let data = [(left_data || right_data) as u8];
-        memory.stack.push_with(&data).map_err(|e| e.into())
+        thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
 
@@ -616,82 +639,93 @@ pub struct Minus {
 }
 
 impl Executable for Minus {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match &self.data_type {
             OpPrimitive::Number(number) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(memory)? as i16;
-                    memory
+                    let data = OpPrimitive::get_num1::<u8>(&thread.memory())? as i16;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(memory)? as i32;
-                    memory
+                    let data = OpPrimitive::get_num2::<u16>(&thread.memory())? as i32;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(memory)? as i64;
-                    memory
+                    let data = OpPrimitive::get_num4::<u32>(&thread.memory())? as i64;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(memory)? as i128;
-                    memory
+                    let data = OpPrimitive::get_num8::<u64>(&thread.memory())? as i128;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(memory)? as i128;
-                    memory
+                    let data = OpPrimitive::get_num16::<u128>(&thread.memory())? as i128;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num1::<i8>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num2::<i16>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num4::<i32>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num8::<i64>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num16::<i128>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&(-data).to_le_bytes())
                         .map_err(|e| e.into())
@@ -708,10 +742,10 @@ impl Executable for Minus {
 pub struct Not();
 
 impl Executable for Not {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let data = OpPrimitive::get_bool(memory)?;
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let data = OpPrimitive::get_bool(&thread.memory())?;
         let data = [(!data) as u8];
-        memory.stack.push_with(&data).map_err(|e| e.into())
+        thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
 
@@ -773,128 +807,139 @@ macro_rules! push_data_as_type {
 }
 
 impl Executable for Cast {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(memory)?;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num1::<u8>(&thread.memory())?;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num2::<u16>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num4::<u32>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num8::<u64>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num16::<u128>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num1::<i8>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num2::<i16>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num4::<i32>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num8::<i64>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num16::<i128>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(memory)? as f64;
-                    push_data_as_type!(data, to, memory)
+                    let data = OpPrimitive::get_num8::<f64>(&thread.memory())? as f64;
+                    push_data_as_type!(data, to, thread.memory())
                 }
             },
             (OpPrimitive::Number(number), OpPrimitive::Bool) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num1::<u8>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num2::<u16>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num4::<u32>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num16::<u128>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num1::<i8>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num2::<i16>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num4::<i32>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num8::<i64>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num16::<i128>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(memory)?;
-                    memory
+                    let data = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                    thread
+                        .env
                         .stack
                         .push_with(&[(data == 0.0) as u8])
                         .map_err(|e| e.into())
@@ -906,49 +951,60 @@ impl Executable for Cast {
                 Err(RuntimeError::UnsupportedOperation)
             }
             (OpPrimitive::Bool, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_char(memory)? as u8;
+                let data = OpPrimitive::get_char(&thread.memory())? as u8;
                 match number {
-                    NumberType::U8 => memory
+                    NumberType::U8 => thread
+                        .env
                         .stack
                         .push_with(&data.to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U16 => memory
+                    NumberType::U16 => thread
+                        .env
                         .stack
                         .push_with(&(data as u16).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U32 => memory
+                    NumberType::U32 => thread
+                        .env
                         .stack
                         .push_with(&(data as u32).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U64 => memory
+                    NumberType::U64 => thread
+                        .env
                         .stack
                         .push_with(&(data as u64).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U128 => memory
+                    NumberType::U128 => thread
+                        .env
                         .stack
                         .push_with(&(data as u128).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::I8 => memory
+                    NumberType::I8 => thread
+                        .env
                         .stack
                         .push_with(&(data as i8).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::I16 => memory
+                    NumberType::I16 => thread
+                        .env
                         .stack
                         .push_with(&(data as i16).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::I32 => memory
+                    NumberType::I32 => thread
+                        .env
                         .stack
                         .push_with(&(data as i32).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::I64 => memory
+                    NumberType::I64 => thread
+                        .env
                         .stack
                         .push_with(&(data as i64).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::I128 => memory
+                    NumberType::I128 => thread
+                        .env
                         .stack
                         .push_with(&(data as i128).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::F64 => memory
+                    NumberType::F64 => thread
+                        .env
                         .stack
                         .push_with(&(data as f64).to_le_bytes())
                         .map_err(|e| e.into()),
@@ -958,25 +1014,30 @@ impl Executable for Cast {
             (OpPrimitive::Bool, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Bool, OpPrimitive::String(_)) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_char(memory)? as u8;
+                let data = OpPrimitive::get_char(&thread.memory())? as u8;
                 match number {
-                    NumberType::U8 => memory
+                    NumberType::U8 => thread
+                        .env
                         .stack
                         .push_with(&data.to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U16 => memory
+                    NumberType::U16 => thread
+                        .env
                         .stack
                         .push_with(&(data as u16).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U32 => memory
+                    NumberType::U32 => thread
+                        .env
                         .stack
                         .push_with(&(data as u32).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U64 => memory
+                    NumberType::U64 => thread
+                        .env
                         .stack
                         .push_with(&(data as u64).to_le_bytes())
                         .map_err(|e| e.into()),
-                    NumberType::U128 => memory
+                    NumberType::U128 => thread
+                        .env
                         .stack
                         .push_with(&(data as u128).to_le_bytes())
                         .map_err(|e| e.into()),
@@ -1085,309 +1146,401 @@ mod tests {
 
     #[test]
     fn valid_product() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(20u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(20u32, &thread.memory()).expect("init should have succeeded");
         Mult {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 * 20, res);
     }
 
     #[test]
     fn valid_div() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(2u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(2u32, &thread.memory()).expect("init should have succeeded");
         Division {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 / 2, res);
     }
 
     #[test]
     fn valid_mod() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(2u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(2u32, &thread.memory()).expect("init should have succeeded");
         Mod {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 % 2, res);
     }
 
     #[test]
     fn valid_add() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(20u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(20u32, &thread.memory()).expect("init should have succeeded");
         Addition {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 + 20, res);
     }
 
     #[test]
     fn valid_sub() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         Substraction {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 - 5, res);
     }
 
     #[test]
     fn valid_sl() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         ShiftLeft {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 << 5, res);
     }
 
     #[test]
     fn valid_sr() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(2u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(2u32, &thread.memory()).expect("init should have succeeded");
         ShiftRight {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 >> 2, res);
     }
 
     #[test]
     fn valid_bitand() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         BitwiseAnd {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 & 5, res);
     }
 
     #[test]
     fn valid_bitxor() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         BitwiseXOR {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 ^ 5, res);
     }
 
     #[test]
     fn valid_bitor() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         BitwiseOR {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num4::<u32>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 | 5, res);
     }
 
     #[test]
     fn valid_less() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         Less {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 < 5, res);
     }
 
     #[test]
     fn valid_less_equal() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         LessEqual {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 <= 5, res);
     }
 
     #[test]
     fn valid_greater() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         Greater {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 > 5, res);
     }
 
     #[test]
     fn valid_greater_equal() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         GreaterEqual {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 >= 5, res);
     }
 
     #[test]
     fn valid_equal() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(10u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
         GreaterEqual {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 == 10, res);
     }
 
     #[test]
     fn valid_not_equal() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
-        init_num4(5u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
+        init_num4(5u32, &thread.memory()).expect("init should have succeeded");
         GreaterEqual {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 != 5, res);
     }
 
     #[test]
     fn valid_logical_and() {
-        let memory = Memory::new();
-        init_bool(true, &memory).expect("init should have succeeded");
-        init_bool(true, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_bool(true, &thread.memory()).expect("init should have succeeded");
+        init_bool(true, &thread.memory()).expect("init should have succeeded");
         LogicalAnd()
-            .execute(&CasmProgram::default(), &memory)
+            .execute(&thread)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(true && true, res);
     }
 
     #[test]
     fn valid_logical_or() {
-        let memory = Memory::new();
-        init_bool(true, &memory).expect("init should have succeeded");
-        init_bool(true, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_bool(true, &thread.memory()).expect("init should have succeeded");
+        init_bool(true, &thread.memory()).expect("init should have succeeded");
         LogicalOr()
-            .execute(&CasmProgram::default(), &memory)
+            .execute(&thread)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(true || true, res);
     }
 
     #[test]
     fn valid_minus() {
-        let memory = Memory::new();
-        init_num4(10u32, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num4(10u32, &thread.memory()).expect("init should have succeeded");
         Minus {
             data_type: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&CasmProgram::default(), &memory)
+        .execute(&thread)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num8::<i64>(&memory).expect("result should be of valid type");
+        let res =
+            OpPrimitive::get_num8::<i64>(&thread.memory()).expect("result should be of valid type");
         assert_eq!(-10i64, res);
     }
 
     #[test]
     fn valid_not() {
-        let memory = Memory::new();
-        init_bool(true, &memory).expect("init should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_bool(true, &thread.memory()).expect("init should have succeeded");
         Not()
-            .execute(&CasmProgram::default(), &memory)
+            .execute(&thread)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(&memory).expect("result should be of valid type");
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(false, res);
     }
 }

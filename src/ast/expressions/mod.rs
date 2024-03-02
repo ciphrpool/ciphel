@@ -213,7 +213,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Product(value) => value.gencode(scope, instructions),
@@ -237,7 +237,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.gencode(scope, instructions),

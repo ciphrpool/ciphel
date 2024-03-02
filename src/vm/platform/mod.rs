@@ -16,7 +16,8 @@ use self::{
 use super::{
     allocator::Memory,
     casm::CasmProgram,
-    vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
+    scheduler::Thread,
+    vm::{CodeGenerationError, Executable, GenerateCode, Runtime, RuntimeError},
 };
 
 pub mod core;
@@ -81,7 +82,7 @@ pub trait GenerateCodePlatform<Scope: ScopeApi> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError>;
 }
@@ -90,7 +91,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for Lib {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -100,10 +101,10 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for Lib {
     }
 }
 impl Executable for LibCasm {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             LibCasm::Core(_) => todo!(),
-            LibCasm::Std(value) => value.execute(program, memory),
+            LibCasm::Std(value) => value.execute(thread),
         }
     }
 }

@@ -6,7 +6,8 @@ use crate::{
     vm::{
         allocator::Memory,
         casm::CasmProgram,
-        vm::{CodeGenerationError, Executable, RuntimeError},
+        scheduler::Thread,
+        vm::{CodeGenerationError, Executable, Runtime, RuntimeError},
     },
 };
 
@@ -86,7 +87,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for StdFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -98,9 +99,9 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for StdFn {
 }
 
 impl Executable for StdCasm {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            StdCasm::IO(value) => value.execute(program, memory),
+            StdCasm::IO(value) => value.execute(thread),
             StdCasm::Math(_) => todo!(),
             StdCasm::Strings(_) => todo!(),
         }

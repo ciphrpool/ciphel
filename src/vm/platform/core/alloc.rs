@@ -132,7 +132,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for AllocFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -140,7 +140,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for AllocFn {
             AllocFn::Insert => todo!(),
             AllocFn::Delete => todo!(),
             AllocFn::Free => todo!(),
-            AllocFn::Vec => todo!(),
+            AllocFn::Vec => gencode_vec(scope, instructions, params_size),
             AllocFn::Map => todo!(),
             AllocFn::Chan => todo!(),
             AllocFn::String => gencode_string(scope, instructions, params_size),
@@ -148,16 +148,19 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for AllocFn {
     }
 }
 
-fn gencode_string<Scope: ScopeApi>(
+fn gencode_vec<Scope: ScopeApi>(
     scope: &MutRc<Scope>,
-    instructions: &MutRc<CasmProgram>,
+    instructions: &CasmProgram,
     params_size: usize,
 ) -> Result<(), CodeGenerationError> {
-    let mut borrowed = instructions
-        .as_ref()
-        .try_borrow_mut()
-        .map_err(|_| CodeGenerationError::Default)?;
+    todo!()
+}
 
+fn gencode_string<Scope: ScopeApi>(
+    scope: &MutRc<Scope>,
+    instructions: &CasmProgram,
+    params_size: usize,
+) -> Result<(), CodeGenerationError> {
     let len_bytes = (params_size as u64).to_le_bytes().as_slice().to_vec();
     let cap_bytes = (align(params_size) as u64)
         .to_le_bytes()
@@ -165,44 +168,40 @@ fn gencode_string<Scope: ScopeApi>(
         .to_vec();
 
     // Push Length on stack
-    borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
+    instructions.push(Casm::Serialize(Serialized { data: len_bytes }));
     // Push Capacity on stack
-    borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
-    drop(borrowed);
+    instructions.push(Casm::Serialize(Serialized { data: cap_bytes }));
+
     // Copy data on stack to heap at address
-    let mut borrowed = instructions
-        .as_ref()
-        .try_borrow_mut()
-        .map_err(|_| CodeGenerationError::Default)?;
     // Alloc and push heap address on stack
-    borrowed.push(Casm::Alloc(Alloc::Heap {
+    instructions.push(Casm::Alloc(Alloc::Heap {
         size: align(params_size + 16),
     }));
     // Take the address on the top of the stack
     // and copy the data on the stack in the heap at given address and given offset
     // ( removing the data from the stack ) and put back the address on top of the stack
-    borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+    instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
         //offset: vec_stack_address + 8,
         size: 16,
     }));
-    borrowed.push(Casm::Serialize(Serialized {
+    instructions.push(Casm::Serialize(Serialized {
         data: (16u64).to_le_bytes().to_vec(),
     }));
-    borrowed.push(Casm::Operation(Operation {
+    instructions.push(Casm::Operation(Operation {
         kind: OperationKind::Addition(Addition {
             left: OpPrimitive::Number(NumberType::U64),
             right: OpPrimitive::Number(NumberType::U64),
         }),
     }));
 
-    borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+    instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
         //offset: vec_stack_address + 8,
         size: params_size,
     }));
-    borrowed.push(Casm::Serialize(Serialized {
+    instructions.push(Casm::Serialize(Serialized {
         data: (16u64).to_le_bytes().to_vec(),
     }));
-    borrowed.push(Casm::Operation(Operation {
+    instructions.push(Casm::Operation(Operation {
         kind: OperationKind::Substraction(Substraction {
             left: OpPrimitive::Number(NumberType::U64),
             right: OpPrimitive::Number(NumberType::U64),

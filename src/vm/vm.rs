@@ -1,14 +1,21 @@
 use std::{
     cell::{Cell, RefCell},
+    collections::HashMap,
     rc::Rc,
 };
 
 use crate::semantic::{scope::ScopeApi, MutRc};
 
 use super::{
-    allocator::{heap::HeapError, stack::StackError, Memory},
+    allocator::{
+        heap::{Heap, HeapError},
+        stack::StackError,
+        Memory,
+    },
     casm::{Casm, CasmProgram},
     platform::stdlib::io::PrintCasm,
+    scheduler::{Env, Thread},
+    stdio::StdIO,
 };
 
 #[derive(Debug, Clone)]
@@ -30,16 +37,51 @@ pub enum RuntimeError {
     Default,
 }
 
+#[derive(Debug, Clone)]
+pub struct Runtime {
+    pub heap: Heap,
+    pub stdio: StdIO,
+    pub threads: Vec<Env>,
+}
+
+impl Runtime {
+    pub fn new() -> Self {
+        Self {
+            heap: Heap::new(),
+            stdio: StdIO::default(),
+            threads: Default::default(),
+        }
+    }
+
+    pub fn spawn(&mut self) -> Result<usize, RuntimeError> {
+        let env = Env::default();
+        let tid = self.threads.len();
+        self.threads.push(env);
+        Ok(tid)
+    }
+
+    pub fn get<'runtime>(&'runtime self, tid: usize) -> Result<Thread<'runtime>, RuntimeError> {
+        self.threads
+            .get(tid)
+            .ok_or(RuntimeError::Default)
+            .map(|env| Thread {
+                env,
+                tid,
+                runtime: self,
+            })
+    }
+}
+
 pub trait GenerateCode<Scope: ScopeApi> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 }
 
 pub trait Executable {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError>;
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError>;
 }
 
 pub trait DeserializeFrom<Scope: ScopeApi> {

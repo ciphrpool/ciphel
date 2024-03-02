@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

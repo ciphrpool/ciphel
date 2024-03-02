@@ -1,7 +1,8 @@
 use super::CasmProgram;
 use crate::vm::{
     allocator::Memory,
-    vm::{Executable, RuntimeError},
+    scheduler::Thread,
+    vm::{Executable, Runtime, RuntimeError},
 };
 use std::cell::Cell;
 #[derive(Debug, Clone)]
@@ -11,9 +12,13 @@ pub struct Serialized {
 }
 
 impl Executable for Serialized {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let _ = memory.stack.push_with(&self.data).map_err(|e| e.into())?;
-        program.incr();
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let _ = thread
+            .env
+            .stack
+            .push_with(&self.data)
+            .map_err(|e| e.into())?;
+        thread.env.program.incr();
         Ok(())
     }
 }

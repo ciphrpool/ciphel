@@ -14,7 +14,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Flow<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Flow::If(_) => todo!(),
@@ -29,7 +29,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for CallStat<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         self.call.gencode(scope, instructions)
     }

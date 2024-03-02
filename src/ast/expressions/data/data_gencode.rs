@@ -37,7 +37,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Primitive(value) => value.gencode(scope, instructions),
@@ -62,12 +62,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
         let casm = match self {
             Primitive::Number(data) => match data.get() {
                 super::Number::U8(data) => Serialized {
@@ -112,7 +108,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
                 data: [*data as u8].to_vec(),
             },
         };
-        borrowed.push(Casm::Serialize(casm));
+        instructions.push(Casm::Serialize(casm));
         Ok(())
     }
 }
@@ -172,7 +168,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                     let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                     borrowed.push(Casm::Access(Access::Variable {
+//                     instructions.push(Casm::Access(Access::Variable {
 //                         address: MemoryAddress::Stack { offset },
 //                         size: var_size,
 //                     }))
@@ -193,7 +189,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                     let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                     borrowed.push(Casm::Access(Access::Variable {
+//                     instructions.push(Casm::Access(Access::Variable {
 //                         address: MemoryAddress::Stack {
 //                             offset: field_offset,
 //                         },
@@ -235,7 +231,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                     let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                     borrowed.push(Casm::Access(Access::Variable {
+//                     instructions.push(Casm::Access(Access::Variable {
 //                         address: MemoryAddress::Stack { offset },
 //                         size: var_size,
 //                     }))
@@ -264,7 +260,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                             let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                             borrowed.push(Casm::Access(Access::List {
+//                             instructions.push(Casm::Access(Access::List {
 //                                 address: MemoryAddress::Stack {
 //                                     offset: var_offset + 8,
 //                                 },
@@ -277,7 +273,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                             let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                             borrowed.push(Casm::Access(Access::Variable {
+//                             instructions.push(Casm::Access(Access::Variable {
 //                                 address: MemoryAddress::Stack {
 //                                     offset: var_offset + 16, /* LENGTH + CAPACITY */
 //                                 },
@@ -289,7 +285,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                             let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                             borrowed.push(Casm::Access(Access::List {
+//                             instructions.push(Casm::Access(Access::List {
 //                                 address: MemoryAddress::Heap,
 //                                 size: item_size,
 //                             }));
@@ -337,7 +333,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                 let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
 // .map_err(|_| CodeGenerationError::Default)?;
-//                 borrowed.push(Casm::Access(Access::Variable {
+//                 instructions.push(Casm::Access(Access::Variable {
 //                     address: MemoryAddress::Stack {
 //                         offset: address.as_ref().get(),
 //                     },
@@ -362,7 +358,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
@@ -378,11 +374,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                 let var_type = &var.as_ref().type_sig;
                 let var_size = var_type.size_of();
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Access(Access::Static {
+                instructions.push(Casm::Access(Access::Static {
                     address: MemoryAddress::Stack {
                         offset: address,
                         level,
@@ -407,14 +399,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -443,21 +431,17 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size }));
                 }
                 Ok(())
             }
@@ -475,18 +459,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size }));
                 }
                 Ok(())
             }
@@ -542,18 +522,14 @@ impl<Scope: ScopeApi> Variable<Scope> {
         from_type: EType,
 
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id: _, metadata }) => {
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                borrowed.push(Casm::Access(Access::Runtime { size }));
+                instructions.push(Casm::Access(Access::Runtime { size }));
                 Ok(())
             }
             Variable::FieldAccess(FieldAccess {
@@ -569,14 +545,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -602,21 +574,17 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size }));
                 }
                 Ok(())
             }
@@ -631,18 +599,14 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size }));
                 }
                 Ok(())
             }
@@ -652,7 +616,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
     pub fn locate(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
@@ -668,12 +632,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 let var_type = &var.as_ref().type_sig;
                 let _var_size = var_type.size_of();
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-
-                borrowed.push(Casm::Locate(Locate {
+                instructions.push(Casm::Locate(Locate {
                     address: MemoryAddress::Stack {
                         offset: address,
                         level,
@@ -696,14 +655,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -726,14 +681,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -754,21 +705,17 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (item_size as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Mult(Mult {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -786,7 +733,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
         from_type: EType,
 
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id: _, metadata }) => Ok(()),
@@ -803,14 +750,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -833,14 +776,10 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (offset as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -861,21 +800,17 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Serialize(Serialized {
+                    instructions.push(Casm::Serialize(Serialized {
                         data: (item_size as u64).to_le_bytes().to_vec(),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Mult(Mult {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    borrowed.push(Casm::Operation(Operation {
+                    instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
                             left: OpPrimitive::Number(NumberType::U64),
                             right: OpPrimitive::Number(NumberType::U64),
@@ -893,13 +828,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -913,9 +843,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
         // // Push the size of the slice
         // let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
         // offset += bytes.len();
-        // borrowed.push(Casm::Serialize(Serialized { data: bytes }));
+        // instructions.push(Casm::Serialize(Serialized { data: bytes }));
 
-        drop(borrowed);
         for element in &self.value {
             let _ = element.gencode(scope, instructions)?;
         }
@@ -928,15 +857,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
         let str_bytes = self.value.clone().into_bytes();
         let bytes_len = str_bytes.len();
-        borrowed.push(Casm::Serialize(Serialized { data: str_bytes }));
+        instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
         Ok(())
         // let mut borrowed = instructions
         //     .as_ref()
@@ -944,7 +869,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         //     .map_err(|_| CodeGenerationError::Default)?;
 
         // // Alloc and push heap address on stack
-        // borrowed.push(Casm::Alloc(Alloc::Heap {
+        // instructions.push(Casm::Alloc(Alloc::Heap {
         //     size: align(self.value.len()) + 16,
         // }));
 
@@ -955,12 +880,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         //     .to_vec();
 
         // // Push Length on stack
-        // borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
+        // instructions.push(Casm::Serialize(Serialized { data: len_bytes }));
         // // Push Capacity on stack
-        // borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
+        // instructions.push(Casm::Serialize(Serialized { data: cap_bytes }));
         // let str_bytes = self.value.clone().into_bytes();
         // let bytes_len = str_bytes.len();
-        // borrowed.push(Casm::Serialize(Serialized { data: str_bytes }));
+        // instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
 
         // drop(borrowed);
         // // Copy data on stack to heap at address
@@ -969,7 +894,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         //     .try_borrow_mut()
         //     .map_err(|_| CodeGenerationError::Default)?;
         // // Copy heap address on top of the stack
-        // borrowed.push(Casm::Access(Access::Static {
+        // instructions.push(Casm::Access(Access::Static {
         //     address: MemoryAddress::Stack {
         //         offset: Offset::ST(-((bytes_len + 16 + 8) as isize)),
         //         level: AccessLevel::Direct,
@@ -980,7 +905,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         // // Take the address on the top of the stack
         // // and copy the data on the stack in the heap at given address and given offset
         // // ( removing the data from the stack )
-        // borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+        // instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
         //     //offset: vec_stack_address + 8,
         //     size: self.value.len() + 16,
         // }));
@@ -993,7 +918,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1004,45 +929,29 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
             };
             item_type.size_of()
         };
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
 
         let len_bytes = (self.length as u64).to_le_bytes().as_slice().to_vec();
         let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().to_vec();
 
         // Push Length on stack
-        borrowed.push(Casm::Serialize(Serialized { data: len_bytes }));
+        instructions.push(Casm::Serialize(Serialized { data: len_bytes }));
         // Push Capacity on stack
-        borrowed.push(Casm::Serialize(Serialized { data: cap_bytes }));
+        instructions.push(Casm::Serialize(Serialized { data: cap_bytes }));
 
-        drop(borrowed);
         for element in &self.value {
             let _ = element.gencode(scope, instructions)?;
         }
 
         // Copy data on stack to heap at address
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        // // Copy heap address on top of the stack
-        // borrowed.push(Casm::Access(Access::Static {
-        //     address: MemoryAddress::Stack {
-        //         offset: Offset::ST(-((self.value.len() * item_size + 16 + 8) as isize)),
-        //         level: AccessLevel::Direct,
-        //     },
-        //     size: 8,
-        // }));
+
         // Alloc and push heap address on stack
-        borrowed.push(Casm::Alloc(Alloc::Heap {
+        instructions.push(Casm::Alloc(Alloc::Heap {
             size: item_size * self.capacity + 16,
         }));
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
         // ( removing the data from the stack )
-        borrowed.push(Casm::MemCopy(MemCopy::TakeToHeap {
+        instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
             //offset: vec_stack_address + 8,
             size: item_size * self.value.len() + 16,
         }));
@@ -1055,7 +964,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Tuple<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1080,7 +989,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprScope<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ExprScope::Scope(value) => value.gencode(scope, instructions),
@@ -1093,7 +1002,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        _instructions: &MutRc<CasmProgram>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -1103,7 +1012,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        _instructions: &MutRc<CasmProgram>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -1113,7 +1022,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        _instructions: &MutRc<CasmProgram>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -1123,7 +1032,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Struct<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1150,11 +1059,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Struct<Scope> {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Serialize(Serialized {
+                instructions.push(Casm::Serialize(Serialized {
                     data: vec![0; padding],
                 }));
             }
@@ -1167,7 +1072,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1204,24 +1109,16 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Serialize(Serialized {
+                instructions.push(Casm::Serialize(Serialized {
                     data: vec![0; padding],
                 }));
             }
         }
-        {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push(Casm::Serialize(Serialized {
-                data: (idx as u64).to_le_bytes().to_vec(),
-            }));
-        }
+
+        instructions.push(Casm::Serialize(Serialized {
+            data: (idx as u64).to_le_bytes().to_vec(),
+        }));
+
         Ok(())
     }
 }
@@ -1230,7 +1127,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -1251,11 +1148,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
         else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Serialize(Serialized {
+
+        instructions.push(Casm::Serialize(Serialized {
             data: (index as u64).to_le_bytes().to_vec(),
         }));
         Ok(())
@@ -1266,7 +1160,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Map<Scope> {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
-        _instructions: &MutRc<CasmProgram>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -1297,10 +1191,9 @@ mod tests {
         },
         vm::{
             allocator::Memory,
-            vm::{DeserializeFrom, Executable},
+            vm::{DeserializeFrom, Executable, Runtime},
         },
     };
-
     #[macro_export]
     macro_rules! assert_number {
         ($expr:ident,$data:ident,$num_type:ident) => {
@@ -1330,20 +1223,22 @@ mod tests {
                 .expect("Semantic resolution should have succeeded");
 
             // Code generation.
-            let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             expr.gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
-
-            let instructions = instructions.as_ref().take();
             assert!(instructions.len() > 0);
 
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-
-            (expr, memory)
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+            thread.run().expect("Execution should have succeeded");
+            let memory = &thread.memory();
+            let data = clear_stack!(memory);
+            (expr, data)
         }};
     }
 
@@ -1370,20 +1265,22 @@ mod tests {
                 .expect("Semantic resolution should have succeeded");
 
             // Code generation.
-            let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             expr.gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
-
-            let instructions = instructions.as_ref().take();
             assert!(instructions.len() > 0);
 
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions
-                .execute(&memory)
-                .expect("Execution should have succeeded");
-
-            (expr, memory)
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+            thread.run().expect("Execution should have succeeded");
+            let memory = &thread.memory();
+            let data = clear_stack!(memory);
+            (expr, data)
         }};
     }
 
@@ -1400,63 +1297,50 @@ mod tests {
 
     #[test]
     fn valid_number() {
-        let (expr_i64, memory) = compile_expression!(Primitive, "420");
-        let data_i64 = clear_stack!(memory);
+        let (expr_i64, data_i64) = compile_expression!(Primitive, "420");
         assert_number!(expr_i64, data_i64, I64);
 
-        let (expr_u128, memory) = compile_expression!(Primitive, "420u128");
-        let data_u128 = clear_stack!(memory);
+        let (expr_u128, data_u128) = compile_expression!(Primitive, "420u128");
         assert_number!(expr_u128, data_u128, U128);
 
-        let (expr_u64, memory) = compile_expression!(Primitive, "420u64");
-        let data_u64 = clear_stack!(memory);
+        let (expr_u64, data_u64) = compile_expression!(Primitive, "420u64");
         assert_number!(expr_u64, data_u64, U64);
 
-        let (expr_u32, memory) = compile_expression!(Primitive, "420u32");
-        let data_u32 = clear_stack!(memory);
+        let (expr_u32, data_u32) = compile_expression!(Primitive, "420u32");
         assert_number!(expr_u32, data_u32, U32);
 
-        let (expr_u16, memory) = compile_expression!(Primitive, "420u16");
-        let data_u16 = clear_stack!(memory);
+        let (expr_u16, data_u16) = compile_expression!(Primitive, "420u16");
         assert_number!(expr_u16, data_u16, U16);
 
-        let (expr_u8, memory) = compile_expression!(Primitive, "20u8");
-        let data_u8 = clear_stack!(memory);
+        let (expr_u8, data_u8) = compile_expression!(Primitive, "20u8");
         assert_number!(expr_u8, data_u8, U8);
 
-        let (expr_i128, memory) = compile_expression!(Primitive, "420i128");
-        let data_i128 = clear_stack!(memory);
+        let (expr_i128, data_i128) = compile_expression!(Primitive, "420i128");
         assert_number!(expr_i128, data_i128, I128);
 
-        let (expr_i64, memory) = compile_expression!(Primitive, "420i64");
-        let data_i64 = clear_stack!(memory);
+        let (expr_i64, data_i64) = compile_expression!(Primitive, "420i64");
         assert_number!(expr_i64, data_i64, I64);
 
-        let (expr_i32, memory) = compile_expression!(Primitive, "420i32");
-        let data_i32 = clear_stack!(memory);
+        let (expr_i32, data_i32) = compile_expression!(Primitive, "420i32");
         assert_number!(expr_i32, data_i32, I32);
 
-        let (expr_i16, memory) = compile_expression!(Primitive, "420i16");
-        let data_i16 = clear_stack!(memory);
+        let (expr_i16, data_i16) = compile_expression!(Primitive, "420i16");
         assert_number!(expr_i16, data_i16, I16);
 
-        let (expr_i8, memory) = compile_expression!(Primitive, "20i8");
-        let data_i8 = clear_stack!(memory);
+        let (expr_i8, data_i8) = compile_expression!(Primitive, "20i8");
         assert_number!(expr_i8, data_i8, I8);
     }
 
     #[test]
     fn valid_primitive() {
-        let (expr, memory) = compile_expression!(Primitive, "'a'");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Primitive, "'a'");
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Char,
             &data,
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, expr);
-        let (expr, memory) = compile_expression!(Primitive, "true");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Primitive, "true");
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Bool,
             &data,
@@ -1464,8 +1348,7 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, expr);
 
-        let (expr, memory) = compile_expression!(Primitive, "420.69");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Primitive, "420.69");
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
@@ -1476,8 +1359,7 @@ mod tests {
 
     #[test]
     fn valid_tuple() {
-        let (expr, memory) = compile_expression!(Tuple, "(true,17)");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Tuple, "(true,17)");
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
@@ -1496,8 +1378,7 @@ mod tests {
                 _ => assert!(false, "Expected boolean or u64"),
             }
         }
-        let (expr, memory) = compile_expression!(Tuple, "(420i128,true,17,'a')");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Tuple, "(420i128,true,17,'a')");
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into()),
             Either::Static(StaticType::Primitive(PrimitiveType::Bool).into()),
@@ -1541,7 +1422,7 @@ mod tests {
                 res
             },
         };
-        let (expr, memory) = compile_expression_with_type!(
+        let (expr, data) = compile_expression_with_type!(
             Struct,
             r##"
         Point {
@@ -1551,7 +1432,6 @@ mod tests {
         "##,
             user_type
         );
-        let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -1592,7 +1472,7 @@ mod tests {
                 res
             },
         };
-        let (expr, memory) = compile_expression_with_type!(
+        let (expr, data) = compile_expression_with_type!(
             Struct,
             r##"
         Point {
@@ -1602,7 +1482,6 @@ mod tests {
         "##,
             user_type
         );
-        let data = clear_stack!(memory);
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -1670,14 +1549,13 @@ mod tests {
                 res
             },
         };
-        let (expr, memory) = compile_expression_with_type!(
+        let (expr, data) = compile_expression_with_type!(
             Union,
             r##"
             Geo::Point { x : 2, y : 8}
         "##,
             user_type
         );
-        let data = clear_stack!(memory);
         let result: Union<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -1712,14 +1590,13 @@ mod tests {
                 res
             },
         };
-        let (expr, memory) = compile_expression_with_type!(
+        let (expr, data) = compile_expression_with_type!(
             Enum,
             r##"
             Geo::Point
         "##,
             user_type
         );
-        let data = clear_stack!(memory);
         let result: Enum =
             <user_type_impl::Enum as DeserializeFrom<Scope>>::deserialize_from(&user_type, &data)
                 .expect("Deserialization should have succeeded");
@@ -1728,8 +1605,7 @@ mod tests {
 
     #[test]
     fn valid_slice() {
-        let (expr, memory) = compile_expression!(Slice, "[1,2,3]");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(Slice, "[1,2,3]");
         let result: Slice<Scope> = SliceType {
             size: 3,
             item_type: Box::new(Either::Static(
@@ -1757,9 +1633,34 @@ mod tests {
 
     #[test]
     fn valid_vector() {
-        let (expr, memory) = compile_expression!(Vector, "vec[1,2,3,4]");
-        let data = clear_stack!(memory);
+        // Parse the expression.
+        let expr = Vector::parse("vec[1,2,3,4]".into())
+            .expect("Parsing should have succeeded")
+            .1;
 
+        // Create a new scope.
+        let scope = Scope::new();
+        // Perform semantic check.
+        expr.resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        expr.gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
         let arr: [u8; 8] = data.try_into().expect("");
         let heap_address = u64::from_le_bytes(arr);
 
@@ -1792,8 +1693,7 @@ mod tests {
 
     #[test]
     fn valid_string() {
-        let (expr, memory) = compile_expression!(StrSlice, "\"Hello World\"");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(StrSlice, "\"Hello World\"");
 
         let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
             &&StrSliceType {
@@ -1808,8 +1708,7 @@ mod tests {
 
     #[test]
     fn valid_string_complex() {
-        let (expr, memory) = compile_expression!(StrSlice, "\"你好世界\"");
-        let data = clear_stack!(memory);
+        let (expr, data) = compile_expression!(StrSlice, "\"你好世界\"");
 
         let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
             &StrSliceType {

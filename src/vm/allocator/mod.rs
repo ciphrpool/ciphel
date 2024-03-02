@@ -20,20 +20,7 @@ pub enum MemoryAddress {
 }
 
 #[derive(Debug, Clone)]
-pub struct Memory {
-    pub heap: Heap,
-    pub stack: Stack,
-    pub stdout: MutRc<String>,
-    pub stdin: MutRc<String>,
-}
-
-impl Memory {
-    pub fn new() -> Self {
-        Self {
-            heap: Heap::new(),
-            stack: Stack::new(),
-            stdout: Default::default(),
-            stdin: Default::default(),
-        }
-    }
+pub struct Memory<'runtime> {
+    pub heap: &'runtime Heap,
+    pub stack: &'runtime Stack,
 }

@@ -1,9 +1,12 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::expressions::{
-        data::{Data, Number, Primitive, Slice, StrSlice, Tuple, Vector},
-        Atomic, Expression,
+    ast::{
+        expressions::{
+            data::{Data, Number, Primitive, Slice, StrSlice, Tuple, Vector},
+            Atomic, Expression,
+        },
+        utils::lexem,
     },
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
@@ -25,7 +28,7 @@ use crate::{
             },
             LibCasm,
         },
-        vm::{DeserializeFrom, Printer, RuntimeError},
+        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
     },
 };
 
@@ -68,7 +71,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
 }
 
 impl Printer for StaticType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         match self {
             StaticType::Primitive(value) => value.build_printer(),
             StaticType::Slice(value) => value.build_printer(),
@@ -78,9 +81,15 @@ impl Printer for StaticType {
             StaticType::Fn(value) => todo!(),
             StaticType::Chan(value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(),
-            StaticType::Unit => todo!(),
-            StaticType::Any => todo!(),
-            StaticType::Error => todo!(),
+            StaticType::Unit => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintID("unit".into())),
+            )))]),
+            StaticType::Any => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintID("any".into())),
+            )))]),
+            StaticType::Error => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
+                IOCasm::Print(PrintCasm::PrintID("error".into())),
+            )))]),
             StaticType::Address(value) => todo!(),
             StaticType::Map(value) => todo!(),
         }
@@ -151,7 +160,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for NumberType {
 }
 
 impl Printer for NumberType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         match self {
             NumberType::U8 => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
                 IOCasm::Print(PrintCasm::PrintU8),
@@ -213,7 +222,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
     }
 }
 impl Printer for PrimitiveType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         match self {
             PrimitiveType::Number(value) => value.build_printer(),
             PrimitiveType::Char => Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
@@ -290,49 +299,18 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
     }
 }
 impl Printer for VecType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
-        todo!()
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
+        let mut instructions = Vec::default();
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::SQ_BRA_O),
+        )))));
+
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::SQ_BRA_C),
+        )))));
+        Ok(instructions)
     }
 }
-// impl ToStr for VecType {
-//     fn to_str(&self, bytes: &[u8]) -> Result<String, RuntimeError> {
-//         let (length, rest) = extract_u64(bytes)?;
-//         let (capacity, rest) = extract_u64(rest)?;
-//         let rest = rest;
-
-//         let size = self.0.size_of();
-//         let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = rest
-//             .chunks(size)
-//             .enumerate()
-//             .map(|(idx, bytes)| {
-//                 if idx as u64 >= length {
-//                     Ok(None)
-//                 } else {
-//                     <EType as DeserializeFrom<Scope>>::deserialize_from(&self.0, bytes)
-//                         .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
-//                 }
-//             })
-//             .collect();
-//         if !array.iter().all(|e| e.is_ok()) {
-//             return Err(RuntimeError::Deserialization);
-//         }
-//         Ok(Vector {
-//             value: array
-//                 .into_iter()
-//                 .take_while(|e| e.clone().ok().flatten().is_some())
-//                 .map(|e| e.ok().flatten().unwrap())
-//                 .collect(),
-//             metadata: Metadata {
-//                 info: Rc::new(RefCell::new(Info::Resolved {
-//                     context: None,
-//                     signature: Some(Either::Static(Rc::new(StaticType::Vec(self.clone())))),
-//                 })),
-//             },
-//             length: length as usize,
-//             capacity: capacity as usize,
-//         })
-//     }
-// }
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
     type Output = StrSlice;
@@ -357,7 +335,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
     }
 }
 impl Printer for StringType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         let mut instructions = Vec::default();
         instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer));
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
@@ -384,7 +362,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StrSliceType {
     }
 }
 impl Printer for StrSliceType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         Ok(vec![Casm::Platform(LibCasm::Std(StdCasm::IO(
             IOCasm::Print(PrintCasm::PrintStr(self.size)),
         )))])
@@ -421,8 +399,29 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
     }
 }
 impl Printer for TupleType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
-        todo!()
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
+        let mut instructions = Vec::default();
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::PAR_O),
+        )))));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufOpen,
+        )))));
+        for (idx, item) in self.0.iter().enumerate().rev() {
+            instructions.extend(item.build_printer()?);
+            if idx > 0 {
+                instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                    PrintCasm::PrintLexem(lexem::COMA),
+                )))));
+            }
+        }
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufRevFlush,
+        )))));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::PAR_C),
+        )))));
+        Ok(instructions)
     }
 }
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
@@ -460,7 +459,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
     }
 }
 impl Printer for SliceType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
         todo!()
     }
 }

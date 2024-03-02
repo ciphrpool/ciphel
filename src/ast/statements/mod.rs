@@ -130,7 +130,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
@@ -144,30 +144,22 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
                 //     .as_ref()
                 //     .try_borrow_mut()
                 //     .map_err(|_| CodeGenerationError::Default)?;
-                // borrowed.push(Casm::Serialize(Serialized {
+                // instructions.push(Casm::Serialize(Serialized {
                 //     data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
                 // }));
                 // borrowed.extend(scope_casm.main);
                 let scope_label = Label::gen();
                 let end_scope_label = Label::gen();
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push(Casm::Goto(Goto {
+                    instructions.push(Casm::Goto(Goto {
                         label: end_scope_label,
                     }));
-                    borrowed.push_label_id(scope_label, "scope".into());
+                    instructions.push_label_id(scope_label, "scope".into());
                 }
                 let _ = value.gencode(scope, &instructions)?;
                 {
-                    let mut borrowed = instructions
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| CodeGenerationError::Default)?;
-                    borrowed.push_label_id(end_scope_label, "end_scope".into());
-                    borrowed.push(Casm::Call(Call {
+                    instructions.push_label_id(end_scope_label, "end_scope".into());
+                    instructions.push(Casm::Call(Call {
                         label: scope_label,
                         return_size: 0,
                         param_size: 0,

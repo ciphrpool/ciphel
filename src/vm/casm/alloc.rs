@@ -9,6 +9,7 @@ use crate::{
             Memory, MemoryAddress,
         },
         casm::operation::OpPrimitive,
+        scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
@@ -20,19 +21,19 @@ pub enum Alloc {
 }
 
 impl Executable for Alloc {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
-                let address = memory.heap.alloc(*size).map_err(|e| e.into())?;
+                let address = thread.runtime.heap.alloc(*size).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
                 let data = (address as u64).to_le_bytes().to_vec();
-                let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                program.incr();
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                thread.env.program.incr();
                 Ok(())
             }
             Alloc::Stack { size } => {
-                let _ = memory.stack.push(*size).map_err(|e| e.into())?;
-                program.incr();
+                let _ = thread.env.stack.push(*size).map_err(|e| e.into())?;
+                thread.env.program.incr();
                 Ok(())
             }
         }
@@ -53,11 +54,15 @@ pub enum StackFrame {
 }
 
 impl Executable for StackFrame {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             StackFrame::Clean => {
-                program.cursor.set(memory.stack.registers.link.get());
-                let _ = memory.stack.clean().map_err(|e| e.into())?;
+                thread
+                    .env
+                    .program
+                    .cursor
+                    .set(thread.env.stack.registers.link.get());
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
                 Ok(())
             }
             StackFrame::Set {
@@ -65,26 +70,32 @@ impl Executable for StackFrame {
                 params_size,
                 cursor_offset,
             } => {
-                let _ = memory
+                let _ = thread
+                    .env
                     .stack
                     .frame(
                         *return_size,
                         *params_size,
-                        program.cursor.get() + cursor_offset,
+                        thread.env.program.cursor.get() + cursor_offset,
                     )
                     .map_err(|e| e.into())?;
-                program.incr();
+                thread.env.program.incr();
                 Ok(())
             }
             StackFrame::Return { return_size } => {
-                let return_data = memory.stack.pop(*return_size).map_err(|e| e.into())?;
+                let return_data = thread.env.stack.pop(*return_size).map_err(|e| e.into())?;
 
-                let _ = memory
+                let _ = thread
+                    .env
                     .stack
                     .write(Offset::FB(0), AccessLevel::Direct, &return_data)
                     .map_err(|e| e.into())?;
-                program.cursor.set(memory.stack.registers.link.get());
-                let _ = memory.stack.clean().map_err(|e| e.into())?;
+                thread
+                    .env
+                    .program
+                    .cursor
+                    .set(thread.env.stack.registers.link.get());
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
                 Ok(())
             }
         }
@@ -98,33 +109,38 @@ pub enum Access {
 }
 
 impl Executable for Access {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             Access::Static { address, size } => match address {
                 MemoryAddress::Heap => {
-                    let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
-                    let _data = memory.heap.read(address, *size).map_err(|err| err.into())?;
+                    let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                    let _data = thread
+                        .runtime
+                        .heap
+                        .read(address, *size)
+                        .map_err(|err| err.into())?;
                     todo!("Copy data onto stack");
-                    program.incr();
+                    thread.env.program.incr();
                     Ok(())
                 }
                 MemoryAddress::Stack { offset, level } => {
-                    let data = memory
+                    let data = thread
+                        .env
                         .stack
                         .read(*offset, *level, *size)
                         .map_err(|err| err.into())?;
                     // Copy data onto stack;
-                    let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                    program.incr();
+                    let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                    thread.env.program.incr();
                     Ok(())
                 }
             },
             Access::Runtime { size: _ } => {
-                let _address = OpPrimitive::get_num8::<u64>(memory)?;
+                let _address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 let _address = {
                     todo!("Convert u64 to memory address by differenting stack pointer and heap pointer");
                 };
-                program.incr();
+                thread.env.program.incr();
                 Ok(())
             }
         }
@@ -138,8 +154,9 @@ pub struct Assign {
 }
 
 impl Executable for Assign {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
-        let data = memory
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let data = thread
+            .env
             .stack
             .read(
                 self.stack_slice.offset,
@@ -150,18 +167,23 @@ impl Executable for Assign {
 
         match self.address {
             MemoryAddress::Heap => {
-                let address = OpPrimitive::get_num8::<u64>(memory)? as usize;
-                let _ = memory.heap.write(address, &data).map_err(|e| e.into())?;
+                let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(address, &data)
+                    .map_err(|e| e.into())?;
             }
             MemoryAddress::Stack { offset, level } => {
-                let _ = memory
+                let _ = thread
+                    .env
                     .stack
                     .write(offset, level, &data)
                     .map_err(|e| e.into())?;
             }
         };
 
-        program.incr();
+        thread.env.program.incr();
         Ok(())
     }
 }

@@ -4,6 +4,7 @@ use crate::vm::{
         stack::{Offset, StackError},
         Memory, MemoryAddress,
     },
+    scheduler::Thread,
     vm::{Executable, RuntimeError},
 };
 use num_traits::ToBytes;
@@ -15,22 +16,23 @@ pub struct Locate {
 }
 
 impl Executable for Locate {
-    fn execute(&self, program: &CasmProgram, memory: &Memory) -> Result<(), RuntimeError> {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match &self.address {
             MemoryAddress::Heap => {
                 // let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
                 todo!();
-                program.incr();
+                thread.env.program.incr();
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
-                let offset = memory
+                let offset = thread
+                    .env
                     .stack
                     .compute_absolute_address(*offset, *level)
                     .map_err(|e| e.into())?;
                 let data = (offset as u64).to_le_bytes();
-                let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                program.incr();
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                thread.env.program.incr();
                 Ok(())
             }
         }

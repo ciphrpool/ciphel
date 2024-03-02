@@ -33,7 +33,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprFlow<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ExprFlow::If(value) => value.gencode(scope, instructions),
@@ -48,7 +48,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -60,70 +60,48 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         let end_else_scope_label = Label::gen();
         let end_ifelse_label = Label::gen();
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-
-            let if_label = borrowed.push_label("If".into());
+            let if_label = instructions.push_label("If".into());
         }
         let _ = self.condition.gencode(scope, &instructions)?;
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push(Casm::If(BranchIf { else_label }));
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push(Casm::If(BranchIf { else_label }));
+            instructions.push(Casm::Goto(Goto {
                 label: end_if_scope_label,
             }));
-            borrowed.push_label_id(if_scope_label, "if_scope".into());
+            instructions.push_label_id(if_scope_label, "if_scope".into());
         }
         let _ = self.then_branch.gencode(scope, &instructions)?;
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push_label_id(end_if_scope_label, "end_if_scope".into());
-            borrowed.push(Casm::Call(Call {
+            instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
+            instructions.push(Casm::Call(Call {
                 label: if_scope_label,
                 return_size,
                 param_size: 0,
             }));
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push(Casm::Goto(Goto {
                 label: end_ifelse_label,
             }));
         }
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push_label_id(else_label, "else".into());
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push_label_id(else_label, "else".into());
+            instructions.push(Casm::Goto(Goto {
                 label: end_else_scope_label,
             }));
-            borrowed.push_label_id(else_scope_label, "else_scope".into());
+            instructions.push_label_id(else_scope_label, "else_scope".into());
         }
         let _ = self.else_branch.gencode(scope, &instructions)?;
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-
-            borrowed.push_label_id(end_else_scope_label, "end_else_scope".into());
-            borrowed.push(Casm::Call(Call {
+            instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
+            instructions.push(Casm::Call(Call {
                 label: else_scope_label,
                 return_size,
                 param_size: 0,
             }));
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push(Casm::Goto(Goto {
                 label: end_ifelse_label,
             }));
 
-            borrowed.push_label_id(end_ifelse_label, "end_if_else".into());
+            instructions.push_label_id(end_ifelse_label, "end_if_else".into());
         }
 
         Ok(())
@@ -134,7 +112,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -158,14 +136,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 }
             },
         };
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
 
         let end_match_label = Label::gen();
-        let match_label = borrowed.push_label("Match".into());
-        drop(borrowed);
+        let match_label = instructions.push_label("Match".into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
         let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.patterns.len());
@@ -248,11 +221,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 Either::User(_) => return Err(CodeGenerationError::UnresolvedError),
             };
 
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push(Casm::Switch(BranchTable::Swith {
+            instructions.push(Casm::Switch(BranchTable::Swith {
                 info,
                 table: switch,
                 else_label,
@@ -260,82 +229,58 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
         } else {
             // Switch with branch table statement
             // extrart variant from matched expression
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push(Casm::Switch(BranchTable::Table { table, else_label }))
+
+            instructions.push(Casm::Switch(BranchTable::Table { table, else_label }))
         }
         for (idx, (PatternExpr { pattern, expr }, label)) in
             self.patterns.iter().zip(cases).enumerate()
         {
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-            borrowed.push_label_id(label, format!("match_case_{}", idx).into());
+            instructions.push_label_id(label, format!("match_case_{}", idx).into());
             let end_scope_label = Label::gen();
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push(Casm::Goto(Goto {
                 label: end_scope_label,
             }));
-            let scope_label = borrowed.push_label("Scope".into());
-            drop(borrowed);
+            let scope_label = instructions.push_label("Scope".into());
             let _ = expr.gencode(scope, instructions)?;
 
             let param_size = expr
                 .parameters_size()
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-            let mut borrowed = instructions
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| CodeGenerationError::Default)?;
-
-            borrowed.push_label_id(end_scope_label, "End_Scope".into());
-            borrowed.push(Casm::Call(Call {
+            instructions.push_label_id(end_scope_label, "End_Scope".into());
+            instructions.push(Casm::Call(Call {
                 label: scope_label,
                 return_size,
                 param_size,
             }));
-            borrowed.push(Casm::Goto(Goto {
+            instructions.push(Casm::Goto(Goto {
                 label: end_match_label,
             }));
         }
         match &self.else_branch {
             Some(else_branch) => {
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push_label_id(else_label.unwrap(), "else_case".into());
+                instructions.push_label_id(else_label.unwrap(), "else_case".into());
                 let end_scope_label = Label::gen();
-                borrowed.push(Casm::Goto(Goto {
+                instructions.push(Casm::Goto(Goto {
                     label: end_scope_label,
                 }));
-                let scope_label = borrowed.push_label("Scope".into());
-                drop(borrowed);
+                let scope_label = instructions.push_label("Scope".into());
                 let _ = else_branch.gencode(scope, instructions)?;
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push_label_id(end_scope_label, "End_Scope".into());
-                borrowed.push(Casm::Call(Call {
+
+                instructions.push_label_id(end_scope_label, "End_Scope".into());
+                instructions.push(Casm::Call(Call {
                     label: scope_label,
                     return_size,
                     param_size: 0,
                 }));
-                borrowed.push(Casm::Goto(Goto {
+                instructions.push(Casm::Goto(Goto {
                     label: end_match_label,
                 }));
             }
             None => {}
         }
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push_label_id(end_match_label, "end_match_else".into());
+
+        instructions.push_label_id(end_match_label, "end_match_else".into());
         Ok(())
     }
 }
@@ -344,7 +289,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for TryExpr<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -354,7 +299,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let params_size: usize = self
             .params
@@ -398,7 +343,7 @@ mod tests {
         },
         vm::{
             allocator::Memory,
-            vm::{DeserializeFrom, Executable},
+            vm::{DeserializeFrom, Executable, Runtime},
         },
     };
 
@@ -433,25 +378,28 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_else = CasmProgram::default();
         statement_else
             .gencode(&scope, &instructions_else)
             .expect("Code generation should have succeeded");
 
-        let instructions_then = instructions_then.as_ref().take();
-        let instructions_else = instructions_else.as_ref().take();
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions_then
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_then);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -459,11 +407,16 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
 
-        let memory = Memory::new();
-        instructions_else
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_else);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -507,25 +460,28 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_else = CasmProgram::default();
         statement_else
             .gencode(&scope, &instructions_else)
             .expect("Code generation should have succeeded");
 
-        let instructions_then = instructions_then.as_ref().take();
-        let instructions_else = instructions_else.as_ref().take();
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions_then
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_then);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -533,11 +489,16 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
 
-        let memory = Memory::new();
-        instructions_else
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_else);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -613,26 +574,28 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_else = CasmProgram::default();
         statement_else
             .gencode(&scope, &instructions_else)
             .expect("Code generation should have succeeded");
 
-        let instructions_then = instructions_then.as_ref().take();
-        let instructions_else = instructions_else.as_ref().take();
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions_then
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_then);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -656,12 +619,16 @@ mod tests {
         }
 
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions_else
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_else);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -705,20 +672,23 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
 
-        let instructions_then = instructions_then.as_ref().take();
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions_then
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions_then);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -804,19 +774,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -902,19 +875,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -943,19 +919,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -984,19 +963,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -1025,19 +1007,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -1066,19 +1051,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
-
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,

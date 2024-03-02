@@ -54,7 +54,7 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for StringsFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
         params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()

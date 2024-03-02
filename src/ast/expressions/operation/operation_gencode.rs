@@ -21,7 +21,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata } => {
@@ -31,11 +31,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
                 dbg!(&value_type);
                 let _ = value.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Minus(Minus {
                         data_type: value_type.try_into()?,
                     }),
@@ -46,11 +42,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
             super::UnaryOperation::Not { value, metadata } => {
                 let _ = value.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Not(Not()),
                     // result: OpPrimitive::Number(NumberType::U64),
                 }));
@@ -64,7 +56,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Product::Mult {
@@ -81,11 +73,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -108,11 +96,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Div(Division {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -135,11 +119,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mod(Mod {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -156,7 +136,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Addition<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -167,11 +147,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Addition<Scope> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -186,7 +162,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Substraction<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -197,11 +173,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Substraction<Scope> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Substraction(Substraction {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -216,7 +188,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Shift<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Shift::Left {
@@ -233,11 +205,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Shift<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::ShiftLeft(ShiftLeft {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -260,11 +228,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Shift<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::ShiftRight(ShiftRight {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -281,7 +245,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseAnd<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -292,11 +256,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseAnd<Scope> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseAnd(BitwiseAnd {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -311,7 +271,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseXOR<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -322,11 +282,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseXOR<Scope> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseXOR(BitwiseXOR {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -341,7 +297,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseOR<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -352,11 +308,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseOR<Scope> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseOR(BitwiseOR {
                 left: left_type.try_into()?,
                 right: right_type.try_into()?,
@@ -371,7 +323,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -381,11 +333,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
         };
         let _ = self.left.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Cast(Cast {
                 from: left_type.try_into()?,
                 to: right_type.try_into()?,
@@ -400,7 +348,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Comparaison::Less {
@@ -417,11 +365,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Less(Less {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -444,11 +388,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::LessEqual(LessEqual {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -471,11 +411,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Greater(Greater {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -498,11 +434,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::GreaterEqual(GreaterEqual {
                         left: left_type.try_into()?,
                         right: right_type.try_into()?,
@@ -519,7 +451,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Equation::Equal {
@@ -536,11 +468,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Equal(Equal {
                         left: left_type.size_of(),
                         right: right_type.size_of(),
@@ -563,11 +491,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
                 let _ = left.gencode(scope, instructions)?;
                 let _ = right.gencode(scope, instructions)?;
 
-                let mut borrowed = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-                borrowed.push(Casm::Operation(Operation {
+                instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::NotEqual(NotEqual {
                         left: left_type.size_of(),
                         right: right_type.size_of(),
@@ -584,7 +508,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Inclusion<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -594,7 +518,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -604,11 +528,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
         };
         let _ = self.left.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalAnd(LogicalAnd()),
             // result: OpPrimitive::Number(NumberType::U64),
         }));
@@ -620,7 +540,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalOr<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -630,11 +550,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalOr<Scope> {
         };
         let _ = self.left.gencode(scope, instructions)?;
 
-        let mut borrowed = instructions
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| CodeGenerationError::Default)?;
-        borrowed.push(Casm::Operation(Operation {
+        instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalOr(LogicalOr()),
             // result: OpPrimitive::Number(NumberType::U64),
         }));
@@ -665,7 +581,10 @@ mod tests {
             },
             Resolve,
         },
-        vm::{allocator::Memory, vm::DeserializeFrom},
+        vm::{
+            allocator::Memory,
+            vm::{DeserializeFrom, Runtime},
+        },
     };
 
     use super::*;
@@ -681,17 +600,23 @@ mod tests {
                 .expect("Semantic resolution should have succeeded");
 
             // Code generation.
-            let instructions = std::rc::Rc::new(std::cell::RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             expr.gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
 
-            let instructions = instructions.borrow().clone();
             assert!(instructions.len() > 0, "No instructions generated");
 
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions.execute(&memory).expect("Execution should have succeeded");
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+            thread.run().expect("Execution should have succeeded");
+            let memory = &thread.memory();
             let data = clear_stack!(memory);
+
             let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
                 &PrimitiveType::Number(NumberType::$size),
                 &data,
@@ -714,17 +639,23 @@ mod tests {
                 .expect("Semantic resolution should have succeeded");
 
             // Code generation.
-            let instructions = std::rc::Rc::new(std::cell::RefCell::new(CasmProgram::default()));
+            let instructions = CasmProgram::default();
             expr.gencode(&scope, &instructions)
                 .expect("Code generation should have succeeded");
 
-            let instructions = instructions.borrow().clone();
             assert!(instructions.len() > 0, "No instructions generated");
 
             // Execute the instructions.
-            let memory = Memory::new();
-            instructions.execute(&memory).expect("Execution should have succeeded");
+            let mut runtime = Runtime::new();
+            let tid = runtime
+                .spawn()
+                .expect("Thread spawning should have succeeded");
+            let thread = runtime.get(tid).expect("Thread should exist");
+            thread.push_instr(instructions);
+            thread.run().expect("Execution should have succeeded");
+            let memory = &thread.memory();
             let data = clear_stack!(memory);
+
             let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
                 &PrimitiveType::Bool,
                 &data,
@@ -1481,18 +1412,22 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         expr.gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
             &StrSliceType {
                 size: "Hello ".len() + "world".len(),

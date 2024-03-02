@@ -20,7 +20,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignation<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
         // match &self.right {
@@ -41,23 +41,20 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Assignee::Variable(variable) => {
                 // Push the address of the variable on the stack
                 let _ = variable.locate(scope, instructions)?;
-                let mut borrowed_instructions = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
+
                 let var_size = {
                     let Some(var_type) = variable.signature() else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
                     var_type.size_of()
                 };
-                borrowed_instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))
+                instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))
             }
             Assignee::PtrAccess(_) => todo!(),
         }
@@ -69,27 +66,17 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
-        instructions: &MutRc<CasmProgram>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             AssignValue::Scope(value) => {
-                let mut borrowed_instructions = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
-
                 let end_scope_label = Label::gen();
-                borrowed_instructions.push(Casm::Goto(Goto {
+                instructions.push(Casm::Goto(Goto {
                     label: end_scope_label,
                 }));
-                let scope_label = borrowed_instructions.push_label("Scope".into());
-                drop(borrowed_instructions);
-                value.gencode(scope, instructions)?;
+                let scope_label = instructions.push_label("Scope".into());
 
-                let mut borrowed_instructions = instructions
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| CodeGenerationError::Default)?;
+                value.gencode(scope, instructions)?;
 
                 let size = value
                     .metadata
@@ -97,8 +84,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
                     .map(|t| t.size_of())
                     .ok_or(CodeGenerationError::UnresolvedError)?;
 
-                borrowed_instructions.push_label_id(end_scope_label, "End_Scope".into());
-                borrowed_instructions.push(Casm::Call(Call {
+                instructions.push_label_id(end_scope_label, "End_Scope".into());
+                instructions.push(Casm::Call(Call {
                     label: scope_label,
                     return_size: size,
                     param_size: 0,
@@ -135,7 +122,7 @@ mod tests {
         },
         vm::{
             allocator::Memory,
-            vm::{DeserializeFrom, Executable},
+            vm::{DeserializeFrom, Executable, Runtime},
         },
     };
 
@@ -161,19 +148,23 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -209,7 +200,7 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         declaration
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
@@ -217,14 +208,18 @@ mod tests {
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -279,20 +274,24 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -335,20 +334,24 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Tuple<Scope> = TupleType(vec![
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
@@ -391,19 +394,23 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Slice<Scope> = SliceType {
             size: 4,
             item_type: Box::new(Either::Static(
@@ -472,19 +479,23 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -572,20 +583,24 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
@@ -691,20 +706,24 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = Rc::new(RefCell::new(CasmProgram::default()));
+        let instructions = CasmProgram::default();
         statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
 
-        let instructions = instructions.as_ref().take();
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let memory = Memory::new();
-        instructions
-            .execute(&memory)
-            .expect("Execution should have succeeded");
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
         let data = clear_stack!(memory);
+
         let result: Struct<Scope> = user_type_point
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
