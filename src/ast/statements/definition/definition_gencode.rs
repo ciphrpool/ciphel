@@ -16,6 +16,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Definition<Scope> {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        Ok(())
     }
 }

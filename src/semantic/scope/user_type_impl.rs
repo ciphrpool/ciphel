@@ -11,15 +11,22 @@ use crate::{
             Atomic, Expression,
         },
         statements::definition,
-        utils::strings::ID,
+        utils::{lexem, strings::ID},
     },
     semantic::{
         CompatibleWith, EType, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::align,
-        casm::{operation::OpPrimitive, Casm},
-        vm::{DeserializeFrom, Printer, RuntimeError},
+        casm::{operation::OpPrimitive, Casm, CasmProgram},
+        platform::{
+            stdlib::{
+                io::{IOCasm, PrintCasm},
+                StdCasm,
+            },
+            LibCasm,
+        },
+        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
     },
 };
 
@@ -221,11 +228,11 @@ impl SizeOf for UserType {
 }
 
 impl Printer for UserType {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
-            UserType::Struct(value) => value.build_printer(),
-            UserType::Enum(value) => value.build_printer(),
-            UserType::Union(value) => value.build_printer(),
+            UserType::Struct(value) => value.build_printer(instructions),
+            UserType::Enum(value) => value.build_printer(instructions),
+            UserType::Union(value) => value.build_printer(instructions),
         }
     }
 }
@@ -465,8 +472,37 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
 }
 
 impl Printer for Struct {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
-        todo!()
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintID(self.id.clone()),
+        )))));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufOpen,
+        )))));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::BRA_C),
+        )))));
+        for (idx, (field_name, field_type)) in self.fields.iter().enumerate().rev() {
+            if idx != self.fields.len() - 1 {
+                instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                    PrintCasm::PrintLexem(lexem::COMA),
+                )))));
+            }
+            let _ = field_type.build_printer(instructions)?;
+            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                PrintCasm::PrintLexem(lexem::COLON),
+            )))));
+            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                PrintCasm::PrintID(field_name.to_string()),
+            )))));
+        }
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::BRA_O),
+        )))));
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufRevFlush,
+        )))));
+        Ok(())
     }
 }
 
@@ -496,7 +532,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
 }
 
 impl Printer for Union {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         todo!()
     }
 }
@@ -524,7 +560,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
 }
 
 impl Printer for Enum {
-    fn build_printer(&self) -> Result<Vec<Casm>, crate::vm::vm::CodeGenerationError> {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         todo!()
     }
 }

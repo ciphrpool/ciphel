@@ -861,7 +861,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U16 => {
@@ -869,7 +869,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U32 => {
@@ -877,7 +877,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U64 => {
@@ -885,7 +885,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::U128 => {
@@ -893,7 +893,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I8 => {
@@ -901,7 +901,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I16 => {
@@ -909,7 +909,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I32 => {
@@ -917,7 +917,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I64 => {
@@ -925,7 +925,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::I128 => {
@@ -933,7 +933,7 @@ impl Executable for Cast {
                     thread
                         .env
                         .stack
-                        .push_with(&[(data == 0) as u8])
+                        .push_with(&[(data != 0) as u8])
                         .map_err(|e| e.into())
                 }
                 NumberType::F64 => {
@@ -1394,7 +1394,24 @@ mod tests {
         let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
         assert_eq!(10 <= 5, res);
     }
+    #[test]
+    fn valid_cast() {
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        init_num8(1u64, &thread.memory()).expect("init should have succeeded");
+        Cast {
+            from: OpPrimitive::Number(NumberType::U64),
+            to: OpPrimitive::Bool,
+        }
+        .execute(&thread)
+        .expect("execution should have succeeded");
 
+        let res = OpPrimitive::get_bool(&thread.memory()).expect("result should be of valid type");
+        assert_eq!(true, res);
+    }
     #[test]
     fn valid_greater() {
         let mut runtime = Runtime::new();

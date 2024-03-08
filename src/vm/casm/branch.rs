@@ -74,7 +74,7 @@ impl Executable for Call {
         let Some(idx) = thread.env.program.get(&self.label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        thread.env.program.cursor.set(idx);
+        thread.env.program.cursor_set(idx);
         Ok(())
     }
 }
@@ -89,7 +89,7 @@ impl Executable for Goto {
         let Some(idx) = thread.env.program.get(&self.label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        thread.env.program.cursor.set(idx);
+        thread.env.program.cursor_set(idx);
         Ok(())
     }
 }
@@ -105,7 +105,7 @@ impl Executable for BranchIf {
         let Some(else_label) = thread.env.program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
-        thread.env.program.cursor.set(if condition {
+        thread.env.program.cursor_set(if condition {
             thread.env.program.cursor.get() + 1
         } else {
             else_label
@@ -168,14 +168,14 @@ impl Executable for BranchTable {
                         let Some(idx) = thread.env.program.get(&else_label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        thread.env.program.cursor.set(idx);
+                        thread.env.program.cursor_set(idx);
                         Ok(())
                     }
                     (Some(label), _) => {
                         let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        thread.env.program.cursor.set(idx);
+                        thread.env.program.cursor_set(idx);
                         Ok(())
                     }
                 }
@@ -188,14 +188,14 @@ impl Executable for BranchTable {
                         let Some(idx) = thread.env.program.get(&else_label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        thread.env.program.cursor.set(idx);
+                        thread.env.program.cursor_set(idx);
                         Ok(())
                     }
                     (Some(label), _) => {
                         let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        thread.env.program.cursor.set(idx);
+                        thread.env.program.cursor_set(idx);
                         Ok(())
                     }
                 }

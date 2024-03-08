@@ -90,5 +90,5 @@ pub trait DeserializeFrom<Scope: ScopeApi> {
 }
 
 pub trait Printer {
-    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError>;
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
 }

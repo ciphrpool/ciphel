@@ -53,7 +53,20 @@ pub struct Registers {
     pub zero: Cell<usize>,
     pub params_start: Cell<usize>,
     pub link: Cell<usize>,
+    pub r1: Cell<u64>,
+    pub r2: Cell<u64>,
+    pub r3: Cell<u64>,
+    pub r4: Cell<u64>,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub enum UReg {
+    R1,
+    R2,
+    R3,
+    R4,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct Frame {
     bottom: usize,
@@ -130,6 +143,10 @@ impl Default for Registers {
             zero: Cell::new(0),
             params_start: Cell::new(0),
             link: Cell::new(0),
+            r1: Cell::new(0),
+            r2: Cell::new(0),
+            r3: Cell::new(0),
+            r4: Cell::new(0),
         }
     }
 }
@@ -271,6 +288,100 @@ impl Stack {
             self.registers.zero.set(zero);
         } else {
             self.registers.top.set(self.registers.bottom.get());
+        }
+        Ok(())
+    }
+
+    pub fn set_reg(&self, reg: UReg, idx: u64) -> u64 {
+        match reg {
+            UReg::R1 => {
+                let old = self.registers.r1.get();
+                self.registers.r1.set(idx);
+                old
+            }
+            UReg::R2 => {
+                let old = self.registers.r2.get();
+                self.registers.r2.set(idx);
+                old
+            }
+            UReg::R3 => {
+                let old = self.registers.r3.get();
+                self.registers.r3.set(idx);
+                old
+            }
+            UReg::R4 => {
+                let old = self.registers.r4.get();
+                self.registers.r4.set(idx);
+                old
+            }
+        }
+    }
+    pub fn get_reg(&self, reg: UReg) -> u64 {
+        match reg {
+            UReg::R1 => self.registers.r1.get(),
+            UReg::R2 => self.registers.r2.get(),
+            UReg::R3 => self.registers.r3.get(),
+            UReg::R4 => self.registers.r4.get(),
+        }
+    }
+    pub fn reg_add(&self, reg: UReg, x: u64) -> Result<(), StackError> {
+        match reg {
+            UReg::R1 => {
+                if let Some(res) = self.registers.r1.get().checked_add(x) {
+                    self.registers.r1.set(res);
+                    Ok(())
+                } else {
+                    Err(StackError::WriteError)
+                }
+            }
+            UReg::R2 => {
+                if let Some(res) = self.registers.r2.get().checked_add(x) {
+                    self.registers.r2.set(res);
+                    Ok(())
+                } else {
+                    Err(StackError::WriteError)
+                }
+            }
+            UReg::R3 => {
+                if let Some(res) = self.registers.r3.get().checked_add(x) {
+                    self.registers.r3.set(res);
+                    Ok(())
+                } else {
+                    Err(StackError::WriteError)
+                }
+            }
+            UReg::R4 => {
+                if let Some(res) = self.registers.r4.get().checked_add(x) {
+                    self.registers.r4.set(res);
+                    Ok(())
+                } else {
+                    Err(StackError::WriteError)
+                }
+            }
+        }
+    }
+    pub fn reg_sub(&self, reg: UReg, x: u64) -> Result<(), StackError> {
+        match reg {
+            UReg::R1 => {
+                if let Some(res) = self.registers.r1.get().checked_sub(x) {
+                    self.registers.r1.set(res);
+                }
+            }
+            UReg::R2 => {
+                if let Some(res) = self.registers.r2.get().checked_sub(x) {
+                    self.registers.r2.set(res);
+                }
+            }
+            UReg::R3 => {
+                if let Some(res) = self.registers.r3.get().checked_sub(x) {
+                    self.registers.r3.set(res);
+                }
+            }
+            UReg::R4 => {
+                if let Some(res) = self.registers.r4.get().checked_sub(x) {
+                    self.registers.r4.set(res);
+                }
+            }
         }
         Ok(())
     }

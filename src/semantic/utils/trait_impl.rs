@@ -13,7 +13,7 @@ use crate::{
     },
     vm::{
         allocator::Memory,
-        casm::Casm,
+        casm::{Casm, CasmProgram},
         vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
     },
 };
@@ -520,10 +520,10 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for EType {
 }
 
 impl Printer for EType {
-    fn build_printer(&self) -> Result<Vec<Casm>, CodeGenerationError> {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
-            Either::Static(value) => value.build_printer(),
-            Either::User(value) => value.build_printer(),
+            Either::Static(value) => value.build_printer(instructions),
+            Either::User(value) => value.build_printer(instructions),
         }
     }
 }

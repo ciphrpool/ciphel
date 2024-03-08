@@ -5,7 +5,10 @@ use super::CasmProgram;
 use crate::{
     semantic::AccessLevel,
     vm::{
-        allocator::{stack::Offset, Memory, MemoryAddress},
+        allocator::{
+            stack::{Offset, UReg},
+            Memory, MemoryAddress,
+        },
         scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
@@ -14,24 +17,20 @@ use std::{cell::Cell, os::raw::c_uint};
 
 #[derive(Debug, Clone)]
 pub enum MemCopy {
-    Clone {
-        from: MemoryAddress,
-        to: MemoryAddress,
-    },
-    CloneFromSmartPointer,
-    TakeToHeap {
-        size: usize,
-    },
-    TakeToStack {
-        size: usize,
-    },
+    Dup(usize),
+    SetReg(UReg, Option<u64>),
+    GetReg(UReg),
+    AddReg(UReg, Option<u64>),
+    SubReg(UReg, Option<u64>),
+    CloneFromSmartPointer(usize),
+    TakeToHeap { size: usize },
+    TakeToStack { size: usize },
 }
 
 impl Executable for MemCopy {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            MemCopy::Clone { from: _, to: _ } => todo!(),
-            MemCopy::CloneFromSmartPointer => {
+            MemCopy::CloneFromSmartPointer(size) => {
                 let heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 let data = thread
                     .runtime
@@ -40,17 +39,19 @@ impl Executable for MemCopy {
                     .map_err(|e| e.into())?;
                 let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
-                let size = u64::from_le_bytes(*data);
+                let length = u64::from_le_bytes(*data);
+
                 let data = thread
                     .runtime
                     .heap
-                    .read(heap_address as usize + 16, size as usize)
+                    .read(heap_address as usize + 16, size * length as usize)
                     .map_err(|e| e.into())?;
+
                 let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 let _ = thread
                     .env
                     .stack
-                    .push_with(&size.to_le_bytes())
+                    .push_with(&length.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             MemCopy::TakeToHeap { size } => {
@@ -82,6 +83,61 @@ impl Executable for MemCopy {
                     )
                     .map_err(|e| e.into())?;
             }
+            MemCopy::Dup(size) => {
+                let data = thread
+                    .env
+                    .stack
+                    .read(Offset::ST(-(*size as isize)), AccessLevel::Direct, *size)
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+            }
+            MemCopy::SetReg(reg, opt_offset) => match opt_offset {
+                Some(offset) => {
+                    let old = thread.env.stack.set_reg(*reg, *offset);
+                }
+                None => {
+                    let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    let old = thread.env.stack.set_reg(*reg, idx);
+                }
+            },
+            MemCopy::GetReg(reg) => {
+                let idx = thread.env.stack.get_reg(*reg);
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&idx.to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
+            MemCopy::AddReg(reg, opt_offset) => match opt_offset {
+                Some(offset) => thread
+                    .env
+                    .stack
+                    .reg_add(*reg, *offset)
+                    .map_err(|e| e.into())?,
+                None => {
+                    let offset = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    thread
+                        .env
+                        .stack
+                        .reg_add(*reg, offset)
+                        .map_err(|e| e.into())?;
+                }
+            },
+            MemCopy::SubReg(reg, opt_offset) => match opt_offset {
+                Some(offset) => thread
+                    .env
+                    .stack
+                    .reg_sub(*reg, *offset)
+                    .map_err(|e| e.into())?,
+                None => {
+                    let offset = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    thread
+                        .env
+                        .stack
+                        .reg_sub(*reg, offset)
+                        .map_err(|e| e.into())?;
+                }
+            },
         }
 
         thread.env.program.incr();

@@ -1,5 +1,7 @@
 use crate::{ast::expressions::data, semantic::MutRc};
 
+use super::allocator::heap;
+
 #[derive(Debug, Clone)]
 pub struct StdIO {
     pub stdout: StdOut,
@@ -16,9 +18,78 @@ impl Default for StdIO {
 }
 
 #[derive(Debug, Clone)]
+enum OutBuffer {
+    Stack(Vec<Vec<String>>),
+    Empty,
+}
+
+impl Default for OutBuffer {
+    fn default() -> Self {
+        Self::Empty
+    }
+}
+
+impl OutBuffer {
+    fn push(&mut self, word: &str, or: &mut String) {
+        match self {
+            OutBuffer::Stack(stack) => match stack.last_mut() {
+                Some(head) => head.push(word.to_owned()),
+                None => {}
+            },
+            OutBuffer::Empty => or.push_str(word),
+        }
+    }
+
+    fn spawn(&mut self) {
+        match self {
+            OutBuffer::Stack(stack) => {
+                stack.push(Vec::default());
+            }
+            OutBuffer::Empty => *self = OutBuffer::Stack(vec![Vec::default()]),
+        }
+    }
+    fn rev_flush(&mut self) -> Option<String> {
+        match self {
+            OutBuffer::Stack(stack) => {
+                let head = stack.pop();
+                match head {
+                    Some(head) => match stack.last_mut() {
+                        Some(stack) => {
+                            stack.push(head.into_iter().rev().collect::<Vec<String>>().join(""));
+                            None
+                        }
+                        None => Some(head.into_iter().rev().collect::<Vec<String>>().join("")),
+                    },
+                    None => None,
+                }
+            }
+            OutBuffer::Empty => None,
+        }
+    }
+    fn flush(&mut self) -> Option<String> {
+        match self {
+            OutBuffer::Stack(stack) => {
+                let head = stack.pop();
+                match head {
+                    Some(head) => match stack.last_mut() {
+                        Some(stack) => {
+                            stack.push(head.join(""));
+                            None
+                        }
+                        None => Some(head.join("")),
+                    },
+                    None => None,
+                }
+            }
+            OutBuffer::Empty => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct StdOut {
     data: MutRc<String>,
-    buffer: MutRc<Option<Vec<String>>>,
+    buffer: MutRc<OutBuffer>,
 }
 impl Default for StdOut {
     fn default() -> Self {
@@ -31,49 +102,27 @@ impl Default for StdOut {
 
 impl StdOut {
     pub fn push(&self, content: &str) {
-        let mut borrowed = self.buffer.as_ref().borrow_mut();
-        match borrowed.as_mut() {
-            Some(buffer) => buffer.push(content.to_string()),
-            None => {
-                self.data.as_ref().borrow_mut().push_str(&content);
-            }
-        }
+        let mut buffer = self.buffer.borrow_mut();
+        buffer.push(content, &mut self.data.borrow_mut());
     }
-    pub fn open_buffer(&self) {
-        let mut borrowed = self.buffer.as_ref().borrow_mut();
-        *borrowed = Some(Vec::default());
+    pub fn spawn_buffer(&self) {
+        self.buffer.borrow_mut().spawn();
     }
     pub fn flush_buffer(&self) {
-        let borrowed = self.buffer.as_ref().borrow();
-        match borrowed.as_ref() {
-            Some(buffer) => {
-                for words in buffer {
-                    self.data.as_ref().borrow_mut().push_str(&words);
-                }
-            }
+        match self.buffer.borrow_mut().flush() {
+            Some(content) => self.data.borrow_mut().push_str(&content),
             None => {}
         }
-        drop(borrowed);
-        let mut borrowed = self.buffer.as_ref().borrow_mut();
-        *borrowed = None;
     }
     pub fn rev_flush_buffer(&self) {
-        let borrowed = self.buffer.as_ref().borrow();
-        match borrowed.as_ref() {
-            Some(buffer) => {
-                for words in buffer.iter().rev() {
-                    self.data.as_ref().borrow_mut().push_str(&words);
-                }
-            }
+        match self.buffer.borrow_mut().rev_flush() {
+            Some(content) => self.data.borrow_mut().push_str(&content),
             None => {}
         }
-        drop(borrowed);
-        let mut borrowed = self.buffer.as_ref().borrow_mut();
-        *borrowed = None;
     }
 
     pub fn take(&self) -> String {
-        self.data.as_ref().take()
+        std::mem::replace(&mut *self.data.borrow_mut(), String::new())
     }
 }
 

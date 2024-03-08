@@ -25,7 +25,7 @@ pub mod serialize;
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
     pub main: MutRc<Vec<Casm>>,
-    pub cursor: Cell<usize>,
+    cursor: Cell<usize>,
     pub labels: MutRc<HashMap<Ulid, usize>>,
 }
 
@@ -48,7 +48,12 @@ impl CasmProgram {
     pub fn incr(&self) {
         self.cursor.set(self.cursor.get() + 1)
     }
-
+    pub fn cursor_set(&self, offset: usize) {
+        self.cursor.set(offset);
+    }
+    pub fn cursor_get(&self) -> usize {
+        self.cursor.get()
+    }
     pub fn push_label(&self, label: String) -> Ulid {
         let id = Ulid::new();
         let mut borrowed_labels = self.labels.as_ref().borrow_mut();
@@ -95,7 +100,7 @@ impl CasmProgram {
             let cursor = self.cursor.get();
             match borrowed_main.get(cursor) {
                 Some(instruction) => {
-                    // dbg!((cursor, instruction, thread.env.stack.top()));
+                    // dbg!((cursor, instruction, thread.env.stack.top(),));
 
                     match instruction.execute(thread) {
                         Ok(_) => {}

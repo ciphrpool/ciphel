@@ -291,6 +291,7 @@ pub fn comparaison_operator(
             match right {
                 NumberType::U64 => {
                     let left_data = OpPrimitive::get_num8::<u64>(memory)?;
+                    dbg!((left_data, right_data, left_data < right_data));
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u64, u64) as u8];
                     memory.stack.push_with(&result).map_err(|e| e.into())

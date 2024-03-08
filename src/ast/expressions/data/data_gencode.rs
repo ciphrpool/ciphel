@@ -1011,18 +1011,18 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        self.value.locate(scope, instructions)
     }
 }
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
