@@ -831,4 +831,97 @@ mod tests {
         assert_eq!(&output, "Point{x:420,y:69}");
         // assert_eq!(&output, "\"Hello World\"");
     }
+
+    #[test]
+    fn valid_print_enum() {
+        let statement = Statement::parse(
+            r##"
+            {
+                enum Color {
+                    RED,
+                    YELLOW,
+                    BLUE,
+                }
+                let color = Color::YELLOW;
+                print(color);
+            }
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
+        assert_eq!(&output, "Color::YELLOW");
+        // assert_eq!(&output, "\"Hello World\"");
+    }
+
+    #[test]
+    fn valid_print_union() {
+        let statement = Statement::parse(
+            r##"
+            {
+                union Geo {
+                    Point {
+                        x: u64,
+                        y: u64,
+                    },
+                    Axe {
+                        x : i64,
+                    }
+                }
+                let geo = Geo::Point {
+                    x : 420,
+                    y : 69,
+                };
+                print(geo);
+            }
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
+        assert_eq!(&output, "Geo::Point{x:420,y:69}");
+        // assert_eq!(&output, "\"Hello World\"");
+    }
 }

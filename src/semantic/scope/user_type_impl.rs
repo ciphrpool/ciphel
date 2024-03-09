@@ -1,8 +1,11 @@
 use std::{
     cell::{Ref, RefCell},
+    collections::HashMap,
     fmt::format,
     rc::Rc,
 };
+
+use ulid::Ulid;
 
 use crate::{
     ast::{
@@ -18,7 +21,11 @@ use crate::{
     },
     vm::{
         allocator::align,
-        casm::{operation::OpPrimitive, Casm, CasmProgram},
+        casm::{
+            branch::{BranchTable, Goto, Label},
+            operation::OpPrimitive,
+            Casm, CasmProgram,
+        },
         platform::{
             stdlib::{
                 io::{IOCasm, PrintCasm},
@@ -533,7 +540,29 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
 
 impl Printer for Union {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        todo!()
+        let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.variants.len());
+        let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
+        let end_label = Label::gen();
+
+        for (idx, _) in self.variants.iter().enumerate() {
+            let label: Ulid = Label::gen();
+            table.insert(idx as u64, label);
+            cases.push(label);
+        }
+        instructions.push(Casm::Switch(BranchTable::Table {
+            table,
+            else_label: None,
+        }));
+        for ((name, value), label) in self.variants.iter().zip(cases) {
+            instructions.push_label_id(label, format!("print_{}", name).into());
+            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
+            )))));
+            let _ = value.build_printer(instructions)?;
+            instructions.push(Casm::Goto(Goto { label: end_label }));
+        }
+        instructions.push_label_id(end_label, "end_print_enum".into());
+        Ok(())
     }
 }
 
@@ -561,6 +590,27 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
 
 impl Printer for Enum {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        todo!()
+        let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.values.len());
+        let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
+        let end_label = Label::gen();
+
+        for (idx, _) in self.values.iter().enumerate() {
+            let label: Ulid = Label::gen();
+            table.insert(idx as u64, label);
+            cases.push(label);
+        }
+        instructions.push(Casm::Switch(BranchTable::Table {
+            table,
+            else_label: None,
+        }));
+        for (name, label) in self.values.iter().zip(cases) {
+            instructions.push_label_id(label, format!("print_{}", name).into());
+            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+                PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
+            )))));
+            instructions.push(Casm::Goto(Goto { label: end_label }));
+        }
+        instructions.push_label_id(end_label, "end_print_enum".into());
+        Ok(())
     }
 }
