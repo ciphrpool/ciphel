@@ -85,7 +85,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
                     .ok_or(CodeGenerationError::UnresolvedError)?;
 
                 instructions.push_label_id(end_scope_label, "End_Scope".into());
-                instructions.push(Casm::Call(Call {
+                instructions.push(Casm::Call(Call::From {
                     label: scope_label,
                     return_size: size,
                     param_size: 0,

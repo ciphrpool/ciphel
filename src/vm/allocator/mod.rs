@@ -13,9 +13,9 @@ pub fn align(size: usize) -> usize {
     (size + (ALIGNMENT - 1)) & (!(ALIGNMENT - 1))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum MemoryAddress {
-    Heap,
+    Heap { offset: usize },
     Stack { offset: Offset, level: AccessLevel },
 }
 

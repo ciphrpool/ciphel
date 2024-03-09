@@ -10,6 +10,7 @@ use super::{
     allocator::{
         heap::{Heap, HeapError},
         stack::StackError,
+        vtable::{VTable, VTableError},
         Memory,
     },
     casm::{Casm, CasmProgram},
@@ -28,6 +29,7 @@ pub enum CodeGenerationError {
 pub enum RuntimeError {
     StackError(StackError),
     HeapError(HeapError),
+    VTableError(VTableError),
     Deserialization,
     UnsupportedOperation,
     MathError,

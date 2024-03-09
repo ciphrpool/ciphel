@@ -5,14 +5,14 @@ use std::{
 };
 
 use crate::{
-    ast::{self, utils::strings::ID},
+    ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             var_impl::Var,
             ScopeApi,
         },
-        EType, Either, Metadata, MutRc, SemanticError,
+        AccessLevel, EType, Either, Metadata, MutRc, SemanticError,
     },
 };
 
@@ -130,7 +130,7 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    env: MutRc<HashMap<ID, Rc<Var>>>,
+    env: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
     scope: ExprScope<InnerScope>,
     pub metadata: Metadata,
 }
@@ -142,7 +142,7 @@ pub enum ExprScope<InnerScope: ScopeApi> {
 }
 
 impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
-    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<Var>>, SemanticError> {
+    pub fn find_outer_vars(&self) -> Result<Vec<(ID, (Rc<Var>, AccessLevel))>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.find_outer_vars(),
             ExprScope::Expr(scope) => scope.find_outer_vars(),
@@ -159,7 +159,7 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClosureParam {
-    Full { id: ID, signature: ast::types::Type },
+    Full(TypedVar),
     Minimal(ID),
 }
 

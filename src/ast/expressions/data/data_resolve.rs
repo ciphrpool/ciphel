@@ -1,3 +1,5 @@
+use nom_supreme::context;
+
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
     MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
@@ -317,7 +319,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         Self: Sized,
         Scope: ScopeApi,
     {
-        // dbg!(&context);
         match context {
             Some(context_type) => {
                 match context_type {
@@ -530,12 +531,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let Some(context) = context else {
-            return Err(SemanticError::CantInferType);
-        };
-        for (index, expr) in self.params.iter().enumerate() {
-            let param_context = <EType as GetSubTypes>::get_nth(context, &index);
-            let _ = expr.resolve(scope, &param_context, &())?;
+        // let Some(context) = context else {
+        //     return Err(SemanticError::CantInferType);
+        // };
+        match context {
+            Some(context) => {
+                for (index, expr) in self.params.iter().enumerate() {
+                    let param_context = <EType as GetSubTypes>::get_nth(context, &index);
+                    let _ = expr.resolve(scope, &param_context, &())?;
+                }
+            }
+            None => {
+                for (index, expr) in self.params.iter().enumerate() {
+                    let _ = expr.resolve(scope, &None, &())?;
+                }
+            }
         }
 
         let vars = self
@@ -547,7 +557,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                     (
                         idx,
                         match param {
-                            ClosureParam::Full { id, .. } => id,
+                            ClosureParam::Full(var) => &var.id,
                             ClosureParam::Minimal(id) => id,
                         },
                         p,
@@ -555,19 +565,22 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                 })
             })
             .map(|(index, id, param)| {
-                let _param_type = param.type_of(&scope.borrow());
-                let param_type = <EType as GetSubTypes>::get_nth(context, &index);
+                let param_type = match context {
+                    Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
+                    None => Some(param),
+                };
                 let var = <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap());
                 var.is_parameter.set((index, true));
                 var
             })
             .collect::<Vec<Var>>();
 
-        let Some(context_return) = <EType as GetSubTypes>::get_return(context) else {
-            return Err(SemanticError::CantInferType);
+        let context_return = match context {
+            Some(context) => <EType as GetSubTypes>::get_return(context),
+            None => None,
         };
 
-        let _ = self.scope.resolve(scope, &Some(context_return), &vars)?;
+        let _ = self.scope.resolve(scope, &context_return, &vars)?;
 
         let env_vars = self.scope.find_outer_vars()?;
         {
@@ -583,7 +596,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                 .map_err(|_| SemanticError::Default)?;
 
             *borrowed_metadata = Info::Resolved {
-                context: Some(context.clone()),
+                context: context.clone(),
                 signature: Some(self.type_of(&scope.borrow())?),
             };
         }
@@ -625,7 +638,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         Scope: ScopeApi,
     {
         match self {
-            ClosureParam::Full { id: _, signature } => signature.resolve(scope, &(), &()),
+            ClosureParam::Full(var) => var.resolve(scope, &(), &()),
             ClosureParam::Minimal(_value) => match context {
                 Some(_) => Ok(()),
                 None => Err(SemanticError::CantInferType),

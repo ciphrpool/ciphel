@@ -18,7 +18,7 @@ pub struct Locate {
 impl Executable for Locate {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match &self.address {
-            MemoryAddress::Heap => {
+            MemoryAddress::Heap { offset } => {
                 // let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
                 todo!();
                 thread.env.program.incr();

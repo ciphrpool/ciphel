@@ -700,7 +700,7 @@ mod tests {
             .clone()
             .values()
             .cloned()
-            .map(|v| v.as_ref().clone())
+            .map(|(v, _)| v.as_ref().clone())
             .collect::<Vec<Var>>();
         assert_eq!(
             captured_vars,
@@ -767,7 +767,7 @@ mod tests {
             .clone()
             .values()
             .cloned()
-            .map(|v| v.as_ref().clone())
+            .map(|(v, _)| v.as_ref().clone())
             .collect::<Vec<Var>>();
         assert_eq!(
             captured_vars,

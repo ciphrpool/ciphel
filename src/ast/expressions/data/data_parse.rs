@@ -4,7 +4,7 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::{return_stat::Return, Statement},
+        statements::{declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
             io::{PResult, Span},
@@ -348,7 +348,7 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
             |(params, scope)| Closure {
                 params,
                 scope,
-                env: Rc::new(RefCell::new(HashMap::default())),
+                env: Rc::new(RefCell::new(Vec::default())),
                 metadata: Metadata::default(),
             },
         )(input)
@@ -384,11 +384,8 @@ impl TryParse for ClosureParam {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
+            map(TypedVar::parse, |var| ClosureParam::Full(var)),
             map(parse_id, |value| ClosureParam::Minimal(value)),
-            map(
-                separated_pair(parse_id, wst(lexem::COLON), ast::types::Type::parse),
-                |(id, signature)| ClosureParam::Full { id, signature },
-            ),
         ))(input)
     }
 }
@@ -682,7 +679,7 @@ mod tests {
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
-                env: Rc::new(RefCell::new(HashMap::default())),
+                env: Rc::new(RefCell::new(Vec::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -701,7 +698,39 @@ mod tests {
             value
         )
     }
+    #[test]
+    fn valid_closure_full() {
+        let res = Closure::<MockScope>::parse("(x:u64) -> x".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
 
+        assert_eq!(
+            Closure {
+                params: vec![ClosureParam::Full(TypedVar {
+                    id: "x".into(),
+                    signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
+                        NumberType::U64
+                    ))
+                }),],
+                env: Rc::new(RefCell::new(Vec::default())),
+                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                    metadata: Metadata::default(),
+                    instructions: vec![Statement::Return(Return::Expr {
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                            Variable::Var(VarID {
+                                id: "x".into(),
+                                metadata: Metadata::default()
+                            })
+                        )))),
+                        metadata: Metadata::default()
+                    })],
+                    inner_scope: RefCell::new(None)
+                }),
+                metadata: Metadata::default()
+            },
+            value
+        )
+    }
     #[test]
     fn valid_tuple() {
         let res = Tuple::<MockScope>::parse("(2,'a')".into());

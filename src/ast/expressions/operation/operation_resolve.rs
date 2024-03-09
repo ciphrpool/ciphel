@@ -3,6 +3,7 @@ use super::{
     LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
 };
 
+use crate::ast::expressions::Expression;
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::scope::type_traits::GetSubTypes;
@@ -36,7 +37,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
                 // ));
                 let _ = value.resolve(scope, context, extra)?;
                 let value_type = value.type_of(&scope.borrow())?;
-                dbg!(value);
+
                 // let _ = <EType as OperandMerging<Scope>>::can_substract(&value_type)?;
                 match value_type {
                     Either::Static(value) => match value.as_ref() {

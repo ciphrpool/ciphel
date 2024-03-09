@@ -316,7 +316,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureParam {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            ClosureParam::Full { id: _, signature } => signature.type_of(&scope),
+            ClosureParam::Full(var) => var.type_of(&scope),
             ClosureParam::Minimal(_) => Ok(Either::Static(
                 <StaticType as BuildStaticType<Scope>>::build_any().into(),
             )),

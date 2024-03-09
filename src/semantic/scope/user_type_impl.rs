@@ -540,13 +540,13 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
 
 impl Printer for Union {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.variants.len());
+        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.variants.len());
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
         let end_label = Label::gen();
 
         for (idx, _) in self.variants.iter().enumerate() {
             let label: Ulid = Label::gen();
-            table.insert(idx as u64, label);
+            table.push((idx as u64, label));
             cases.push(label);
         }
         instructions.push(Casm::Switch(BranchTable::Table {
@@ -590,13 +590,13 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
 
 impl Printer for Enum {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.values.len());
+        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.values.len());
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
         let end_label = Label::gen();
 
         for (idx, _) in self.values.iter().enumerate() {
             let label: Ulid = Label::gen();
-            table.insert(idx as u64, label);
+            table.push((idx as u64, label));
             cases.push(label);
         }
         instructions.push(Casm::Switch(BranchTable::Table {

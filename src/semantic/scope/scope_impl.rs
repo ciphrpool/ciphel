@@ -25,7 +25,7 @@ pub enum Scope {
     Inner {
         parent: Option<Weak<RefCell<Scope>>>,
         general: MutRc<Scope>,
-        outer_vars: MutRc<HashMap<ID, Rc<Var>>>,
+        outer_vars: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
         data: ScopeData,
     },
     General {
@@ -76,7 +76,7 @@ impl ScopeApi for Scope {
                     parent: Some(Rc::downgrade(parent)),
                     general: general.clone(),
                     data: ScopeData::new(),
-                    outer_vars: Rc::new(RefCell::new(HashMap::default())),
+                    outer_vars: Rc::new(RefCell::new(Vec::default())),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -92,7 +92,7 @@ impl ScopeApi for Scope {
                     parent: None,
                     general: parent.clone(),
                     data: ScopeData::new(),
-                    outer_vars: Rc::new(RefCell::new(HashMap::default())),
+                    outer_vars: Rc::new(RefCell::new(Vec::default())),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -171,7 +171,9 @@ impl ScopeApi for Scope {
                                 };
                                 var.captured.set(true);
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
-                                borrowerd_mut.insert(var.id.clone(), var.clone());
+                                if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
+                                    borrowerd_mut.push((var.id.clone(), (var.clone(), level)));
+                                }
                                 Some((var, level))
                             }
                             Err(_) => None,
@@ -185,7 +187,12 @@ impl ScopeApi for Scope {
                         match borrowed_scope.find_var(id) {
                             Ok((var, _)) => {
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
-                                borrowerd_mut.insert(var.id.clone(), var.clone());
+                                if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
+                                    borrowerd_mut.push((
+                                        var.id.clone(),
+                                        (var.clone(), AccessLevel::General),
+                                    ));
+                                }
                                 Some((var, AccessLevel::General))
                             }
                             Err(_) => None,
@@ -203,10 +210,10 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
+    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))> {
         match self {
             Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
-            Scope::General { .. } => HashMap::default(),
+            Scope::General { .. } => Vec::default(),
         }
     }
 
@@ -323,7 +330,7 @@ impl ScopeApi for MockScope {
     fn find_var(&self, _id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
         unimplemented!("Mock function call")
     }
-    fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>> {
+    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))> {
         unimplemented!("Mock function call")
     }
     fn parameters_size(&self) -> usize {

@@ -6,19 +6,23 @@ use crate::{
     ast::expressions::data::{Number, Primitive, VarID, Variable},
     semantic::{
         scope::{
-            static_types::{StaticType, StrSliceType},
+            static_types::{NumberType, StaticType, StrSliceType},
             user_type_impl::{Enum, Union, UserType},
             ScopeApi,
         },
         AccessLevel, Either, MutRc, SizeOf,
     },
     vm::{
-        allocator::{stack::Offset, MemoryAddress},
+        allocator::{
+            stack::{Offset, UReg},
+            MemoryAddress,
+        },
         casm::{
             alloc::{Access, StackFrame},
             branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
             locate::Locate,
             memcopy::MemCopy,
+            operation::{Addition, OpPrimitive, Operation, OperationKind},
             serialize::Serialized,
             Casm, CasmProgram,
         },
@@ -73,7 +77,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         let _ = self.then_branch.gencode(scope, &instructions)?;
         {
             instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
-            instructions.push(Casm::Call(Call {
+            instructions.push(Casm::Call(Call::From {
                 label: if_scope_label,
                 return_size,
                 param_size: 0,
@@ -92,7 +96,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         let _ = self.else_branch.gencode(scope, &instructions)?;
         {
             instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
-            instructions.push(Casm::Call(Call {
+            instructions.push(Casm::Call(Call::From {
                 label: else_scope_label,
                 return_size,
                 param_size: 0,
@@ -141,8 +145,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
         let match_label = instructions.push_label("Match".into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
-        let mut table: HashMap<u64, Ulid> = HashMap::with_capacity(self.patterns.len());
-        let mut switch: HashMap<Vec<u8>, Ulid> = HashMap::with_capacity(self.patterns.len());
+        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.patterns.len());
+        let mut switch: Vec<(Vec<u8>, Ulid)> = Vec::with_capacity(self.patterns.len());
 
         for PatternExpr { pattern, .. } in &self.patterns {
             let label: Ulid = Label::gen();
@@ -158,7 +162,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                         })
                         .flatten()
                     {
-                        table.insert(idx as u64, label);
+                        table.push((idx as u64, label));
                     }
                 }
                 Pattern::Union { variant, .. } => {
@@ -171,7 +175,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                         })
                         .flatten()
                     {
-                        table.insert(idx as u64, label);
+                        table.push((idx as u64, label));
                     }
                 }
                 Pattern::Primitive(value) => {
@@ -193,11 +197,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                         Primitive::Bool(data) => [*data as u8].to_vec(),
                         Primitive::Char(data) => [*data as u8].to_vec(),
                     };
-                    switch.insert(data, label);
+                    switch.push((data, label));
                 }
                 Pattern::String(value) => {
                     let data = value.value.as_bytes().to_vec();
-                    switch.insert(data, label);
+                    switch.push((data, label));
                 }
             }
         }
@@ -248,7 +252,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
             instructions.push_label_id(end_scope_label, "End_Scope".into());
-            instructions.push(Casm::Call(Call {
+            instructions.push(Casm::Call(Call::From {
                 label: scope_label,
                 return_size,
                 param_size,
@@ -268,7 +272,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 let _ = else_branch.gencode(scope, instructions)?;
 
                 instructions.push_label_id(end_scope_label, "End_Scope".into());
-                instructions.push(Casm::Call(Call {
+                instructions.push(Casm::Call(Call::From {
                     label: scope_label,
                     return_size,
                     param_size: 0,
@@ -307,14 +311,65 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
             .map(|p| p.signature().map_or(0, |s| s.size_of()))
             .sum();
 
-        for param in &self.params {
-            let _ = param.gencode(scope, instructions)?;
-        }
-
         if let Some(platform_api) = self.platform.as_ref().borrow().as_ref() {
+            for param in &self.params {
+                let _ = param.gencode(scope, instructions)?;
+            }
             platform_api.gencode(scope, instructions, params_size)
         } else {
-            todo!()
+            let _ = self.fn_var.gencode(scope, instructions)?;
+
+            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
+            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
+
+            instructions.push(Casm::Access(Access::Runtime { size: Some(16) }));
+            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None))); // env size
+            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None))); // function pointer
+
+            // Load Env
+            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
+            instructions.push(Casm::Serialize(Serialized {
+                data: (16u64).to_le_bytes().to_vec(),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Addition(Addition {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+            instructions.push(Casm::Access(Access::Runtime { size: None }));
+
+            // Load Param
+            for param in &self.params {
+                let _ = param.gencode(scope, instructions)?;
+            }
+            // Load function address
+            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R2)));
+            // Call function
+
+            // Load param size
+            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+            instructions.push(Casm::Serialize(Serialized {
+                data: (params_size as u64).to_le_bytes().to_vec(),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Addition(Addition {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+            // Load return size
+            let Some(signature) = self.metadata.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            let return_size = signature.size_of();
+            instructions.push(Casm::Serialize(Serialized {
+                data: (return_size as u64).to_le_bytes().to_vec(),
+            }));
+
+            instructions.push(Casm::Call(Call::Stack));
+            Ok(())
         }
     }
 }

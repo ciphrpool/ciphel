@@ -28,7 +28,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
                 let Some(value_type) = value.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                dbg!(&value_type);
                 let _ = value.gencode(scope, instructions)?;
 
                 instructions.push(Casm::Operation(Operation {

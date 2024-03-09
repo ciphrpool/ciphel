@@ -128,7 +128,7 @@ where
     fn register_event(&mut self, reg: Event) -> Result<(), SemanticError>;
 
     fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;
-    fn find_outer_vars(&self) -> HashMap<ID, Rc<Var>>;
+    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))>;
     fn parameters_size(&self) -> usize;
     fn inner_vars(&self) -> &Vec<Rc<Var>>;
     fn find_chan(&self) -> Result<&Chan, SemanticError>;

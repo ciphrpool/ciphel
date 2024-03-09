@@ -5,7 +5,7 @@ use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, StackSlice},
+            stack::{Offset, StackSlice, STACK_SIZE},
             Memory, MemoryAddress,
         },
         casm::operation::OpPrimitive,
@@ -26,6 +26,7 @@ impl Executable for Alloc {
             Alloc::Heap { size } => {
                 let address = thread.runtime.heap.alloc(*size).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+
                 let data = (address as u64).to_le_bytes().to_vec();
                 let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 thread.env.program.incr();
@@ -105,41 +106,60 @@ impl Executable for StackFrame {
 #[derive(Debug, Clone)]
 pub enum Access {
     Static { address: MemoryAddress, size: usize },
-    Runtime { size: usize },
+    Runtime { size: Option<usize> },
 }
 
 impl Executable for Access {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        match self {
-            Access::Static { address, size } => match address {
-                MemoryAddress::Heap => {
-                    let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                    let _data = thread
-                        .runtime
-                        .heap
-                        .read(address, *size)
-                        .map_err(|err| err.into())?;
-                    todo!("Copy data onto stack");
-                    thread.env.program.incr();
-                    Ok(())
-                }
-                MemoryAddress::Stack { offset, level } => {
-                    let data = thread
-                        .env
-                        .stack
-                        .read(*offset, *level, *size)
-                        .map_err(|err| err.into())?;
-                    // Copy data onto stack;
-                    let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                    thread.env.program.incr();
-                    Ok(())
-                }
-            },
-            Access::Runtime { size: _ } => {
-                let _address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let _address = {
-                    todo!("Convert u64 to memory address by differenting stack pointer and heap pointer");
+        let (address, size) = match self {
+            Access::Static { address, size } => (*address, *size),
+            Access::Runtime { size } => {
+                let size = match size {
+                    Some(size) => *size,
+                    None => {
+                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        size as usize
+                    }
                 };
+                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let address = {
+                    if address < STACK_SIZE as u64 {
+                        MemoryAddress::Stack {
+                            offset: Offset::SB(address as usize),
+                            level: AccessLevel::General,
+                        }
+                    } else {
+                        MemoryAddress::Heap {
+                            offset: address as usize,
+                        }
+                    }
+
+                    // todo!("Convert u64 to memory address by differenting stack pointer and heap pointer");
+                };
+                (address, size)
+            }
+        };
+
+        match address {
+            MemoryAddress::Heap { offset } => {
+                // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let data = thread
+                    .runtime
+                    .heap
+                    .read(offset, size)
+                    .map_err(|err| err.into())?;
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                thread.env.program.incr();
+                Ok(())
+            }
+            MemoryAddress::Stack { offset, level } => {
+                let data = thread
+                    .env
+                    .stack
+                    .read(offset, level, size)
+                    .map_err(|err| err.into())?;
+                // Copy data onto stack;
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 thread.env.program.incr();
                 Ok(())
             }
@@ -166,12 +186,12 @@ impl Executable for Assign {
             .map_err(|err| err.into())?;
 
         match self.address {
-            MemoryAddress::Heap => {
-                let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+            MemoryAddress::Heap { offset } => {
+                // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
                 let _ = thread
                     .runtime
                     .heap
-                    .write(address, &data)
+                    .write(offset, &data)
                     .map_err(|e| e.into())?;
             }
             MemoryAddress::Stack { offset, level } => {

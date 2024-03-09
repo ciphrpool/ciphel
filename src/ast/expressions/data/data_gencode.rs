@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
 
-use num_traits::ToBytes;
+use num_traits::{sign, ToBytes};
 
 use crate::{
     ast::utils::strings::ID,
@@ -16,8 +16,8 @@ use crate::{
     vm::{
         allocator::{align, heap::HEAP_ADDRESS_SIZE, stack::Offset, MemoryAddress},
         casm::{
-            alloc::Access,
-            alloc::Alloc,
+            alloc::{Access, Alloc},
+            branch::{Goto, Label},
             locate::Locate,
             memcopy::MemCopy,
             operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
@@ -441,7 +441,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    instructions.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
                 }
                 Ok(())
             }
@@ -453,21 +453,49 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                 // Locate the variable
                 let _ = var.locate(scope, instructions)?;
 
+                if let Some(signature) = var.signature() {
+                    match signature {
+                        Either::Static(signature) => match signature.as_ref() {
+                            StaticType::String(_) | StaticType::Vec(_) => {
+                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                                instructions.push(Casm::Serialize(Serialized {
+                                    data: (16u64).to_le_bytes().to_vec(),
+                                }));
+                                instructions.push(Casm::Operation(Operation {
+                                    kind: OperationKind::Addition(Addition {
+                                        left: OpPrimitive::Number(NumberType::U64),
+                                        right: OpPrimitive::Number(NumberType::U64),
+                                    }),
+                                }));
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+
                 // Access the field
                 let _ = index.gencode(scope, instructions)?;
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                {
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    instructions.push(Casm::Access(Access::Runtime { size }));
-                }
+                instructions.push(Casm::Serialize(Serialized {
+                    data: (size as u64).to_le_bytes().to_vec(),
+                }));
+                instructions.push(Casm::Operation(Operation {
+                    kind: OperationKind::Mult(Mult {
+                        left: OpPrimitive::Number(NumberType::U64),
+                        right: OpPrimitive::Number(NumberType::U64),
+                    }),
+                }));
+                instructions.push(Casm::Operation(Operation {
+                    kind: OperationKind::Addition(Addition {
+                        left: OpPrimitive::Number(NumberType::U64),
+                        right: OpPrimitive::Number(NumberType::U64),
+                    }),
+                }));
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+
                 Ok(())
             }
         }
@@ -529,7 +557,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Access(Access::Runtime { size }));
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
                 Ok(())
             }
             Variable::FieldAccess(FieldAccess {
@@ -584,7 +612,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
                         }),
                         // result: OpPrimitive::Number(NumberType::U64),
                     }));
-                    instructions.push(Casm::Access(Access::Runtime { size }));
+                    instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
                 }
                 Ok(())
             }
@@ -598,16 +626,26 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                {
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    instructions.push(Casm::Access(Access::Runtime { size }));
-                }
+
+                instructions.push(Casm::Serialize(Serialized {
+                    data: (size as u64).to_le_bytes().to_vec(),
+                }));
+                instructions.push(Casm::Operation(Operation {
+                    kind: OperationKind::Mult(Mult {
+                        left: OpPrimitive::Number(NumberType::U64),
+                        right: OpPrimitive::Number(NumberType::U64),
+                    }),
+                    // result: OpPrimitive::Number(NumberType::U64),
+                }));
+                instructions.push(Casm::Operation(Operation {
+                    kind: OperationKind::Addition(Addition {
+                        left: OpPrimitive::Number(NumberType::U64),
+                        right: OpPrimitive::Number(NumberType::U64),
+                    }),
+                    // result: OpPrimitive::Number(NumberType::U64),
+                }));
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+
                 Ok(())
             }
         }
@@ -1001,10 +1039,49 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprScope<Scope> {
 impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let end_closure = Label::gen();
+
+        instructions.push(Casm::Goto(Goto { label: end_closure }));
+
+        let closure_label = instructions.push_label("fn_closure".into());
+        let _ = self.scope.gencode(scope, instructions);
+        instructions.push_label_id(end_closure, "end_closure".into());
+
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(closure_label)));
+        let mut alloc_size = 16;
+        let mut env_size = 0;
+        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
+            let var_type = &var.as_ref().type_sig;
+            let var_size = var_type.size_of();
+            alloc_size += var_size;
+            env_size += var_size;
+        }
+        // Load Env Size
+        instructions.push(Casm::Serialize(Serialized {
+            data: env_size.to_le_bytes().to_vec(),
+        }));
+        // Load Env variables
+        for (_, (var, level)) in self.env.as_ref().borrow().iter() {
+            let address = &var.as_ref().address;
+            let Some(address) = address.get() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            let var_type = &var.as_ref().type_sig;
+            let var_size = var_type.size_of();
+            instructions.push(Casm::Access(Access::Static {
+                address: MemoryAddress::Stack {
+                    offset: address,
+                    level: *level,
+                },
+                size: var_size,
+            }));
+        }
+        instructions.push(Casm::Alloc(Alloc::Heap { size: alloc_size }));
+        instructions.push(Casm::MemCopy(MemCopy::TakeToHeap { size: alloc_size }));
+        Ok(())
     }
 }
 
@@ -1168,6 +1245,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Map<Scope> {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, mem};
+
     use num_traits::Zero;
 
     use super::*;
@@ -1177,6 +1256,7 @@ mod tests {
                 data::{Data, Number},
                 Atomic, Expression,
             },
+            statements::{self, Statement},
             TryParse,
         },
         semantic::{
@@ -1191,6 +1271,7 @@ mod tests {
         },
         vm::{
             allocator::Memory,
+            casm::branch::BranchTable,
             vm::{DeserializeFrom, Executable, Runtime},
         },
     };
@@ -1719,5 +1800,327 @@ mod tests {
         .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "你好世界")
+    }
+
+    #[test]
+    fn valid_array_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = [1,2,3,4];
+            return arr[2]; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(3))));
+    }
+
+    #[test]
+    fn valid_vec_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = vec[1,2,3,4];
+            return arr[2]; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(3))));
+    }
+
+    #[test]
+    fn valid_str_slice_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = "Hello World";
+            return arr[2]; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Char,
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('l'));
+    }
+
+    #[test]
+    fn valid_string_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = string("Hello World");
+            return arr[2]; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Char,
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('l'));
+    }
+
+    #[test]
+    fn valid_tuple_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let tuple = (420,69);
+            return tuple.1; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+    }
+
+    #[test]
+    fn valid_field_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            struct Point {
+                x : i64,
+                y : i64,
+            }
+            let point = Point {
+                x : 420,
+                y : 69,
+            };
+            return point.y; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+    }
+
+    #[test]
+    fn valid_closure() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let f = (x:u64) -> x+1u64;
+            return f(68); 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
     }
 }

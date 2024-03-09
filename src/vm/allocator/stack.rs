@@ -11,7 +11,7 @@ use crate::{
     vm::vm::RuntimeError,
 };
 
-const STACK_SIZE: usize = 512;
+pub const STACK_SIZE: usize = 512;
 
 #[derive(Debug, Clone)]
 pub enum StackError {

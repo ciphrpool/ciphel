@@ -31,29 +31,42 @@ impl Executable for Label {
 }
 
 #[derive(Debug, Clone)]
-pub struct Call {
-    pub label: Ulid,
-    pub return_size: usize,
-    pub param_size: usize,
+pub enum Call {
+    From {
+        label: Ulid,
+        return_size: usize,
+        param_size: usize,
+    },
+    Stack,
 }
 
 impl Executable for Call {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        if self.param_size != 0 {
-            let data = thread
-                .env
-                .stack
-                .pop(self.param_size)
-                .map_err(|e| e.into())?;
+        let (return_size, param_size, function_offset) = match self {
+            Call::From {
+                label,
+                return_size,
+                param_size,
+            } => {
+                let Some(function_offset) = thread.env.program.get(&label) else {
+                    return Err(RuntimeError::CodeSegmentation);
+                };
+                (*return_size, *param_size, function_offset)
+            }
+            Call::Stack => {
+                let return_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let param_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let function_offset = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                (return_size, param_size, function_offset)
+            }
+        };
+        if param_size != 0 {
+            let data = thread.env.stack.pop(param_size).map_err(|e| e.into())?;
 
             let _ = thread
                 .env
                 .stack
-                .frame(
-                    self.return_size,
-                    self.param_size,
-                    thread.env.program.cursor.get() + 1,
-                )
+                .frame(return_size, param_size, thread.env.program.cursor.get() + 1)
                 .map_err(|e| e.into())?;
             let _ = thread
                 .env
@@ -64,17 +77,11 @@ impl Executable for Call {
             let _ = thread
                 .env
                 .stack
-                .frame(
-                    self.return_size,
-                    self.param_size,
-                    thread.env.program.cursor.get() + 1,
-                )
+                .frame(return_size, param_size, thread.env.program.cursor.get() + 1)
                 .map_err(|e| e.into())?;
         }
-        let Some(idx) = thread.env.program.get(&self.label) else {
-            return Err(RuntimeError::CodeSegmentation);
-        };
-        thread.env.program.cursor_set(idx);
+
+        thread.env.program.cursor_set(function_offset);
         Ok(())
     }
 }
@@ -124,11 +131,11 @@ pub enum BranchTableExprInfo {
 pub enum BranchTable {
     Swith {
         info: BranchTableExprInfo,
-        table: HashMap<Vec<u8>, Ulid>,
+        table: Vec<(Vec<u8>, Ulid)>,
         else_label: Option<Ulid>,
     },
     Table {
-        table: HashMap<u64, Ulid>,
+        table: Vec<(u64, Ulid)>,
         else_label: Option<Ulid>,
     },
 }
@@ -162,7 +169,7 @@ impl Executable for BranchTable {
                         data
                     }
                 };
-                match (table.get(&data), else_label) {
+                match (table.iter().find(|(d, l)| d == &data), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
                         let Some(idx) = thread.env.program.get(&else_label) else {
@@ -171,7 +178,7 @@ impl Executable for BranchTable {
                         thread.env.program.cursor_set(idx);
                         Ok(())
                     }
-                    (Some(label), _) => {
+                    (Some((_, label)), _) => {
                         let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
@@ -182,7 +189,7 @@ impl Executable for BranchTable {
             }
             BranchTable::Table { table, else_label } => {
                 let variant = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                match (table.get(&variant), else_label) {
+                match (table.iter().find(|(d, l)| d == &variant), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
                         let Some(idx) = thread.env.program.get(&else_label) else {
@@ -191,7 +198,7 @@ impl Executable for BranchTable {
                         thread.env.program.cursor_set(idx);
                         Ok(())
                     }
-                    (Some(label), _) => {
+                    (Some((_, label)), _) => {
                         let Some(idx) = thread.env.program.get(label) else {
                             return Err(RuntimeError::CodeSegmentation);
                         };

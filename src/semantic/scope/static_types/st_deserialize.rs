@@ -20,7 +20,6 @@ use crate::{
             MemoryAddress,
         },
         casm::{
-            alloc::Access,
             branch::{BranchIf, Goto, Label},
             memcopy::MemCopy,
             operation::{

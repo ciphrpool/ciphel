@@ -1,4 +1,5 @@
 use num_traits::ToBytes;
+use ulid::Ulid;
 
 use super::operation::OpPrimitive;
 use super::CasmProgram;
@@ -23,6 +24,7 @@ pub enum MemCopy {
     AddReg(UReg, Option<u64>),
     SubReg(UReg, Option<u64>),
     CloneFromSmartPointer(usize),
+    LabelOffset(Ulid),
     TakeToHeap { size: usize },
     TakeToStack { size: usize },
 }
@@ -58,7 +60,6 @@ impl Executable for MemCopy {
                 let heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
 
                 let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
-
                 let _ = thread
                     .runtime
                     .heap
@@ -138,6 +139,17 @@ impl Executable for MemCopy {
                         .map_err(|e| e.into())?;
                 }
             },
+            MemCopy::LabelOffset(label) => {
+                let Some(idx) = thread.env.program.get(label) else {
+                    return Err(RuntimeError::CodeSegmentation);
+                };
+                let idx = idx as u64;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&idx.to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
         }
 
         thread.env.program.incr();

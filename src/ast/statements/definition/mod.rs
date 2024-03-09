@@ -4,7 +4,7 @@ use crate::{
     ast::{types::Type, utils::strings::ID},
     semantic::{
         scope::{var_impl::Var, ScopeApi},
-        MutRc,
+        AccessLevel, MutRc,
     },
 };
 
@@ -52,7 +52,7 @@ pub struct FnDef<InnerScope: ScopeApi> {
     id: ID,
     params: Vec<TypedVar>,
     ret: Box<Type>,
-    env: MutRc<HashMap<ID, Rc<Var>>>,
+    env: MutRc<HashMap<ID, (Rc<Var>, AccessLevel)>>,
     scope: Scope<InnerScope>,
 }
 

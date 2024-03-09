@@ -4,7 +4,7 @@ use crate::{
     ast::utils::strings::ID,
     semantic::{
         scope::{var_impl::Var, ScopeApi},
-        Metadata, MutRc, SemanticError,
+        AccessLevel, Metadata, MutRc, SemanticError,
     },
 };
 
@@ -23,7 +23,7 @@ pub struct Scope<Inner: ScopeApi> {
 }
 
 impl<InnerScope: ScopeApi> Scope<InnerScope> {
-    pub fn find_outer_vars(&self) -> Result<HashMap<ID, Rc<Var>>, SemanticError> {
+    pub fn find_outer_vars(&self) -> Result<Vec<(ID, (Rc<Var>, AccessLevel))>, SemanticError> {
         match self.inner_scope.borrow().as_ref() {
             Some(inner) => Ok(inner.as_ref().borrow().find_outer_vars()),
             None => Err(SemanticError::NotResolvedYet),

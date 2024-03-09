@@ -119,7 +119,6 @@ impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for IOFn {
                 let binding = inner.borrow();
 
                 let Some(param_type) = binding.as_ref() else {
-                    dbg!("here");
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let _ = param_type.build_printer(instructions)?;
@@ -193,7 +192,6 @@ impl Executable for PrintCasm {
             }
             PrintCasm::PrintAddr => {
                 let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                dbg!(n);
                 thread.runtime.stdio.stdout.push(&format!("0x{:X}", n));
             }
             PrintCasm::PrintChar => {

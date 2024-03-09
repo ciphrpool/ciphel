@@ -9,7 +9,7 @@ use num_traits::ToBytes;
 
 use crate::{semantic::MutRc, vm::vm::RuntimeError};
 
-use super::align;
+use super::{align, stack::STACK_SIZE};
 
 pub const ALIGNMENT: usize = 8;
 pub const HEAP_SIZE: usize = 512;
@@ -487,10 +487,16 @@ impl Heap {
             }
         }
 
-        Ok(block.pointer)
+        let address = block.pointer + STACK_SIZE;
+        Ok(address)
     }
 
     pub fn free(&self, address: Pointer) -> Result<(), HeapError> {
+        if address < STACK_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let address = address - STACK_SIZE;
+
         let block = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();
@@ -696,6 +702,10 @@ impl Heap {
         address: Pointer,
         /*offset: usize,*/ size: usize,
     ) -> Result<Vec<u8>, HeapError> {
+        if address < STACK_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let address = address - STACK_SIZE;
         // let block = {
         //     let binding = self.heap.borrow();
         //     let borrowed = binding.as_ref();
@@ -740,6 +750,10 @@ impl Heap {
     }
 
     pub fn write(&self, address: Pointer, data: &Vec<u8>) -> Result<(), HeapError> {
+        if address < STACK_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let address = address - STACK_SIZE;
         // let block = {
         //     let binding = self.heap.borrow();
         //     let borrowed = binding.as_ref();
@@ -781,13 +795,13 @@ mod tests {
         let heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
 
         let address = heap
             .alloc(64)
             .expect("The allocation should have succeeded");
 
-        assert_eq!(address, 32);
+        assert_eq!(address, 32 + STACK_SIZE);
     }
 
     #[test]
@@ -804,7 +818,7 @@ mod tests {
             }
         }
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
     }
 
     #[test]
@@ -822,7 +836,7 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 64);
+        assert_eq!(address, 64 + STACK_SIZE);
     }
 
     #[test]
@@ -841,7 +855,7 @@ mod tests {
         let address = heap
             .alloc(32)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 64);
+        assert_eq!(address, 64 + STACK_SIZE);
     }
 
     #[test]
@@ -858,7 +872,7 @@ mod tests {
         let address = heap
             .alloc(200)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 160);
+        assert_eq!(address, 160 + STACK_SIZE);
     }
 
     #[test]
@@ -886,11 +900,11 @@ mod tests {
         let heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
 
         heap.free(address).expect("The free should have succeeded");
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
     }
 
     #[test]
@@ -906,7 +920,7 @@ mod tests {
         let address = heap
             .alloc(200)
             .expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
 
         let address = heap.alloc(HEAP_SIZE - 200);
         assert!(address.is_err());
@@ -917,7 +931,7 @@ mod tests {
         let heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
 
         heap.free(address).expect("The free should have succeeded");
         let res = heap.free(address);
@@ -929,7 +943,7 @@ mod tests {
         let heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
         let res = heap.read(address, 6).expect("Read should have succeeded");
         assert_eq!(res.len(), 6)
     }
@@ -955,7 +969,7 @@ mod tests {
         let heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
-        assert_eq!(address, 0);
+        assert_eq!(address, 0 + STACK_SIZE);
         let data = vec![1u8; 6];
 
         heap.write(address, &data)

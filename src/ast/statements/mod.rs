@@ -159,7 +159,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
                 let _ = value.gencode(scope, &instructions)?;
                 {
                     instructions.push_label_id(end_scope_label, "end_scope".into());
-                    instructions.push(Casm::Call(Call {
+                    instructions.push(Casm::Call(Call::From {
                         label: scope_label,
                         return_size: 0,
                         param_size: 0,
