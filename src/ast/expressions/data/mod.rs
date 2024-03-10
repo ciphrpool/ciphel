@@ -155,6 +155,13 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
             ExprScope::Expr(value) => value.parameters_size(),
         }
     }
+
+    pub fn to_capturing(&self) {
+        match self {
+            ExprScope::Scope(value) => value.to_capturing(),
+            ExprScope::Expr(value) => value.to_capturing(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

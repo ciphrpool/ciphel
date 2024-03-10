@@ -7,7 +7,7 @@ use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, UReg},
+            stack::{Offset, UReg, STACK_SIZE},
             Memory, MemoryAddress,
         },
         scheduler::Thread,
@@ -27,6 +27,7 @@ pub enum MemCopy {
     LabelOffset(Ulid),
     TakeToHeap { size: usize },
     TakeToStack { size: usize },
+    Take { size: usize },
 }
 
 impl Executable for MemCopy {
@@ -70,6 +71,29 @@ impl Executable for MemCopy {
                     .stack
                     .push_with(&heap_address.to_le_bytes())
                     .map_err(|e| e.into())?;
+            }
+            MemCopy::Take { size } => {
+                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                if address < STACK_SIZE as u64 {
+                    let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
+                    let _ = thread
+                        .env
+                        .stack
+                        .write(Offset::SB(address as usize), AccessLevel::General, &data)
+                        .map_err(|e| e.into())?;
+                } else {
+                    let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
+                    let _ = thread
+                        .runtime
+                        .heap
+                        .write(address as usize, &data)
+                        .map_err(|e| e.into())?;
+                    let _ = thread
+                        .env
+                        .stack
+                        .push_with(&address.to_le_bytes())
+                        .map_err(|e| e.into())?;
+                }
             }
             MemCopy::TakeToStack { size } => {
                 let stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;

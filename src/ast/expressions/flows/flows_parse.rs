@@ -276,6 +276,7 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -289,6 +290,7 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -339,6 +341,7 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
+                            can_capture: Cell::new(false),
 
                             inner_scope: RefCell::new(None),
                         })
@@ -358,6 +361,7 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
+                            can_capture: Cell::new(false),
 
                             inner_scope: RefCell::new(None),
                         })
@@ -377,6 +381,7 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
+                            can_capture: Cell::new(false),
 
                             inner_scope: RefCell::new(None),
                         })
@@ -397,6 +402,7 @@ mod tests {
                                     metadata: Metadata::default()
                                 }))
                             ],
+                            can_capture: Cell::new(false),
 
                             inner_scope: RefCell::new(None),
                         })
@@ -447,6 +453,7 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }))
@@ -472,6 +479,7 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -485,6 +493,7 @@ mod tests {
                             metadata: Metadata::default()
                         }))
                     ],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),

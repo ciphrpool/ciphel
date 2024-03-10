@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::{
     ast::utils::strings::ID,
@@ -19,6 +23,7 @@ pub mod scope_typeof;
 pub struct Scope<Inner: ScopeApi> {
     pub instructions: Vec<Statement<Inner>>,
     pub inner_scope: RefCell<Option<MutRc<Inner>>>,
+    pub can_capture: Cell<bool>,
     pub metadata: Metadata,
 }
 
@@ -35,5 +40,9 @@ impl<InnerScope: ScopeApi> Scope<InnerScope> {
             Some(inner) => Ok(inner.as_ref().borrow().parameters_size()),
             None => Err(SemanticError::NotResolvedYet),
         }
+    }
+
+    pub fn to_capturing(&self) {
+        self.can_capture.set(true);
     }
 }

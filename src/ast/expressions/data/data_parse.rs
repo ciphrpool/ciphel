@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::{
     ast::{
@@ -368,6 +372,7 @@ impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
                         expr: Box::new(value),
                         metadata: Metadata::default(),
                     })],
+                    can_capture: Cell::new(false),
                     inner_scope: RefCell::new(None),
                 })
             }),
@@ -691,6 +696,7 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
+                    can_capture: Cell::new(false),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()
@@ -724,6 +730,7 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
+                    can_capture: Cell::new(false),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()

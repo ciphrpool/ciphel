@@ -32,13 +32,13 @@ impl TryParse for Type {
             map(SliceType::parse, |value| Type::Slice(value)),
             map(StringType::parse, |value| Type::String(value)),
             value(Type::Unit, wst(lexem::UUNIT)),
-            map(parse_id, |value| Type::UserType(value)),
             map(VecType::parse, |value| Type::Vec(value)),
             map(FnType::parse, |value| Type::Fn(value)),
             map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
             map(AddrType::parse, |value| Type::Address(value)),
             map(MapType::parse, |value| Type::Map(value)),
+            map(parse_id, |value| Type::UserType(value)),
         ))(input)
     }
 }
@@ -354,6 +354,16 @@ mod tests {
                 size: 8,
                 item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U128)))
             }))),
+            value
+        );
+
+        let res = VecType::parse("Vec<u64>".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            VecType(Box::new(Type::Primitive(PrimitiveType::Number(
+                NumberType::U64
+            )))),
             value
         );
     }

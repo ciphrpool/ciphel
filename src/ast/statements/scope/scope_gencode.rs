@@ -35,6 +35,12 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
         // Parameter allocation if any
+        let mut env_vars = vars
+            .iter()
+            .filter(|v| v.is_captured.get().1)
+            .collect::<Vec<&Rc<Var>>>();
+        env_vars.sort_by_key(|v| v.is_captured.get().0);
+
         let mut parameters = vars
             .iter()
             .filter(|v| v.is_parameter.get().1)
@@ -42,6 +48,13 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         parameters.sort_by_key(|v| v.is_parameter.get().0);
 
         let mut offset_idx = 0;
+        for var in env_vars {
+            let var = var.as_ref();
+            let var_size = var.type_sig.size_of();
+            // Already allocated
+            var.address.set(Some(Offset::FP(offset_idx)));
+            offset_idx += var_size;
+        }
         for var in parameters {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
@@ -54,7 +67,7 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         for var in vars {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
-            if !var.is_parameter.get().1 {
+            if !var.is_parameter.get().1 && !var.is_captured.get().1 {
                 var.address.set(Some(Offset::FZ(offset_idx as isize)));
                 // Alloc and push heap address on stack
                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));

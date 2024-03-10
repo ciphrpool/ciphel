@@ -133,13 +133,10 @@ impl Executable for Access {
                             offset: address as usize,
                         }
                     }
-
-                    // todo!("Convert u64 to memory address by differenting stack pointer and heap pointer");
                 };
                 (address, size)
             }
         };
-
         match address {
             MemoryAddress::Heap { offset } => {
                 // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;

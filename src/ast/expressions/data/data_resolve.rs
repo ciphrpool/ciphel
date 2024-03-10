@@ -579,7 +579,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             Some(context) => <EType as GetSubTypes>::get_return(context),
             None => None,
         };
-
+        self.scope.to_capturing();
         let _ = self.scope.resolve(scope, &context_return, &vars)?;
 
         let env_vars = self.scope.find_outer_vars()?;
@@ -1071,7 +1071,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -1098,7 +1098,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -1120,7 +1120,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -1142,7 +1142,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -1167,7 +1167,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -1202,7 +1202,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "point".into(),
@@ -1258,7 +1258,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),

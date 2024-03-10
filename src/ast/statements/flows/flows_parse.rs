@@ -204,6 +204,7 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -222,6 +223,7 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }))
@@ -261,6 +263,7 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -279,6 +282,7 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
+                    can_capture: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }))

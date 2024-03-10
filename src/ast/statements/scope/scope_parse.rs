@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use nom::{combinator::map, multi::many0, sequence::delimited};
 
@@ -28,6 +28,7 @@ impl<Inner: ScopeApi> TryParse for Scope<Inner> {
             |value| Scope {
                 instructions: value,
                 inner_scope: RefCell::new(None),
+                can_capture: Cell::new(false),
                 metadata: Metadata::default(),
             },
         )(input)

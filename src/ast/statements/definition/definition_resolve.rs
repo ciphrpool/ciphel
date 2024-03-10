@@ -680,7 +680,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -707,7 +707,7 @@ mod tests {
             vec![Var {
                 id: "x".into(),
                 address: Cell::new(None),
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
@@ -736,7 +736,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -748,7 +748,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "y".into(),
@@ -773,7 +773,7 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 type_sig: Either::Static(

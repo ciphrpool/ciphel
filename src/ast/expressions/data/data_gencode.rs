@@ -366,7 +366,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
                 let address = &var.as_ref().address;
                 let Some(address) = address.get() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -622,6 +621,26 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 metadata,
             }) => {
                 let _ = var.locate_from(from_type, scope, instructions)?;
+                if let Some(signature) = var.signature() {
+                    match signature {
+                        Either::Static(signature) => match signature.as_ref() {
+                            StaticType::String(_) | StaticType::Vec(_) => {
+                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                                instructions.push(Casm::Serialize(Serialized {
+                                    data: (16u64).to_le_bytes().to_vec(),
+                                }));
+                                instructions.push(Casm::Operation(Operation {
+                                    kind: OperationKind::Addition(Addition {
+                                        left: OpPrimitive::Number(NumberType::U64),
+                                        right: OpPrimitive::Number(NumberType::U64),
+                                    }),
+                                }));
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
                 let _ = index.gencode(scope, instructions)?;
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -738,6 +757,26 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 metadata,
             }) => {
                 let _ = var.locate(scope, instructions)?;
+                if let Some(signature) = var.signature() {
+                    match signature {
+                        Either::Static(signature) => match signature.as_ref() {
+                            StaticType::String(_) | StaticType::Vec(_) => {
+                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                                instructions.push(Casm::Serialize(Serialized {
+                                    data: (16u64).to_le_bytes().to_vec(),
+                                }));
+                                instructions.push(Casm::Operation(Operation {
+                                    kind: OperationKind::Addition(Addition {
+                                        left: OpPrimitive::Number(NumberType::U64),
+                                        right: OpPrimitive::Number(NumberType::U64),
+                                    }),
+                                }));
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
                 let _ = index.gencode(scope, instructions)?;
                 let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -833,6 +872,27 @@ impl<Scope: ScopeApi> Variable<Scope> {
                 metadata,
             }) => {
                 let _ = var.locate_from(from_type, scope, instructions)?;
+                if let Some(signature) = var.signature() {
+                    match signature {
+                        Either::Static(signature) => match signature.as_ref() {
+                            StaticType::String(_) | StaticType::Vec(_) => {
+                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                                instructions.push(Casm::Serialize(Serialized {
+                                    data: (16u64).to_le_bytes().to_vec(),
+                                }));
+                                instructions.push(Casm::Operation(Operation {
+                                    kind: OperationKind::Addition(Addition {
+                                        left: OpPrimitive::Number(NumberType::U64),
+                                        right: OpPrimitive::Number(NumberType::U64),
+                                    }),
+                                }));
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+
                 let _ = index.gencode(scope, instructions)?;
                 let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -1064,7 +1124,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
             data: env_size.to_le_bytes().to_vec(),
         }));
         // Load Env variables
-        for (_, (var, level)) in self.env.as_ref().borrow().iter() {
+        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
+            let (var, level) = scope
+                .as_ref()
+                .borrow()
+                .find_var(&var.id)
+                .map_err(|_| CodeGenerationError::UnresolvedError)?;
             let address = &var.as_ref().address;
             let Some(address) = address.get() else {
                 return Err(CodeGenerationError::UnresolvedError);
@@ -1074,7 +1139,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
             instructions.push(Casm::Access(Access::Static {
                 address: MemoryAddress::Stack {
                     offset: address,
-                    level: *level,
+                    level: level,
                 },
                 size: var_size,
             }));
@@ -2086,6 +2151,103 @@ mod tests {
         let x = {
             let f = (x:u64) -> x+1u64;
             return f(68); 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+    }
+    #[test]
+    fn valid_closure_with_stack_env() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let env:u64 = 31;
+            let f = (x:u64) -> {
+                return env + x;
+            };
+            env = 50;
+            return f(38); 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+    }
+
+    #[test]
+    fn valid_closure_with_heap_env() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let env : Vec<u64> = vec[2,5];
+            let f = (x:u64) -> {
+                return env[1] + x;
+            };
+            env[1] = 31;
+            return f(38); 
         };
 
         "##

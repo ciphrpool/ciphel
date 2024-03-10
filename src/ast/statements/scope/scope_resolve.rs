@@ -25,10 +25,17 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
         Self: Sized,
     {
         let mut inner_scope = OuterScope::child_scope_with(scope, extra.clone())?;
+        {
+            if self.can_capture.get() {
+                inner_scope.as_ref().borrow().to_capturing();
+            }
+        }
         for instruction in &self.instructions {
             let _ = instruction.resolve(&mut inner_scope, context, &())?;
         }
-
+        {
+            inner_scope.as_ref().borrow_mut().capture_needed_vars();
+        }
         {
             let mut mut_self = self.inner_scope.borrow_mut();
             mut_self.replace(inner_scope);
@@ -37,6 +44,7 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
         let return_type = self.type_of(&scope.borrow())?;
         let _ = context.compatible_with(&return_type, &scope.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
+
         Ok(())
     }
 }

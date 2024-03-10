@@ -54,7 +54,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
                     };
                     var_type.size_of()
                 };
-                instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))
+
+                instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
             }
             Assignee::PtrAccess(_) => todo!(),
         }

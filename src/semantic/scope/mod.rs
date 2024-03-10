@@ -131,6 +131,10 @@ where
     fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))>;
     fn parameters_size(&self) -> usize;
     fn inner_vars(&self) -> &Vec<Rc<Var>>;
+
+    fn to_capturing(&self);
+    fn capture_needed_vars(&mut self);
+
     fn find_chan(&self) -> Result<&Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;
     fn find_event(&self) -> Result<&Event, SemanticError>;

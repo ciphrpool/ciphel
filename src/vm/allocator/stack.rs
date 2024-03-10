@@ -472,7 +472,7 @@ impl Stack {
                 if frame_bottom + idx >= top {
                     return Err(StackError::ReadError);
                 }
-                Ok(frame_bottom)
+                Ok(frame_bottom + idx)
             }
             Offset::FZ(idx) => {
                 let frame_zero = match level {
@@ -531,7 +531,7 @@ impl Stack {
                 if frame_params_start + idx >= top {
                     return Err(StackError::ReadError);
                 }
-                Ok(frame_params_start)
+                Ok(frame_params_start + idx)
             }
         }
     }

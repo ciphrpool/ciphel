@@ -111,7 +111,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),
@@ -139,7 +139,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                captured: Cell::new(false),
+                is_captured: Cell::new((0, false)),
                 is_parameter: Cell::new((0, false)),
                 address: Cell::new(None),
                 id: "x".into(),

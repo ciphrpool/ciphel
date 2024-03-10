@@ -62,7 +62,6 @@ impl Executable for Call {
         };
         if param_size != 0 {
             let data = thread.env.stack.pop(param_size).map_err(|e| e.into())?;
-
             let _ = thread
                 .env
                 .stack

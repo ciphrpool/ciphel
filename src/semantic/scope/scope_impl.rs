@@ -1,6 +1,6 @@
 use std::{
     borrow::Borrow,
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     rc::{Rc, Weak},
 };
@@ -27,6 +27,7 @@ pub enum Scope {
         general: MutRc<Scope>,
         outer_vars: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
         data: ScopeData,
+        can_capture: Cell<bool>,
     },
     General {
         data: ScopeData,
@@ -77,6 +78,7 @@ impl ScopeApi for Scope {
                     general: general.clone(),
                     data: ScopeData::new(),
                     outer_vars: Rc::new(RefCell::new(Vec::default())),
+                    can_capture: Cell::new(false),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -92,6 +94,7 @@ impl ScopeApi for Scope {
                     parent: None,
                     general: parent.clone(),
                     data: ScopeData::new(),
+                    can_capture: Cell::new(false),
                     outer_vars: Rc::new(RefCell::new(Vec::default())),
                 };
                 for variable in vars {
@@ -144,6 +147,22 @@ impl ScopeApi for Scope {
     fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         todo!()
     }
+    fn to_capturing(&self) {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                outer_vars,
+                data,
+                can_capture,
+            } => can_capture.set(true),
+            Scope::General {
+                data,
+                events,
+                channels,
+            } => todo!(),
+        }
+    }
 
     fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
         match self {
@@ -152,6 +171,7 @@ impl ScopeApi for Scope {
                 parent,
                 general,
                 outer_vars,
+                can_capture,
             } => data
                 .vars
                 .iter()
@@ -169,11 +189,18 @@ impl ScopeApi for Scope {
                                     AccessLevel::Direct => AccessLevel::Backward(1),
                                     AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
                                 };
-                                var.captured.set(true);
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
                                 if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
+                                    // if can_capture.get() {
+                                    //     var.is_captured.set((borrowerd_mut.len(), true));
+                                    // } else {
+                                    //     borrowerd_mut.push((var.id.clone(), (var.clone(), level)));
+                                    // }
                                     borrowerd_mut.push((var.id.clone(), (var.clone(), level)));
                                 }
+                                // if can_capture.get() {
+                                //     return Some((var, AccessLevel::Direct));
+                                // }
                                 Some((var, level))
                             }
                             Err(_) => None,
@@ -188,11 +215,17 @@ impl ScopeApi for Scope {
                             Ok((var, _)) => {
                                 let mut borrowerd_mut = outer_vars.borrow_mut();
                                 if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
+                                    // if can_capture.get() {
+                                    //     var.is_captured.set((borrowerd_mut.len(), true));
+                                    // }
                                     borrowerd_mut.push((
                                         var.id.clone(),
                                         (var.clone(), AccessLevel::General),
                                     ));
                                 }
+                                // if can_capture.get() {
+                                //     return Some((var, AccessLevel::Direct));
+                                // }
                                 Some((var, AccessLevel::General))
                             }
                             Err(_) => None,
@@ -214,6 +247,26 @@ impl ScopeApi for Scope {
         match self {
             Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
             Scope::General { .. } => Vec::default(),
+        }
+    }
+
+    fn capture_needed_vars(&mut self) {
+        match self {
+            Scope::Inner {
+                outer_vars,
+                data,
+                can_capture,
+                ..
+            } => {
+                if can_capture.get() {
+                    for (idx, (_, (var, _))) in outer_vars.as_ref().borrow().iter().enumerate() {
+                        let cloned_var = var.as_ref().clone();
+                        cloned_var.is_captured.set((idx, true));
+                        data.vars.push(Rc::new(cloned_var));
+                    }
+                }
+            }
+            Scope::General { .. } => {}
         }
     }
 
@@ -269,6 +322,7 @@ impl ScopeApi for Scope {
                 general,
                 outer_vars,
                 data,
+                can_capture,
             } => data
                 .vars
                 .iter()
@@ -326,7 +380,12 @@ impl ScopeApi for MockScope {
     fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
-
+    fn to_capturing(&self) {
+        unimplemented!("Mock function call")
+    }
+    fn capture_needed_vars(&mut self) {
+        unimplemented!("Mock function call")
+    }
     fn find_var(&self, _id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
         unimplemented!("Mock function call")
     }
