@@ -171,6 +171,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             })
             .collect::<Vec<Var>>();
 
+        self.scope.to_capturing();
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
 
         let env_vars = self.scope.find_outer_vars()?;
