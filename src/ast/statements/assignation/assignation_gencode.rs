@@ -73,7 +73,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
             AssignValue::Scope(value) => {
                 let end_scope_label = Label::gen();
                 instructions.push(Casm::Goto(Goto {
-                    label: end_scope_label,
+                    label: Some(end_scope_label),
                 }));
                 let scope_label = instructions.push_label("Scope".into());
 

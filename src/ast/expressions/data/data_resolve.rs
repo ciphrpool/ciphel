@@ -8,6 +8,7 @@ use super::{
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
@@ -570,7 +571,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                     None => Some(param),
                 };
                 let var = <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap());
-                var.is_parameter.set((index, true));
+                var.state.set(VarState::Parameter);
                 var
             })
             .collect::<Vec<Var>>();
@@ -582,11 +583,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         self.scope.to_capturing();
         let _ = self.scope.resolve(scope, &context_return, &vars)?;
 
-        let env_vars = self.scope.find_outer_vars()?;
-        {
-            let mut borrowed_env = self.env.borrow_mut();
-            borrowed_env.extend(env_vars);
-        }
         {
             let mut borrowed_metadata = self
                 .metadata
@@ -1071,9 +1067,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -1098,9 +1092,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1120,9 +1112,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
@@ -1142,9 +1132,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -1167,9 +1155,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Tuple(TupleType(vec![
@@ -1202,9 +1188,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "point".into(),
                 type_sig: Either::User(
                     UserType::Struct(
@@ -1258,9 +1242,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),

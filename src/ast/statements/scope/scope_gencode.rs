@@ -1,9 +1,15 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use crate::{
     ast::statements,
     semantic::{
-        scope::{var_impl::Var, ScopeApi},
+        scope::{
+            var_impl::{Var, VarState},
+            ScopeApi,
+        },
         MutRc, SizeOf,
     },
     vm::{
@@ -30,50 +36,53 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         };
         let borrowed = borrowed_scope.as_ref().borrow();
 
-        let vars = borrowed.inner_vars();
-
         let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
         // Parameter allocation if any
-        let mut env_vars = vars
-            .iter()
-            .filter(|v| v.is_captured.get().1)
-            .collect::<Vec<&Rc<Var>>>();
-        env_vars.sort_by_key(|v| v.is_captured.get().0);
 
-        let mut parameters = vars
+        let binding = borrowed.vars();
+        let parameters = binding
             .iter()
-            .filter(|v| v.is_parameter.get().1)
-            .collect::<Vec<&Rc<Var>>>();
-        parameters.sort_by_key(|v| v.is_parameter.get().0);
+            .filter(|(v, _)| v.state.get() == VarState::Parameter);
 
         let mut offset_idx = 0;
-        for var in env_vars {
-            let var = var.as_ref();
-            let var_size = var.type_sig.size_of();
-            // Already allocated
-            var.address.set(Some(Offset::FP(offset_idx)));
-            offset_idx += var_size;
+
+        if borrowed.state().is_closure {
+            offset_idx = 8;
         }
-        for var in parameters {
+
+        for (var, offset) in parameters {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
             // Already allocated
-            var.address.set(Some(Offset::FP(offset_idx)));
+            offset.set(Offset::FP(offset_idx));
+            // let _ = scope
+            //     .borrow()
+            //     .update_var_offset(&var.id, Offset::FP(offset_idx))
+            //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
+            offset.set(Offset::FP(offset_idx));
             offset_idx += var_size;
         }
 
         let mut offset_idx = 0;
-        for var in vars {
+        for (var, offset) in borrowed.vars() {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
-            if !var.is_parameter.get().1 && !var.is_captured.get().1 {
-                var.address.set(Some(Offset::FZ(offset_idx as isize)));
+
+            if var.state.get() != VarState::Parameter {
+                dbg!("here");
+                // let _ = scope
+                //     .borrow()
+                //     .update_var_offset(&var.id, Offset::FZ(offset_idx as isize))
+                //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                offset.set(Offset::FZ(offset_idx as isize));
                 // Alloc and push heap address on stack
                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
             }
             offset_idx += var_size;
         }
+
+        drop(borrowed);
 
         let inner_scope = self.inner_scope.borrow();
         let Some(inner_scope) = inner_scope.as_ref() else {

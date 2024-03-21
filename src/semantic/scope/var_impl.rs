@@ -16,13 +16,43 @@ use super::{
     BuildVar, ScopeApi,
 };
 
+#[derive(Debug, Clone, PartialEq, Copy, Eq, PartialOrd, Ord)]
+pub enum VarState {
+    Local,
+    Global,
+    Parameter,
+    ClosureEnv,
+}
+
+impl Default for VarState {
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     pub id: ID,
     pub type_sig: EType,
-    pub is_captured: Cell<(usize, bool)>,
-    pub is_parameter: Cell<(usize, bool)>,
-    pub address: Cell<Option<Offset>>,
+    pub state: Cell<VarState>,
+}
+
+impl PartialOrd for Var {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.id.partial_cmp(&other.id) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.state.partial_cmp(&other.state)
+    }
+}
+
+impl Eq for Var {}
+
+impl Ord for Var {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
 }
 
 impl<Scope: ScopeApi> CompatibleWith<Scope> for Var {
@@ -49,9 +79,7 @@ impl<Scope: ScopeApi> BuildVar<Scope> for Var {
         Self {
             id: id.clone(),
             type_sig: type_sig.clone(),
-            is_captured: Cell::new((0, false)),
-            is_parameter: Cell::new((0, false)),
-            address: Cell::new(None),
+            state: Cell::new(VarState::Local),
         }
     }
 }

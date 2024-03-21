@@ -519,13 +519,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let Some(left_type) = self.left.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
         let _ = self.left.gencode(scope, instructions)?;
+        let _ = self.right.gencode(scope, instructions)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalAnd(LogicalAnd()),
@@ -541,13 +536,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalOr<Scope> {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let Some(left_type) = self.left.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
         let _ = self.left.gencode(scope, instructions)?;
+        let _ = self.right.gencode(scope, instructions)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalOr(LogicalOr()),

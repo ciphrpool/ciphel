@@ -25,6 +25,7 @@ pub enum Flow<InnerScope: ScopeApi> {
 pub struct IfStat<InnerScope: ScopeApi> {
     condition: Box<Expression<InnerScope>>,
     then_branch: Box<Scope<InnerScope>>,
+    else_if_branches: Vec<(Expression<InnerScope>, Scope<InnerScope>)>,
     else_branch: Option<Box<Scope<InnerScope>>>,
 }
 

@@ -1,6 +1,7 @@
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 use crate::ast::types::FnType;
 use crate::ast::types::Types;
+use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::EType;
@@ -166,21 +167,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             .enumerate()
             .map(|(index, (id, param))| {
                 let var = <Var as BuildVar<Scope>>::build_var(&id, &param);
-                var.is_parameter.set((index, true));
+                var.state.set(VarState::Parameter);
                 var
             })
             .collect::<Vec<Var>>();
-
-        self.scope.to_capturing();
-        let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
-
-        let env_vars = self.scope.find_outer_vars()?;
-        {
-            let mut borrowed_env = self.env.borrow_mut();
-            borrowed_env.extend(env_vars);
-        }
-
-        //let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
 
         // convert to FnType -> GOAL : Retrieve function type signature
         let params = self
@@ -195,6 +185,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         let fn_type_sig = fn_type.type_of(&scope.borrow())?;
         let var = <Var as BuildVar<Scope>>::build_var(&self.id, &fn_type_sig);
         let _ = scope.borrow_mut().register_var(var)?;
+
+        self.scope.to_capturing();
+        let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
+
+        //let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
         Ok(())
     }
 }
@@ -544,7 +539,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -578,7 +573,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -599,7 +594,7 @@ mod tests {
         );
 
         let function_scope = function.scope;
-        let (x_type, _) = function_scope
+        let x_type = function_scope
             .inner_scope
             .borrow()
             .clone()
@@ -611,7 +606,7 @@ mod tests {
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             x_type.type_sig
         );
-        let (text_type, _) = function_scope
+        let text_type = function_scope
             .inner_scope
             .borrow()
             .clone()
@@ -644,7 +639,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let (function_var, _) = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -681,9 +676,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -707,9 +700,7 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
                 ),
@@ -737,9 +728,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -749,9 +738,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "y".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
@@ -774,13 +761,48 @@ mod tests {
             captured_vars,
             vec![Var {
                 id: "x".into(),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
                 ),
             }]
+        )
+    }
+
+    #[test]
+    fn valid_function_rec_no_args_returns() {
+        let function = FnDef::<scope_impl::Scope>::parse(
+            r##"
+
+        fn main() -> u64 {
+            let x:u64 = main();
+            return x;
+        }
+
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let res = function.resolve(&scope, &(), &());
+        assert!(res.is_ok(), "{:?}", res);
+
+        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = function_var.as_ref().clone();
+        let function_type = function_var.type_sig;
+
+        assert_eq!(
+            function_type,
+            Either::Static(
+                StaticType::Fn(FnType {
+                    params: vec![],
+                    ret: Box::new(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
+                    ))
+                })
+                .into()
+            )
         )
     }
 }

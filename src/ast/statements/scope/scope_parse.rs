@@ -29,6 +29,8 @@ impl<Inner: ScopeApi> TryParse for Scope<Inner> {
                 instructions: value,
                 inner_scope: RefCell::new(None),
                 can_capture: Cell::new(false),
+                is_loop: Cell::new(false),
+                is_yieldable: Cell::new(false),
                 metadata: Metadata::default(),
             },
         )(input)

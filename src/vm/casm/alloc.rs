@@ -44,6 +44,8 @@ impl Executable for Alloc {
 #[derive(Debug, Clone)]
 pub enum StackFrame {
     Clean,
+    SoftClean,
+    CleanAndGo,
     Set {
         return_size: usize,
         params_size: usize,
@@ -57,6 +59,17 @@ pub enum StackFrame {
 impl Executable for StackFrame {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
+            StackFrame::CleanAndGo => {
+                let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                thread.env.program.cursor_set(idx);
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                Ok(())
+            }
+            StackFrame::SoftClean => {
+                thread.env.program.incr();
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                Ok(())
+            }
             StackFrame::Clean => {
                 thread
                     .env
@@ -150,6 +163,26 @@ impl Executable for Access {
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
+                if let Offset::FE(idx) = offset {
+                    let heap_address = thread
+                        .env
+                        .stack
+                        .read(Offset::FP(0), level, 8)
+                        .map_err(|err| err.into())?;
+                    let data = TryInto::<&[u8; 8]>::try_into(heap_address.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                    let heap_address = u64::from_le_bytes(*data);
+                    dbg!(heap_address);
+                    let data = thread
+                        .runtime
+                        .heap
+                        .read(heap_address as usize + idx, size)
+                        .map_err(|err| err.into())?;
+                    let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                    thread.env.program.incr();
+                    return Ok(());
+                }
+
                 let data = thread
                     .env
                     .stack

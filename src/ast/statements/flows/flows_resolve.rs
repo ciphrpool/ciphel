@@ -1,7 +1,8 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::{
     scope::{
-        static_types::StaticType, type_traits::TypeChecking, user_type_impl::UserType, ScopeApi,
+        static_types::StaticType, type_traits::TypeChecking, user_type_impl::UserType,
+        var_impl::VarState, ScopeApi,
     },
     EType, Either, MutRc, Resolve, SemanticError, TypeOf,
 };
@@ -51,6 +52,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
         }
 
         let _ = self.then_branch.resolve(scope, &context, &Vec::default())?;
+
+        for (else_if_cond, else_if_scope) in &self.else_if_branches {
+            let _ = else_if_cond.resolve(scope, &None, extra)?;
+            let condition_type = else_if_cond.type_of(&scope.borrow())?;
+            if !<EType as TypeChecking>::is_boolean(&condition_type) {
+                return Err(SemanticError::ExpectedBoolean);
+            }
+            let _ = else_if_scope.resolve(scope, &context, &Vec::default())?;
+        }
+
         if let Some(else_branch) = &self.else_branch {
             let _ = else_branch.resolve(scope, &context, &Vec::default())?;
         }
@@ -77,7 +88,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
         for value in &self.patterns {
             let vars = value.pattern.resolve(scope, &expr_type, &())?;
             for (index, var) in vars.iter().enumerate() {
-                var.is_parameter.set((index, true));
+                var.state.set(VarState::Parameter);
             }
             // create a scope and Scope::child_scope())variable to it before resolving the expression
             let _ = value.scope.resolve(scope, &context, &vars)?;
@@ -169,6 +180,44 @@ mod tests {
     }
 
     #[test]
+    fn valid_if_else_if() {
+        let expr = IfStat::parse(
+            r##"
+            if true {
+                let x = 1;
+            } else if false {
+                let x = 1;
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
+    fn valid_if_else() {
+        let expr = IfStat::parse(
+            r##"
+            if true {
+                let x = 1;
+            } else {
+                let x = 1;
+            }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
     fn valid_match() {
         let expr = MatchStat::parse(
             r##"
@@ -189,9 +238,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),

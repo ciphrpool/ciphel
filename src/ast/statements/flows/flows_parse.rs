@@ -5,7 +5,7 @@ use crate::{
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::separated_list1,
+    multi::{many0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
@@ -42,11 +42,18 @@ impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
         map(
             pair(
                 pair(preceded(wst(lexem::IF), Expression::parse), Scope::parse),
-                opt(preceded(wst(lexem::ELSE), Scope::parse)),
+                pair(
+                    many0(pair(
+                        preceded(pair(wst(lexem::ELSE), wst(lexem::IF)), Expression::parse),
+                        Scope::parse,
+                    )),
+                    opt(preceded(wst(lexem::ELSE), Scope::parse)),
+                ),
             ),
-            |((condition, then_branch), else_branch)| IfStat {
+            |((condition, then_branch), (else_if_branches, else_branch))| IfStat {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
+                else_if_branches,
                 else_branch: else_branch.map(|value| Box::new(value)),
             },
         )(input)
@@ -205,9 +212,12 @@ mod tests {
                         }
                     }))],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
+                else_if_branches: Vec::default(),
                 else_branch: Some(Box::new(Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
@@ -224,6 +234,101 @@ mod tests {
                         }
                     }))],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
+
+                    inner_scope: RefCell::new(None),
+                }))
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_if_else_if() {
+        let res = IfStat::<MockScope>::parse(
+            r#"
+        if true {
+            f(10);
+        }
+        else if true {
+            f(10);
+        } else {
+            f(10);
+        }
+        "#
+            .into(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            IfStat {
+                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                then_branch: Box::new(Scope {
+                    metadata: Metadata::default(),
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                            )))],
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
+                        }
+                    }))],
+                    can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
+
+                    inner_scope: RefCell::new(None),
+                }),
+                else_if_branches: vec![(
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Bool(true)))),
+                    Scope {
+                        metadata: Metadata::default(),
+                        instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                            call: FnCall {
+                                fn_var: Variable::Var(VarID {
+                                    id: "f".into(),
+                                    metadata: Metadata::default()
+                                }),
+                                params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                    Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                )))],
+                                metadata: Metadata::default(),
+                                platform: Rc::default(),
+                            }
+                        }))],
+                        can_capture: Cell::new(false),
+                        is_loop: Cell::new(false),
+                        is_yieldable: Cell::new(false),
+
+                        inner_scope: RefCell::new(None),
+                    }
+                )],
+                else_branch: Some(Box::new(Scope {
+                    metadata: Metadata::default(),
+                    instructions: vec![Statement::Flow(Flow::Call(CallStat {
+                        call: FnCall {
+                            fn_var: Variable::Var(VarID {
+                                id: "f".into(),
+                                metadata: Metadata::default()
+                            }),
+                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                            )))],
+                            metadata: Metadata::default(),
+                            platform: Rc::default(),
+                        }
+                    }))],
+                    can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }))
@@ -264,6 +369,8 @@ mod tests {
                         }
                     }))],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }),
@@ -283,6 +390,8 @@ mod tests {
                         }
                     }))],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }))

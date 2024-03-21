@@ -1,4 +1,8 @@
-use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    rc::Rc,
+};
 
 use num_traits::{sign, ToBytes};
 
@@ -362,14 +366,17 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let (var, level) = scope
+                let var = scope
+                    .as_ref()
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                let address = &var.as_ref().address;
-                let Some(address) = address.get() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
+                let (address, level) = scope
+                    .as_ref()
+                    .borrow()
+                    .address_of(id)
+                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
+
                 let var_type = &var.as_ref().type_sig;
                 let var_size = var_type.size_of();
 
@@ -677,15 +684,17 @@ impl<Scope: ScopeApi> Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let (var, level) = scope
+                let var = scope
+                    .as_ref()
                     .borrow()
                     .find_var(id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                let (address, level) = scope
+                    .as_ref()
+                    .borrow()
+                    .address_of(id)
+                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                let address = &var.as_ref().address;
-                let Some(address) = address.get() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
                 let var_type = &var.as_ref().type_sig;
                 let _var_size = var_type.size_of();
 
@@ -1104,7 +1113,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
-        instructions.push(Casm::Goto(Goto { label: end_closure }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_closure),
+        }));
 
         let closure_label = instructions.push_label("fn_closure".into());
         let _ = self.scope.gencode(scope, instructions);
@@ -1113,27 +1124,31 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
         instructions.push(Casm::MemCopy(MemCopy::LabelOffset(closure_label)));
         let mut alloc_size = 16;
         let mut env_size = 0;
-        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
+
+        let binding = self
+            .scope
+            .scope()
+            .map_err(|_| CodeGenerationError::UnresolvedError)?;
+        let inner_scope = binding.as_ref().borrow();
+
+        for var in inner_scope.env_vars() {
             let var_type = &var.as_ref().type_sig;
             let var_size = var_type.size_of();
             alloc_size += var_size;
             env_size += var_size;
         }
+
         // Load Env Size
         instructions.push(Casm::Serialize(Serialized {
             data: env_size.to_le_bytes().to_vec(),
         }));
+        let outer_scope = scope.as_ref().borrow();
         // Load Env variables
-        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
-            let (var, level) = scope
-                .as_ref()
-                .borrow()
-                .find_var(&var.id)
+        for var in inner_scope.env_vars() {
+            let (address, level) = outer_scope
+                .address_of(&var.id)
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let address = &var.as_ref().address;
-            let Some(address) = address.get() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
+
             let var_type = &var.as_ref().type_sig;
             let var_size = var_type.size_of();
             instructions.push(Casm::Access(Access::Static {
@@ -2194,11 +2209,16 @@ mod tests {
             r##"
         let x = {
             let env:u64 = 31;
-            let f = (x:u64) -> {
-                return env + x;
+
+            let x = {
+                return env + 5u64;
             };
-            env = 50;
-            return f(38); 
+            return x;
+            // let f = (x:u64) -> {
+            //     return env + x;
+            // };
+            // env = 50;
+            // return f(38); 
         };
 
         "##

@@ -352,7 +352,6 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
             |(params, scope)| Closure {
                 params,
                 scope,
-                env: Rc::new(RefCell::new(Vec::default())),
                 metadata: Metadata::default(),
             },
         )(input)
@@ -373,6 +372,8 @@ impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
                         metadata: Metadata::default(),
                     })],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
                     inner_scope: RefCell::new(None),
                 })
             }),
@@ -684,7 +685,6 @@ mod tests {
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
-                env: Rc::new(RefCell::new(Vec::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -697,6 +697,8 @@ mod tests {
                         metadata: Metadata::default()
                     })],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()
@@ -718,7 +720,6 @@ mod tests {
                         NumberType::U64
                     ))
                 }),],
-                env: Rc::new(RefCell::new(Vec::default())),
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -731,6 +732,8 @@ mod tests {
                         metadata: Metadata::default()
                     })],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()

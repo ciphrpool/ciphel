@@ -1,5 +1,5 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, Ref, RefCell},
     collections::HashMap,
     rc::Rc,
 };
@@ -130,7 +130,6 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    env: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
     scope: ExprScope<InnerScope>,
     pub metadata: Metadata,
 }
@@ -142,20 +141,12 @@ pub enum ExprScope<InnerScope: ScopeApi> {
 }
 
 impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
-    pub fn find_outer_vars(&self) -> Result<Vec<(ID, (Rc<Var>, AccessLevel))>, SemanticError> {
+    pub fn scope(&self) -> Result<MutRc<InnerScope>, SemanticError> {
         match self {
-            ExprScope::Scope(scope) => scope.find_outer_vars(),
-            ExprScope::Expr(scope) => scope.find_outer_vars(),
+            ExprScope::Scope(scope) => scope.scope(),
+            ExprScope::Expr(scope) => scope.scope(),
         }
     }
-
-    pub fn parameters_size(&self) -> Result<usize, SemanticError> {
-        match self {
-            ExprScope::Scope(value) => value.parameters_size(),
-            ExprScope::Expr(value) => value.parameters_size(),
-        }
-    }
-
     pub fn to_capturing(&self) {
         match self {
             ExprScope::Scope(value) => value.to_capturing(),
@@ -163,6 +154,21 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
         }
     }
 }
+//     pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
+//         match self {
+//             ExprScope::Scope(scope) => scope.env_vars(),
+//             ExprScope::Expr(scope) => scope.env_vars(),
+//         }
+//     }
+
+//     // pub fn parameters_size(&self) -> Result<usize, SemanticError> {
+//     //     match self {
+//     //         ExprScope::Scope(value) => value.parameters_size(),
+//     //         ExprScope::Expr(value) => value.parameters_size(),
+//     //     }
+//     // }
+
+// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClosureParam {
@@ -274,7 +280,6 @@ impl<Scope: ScopeApi> Data<Scope> {
             }) => metadata.signature(),
             Data::Closure(Closure {
                 params,
-                env,
                 scope,
                 metadata,
             }) => metadata.signature(),

@@ -1,11 +1,15 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
     rc::Rc,
+    slice::Iter,
 };
 
-use crate::ast::{statements::definition, types, utils::strings::ID};
+use crate::{
+    ast::{statements::definition, types, utils::strings::ID},
+    vm::{allocator::stack::Offset, vm::CodeGenerationError},
+};
 
 use self::{
     chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
@@ -115,25 +119,62 @@ pub trait BuildEvent<Scope: ScopeApi> {
     fn build_event(scope: &Ref<Scope>, event: &definition::EventDef<Scope>) -> Event;
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ScopeState {
+    pub is_closure: bool,
+    pub is_generator: bool,
+    pub is_loop: bool,
+}
+
+impl Default for ScopeState {
+    fn default() -> Self {
+        Self {
+            is_closure: false,
+            is_generator: false,
+            is_loop: false,
+        }
+    }
+}
+
 pub trait ScopeApi
 where
     Self: Sized + Clone + Debug,
 {
-    fn child_scope_with(parent: &MutRc<Self>, vars: Vec<Var>)
-        -> Result<MutRc<Self>, SemanticError>;
+    fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError>;
 
     fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError>;
     fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;
     fn register_var(&mut self, reg: Var) -> Result<(), SemanticError>;
     fn register_event(&mut self, reg: Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;
-    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))>;
-    fn parameters_size(&self) -> usize;
-    fn inner_vars(&self) -> &Vec<Rc<Var>>;
+    // fn to_loop(&self);
+    // fn is_loop(&self) -> bool;
+    // fn to_yieldable(&self);
+    // fn is_yieldable(&self) -> bool;
 
-    fn to_capturing(&self);
-    fn capture_needed_vars(&mut self);
+    fn state(&self) -> ScopeState;
+    fn to_closure(&mut self);
+    fn capture(&mut self, var: Rc<Var>) -> bool;
+    fn to_generator(&mut self);
+    fn to_loop(&mut self);
+
+    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
+    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError>;
+    fn stack_top(&self) -> Option<usize>;
+    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError>;
+
+    fn env_vars(&self) -> Vec<Rc<Var>>;
+    fn vars(&self) -> Vec<(Rc<Var>, Cell<Offset>)>;
+
+    fn address_of(&self, id: &ID) -> Result<(Offset, AccessLevel), CodeGenerationError>;
+    // fn access_level_of(&self, id: &ID) -> Result<AccessLevel, CodeGenerationError>;
+
+    // fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;
+    // fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))>;
+    // fn inner_vars(&self) -> &Vec<Rc<Var>>;
+
+    // fn to_capturing(&self);
+    // fn capture_needed_vars(&mut self);
 
     fn find_chan(&self) -> Result<&Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;

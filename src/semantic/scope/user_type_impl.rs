@@ -559,7 +559,9 @@ impl Printer for Union {
                 PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
             )))));
             let _ = value.build_printer(instructions)?;
-            instructions.push(Casm::Goto(Goto { label: end_label }));
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_label),
+            }));
         }
         instructions.push_label_id(end_label, "end_print_enum".into());
         Ok(())
@@ -608,7 +610,9 @@ impl Printer for Enum {
             instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
                 PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
             )))));
-            instructions.push(Casm::Goto(Goto { label: end_label }));
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_label),
+            }));
         }
         instructions.push_label_id(end_label, "end_print_enum".into());
         Ok(())

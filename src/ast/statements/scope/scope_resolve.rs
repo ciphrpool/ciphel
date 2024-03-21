@@ -24,18 +24,21 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     where
         Self: Sized,
     {
-        let mut inner_scope = OuterScope::child_scope_with(scope, extra.clone())?;
+        let mut inner_scope = OuterScope::spawn(scope, extra.clone())?;
         {
             if self.can_capture.get() {
-                inner_scope.as_ref().borrow().to_capturing();
+                inner_scope.as_ref().borrow_mut().to_closure();
+            }
+            if self.is_loop.get() {
+                inner_scope.as_ref().borrow_mut().to_loop();
             }
         }
         for instruction in &self.instructions {
             let _ = instruction.resolve(&mut inner_scope, context, &())?;
         }
-        {
-            inner_scope.as_ref().borrow_mut().capture_needed_vars();
-        }
+        // {
+        //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
+        // }
         {
             let mut mut_self = self.inner_scope.borrow_mut();
             mut_self.replace(inner_scope);
@@ -79,9 +82,9 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
-        let (var_x, _) = res_scope.borrow().find_var(&"x".into()).unwrap();
+        let var_x = res_scope.borrow().find_var(&"x".into()).unwrap();
         let x_type = var_x.type_of(&res_scope.borrow()).unwrap();
-        let (var_y, _) = res_scope.borrow().find_var(&"y".into()).unwrap();
+        let var_y = res_scope.borrow().find_var(&"y".into()).unwrap();
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(

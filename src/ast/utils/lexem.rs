@@ -16,6 +16,10 @@ pub const EVENT: &str = "event";
 pub const WHILE: &str = "while";
 pub const FOR: &str = "for";
 pub const LOOP: &str = "loop";
+pub const BREAK: &str = "break";
+pub const CONTINUE: &str = "continue";
+pub const YIELD: &str = "yield";
+
 // TYPE
 pub const U8: &str = "u8";
 pub const U16: &str = "u16";

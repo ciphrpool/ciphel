@@ -8,6 +8,7 @@ use crate::{
         scope::{
             static_types::{NumberType, StaticType, StrSliceType},
             user_type_impl::{Enum, Union, UserType},
+            var_impl::VarState,
             ScopeApi,
         },
         AccessLevel, Either, MutRc, SizeOf,
@@ -63,50 +64,48 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         let else_scope_label = Label::gen();
         let end_else_scope_label = Label::gen();
         let end_ifelse_label = Label::gen();
-        {
-            let if_label = instructions.push_label("If".into());
-        }
-        let _ = self.condition.gencode(scope, &instructions)?;
-        {
-            instructions.push(Casm::If(BranchIf { else_label }));
-            instructions.push(Casm::Goto(Goto {
-                label: end_if_scope_label,
-            }));
-            instructions.push_label_id(if_scope_label, "if_scope".into());
-        }
-        let _ = self.then_branch.gencode(scope, &instructions)?;
-        {
-            instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
-            instructions.push(Casm::Call(Call::From {
-                label: if_scope_label,
-                return_size,
-                param_size: 0,
-            }));
-            instructions.push(Casm::Goto(Goto {
-                label: end_ifelse_label,
-            }));
-        }
-        {
-            instructions.push_label_id(else_label, "else".into());
-            instructions.push(Casm::Goto(Goto {
-                label: end_else_scope_label,
-            }));
-            instructions.push_label_id(else_scope_label, "else_scope".into());
-        }
-        let _ = self.else_branch.gencode(scope, &instructions)?;
-        {
-            instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
-            instructions.push(Casm::Call(Call::From {
-                label: else_scope_label,
-                return_size,
-                param_size: 0,
-            }));
-            instructions.push(Casm::Goto(Goto {
-                label: end_ifelse_label,
-            }));
 
-            instructions.push_label_id(end_ifelse_label, "end_if_else".into());
-        }
+        let if_label = instructions.push_label("If".into());
+
+        let _ = self.condition.gencode(scope, &instructions)?;
+
+        instructions.push(Casm::If(BranchIf { else_label }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_if_scope_label),
+        }));
+        instructions.push_label_id(if_scope_label, "if_scope".into());
+
+        let _ = self.then_branch.gencode(scope, &instructions)?;
+
+        instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
+        instructions.push(Casm::Call(Call::From {
+            label: if_scope_label,
+            return_size,
+            param_size: 0,
+        }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_ifelse_label),
+        }));
+
+        instructions.push_label_id(else_label, "else".into());
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_else_scope_label),
+        }));
+        instructions.push_label_id(else_scope_label, "else_scope".into());
+
+        let _ = self.else_branch.gencode(scope, &instructions)?;
+
+        instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
+        instructions.push(Casm::Call(Call::From {
+            label: else_scope_label,
+            return_size,
+            param_size: 0,
+        }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_ifelse_label),
+        }));
+
+        instructions.push_label_id(end_ifelse_label, "end_if_else".into());
 
         Ok(())
     }
@@ -242,15 +241,27 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
             let end_scope_label = Label::gen();
             instructions.push(Casm::Goto(Goto {
-                label: end_scope_label,
+                label: Some(end_scope_label),
             }));
             let scope_label = instructions.push_label("Scope".into());
             let _ = expr.gencode(scope, instructions)?;
 
+            // let param_size = expr
+            //     .parameters_size()
+            //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
             let param_size = expr
-                .parameters_size()
+                .scope()
+                .map(|s| {
+                    s.as_ref()
+                        .borrow()
+                        .vars()
+                        .iter()
+                        .filter_map(|(v, _)| {
+                            (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
+                        })
+                        .sum()
+                })
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
             instructions.push_label_id(end_scope_label, "End_Scope".into());
             instructions.push(Casm::Call(Call::From {
                 label: scope_label,
@@ -258,7 +269,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 param_size,
             }));
             instructions.push(Casm::Goto(Goto {
-                label: end_match_label,
+                label: Some(end_match_label),
             }));
         }
         match &self.else_branch {
@@ -266,7 +277,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 instructions.push_label_id(else_label.unwrap(), "else_case".into());
                 let end_scope_label = Label::gen();
                 instructions.push(Casm::Goto(Goto {
-                    label: end_scope_label,
+                    label: Some(end_scope_label),
                 }));
                 let scope_label = instructions.push_label("Scope".into());
                 let _ = else_branch.gencode(scope, instructions)?;
@@ -278,7 +289,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                     param_size: 0,
                 }));
                 instructions.push(Casm::Goto(Goto {
-                    label: end_match_label,
+                    label: Some(end_match_label),
                 }));
             }
             None => {}
@@ -337,8 +348,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                     right: OpPrimitive::Number(NumberType::U64),
                 }),
             }));
-            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
-            instructions.push(Casm::Access(Access::Runtime { size: None }));
+            // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+            // instructions.push(Casm::Access(Access::Runtime { size: None }));
 
             // Load Param
             for param in &self.params {
@@ -349,7 +360,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
             // Call function
 
             // Load param size
-            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+            // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+            instructions.push(Casm::Serialize(Serialized {
+                data: (8 as u64).to_le_bytes().to_vec(),
+            }));
             instructions.push(Casm::Serialize(Serialized {
                 data: (params_size as u64).to_le_bytes().to_vec(),
             }));

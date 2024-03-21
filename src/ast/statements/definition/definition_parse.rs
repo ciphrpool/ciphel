@@ -332,6 +332,8 @@ mod tests {
                         metadata: Metadata::default()
                     })],
                     can_capture: Cell::new(false),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
 
                     inner_scope: RefCell::new(None),
                 }

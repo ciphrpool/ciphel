@@ -12,7 +12,7 @@ use crate::{semantic::MutRc, vm::vm::RuntimeError};
 use super::{align, stack::STACK_SIZE};
 
 pub const ALIGNMENT: usize = 8;
-pub const HEAP_SIZE: usize = 512;
+pub const HEAP_SIZE: usize = 2048;
 pub const HEAP_ADDRESS_SIZE: usize = 8;
 
 type Pointer = usize;
@@ -745,7 +745,7 @@ impl Heap {
         // let Some(res) = res else {
         //     return Err(HeapError::InvalidPointer);
         // };
-
+        dbg!(&res);
         Ok(res)
     }
 

@@ -62,6 +62,7 @@ impl Executable for Call {
         };
         if param_size != 0 {
             let data = thread.env.stack.pop(param_size).map_err(|e| e.into())?;
+            dbg!(&data);
             let _ = thread
                 .env
                 .stack
@@ -87,16 +88,25 @@ impl Executable for Call {
 
 #[derive(Debug, Clone)]
 pub struct Goto {
-    pub label: Ulid,
+    pub label: Option<Ulid>,
 }
 
 impl Executable for Goto {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        let Some(idx) = thread.env.program.get(&self.label) else {
-            return Err(RuntimeError::CodeSegmentation);
-        };
-        thread.env.program.cursor_set(idx);
-        Ok(())
+        match self.label {
+            Some(label) => {
+                let Some(idx) = thread.env.program.get(&label) else {
+                    return Err(RuntimeError::CodeSegmentation);
+                };
+                thread.env.program.cursor_set(idx);
+                Ok(())
+            }
+            None => {
+                let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                thread.env.program.cursor_set(idx);
+                Ok(())
+            }
+        }
     }
 }
 
@@ -108,6 +118,7 @@ pub struct BranchIf {
 impl Executable for BranchIf {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::get_bool(&thread.memory())?;
+
         let Some(else_label) = thread.env.program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };
