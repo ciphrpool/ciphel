@@ -205,8 +205,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
     where
         Self: Sized,
     {
-        let _var = scope.borrow().find_var(&self.id)?;
-
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }

@@ -74,11 +74,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
         }));
         // Load Env variables
         for (_, (var, _)) in self.env.as_ref().borrow().iter() {
-            let (address, level) = scope
-                .borrow()
-                .address_of(&var.id)
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
+            let (var, address, level) = scope.as_ref().borrow().access_var(&var.id)?;
             let var_type = &var.as_ref().type_sig;
             let var_size = var_type.size_of();
             instructions.push(Casm::Access(Access::Static {
@@ -92,14 +88,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
         instructions.push(Casm::Alloc(Alloc::Heap { size: alloc_size }));
         instructions.push(Casm::MemCopy(MemCopy::TakeToHeap { size: alloc_size }));
 
-        let var = scope
-            .borrow()
-            .find_var(&self.id)
-            .map_err(|_| CodeGenerationError::UnresolvedError)?;
-        let (address, level) = scope
-            .borrow()
-            .address_of(&self.id)
-            .map_err(|_| CodeGenerationError::UnresolvedError)?;
+        let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
         let _var_size = var_type.size_of();
 

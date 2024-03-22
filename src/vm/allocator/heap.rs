@@ -745,7 +745,6 @@ impl Heap {
         // let Some(res) = res else {
         //     return Err(HeapError::InvalidPointer);
         // };
-        dbg!(&res);
         Ok(res)
     }
 

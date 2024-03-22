@@ -23,7 +23,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
     vars: Vec<(Rc<Var>, Cell<Offset>)>,
-    env_vars: BTreeSet<Rc<Var>>,
+    env_vars: MutRc<BTreeSet<Rc<Var>>>,
     env_vars_address: HashMap<ID, Cell<AccessLevel>>,
     types: HashMap<ID, Rc<UserType>>,
     state: Cell<ScopeState>,
@@ -50,7 +50,7 @@ impl ScopeData {
             vars: Vec::new(),
             types: HashMap::new(),
             state: Cell::default(),
-            env_vars: BTreeSet::default(),
+            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
             env_vars_address: HashMap::default(),
         }
     }
@@ -60,7 +60,7 @@ impl ScopeData {
             vars: Vec::default(),
             types: HashMap::new(),
             state: self.state.clone(),
-            env_vars: BTreeSet::default(),
+            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
             env_vars_address: HashMap::default(),
         }
     }
@@ -168,25 +168,14 @@ impl ScopeApi for Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let mut borrowed_scope = p.as_ref().try_borrow_mut();
-                        match borrowed_scope {
-                            Ok(mut borrowed_scope) => {}
-                            Err(e) => panic!("{} {}", e, id),
-                        }
+                        let borrowed_scope = p.as_ref().borrow();
                         let var = {
-                            let borrowed_scope = p.as_ref().borrow();
                             let var = borrowed_scope.find_var(id);
                             var.ok()
                         };
-                        // if let Some(var) = &var {
-                        //     let mut borrowed_scope = p.as_ref().try_borrow_mut();
-                        //     match borrowed_scope {
-                        //         Ok(mut borrowed_scope) => {
-                        //             borrowed_scope.capture(var.clone());
-                        //         }
-                        //         Err(e) => panic!("{}", e),
-                        //     }
-                        // }
+                        if let Some(var) = &var {
+                            self.capture(var.clone());
+                        }
                         var
                     }),
                     None => {
@@ -211,15 +200,70 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn capture(&mut self, var: Rc<Var>) -> bool {
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let is_closure = self.state().is_closure;
         match self {
             Scope::Inner {
+                data,
                 parent,
                 general,
-                data,
-            } => {
+                ..
+            } => data
+                .vars
+                .iter()
+                .rev()
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::Direct))
+                .or_else(|| match parent {
+                    Some(parent) => parent.upgrade().and_then(|p| {
+                        let borrowed_scope = p.as_ref().borrow();
+                        match borrowed_scope.access_var(id) {
+                            Ok((var, offset, level)) => {
+                                let level = match level {
+                                    AccessLevel::General => AccessLevel::General,
+                                    AccessLevel::Direct => AccessLevel::Backward(1),
+                                    AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
+                                };
+                                if is_closure {
+                                    let level = match level {
+                                        AccessLevel::Backward(1) => AccessLevel::Direct,
+                                        AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
+                                        _ => level,
+                                    };
+                                    Some((var, Offset::FP(0), level))
+                                } else {
+                                    Some((var, offset, level))
+                                }
+                            }
+                            Err(_) => None,
+                        }
+                    }),
+                    None => {
+                        let borrowed_scope =
+                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                        let borrowed_scope = borrowed_scope.borrow();
+
+                        match borrowed_scope.access_var(id) {
+                            Ok(var) => Some(var),
+                            Err(_) => None,
+                        }
+                    }
+                })
+                .ok_or(CodeGenerationError::UnresolvedError),
+            Scope::General { data, .. } => data
+                .vars
+                .iter()
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::General))
+                .ok_or(CodeGenerationError::UnresolvedError),
+        }
+    }
+
+    fn capture(&self, var: Rc<Var>) -> bool {
+        match self {
+            Scope::Inner { data, .. } => {
                 if data.state.get().is_closure {
-                    data.env_vars.insert(var.clone());
+                    data.env_vars.as_ref().borrow_mut().insert(var);
                     return true;
                 }
                 return false;
@@ -299,62 +343,18 @@ impl ScopeApi for Scope {
 
     fn env_vars(&self) -> Vec<Rc<Var>> {
         match self {
-            Scope::Inner { data, .. } => (&data.env_vars).into_iter().cloned().collect(),
-            Scope::General { data, .. } => (&data.env_vars).into_iter().cloned().collect(),
-        }
-    }
-
-    fn address_of(&self, id: &ID) -> Result<(Offset, AccessLevel), CodeGenerationError> {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                data,
-            } => data
-                .vars
-                .iter()
-                .find(|(var, _)| &var.as_ref().id == id)
-                .map(|(_, offset)| (offset.get(), AccessLevel::Direct))
-                .or_else(|| match parent {
-                    Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
-                        let borrowed_scope = borrowed_scope.borrow();
-                        let is_closure = borrowed_scope.state().is_closure;
-
-                        match borrowed_scope.address_of(id) {
-                            Ok((offset, level)) => {
-                                let level = match level {
-                                    AccessLevel::General => AccessLevel::General,
-                                    AccessLevel::Direct => AccessLevel::Backward(1),
-                                    AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
-                                };
-                                if is_closure {
-                                    Some((Offset::FP(0), level))
-                                } else {
-                                    Some((offset, level))
-                                }
-                            }
-                            Err(_) => None,
-                        }
-                    }),
-                    None => {
-                        let borrowed_scope =
-                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
-                        let borrowed_scope = borrowed_scope.borrow();
-
-                        match borrowed_scope.address_of(id) {
-                            Ok((offset, _)) => Some((offset, AccessLevel::General)),
-                            Err(_) => None,
-                        }
-                    }
-                })
-                .ok_or(CodeGenerationError::UnresolvedError),
-            Scope::General { data, .. } => data
-                .vars
-                .iter()
-                .find(|(var, _)| &var.as_ref().id == id)
-                .map(|(var, offset)| (offset.get(), AccessLevel::General))
-                .ok_or(CodeGenerationError::UnresolvedError),
+            Scope::Inner { data, .. } => (&data.env_vars)
+                .as_ref()
+                .borrow()
+                .clone()
+                .into_iter()
+                .collect(),
+            Scope::General { data, .. } => (&data.env_vars)
+                .as_ref()
+                .borrow()
+                .clone()
+                .into_iter()
+                .collect(),
         }
     }
 
@@ -362,14 +362,14 @@ impl ScopeApi for Scope {
     //     todo!()
     // }
 
-    fn vars(&self) -> Vec<(Rc<Var>, Cell<Offset>)> {
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         match self {
             Scope::Inner {
                 parent,
                 general,
                 data,
-            } => data.vars.clone(),
-            Scope::General { data, .. } => data.vars.clone(),
+            } => data.vars.iter(),
+            Scope::General { data, .. } => data.vars.iter(),
         }
     }
 
@@ -477,27 +477,13 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
 
-    fn address_of(
-        &self,
-        id: &ID,
-    ) -> Result<
-        (crate::vm::allocator::stack::Offset, AccessLevel),
-        crate::vm::vm::CodeGenerationError,
-    > {
-        unimplemented!("Mock function call")
-    }
-
-    // fn access_level_of(&self, id: &ID) -> Result<AccessLevel, crate::vm::vm::CodeGenerationError> {
-    //     unimplemented!("Mock function call")
-    // }
-
     fn env_vars(&self) -> Vec<Rc<Var>> {
         unimplemented!("Mock function call")
     }
-    fn capture(&mut self, var: Rc<Var>) -> bool {
+    fn capture(&self, var: Rc<Var>) -> bool {
         unimplemented!("Mock function call")
     }
-    fn vars(&self) -> Vec<(Rc<Var>, Cell<Offset>)> {
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         unimplemented!("Mock function call")
     }
     fn stack_top(&self) -> Option<usize> {
@@ -507,6 +493,10 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
     fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
         unimplemented!("Mock function call")
     }
 }

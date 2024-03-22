@@ -154,19 +154,19 @@ where
 
     fn state(&self) -> ScopeState;
     fn to_closure(&mut self);
-    fn capture(&mut self, var: Rc<Var>) -> bool;
+    fn capture(&self, var: Rc<Var>) -> bool;
     fn to_generator(&mut self);
     fn to_loop(&mut self);
 
     fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
+
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError>;
     fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError>;
     fn stack_top(&self) -> Option<usize>;
     fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError>;
 
     fn env_vars(&self) -> Vec<Rc<Var>>;
-    fn vars(&self) -> Vec<(Rc<Var>, Cell<Offset>)>;
-
-    fn address_of(&self, id: &ID) -> Result<(Offset, AccessLevel), CodeGenerationError>;
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)>;
     // fn access_level_of(&self, id: &ID) -> Result<AccessLevel, CodeGenerationError>;
 
     // fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;

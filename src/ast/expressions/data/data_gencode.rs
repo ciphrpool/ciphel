@@ -366,17 +366,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let var = scope
-                    .as_ref()
-                    .borrow()
-                    .find_var(id)
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                let (address, level) = scope
-                    .as_ref()
-                    .borrow()
-                    .address_of(id)
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
+                let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                dbg!((&var, &address, &level));
                 let var_type = &var.as_ref().type_sig;
                 let var_size = var_type.size_of();
 
@@ -684,16 +675,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => {
-                let var = scope
-                    .as_ref()
-                    .borrow()
-                    .find_var(id)
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                let (address, level) = scope
-                    .as_ref()
-                    .borrow()
-                    .address_of(id)
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
 
                 let var_type = &var.as_ref().type_sig;
                 let _var_size = var_type.size_of();
@@ -1145,10 +1127,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
         let outer_scope = scope.as_ref().borrow();
         // Load Env variables
         for var in inner_scope.env_vars() {
-            let (address, level) = outer_scope
-                .address_of(&var.id)
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
+            let (var, address, level) = outer_scope.access_var(&var.id)?;
             let var_type = &var.as_ref().type_sig;
             let var_size = var_type.size_of();
             instructions.push(Casm::Access(Access::Static {
@@ -2210,15 +2189,11 @@ mod tests {
         let x = {
             let env:u64 = 31;
 
-            let x = {
-                return env + 5u64;
+            let f = (x:u64) -> {
+                return env + x;
             };
-            return x;
-            // let f = (x:u64) -> {
-            //     return env + x;
-            // };
-            // env = 50;
-            // return f(38); 
+            env = 50;
+            return f(38); 
         };
 
         "##

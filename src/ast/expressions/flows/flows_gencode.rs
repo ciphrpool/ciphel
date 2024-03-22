@@ -255,7 +255,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                     s.as_ref()
                         .borrow()
                         .vars()
-                        .iter()
                         .filter_map(|(v, _)| {
                             (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
                         })

@@ -70,10 +70,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 };
 
                 for id in &vars {
-                    let var = scope
-                        .borrow()
-                        .find_var(id)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
 
                     let var_size = var.type_sig.size_of();
 
@@ -88,22 +85,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 }
 
                 // Generate right side code
-                dbg!("before");
                 let _ = right.gencode(scope, instructions)?;
                 // Generate the left side code : the variable declaration
                 // reverse the variables in order to pop the stack and assign in order of stack push
                 vars.reverse();
 
                 for id in &vars {
-                    let var = scope
-                        .borrow()
-                        .find_var(id)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                    let (address, level) = scope
-                        .borrow()
-                        .address_of(id)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                    dbg!((address, id));
+                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+
                     let var_size = var.type_sig.size_of();
                     instructions.push(Casm::Locate(Locate {
                         address: MemoryAddress::Stack {

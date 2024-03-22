@@ -39,10 +39,8 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
         // Parameter allocation if any
-
-        let binding = borrowed.vars();
-        let parameters = binding
-            .iter()
+        let parameters = borrowed
+            .vars()
             .filter(|(v, _)| v.state.get() == VarState::Parameter);
 
         let mut offset_idx = 0;
@@ -70,7 +68,6 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             let var_size = var.type_sig.size_of();
 
             if var.state.get() != VarState::Parameter {
-                dbg!("here");
                 // let _ = scope
                 //     .borrow()
                 //     .update_var_offset(&var.id, Offset::FZ(offset_idx as isize))
