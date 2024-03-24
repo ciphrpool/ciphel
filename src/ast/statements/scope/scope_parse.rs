@@ -12,7 +12,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::{
+        scope::{ClosureState, ScopeApi},
+        Metadata,
+    },
 };
 
 use super::Scope;
@@ -28,7 +31,10 @@ impl<Inner: ScopeApi> TryParse for Scope<Inner> {
             |value| Scope {
                 instructions: value,
                 inner_scope: RefCell::new(None),
-                can_capture: Cell::new(false),
+                can_capture: Cell::new(ClosureState::DEFAULT),
+                is_loop: Cell::new(false),
+                is_yieldable: Cell::new(false),
+                caller: Default::default(),
                 metadata: Metadata::default(),
             },
         )(input)

@@ -111,9 +111,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -139,9 +137,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),

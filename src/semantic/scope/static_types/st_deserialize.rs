@@ -56,7 +56,8 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
             }
             StaticType::Slice(value) => Ok(Data::Slice(value.deserialize_from(bytes)?)),
             StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
-            StaticType::Fn(_value) => unimplemented!(),
+            StaticType::StaticFn(_value) => unimplemented!(),
+            StaticType::Closure(_value) => unimplemented!(),
             StaticType::Chan(_value) => unimplemented!(),
             StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
             StaticType::Unit => Ok(Data::Unit),
@@ -86,7 +87,8 @@ impl Printer for StaticType {
             StaticType::String(value) => value.build_printer(instructions),
             StaticType::StrSlice(value) => value.build_printer(instructions),
             StaticType::Vec(value) => value.build_printer(instructions),
-            StaticType::Fn(value) => todo!(),
+            StaticType::StaticFn(value) => todo!(),
+            StaticType::Closure(value) => todo!(),
             StaticType::Chan(value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(instructions),
             StaticType::Unit => {

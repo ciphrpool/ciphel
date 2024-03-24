@@ -11,7 +11,8 @@ impl TypeChecking for StaticType {
             StaticType::Primitive(_) => false,
             StaticType::Slice(_) => true,
             StaticType::Vec(_) => true,
-            StaticType::Fn(_) => false,
+            StaticType::StaticFn(_) => false,
+            StaticType::Closure(_) => false,
             StaticType::Chan(_) => true,
             StaticType::Tuple(_) => false,
             StaticType::Unit => false,
@@ -28,7 +29,8 @@ impl TypeChecking for StaticType {
             StaticType::Primitive(_) => false,
             StaticType::Slice(_) => true,
             StaticType::Vec(_) => true,
-            StaticType::Fn(_) => false,
+            StaticType::StaticFn(_) => false,
+            StaticType::Closure(_) => false,
             StaticType::Chan(_) => false,
             StaticType::Tuple(_) => false,
             StaticType::Unit => false,
@@ -45,7 +47,8 @@ impl TypeChecking for StaticType {
             StaticType::Primitive(_) => false,
             StaticType::Slice(_) => false,
             StaticType::Vec(_) => false,
-            StaticType::Fn(_) => false,
+            StaticType::StaticFn(_) => false,
+            StaticType::Closure(_) => false,
             StaticType::Chan(_) => false,
             StaticType::Tuple(_) => true,
             StaticType::Unit => false,
@@ -76,7 +79,8 @@ impl TypeChecking for StaticType {
 
     fn is_callable(&self) -> bool {
         match self {
-            StaticType::Fn(_) => true,
+            StaticType::StaticFn(_) => true,
+            StaticType::Closure(_) => true,
             StaticType::Address(AddrType(value)) => <EType as TypeChecking>::is_callable(value),
             _ => false,
         }

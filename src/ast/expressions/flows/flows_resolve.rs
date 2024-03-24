@@ -3,6 +3,7 @@ use crate::ast::expressions::data::{VarID, Variable};
 use crate::resolve_metadata;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::user_type_impl::{Enum, Union};
+use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
@@ -135,7 +136,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+                    let var = <Var as BuildVar<Scope>>::build_var(var_name, field_type);
+                    var.state.set(VarState::Parameter);
+                    scope_vars.push(var);
                 }
                 Ok(scope_vars)
             } // Pattern::Struct { typename, vars } => {
@@ -199,7 +202,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
     {
         let vars = self.pattern.resolve(scope, &extra, &())?;
         for (index, var) in vars.iter().enumerate() {
-            var.is_parameter.set((index, true));
+            var.state.set(VarState::Parameter);
         }
         // create a scope and assign the pattern variable to it before resolving the expression
         let _ = self.expr.resolve(scope, context, &vars)?;
@@ -451,9 +454,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -499,9 +500,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::User(
                     UserType::Enum(Enum {
@@ -557,9 +556,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(StaticType::String(StringType()).into()),
             })
@@ -604,9 +601,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -632,9 +627,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -720,9 +713,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::User(
                     UserType::Union(Union {
@@ -812,12 +803,10 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "f".into(),
                 type_sig: Either::Static(
-                    StaticType::Fn(FnType {
+                    StaticType::StaticFn(FnType {
                         params: vec![
                             Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
@@ -856,9 +845,7 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 id: "f".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -935,9 +922,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
-                address: Cell::new(None),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -957,9 +942,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -982,9 +965,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -1004,9 +985,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -1029,9 +1008,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
@@ -1048,9 +1025,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Address(AddrType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -1150,9 +1125,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -1172,9 +1145,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -1197,9 +1168,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "tab".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Vec(VecType(Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
@@ -1219,9 +1188,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "obj".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
@@ -1244,9 +1211,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 id: "x".into(),
-                address: Cell::new(None),
-                is_captured: Cell::new((0, false)),
-                is_parameter: Cell::new((0, false)),
+                state: Cell::default(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),

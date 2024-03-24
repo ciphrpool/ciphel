@@ -1,7 +1,7 @@
 use super::CasmProgram;
 use crate::vm::{
     allocator::{
-        stack::{Offset, StackError},
+        stack::{Offset, StackError, STACK_SIZE},
         Memory, MemoryAddress,
     },
     scheduler::Thread,
@@ -25,6 +25,20 @@ impl Executable for Locate {
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
+                if let Offset::FE(idx) = offset {
+                    let heap_address = thread
+                        .env
+                        .stack
+                        .read(Offset::FP(0), *level, 8)
+                        .map_err(|err| err.into())?;
+                    let data = TryInto::<&[u8; 8]>::try_into(heap_address.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                    let heap_address = u64::from_le_bytes(*data);
+                    let data = (heap_address + *idx as u64).to_le_bytes();
+                    let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+                    thread.env.program.incr();
+                    return Ok(());
+                }
                 let offset = thread
                     .env
                     .stack

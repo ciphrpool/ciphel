@@ -17,7 +17,8 @@ impl GetSubTypes for StaticType {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
             StaticType::Vec(_) => None,
-            StaticType::Fn(value) => value.params.get(*n).map(|v| v.clone()),
+            StaticType::StaticFn(value) => value.params.get(*n).map(|v| v.clone()),
+            StaticType::Closure(value) => value.params.get(*n).map(|v| v.clone()),
             StaticType::Chan(_) => None,
             StaticType::Tuple(value) => value.0.get(*n).map(|v| v.clone()),
             StaticType::Unit => None,
@@ -35,7 +36,8 @@ impl GetSubTypes for StaticType {
             StaticType::Primitive(_) => None,
             StaticType::Slice(SliceType { size, item_type }) => Some(item_type.as_ref().clone()),
             StaticType::Vec(value) => Some(value.0.as_ref().clone()),
-            StaticType::Fn(_) => None,
+            StaticType::StaticFn(_) => None,
+            StaticType::Closure(_) => None,
             StaticType::Chan(value) => Some(value.0.as_ref().clone()),
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
@@ -83,7 +85,8 @@ impl GetSubTypes for StaticType {
 
     fn get_return(&self) -> Option<EType> {
         match self {
-            StaticType::Fn(value) => Some(value.ret.as_ref().clone()),
+            StaticType::StaticFn(value) => Some(value.ret.as_ref().clone()),
+            StaticType::Closure(value) => Some(value.ret.as_ref().clone()),
             StaticType::Chan(value) => Some(value.0.as_ref().clone()),
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_return(value),
             _ => None,
@@ -94,7 +97,15 @@ impl GetSubTypes for StaticType {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
             StaticType::Vec(_) => None,
-            StaticType::Fn(value) => Some(
+            StaticType::StaticFn(value) => Some(
+                value
+                    .params
+                    .clone()
+                    .into_iter()
+                    .map(|param| (None, param))
+                    .collect(),
+            ),
+            StaticType::Closure(value) => Some(
                 value
                     .params
                     .clone()
@@ -126,7 +137,8 @@ impl GetSubTypes for StaticType {
             StaticType::Primitive(_) => None,
             StaticType::Slice(SliceType { size, item_type }) => Some(size.clone()),
             StaticType::Vec(_) => None,
-            StaticType::Fn(_) => None,
+            StaticType::StaticFn(_) => None,
+            StaticType::Closure(_) => None,
             StaticType::Chan(_) => None,
             StaticType::Tuple(value) => Some(value.0.len()),
             StaticType::Unit => None,
@@ -144,7 +156,8 @@ impl GetSubTypes for StaticType {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,
             StaticType::Vec(_) => None,
-            StaticType::Fn(_) => None,
+            StaticType::StaticFn(_) => None,
+            StaticType::Closure(_) => None,
             StaticType::Chan(_) => None,
             StaticType::Tuple(TupleType(fields)) => {
                 Some(fields.iter().take(index).map(|field| field.size_of()).sum())

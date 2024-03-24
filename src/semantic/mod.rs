@@ -30,6 +30,8 @@ pub enum SemanticError {
     ExpectedEnum,
     ExpectedStruct,
     ExpectedChannel,
+    ExpectedLoop,
+    ExpectedMovedClosure,
 
     UnknownVar(ID),
     UnknownType,

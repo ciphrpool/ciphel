@@ -5,7 +5,10 @@ use crate::{
         assignation::AssignValue,
         declaration::{DeclaredVar, PatternVar},
     },
-    semantic::{scope::ScopeApi, MutRc, SizeOf},
+    semantic::{
+        scope::{var_impl::VarState, ScopeApi},
+        MutRc, SizeOf,
+    },
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{alloc::Alloc, locate::Locate, memcopy::MemCopy, Casm, CasmProgram},
@@ -26,22 +29,35 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 // When the variable is created in the general scope,
                 // the scope can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
-                let (var, level) = scope
-                    .borrow()
-                    .find_var(id)
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                let address = &var.as_ref().address;
-                match address.get() {
-                    Some(_) => Ok(()),
-                    None => {
-                        // Update the stack pointer of the variable
-                        var.as_ref().address.set(Some(Offset::FZ(0)));
-                        let var_size = var.type_sig.size_of();
-                        instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                        Ok(())
-                    }
+                if let Some(stack_top) = scope.borrow().stack_top() {
+                    let var = scope
+                        .borrow()
+                        .update_var_offset(id, Offset::SB(stack_top))
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                    instructions.push(Casm::Alloc(Alloc::Stack {
+                        size: var.type_sig.size_of(),
+                    }));
+                    scope
+                        .borrow()
+                        .update_stack_top(stack_top + var.type_sig.size_of());
                 }
+                // let (address, level) = scope
+                //     .borrow()
+                //     .address_of(id)
+                //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
+
+                Ok(())
+                // match address.get() {
+                //     Some(_) => Ok(()),
+                //     None => {
+                //         // Update the stack pointer of the variable
+                //         var.as_ref().address.set(Some(Offset::FZ(0)));
+                //         let var_size = var.type_sig.size_of();
+                //         instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+                //         Ok(())
+                //     }
+                // }
             }
             Declaration::Assigned { left, right } => {
                 // retrieve all named variables and alloc them if needed
@@ -52,41 +68,31 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     DeclaredVar::Pattern(PatternVar::StructFields { vars, .. }) => vars.to_vec(),
                     DeclaredVar::Pattern(PatternVar::Tuple(ids)) => ids.to_vec(),
                 };
-                let mut var_offset_idx = 0;
+
                 for id in &vars {
-                    let (var, level) = scope
-                        .borrow()
-                        .find_var(&id)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                    let address = &var.as_ref().address;
+                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+
                     let var_size = var.type_sig.size_of();
-                    let address = match address.get() {
-                        Some(addr) => addr,
-                        None => {
-                            // Update the stack pointer of the variable
-                            var.as_ref().address.set(Some(Offset::FZ(var_offset_idx)));
-                            instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                            Offset::FZ(var_offset_idx)
-                        }
-                    };
-                    var_offset_idx += var_size as isize;
+
+                    if let Some(stack_top) = scope.borrow().stack_top() {
+                        let var = scope
+                            .borrow()
+                            .update_var_offset(id, Offset::SB(stack_top))
+                            .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                        instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+                        let _ = scope.borrow().update_stack_top(stack_top + var_size)?;
+                    }
                 }
 
                 // Generate right side code
                 let _ = right.gencode(scope, instructions)?;
-
                 // Generate the left side code : the variable declaration
                 // reverse the variables in order to pop the stack and assign in order of stack push
                 vars.reverse();
 
-                for id in vars {
-                    let (var, level) = scope
-                        .borrow()
-                        .find_var(&id)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                    let Some(address) = var.as_ref().address.get() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
+                for id in &vars {
+                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+
                     let var_size = var.type_sig.size_of();
                     instructions.push(Casm::Locate(Locate {
                         address: MemoryAddress::Stack {

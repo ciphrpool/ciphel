@@ -150,21 +150,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
                 // borrowed.extend(scope_casm.main);
                 let scope_label = Label::gen();
                 let end_scope_label = Label::gen();
-                {
-                    instructions.push(Casm::Goto(Goto {
-                        label: end_scope_label,
-                    }));
-                    instructions.push_label_id(scope_label, "scope".into());
-                }
+
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(end_scope_label),
+                }));
+                instructions.push_label_id(scope_label, "scope".into());
+
                 let _ = value.gencode(scope, &instructions)?;
-                {
-                    instructions.push_label_id(end_scope_label, "end_scope".into());
-                    instructions.push(Casm::Call(Call::From {
-                        label: scope_label,
-                        return_size: 0,
-                        param_size: 0,
-                    }))
-                }
+
+                instructions.push_label_id(end_scope_label, "end_scope".into());
+                instructions.push(Casm::Call(Call::From {
+                    label: scope_label,
+                    return_size: 0,
+                    param_size: 0,
+                }));
+
                 Ok(())
             }
             Statement::Flow(value) => value.gencode(scope, instructions),

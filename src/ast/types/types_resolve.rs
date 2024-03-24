@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StrSliceType,
+    AddrType, ChanType, ClosureType, KeyType, MapType, PrimitiveType, SliceType, StrSliceType,
     StringType, TupleType, Type, Types, VecType,
 };
 use crate::semantic::{
@@ -32,7 +32,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
                 Ok(())
             }
             Type::Vec(value) => value.resolve(scope, context, extra),
-            Type::Fn(value) => value.resolve(scope, context, extra),
+            Type::Closure(value) => value.resolve(scope, context, extra),
             Type::Chan(value) => value.resolve(scope, context, extra),
             Type::Tuple(value) => value.resolve(scope, context, extra),
             Type::Unit => Ok(()),
@@ -131,7 +131,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for FnType {
+impl<Scope: ScopeApi> Resolve<Scope> for ClosureType {
     type Output = ();
     type Context = ();
 

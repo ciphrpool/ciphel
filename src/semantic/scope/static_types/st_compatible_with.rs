@@ -13,7 +13,8 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
             StaticType::Primitive(value) => value.compatible_with(other, scope),
             StaticType::Slice(value) => value.compatible_with(other, scope),
             StaticType::Vec(value) => value.compatible_with(other, scope),
-            StaticType::Fn(value) => value.compatible_with(other, scope),
+            StaticType::StaticFn(value) => value.compatible_with(other, scope),
+            StaticType::Closure(value) => value.compatible_with(other, scope),
             StaticType::Chan(value) => value.compatible_with(other, scope),
             StaticType::Tuple(value) => value.compatible_with(other, scope),
             StaticType::Unit => {

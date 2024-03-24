@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use nom::{
     branch::alt,
@@ -153,7 +157,6 @@ impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
             |(id, params, ret, scope)| FnDef {
                 id,
                 params,
-                env: Rc::new(RefCell::new(HashMap::default())),
                 ret: Box::new(ret),
                 scope,
             },
@@ -208,7 +211,10 @@ mod tests {
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::{scope::scope_impl::MockScope, Metadata},
+        semantic::{
+            scope::{scope_impl::MockScope, ClosureState},
+            Metadata,
+        },
     };
 
     use super::*;
@@ -319,10 +325,10 @@ mod tests {
                 id: "f".into(),
                 params: vec![TypedVar {
                     id: "x".into(),
+                    rec: false,
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
-                env: Rc::new(RefCell::new(HashMap::default())),
                 scope: Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -331,8 +337,10 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(false),
-
+                    can_capture: Cell::new(ClosureState::DEFAULT),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }
             },

@@ -28,7 +28,12 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let main_type = self.then_branch.type_of(&scope)?;
+        let mut main_type = self.then_branch.type_of(&scope)?;
+
+        for (_, else_if_scope) in &self.else_if_branches {
+            let else_if_type = else_if_scope.type_of(scope)?;
+            main_type = main_type.merge(&else_if_type, scope)?;
+        }
         match &self.else_branch {
             Some(else_branch) => {
                 let else_type = else_branch.type_of(&scope)?;

@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, value},
+    combinator::{map, opt, value},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
@@ -15,7 +15,7 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
+    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
     StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
@@ -33,7 +33,7 @@ impl TryParse for Type {
             map(StringType::parse, |value| Type::String(value)),
             value(Type::Unit, wst(lexem::UUNIT)),
             map(VecType::parse, |value| Type::Vec(value)),
-            map(FnType::parse, |value| Type::Fn(value)),
+            map(ClosureType::parse, |value| Type::Closure(value)),
             map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
             map(AddrType::parse, |value| Type::Address(value)),
@@ -155,7 +155,7 @@ impl TryParse for VecType {
     }
 }
 
-impl TryParse for FnType {
+impl TryParse for ClosureType {
     /*
      * @desc Parse Closure Type Definition
      *
@@ -165,14 +165,15 @@ impl TryParse for FnType {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                wst(lexem::FN),
+                pair(opt(wst(lexem::DYN)), wst(lexem::FN)),
                 delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
                 wst(lexem::ARROW),
                 Type::parse,
             )),
-            |(_, params, _, ret)| FnType {
+            |((opt_dyn, _), params, _, ret)| ClosureType {
                 params,
                 ret: Box::new(ret),
+                closed: opt_dyn.is_some(),
             },
         )(input)
     }
@@ -370,13 +371,26 @@ mod tests {
 
     #[test]
     fn valid_fn_type() {
-        let res = FnType::parse("fn(u16) -> bool".into());
+        let res = ClosureType::parse("fn(u16) -> bool".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            FnType {
+            ClosureType {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
-                ret: Box::new(Type::Primitive(PrimitiveType::Bool))
+                ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
+                closed: false,
+            },
+            value
+        );
+
+        let res = ClosureType::parse("dyn fn(u16) -> bool".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            ClosureType {
+                params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
+                ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
+                closed: true,
             },
             value
         );

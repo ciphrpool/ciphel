@@ -2,6 +2,7 @@ use crate::semantic::MutRc;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
+    io,
     rc::Rc,
 };
 use ulid::Ulid;
@@ -101,6 +102,8 @@ impl CasmProgram {
             match borrowed_main.get(cursor) {
                 Some(instruction) => {
                     // dbg!((cursor, instruction, thread.env.stack.top(),));
+                    // let mut buffer = String::new();
+                    // io::stdin().read_line(&mut buffer);
 
                     match instruction.execute(thread) {
                         Ok(_) => {}

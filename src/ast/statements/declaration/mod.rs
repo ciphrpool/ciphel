@@ -22,6 +22,7 @@ pub enum Declaration<InnerScope: ScopeApi> {
 pub struct TypedVar {
     pub id: ID,
     pub signature: Type,
+    pub rec: bool,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclaredVar {

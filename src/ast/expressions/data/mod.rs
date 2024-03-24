@@ -1,5 +1,5 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, Ref, RefCell},
     collections::HashMap,
     rc::Rc,
 };
@@ -10,7 +10,7 @@ use crate::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             var_impl::Var,
-            ScopeApi,
+            ClosureState, ScopeApi,
         },
         AccessLevel, EType, Either, Metadata, MutRc, SemanticError,
     },
@@ -130,8 +130,8 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    env: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
-    scope: ExprScope<InnerScope>,
+    pub scope: ExprScope<InnerScope>,
+    pub closed: bool,
     pub metadata: Metadata,
 }
 
@@ -142,27 +142,34 @@ pub enum ExprScope<InnerScope: ScopeApi> {
 }
 
 impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
-    pub fn find_outer_vars(&self) -> Result<Vec<(ID, (Rc<Var>, AccessLevel))>, SemanticError> {
+    pub fn scope(&self) -> Result<MutRc<InnerScope>, SemanticError> {
         match self {
-            ExprScope::Scope(scope) => scope.find_outer_vars(),
-            ExprScope::Expr(scope) => scope.find_outer_vars(),
+            ExprScope::Scope(scope) => scope.scope(),
+            ExprScope::Expr(scope) => scope.scope(),
         }
     }
-
-    pub fn parameters_size(&self) -> Result<usize, SemanticError> {
+    pub fn to_capturing(&self, state: ClosureState) {
         match self {
-            ExprScope::Scope(value) => value.parameters_size(),
-            ExprScope::Expr(value) => value.parameters_size(),
-        }
-    }
-
-    pub fn to_capturing(&self) {
-        match self {
-            ExprScope::Scope(value) => value.to_capturing(),
-            ExprScope::Expr(value) => value.to_capturing(),
+            ExprScope::Scope(value) => value.to_capturing(state),
+            ExprScope::Expr(value) => value.to_capturing(state),
         }
     }
 }
+//     pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
+//         match self {
+//             ExprScope::Scope(scope) => scope.env_vars(),
+//             ExprScope::Expr(scope) => scope.env_vars(),
+//         }
+//     }
+
+//     // pub fn parameters_size(&self) -> Result<usize, SemanticError> {
+//     //     match self {
+//     //         ExprScope::Scope(value) => value.parameters_size(),
+//     //         ExprScope::Expr(value) => value.parameters_size(),
+//     //     }
+//     // }
+
+// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClosureParam {
@@ -272,12 +279,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                 length,
                 capacity,
             }) => metadata.signature(),
-            Data::Closure(Closure {
-                params,
-                env,
-                scope,
-                metadata,
-            }) => metadata.signature(),
+            Data::Closure(Closure { metadata, .. }) => metadata.signature(),
             Data::Tuple(Tuple { value, metadata }) => metadata.signature(),
             Data::Address(Address { value, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),

@@ -1,13 +1,15 @@
 use std::cell::Ref;
 
+use nom::Err;
+
 use crate::semantic::{
     scope::{user_type_impl::UserType, ScopeApi},
     EType, Either, MergeType, SemanticError, TypeOf,
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, PrimitiveType, SliceType, StaticType,
-    StrSliceType, StringType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, SliceType,
+    StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
@@ -36,7 +38,8 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::Primitive(value) => value.merge(other, scope),
             StaticType::Slice(value) => value.merge(other, scope),
             StaticType::Vec(value) => value.merge(other, scope),
-            StaticType::Fn(value) => value.merge(other, scope),
+            StaticType::StaticFn(value) => value.merge(other, scope),
+            StaticType::Closure(value) => value.merge(other, scope),
             StaticType::Chan(value) => value.merge(other, scope),
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
@@ -178,11 +181,43 @@ impl<Scope: ScopeApi> MergeType<Scope> for FnType {
     where
         Other: TypeOf<Scope>,
     {
+        Err(SemanticError::IncompatibleTypes)
+        // let other_type = other.type_of(&scope)?;
+        // let Either::Static(other_type) = other_type else {
+        //     return Err(SemanticError::IncompatibleTypes);
+        // };
+        // let StaticType::StaticFn(other_type) = other_type.as_ref() else {
+        //     return Err(SemanticError::IncompatibleTypes);
+        // };
+        // if self.params.len() != other_type.params.len() {
+        //     return Err(SemanticError::IncompatibleTypes);
+        // }
+        // let mut merged_params = Vec::with_capacity(self.params.len());
+        // for (self_inner, other_inner) in self.params.iter().zip(other_type.params.iter()) {
+        //     let merged = self_inner.merge(other_inner, scope)?;
+        //     merged_params.push(merged);
+        // }
+        // let merged_ret = self.ret.merge(other_type.ret.as_ref(), scope)?;
+        // Ok(Either::Static(
+        //     StaticType::StaticFn(FnType {
+        //         params: merged_params,
+        //         ret: Box::new(merged_ret),
+        //     })
+        //     .into(),
+        // ))
+    }
+}
+
+impl<Scope: ScopeApi> MergeType<Scope> for ClosureType {
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        let StaticType::Fn(other_type) = other_type.as_ref() else {
+        let StaticType::Closure(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         if self.params.len() != other_type.params.len() {
@@ -194,10 +229,16 @@ impl<Scope: ScopeApi> MergeType<Scope> for FnType {
             merged_params.push(merged);
         }
         let merged_ret = self.ret.merge(other_type.ret.as_ref(), scope)?;
+
+        if self.closed != other_type.closed {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+
         Ok(Either::Static(
-            StaticType::Fn(FnType {
+            StaticType::Closure(ClosureType {
                 params: merged_params,
                 ret: Box::new(merged_ret),
+                closed: self.closed,
             })
             .into(),
         ))

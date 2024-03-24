@@ -1,23 +1,32 @@
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, BorrowMut},
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{BTreeMap, BTreeSet, HashMap},
     rc::{Rc, Weak},
+    slice::Iter,
 };
 
 use crate::{
     ast::utils::strings::ID,
     semantic::{AccessLevel, MutRc, SemanticError, SizeOf},
+    vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 
 use super::{
-    chan_impl::Chan, event_impl::Event, user_type_impl::UserType, var_impl::Var, ScopeApi,
+    chan_impl::Chan,
+    event_impl::Event,
+    user_type_impl::UserType,
+    var_impl::{Var, VarState},
+    ClosureState, ScopeApi, ScopeState,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
-    vars: Vec<Rc<Var>>,
+    vars: Vec<(Rc<Var>, Cell<Offset>)>,
+    env_vars: MutRc<BTreeSet<Rc<Var>>>,
+    env_vars_address: HashMap<ID, Cell<AccessLevel>>,
     types: HashMap<ID, Rc<UserType>>,
+    state: Cell<ScopeState>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,14 +34,13 @@ pub enum Scope {
     Inner {
         parent: Option<Weak<RefCell<Scope>>>,
         general: MutRc<Scope>,
-        outer_vars: MutRc<Vec<(ID, (Rc<Var>, AccessLevel))>>,
         data: ScopeData,
-        can_capture: Cell<bool>,
     },
     General {
         data: ScopeData,
         events: HashMap<ID, Event>,
         channels: HashMap<ID, Chan>,
+        stack_top: Cell<usize>,
     },
 }
 
@@ -41,6 +49,19 @@ impl ScopeData {
         Self {
             vars: Vec::new(),
             types: HashMap::new(),
+            state: Cell::default(),
+            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
+            env_vars_address: HashMap::default(),
+        }
+    }
+
+    pub fn spawn(&self) -> Self {
+        Self {
+            vars: Vec::default(),
+            types: HashMap::new(),
+            state: self.state.clone(),
+            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
+            env_vars_address: HashMap::default(),
         }
     }
 }
@@ -51,6 +72,7 @@ impl Scope {
             data: ScopeData::new(),
             events: HashMap::new(),
             channels: HashMap::new(),
+            stack_top: Cell::new(0),
         }))
     }
 }
@@ -66,36 +88,26 @@ impl ScopeApi for Scope {
 
     // type Event = Event;
 
-    fn child_scope_with(
-        parent: &MutRc<Self>,
-        vars: Vec<Var>,
-    ) -> Result<MutRc<Self>, SemanticError> {
+    fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
-            Scope::Inner { general, .. } => {
+            Scope::Inner { general, data, .. } => {
                 let mut child = Self::Inner {
                     parent: Some(Rc::downgrade(parent)),
                     general: general.clone(),
-                    data: ScopeData::new(),
-                    outer_vars: Rc::new(RefCell::new(Vec::default())),
-                    can_capture: Cell::new(false),
+                    data: data.spawn(),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
                 }
-                Ok(Rc::new(RefCell::new(child)))
+                let child = Rc::new(RefCell::new(child));
+                Ok(child)
             }
-            Scope::General {
-                data: _,
-                events: _,
-                channels: _,
-            } => {
+            Scope::General { .. } => {
                 let mut child = Self::Inner {
                     parent: None,
                     general: parent.clone(),
                     data: ScopeData::new(),
-                    can_capture: Cell::new(false),
-                    outer_vars: Rc::new(RefCell::new(Vec::default())),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -107,20 +119,11 @@ impl ScopeApi for Scope {
 
     fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError> {
         match self {
-            Scope::Inner {
-                parent: _,
-                general: _,
-                data,
-                ..
-            } => {
+            Scope::Inner { data, .. } => {
                 data.types.insert(id.clone(), reg.into());
                 Ok(())
             }
-            Scope::General {
-                data,
-                events: _,
-                channels: _,
-            } => {
+            Scope::General { data, .. } => {
                 data.types.insert(id.clone(), reg.into());
                 Ok(())
             }
@@ -134,11 +137,12 @@ impl ScopeApi for Scope {
     fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.vars.push(reg.into());
+                data.vars.push((reg.into(), Cell::default()));
                 Ok(())
             }
             Scope::General { data, .. } => {
-                data.vars.push(reg.into());
+                reg.state.set(VarState::Global);
+                data.vars.push((reg.into(), Cell::default()));
                 Ok(())
             }
         }
@@ -147,61 +151,99 @@ impl ScopeApi for Scope {
     fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         todo!()
     }
-    fn to_capturing(&self) {
-        match self {
-            Scope::Inner {
-                parent,
-                general,
-                outer_vars,
-                data,
-                can_capture,
-            } => can_capture.set(true),
-            Scope::General {
-                data,
-                events,
-                channels,
-            } => todo!(),
-        }
-    }
 
-    fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
+    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
                 parent,
                 general,
-                outer_vars,
-                can_capture,
+                ..
             } => data
                 .vars
                 .iter()
-                .find(|var| &var.as_ref().id == id)
+                .rev()
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(v, _)| v)
                 .cloned()
-                .map(|v| (v, AccessLevel::Direct))
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = p.as_ref().borrow();
+                        let var = {
+                            let var = borrowed_scope.find_var(id);
+                            var.ok()
+                        };
+                        if let Some(var) = &var {
+                            self.capture(var.clone());
+                        }
+                        var
+                    }),
+                    None => {
+                        let borrowed_scope =
+                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
+
                         match borrowed_scope.find_var(id) {
-                            Ok((var, level)) => {
+                            Ok(var) => Some(var),
+                            Err(_) => None,
+                        }
+                    }
+                })
+                .ok_or(SemanticError::UnknownVar(id.clone())),
+            Scope::General { data, .. } => data
+                .vars
+                .iter()
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(v, _)| v)
+                .cloned()
+                .ok_or(SemanticError::UnknownVar(id.clone())),
+        }
+    }
+
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let is_closure = self.state().is_closure;
+        match self {
+            Scope::Inner {
+                data,
+                parent,
+                general,
+                ..
+            } => data
+                .vars
+                .iter()
+                .rev()
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::Direct))
+                .or_else(|| match parent {
+                    Some(parent) => parent.upgrade().and_then(|p| {
+                        let borrowed_scope = p.as_ref().borrow();
+                        match borrowed_scope.access_var(id) {
+                            Ok((var, offset, level)) => {
                                 let level = match level {
                                     AccessLevel::General => AccessLevel::General,
                                     AccessLevel::Direct => AccessLevel::Backward(1),
                                     AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
                                 };
-                                let mut borrowerd_mut = outer_vars.borrow_mut();
-                                if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
-                                    // if can_capture.get() {
-                                    //     var.is_captured.set((borrowerd_mut.len(), true));
-                                    // } else {
-                                    //     borrowerd_mut.push((var.id.clone(), (var.clone(), level)));
-                                    // }
-                                    borrowerd_mut.push((var.id.clone(), (var.clone(), level)));
+                                if is_closure == ClosureState::CAPTURING {
+                                    let level = match level {
+                                        AccessLevel::Backward(1) => AccessLevel::Direct,
+                                        AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
+                                        _ => level,
+                                    };
+                                    let offset = {
+                                        let mut idx = 0;
+                                        for env_var in borrowed_scope.env_vars() {
+                                            if env_var.id == var.id {
+                                                break;
+                                            }
+                                            idx += env_var.as_ref().type_sig.size_of();
+                                        }
+                                        idx
+                                    };
+                                    Some((var, Offset::FE(offset), level))
+                                } else {
+                                    Some((var, offset, level))
                                 }
-                                // if can_capture.get() {
-                                //     return Some((var, AccessLevel::Direct));
-                                // }
-                                Some((var, level))
                             }
                             Err(_) => None,
                         }
@@ -211,69 +253,72 @@ impl ScopeApi for Scope {
                             <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
-                        match borrowed_scope.find_var(id) {
-                            Ok((var, _)) => {
-                                let mut borrowerd_mut = outer_vars.borrow_mut();
-                                if borrowerd_mut.iter().find(|(id, _)| id == &var.id).is_none() {
-                                    // if can_capture.get() {
-                                    //     var.is_captured.set((borrowerd_mut.len(), true));
-                                    // }
-                                    borrowerd_mut.push((
-                                        var.id.clone(),
-                                        (var.clone(), AccessLevel::General),
-                                    ));
-                                }
-                                // if can_capture.get() {
-                                //     return Some((var, AccessLevel::Direct));
-                                // }
-                                Some((var, AccessLevel::General))
-                            }
+                        match borrowed_scope.access_var(id) {
+                            Ok(var) => Some(var),
                             Err(_) => None,
                         }
                     }
                 })
-                .ok_or(SemanticError::UnknownVar(id.clone())),
+                .ok_or(CodeGenerationError::UnresolvedError),
             Scope::General { data, .. } => data
                 .vars
                 .iter()
-                .find(|var| &var.as_ref().id == id)
-                .cloned()
-                .ok_or(SemanticError::UnknownVar(id.clone()))
-                .map(|v| (v, AccessLevel::General)),
+                .find(|(var, _)| &var.as_ref().id == id)
+                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::General))
+                .ok_or(CodeGenerationError::UnresolvedError),
         }
     }
 
-    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))> {
-        match self {
-            Scope::Inner { outer_vars, .. } => outer_vars.as_ref().borrow().clone(),
-            Scope::General { .. } => Vec::default(),
-        }
-    }
-
-    fn capture_needed_vars(&mut self) {
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let is_closure = self.state().is_closure;
         match self {
             Scope::Inner {
-                outer_vars,
                 data,
-                can_capture,
+                parent,
+                general,
                 ..
-            } => {
-                if can_capture.get() {
-                    for (idx, (_, (var, _))) in outer_vars.as_ref().borrow().iter().enumerate() {
-                        let cloned_var = var.as_ref().clone();
-                        cloned_var.is_captured.set((idx, true));
-                        data.vars.push(Rc::new(cloned_var));
+            } => match parent {
+                Some(parent) => parent.upgrade().and_then(|p| {
+                    let borrowed_scope = p.as_ref().borrow();
+                    match borrowed_scope.access_var(id) {
+                        Ok((var, offset, level)) => {
+                            let level = match level {
+                                AccessLevel::General => AccessLevel::General,
+                                AccessLevel::Direct => AccessLevel::Backward(1),
+                                AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
+                            };
+                            Some((var, offset, level))
+                        }
+                        Err(_) => None,
+                    }
+                }),
+                None => {
+                    let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                    let borrowed_scope = borrowed_scope.borrow();
+
+                    match borrowed_scope.access_var(id) {
+                        Ok(var) => Some(var),
+                        Err(_) => None,
                     }
                 }
             }
-            Scope::General { .. } => {}
+            .ok_or(CodeGenerationError::UnresolvedError),
+            Scope::General { data, .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
-
-    fn inner_vars(&self) -> &Vec<Rc<Var>> {
+    fn capture(&self, var: Rc<Var>) -> bool {
         match self {
-            Scope::Inner { data, .. } => &data.vars,
-            Scope::General { data, .. } => &data.vars,
+            Scope::Inner { data, .. } => {
+                if data.state.get().is_closure != ClosureState::DEFAULT {
+                    data.env_vars.as_ref().borrow_mut().insert(var);
+                    return true;
+                }
+                return false;
+            }
+            _ => false,
         }
     }
 
@@ -314,33 +359,105 @@ impl ScopeApi for Scope {
                 .ok_or(SemanticError::UnknownType),
         }
     }
+    fn find_event(&self) -> Result<&Event, SemanticError> {
+        todo!()
+    }
 
-    fn parameters_size(&self) -> usize {
+    fn state(&self) -> ScopeState {
+        match self {
+            Scope::Inner { data, .. } => data.state.get(),
+            Scope::General { data, .. } => data.state.get(),
+        }
+    }
+
+    fn to_closure(&mut self, state: ClosureState) {
+        match self {
+            Scope::Inner { data, .. } => data.state.get_mut().is_closure = state,
+            _ => {}
+        }
+    }
+
+    fn to_generator(&mut self) {
+        match self {
+            Scope::Inner { data, .. } => data.state.get_mut().is_generator = true,
+            _ => {}
+        }
+    }
+
+    fn to_loop(&mut self) {
+        match self {
+            Scope::Inner { data, .. } => data.state.get_mut().is_loop = true,
+            _ => {}
+        }
+    }
+
+    fn env_vars(&self) -> Vec<Rc<Var>> {
+        match self {
+            Scope::Inner { data, .. } => (&data.env_vars)
+                .as_ref()
+                .borrow()
+                .clone()
+                .into_iter()
+                .collect(),
+            Scope::General { data, .. } => (&data.env_vars)
+                .as_ref()
+                .borrow()
+                .clone()
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    // fn access_level_of(&self, id: &ID) -> Result<AccessLevel, crate::vm::vm::CodeGenerationError> {
+    //     todo!()
+    // }
+
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         match self {
             Scope::Inner {
                 parent,
                 general,
-                outer_vars,
                 data,
-                can_capture,
-            } => data
-                .vars
-                .iter()
-                .filter_map(|v| v.is_parameter.get().1.then(|| v.type_sig.size_of()))
-                .sum(),
-            Scope::General {
-                data,
-                events,
-                channels,
-            } => data
-                .vars
-                .iter()
-                .filter_map(|v| v.is_parameter.get().1.then(|| v.type_sig.size_of()))
-                .sum(),
+            } => data.vars.iter(),
+            Scope::General { data, .. } => data.vars.iter(),
         }
     }
-    fn find_event(&self) -> Result<&Event, SemanticError> {
-        todo!()
+
+    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError> {
+        match self {
+            Scope::Inner { data, .. } => {
+                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
+                    var_offset.set(offset);
+                    Ok(var.clone())
+                } else {
+                    Err(CodeGenerationError::UnresolvedError)
+                }
+            }
+            Scope::General { data, .. } => {
+                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
+                    var_offset.set(offset);
+                    Ok(var.clone())
+                } else {
+                    Err(CodeGenerationError::UnresolvedError)
+                }
+            }
+        }
+    }
+    fn stack_top(&self) -> Option<usize> {
+        match self {
+            Scope::Inner { .. } => None,
+            Scope::General { stack_top, .. } => Some(stack_top.get()),
+        }
+    }
+
+    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
+        match self {
+            Scope::Inner { .. } => Err(CodeGenerationError::UnresolvedError),
+            Scope::General { stack_top, .. } => {
+                stack_top.set(top);
+                Ok(())
+            }
+        }
     }
 }
 
@@ -358,10 +475,7 @@ impl ScopeApi for MockScope {
 
     // type Event = Event;
 
-    fn child_scope_with(
-        _parent: &MutRc<Self>,
-        _vars: Vec<Var>,
-    ) -> Result<MutRc<Self>, SemanticError> {
+    fn spawn(_parent: &MutRc<Self>, _vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
         unimplemented!("Mock function call")
     }
 
@@ -380,24 +494,7 @@ impl ScopeApi for MockScope {
     fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         unimplemented!("Mock function call")
     }
-    fn to_capturing(&self) {
-        unimplemented!("Mock function call")
-    }
-    fn capture_needed_vars(&mut self) {
-        unimplemented!("Mock function call")
-    }
-    fn find_var(&self, _id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError> {
-        unimplemented!("Mock function call")
-    }
-    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))> {
-        unimplemented!("Mock function call")
-    }
-    fn parameters_size(&self) -> usize {
-        unimplemented!("Mock function call")
-    }
-    fn inner_vars(&self) -> &Vec<Rc<Var>> {
-        unimplemented!("Mock function call")
-    }
+
     fn find_chan(&self) -> Result<&Chan, SemanticError> {
         unimplemented!("Mock function call")
     }
@@ -407,6 +504,56 @@ impl ScopeApi for MockScope {
     }
 
     fn find_event(&self) -> Result<&Event, SemanticError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn state(&self) -> ScopeState {
+        unimplemented!("Mock function call")
+    }
+
+    fn to_closure(&mut self, state: ClosureState) {
+        unimplemented!("Mock function call")
+    }
+
+    fn to_generator(&mut self) {
+        unimplemented!("Mock function call")
+    }
+
+    fn to_loop(&mut self) {
+        unimplemented!("Mock function call")
+    }
+
+    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn env_vars(&self) -> Vec<Rc<Var>> {
+        unimplemented!("Mock function call")
+    }
+    fn capture(&self, var: Rc<Var>) -> bool {
+        unimplemented!("Mock function call")
+    }
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
+        unimplemented!("Mock function call")
+    }
+    fn stack_top(&self) -> Option<usize> {
+        unimplemented!("Mock function call")
+    }
+    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
+        unimplemented!("Mock function call")
+    }
+    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
         unimplemented!("Mock function call")
     }
 }

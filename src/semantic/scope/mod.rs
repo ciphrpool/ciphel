@@ -1,11 +1,15 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
     rc::Rc,
+    slice::Iter,
 };
 
-use crate::ast::{statements::definition, types, utils::strings::ID};
+use crate::{
+    ast::{statements::definition, types, utils::strings::ID},
+    vm::{allocator::stack::Offset, vm::CodeGenerationError},
+};
 
 use self::{
     chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
@@ -64,10 +68,15 @@ pub trait BuildStaticType<Scope: ScopeApi> {
 
     fn build_error() -> StaticType;
 
-    fn build_fn(type_sig: &types::FnType, scope: &Ref<Scope>) -> Result<StaticType, SemanticError>;
-    fn build_fn_from(
+    fn build_fn(
         params: &Vec<EType>,
         ret: &EType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError>;
+    fn build_closure(
+        params: &Vec<EType>,
+        ret: &EType,
+        closed: bool,
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
 
@@ -115,25 +124,60 @@ pub trait BuildEvent<Scope: ScopeApi> {
     fn build_event(scope: &Ref<Scope>, event: &definition::EventDef<Scope>) -> Event;
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ClosureState {
+    CAPTURING,
+    NOT_CAPTURING,
+    DEFAULT,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub struct ScopeState {
+    pub is_closure: ClosureState,
+    pub is_generator: bool,
+    pub is_loop: bool,
+}
+
+impl Default for ScopeState {
+    fn default() -> Self {
+        Self {
+            is_closure: ClosureState::DEFAULT,
+            is_generator: false,
+            is_loop: false,
+        }
+    }
+}
+
 pub trait ScopeApi
 where
     Self: Sized + Clone + Debug,
 {
-    fn child_scope_with(parent: &MutRc<Self>, vars: Vec<Var>)
-        -> Result<MutRc<Self>, SemanticError>;
+    fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError>;
 
     fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError>;
     fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;
     fn register_var(&mut self, reg: Var) -> Result<(), SemanticError>;
     fn register_event(&mut self, reg: Event) -> Result<(), SemanticError>;
 
-    fn find_var(&self, id: &ID) -> Result<(Rc<Var>, AccessLevel), SemanticError>;
-    fn find_outer_vars(&self) -> Vec<(ID, (Rc<Var>, AccessLevel))>;
-    fn parameters_size(&self) -> usize;
-    fn inner_vars(&self) -> &Vec<Rc<Var>>;
+    fn state(&self) -> ScopeState;
+    fn to_closure(&mut self, state: ClosureState);
+    fn capture(&self, var: Rc<Var>) -> bool;
+    fn to_generator(&mut self);
+    fn to_loop(&mut self);
 
-    fn to_capturing(&self);
-    fn capture_needed_vars(&mut self);
+    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
+
+    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError>;
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError>;
+    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError>;
+    fn stack_top(&self) -> Option<usize>;
+    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError>;
+
+    fn env_vars(&self) -> Vec<Rc<Var>>;
+    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)>;
 
     fn find_chan(&self) -> Result<&Chan, SemanticError>;
     fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;

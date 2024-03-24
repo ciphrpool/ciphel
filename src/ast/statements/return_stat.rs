@@ -1,6 +1,11 @@
 use std::cell::Ref;
 
-use crate::semantic::Info;
+use crate::semantic::{AccessLevel, Info};
+use crate::vm::allocator::stack::{Offset, UReg};
+use crate::vm::allocator::MemoryAddress;
+use crate::vm::casm::alloc::Access;
+use crate::vm::casm::branch::Goto;
+use crate::vm::casm::memcopy::MemCopy;
 use crate::{
     ast::{
         expressions::Expression,
@@ -21,6 +26,8 @@ use crate::{
         vm::{CodeGenerationError, GenerateCode},
     },
 };
+use nom::branch::alt;
+use nom::sequence::terminated;
 use nom::{
     combinator::{map, opt},
     sequence::delimited,
@@ -30,6 +37,12 @@ use nom::{
 pub enum Return<InnerScope: ScopeApi> {
     Unit,
     Expr {
+        expr: Box<Expression<InnerScope>>,
+        metadata: Metadata,
+    },
+    Break,
+    Continue,
+    Yield {
         expr: Box<Expression<InnerScope>>,
         metadata: Metadata,
     },
@@ -46,20 +59,37 @@ impl<Scope: ScopeApi> TryParse for Return<Scope> {
      *      | Λ
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(
-            delimited(
-                wst(lexem::RETURN),
-                opt(Expression::parse),
-                wst(lexem::SEMI_COLON),
+        alt((
+            map(
+                delimited(
+                    wst(lexem::RETURN),
+                    opt(Expression::parse),
+                    wst(lexem::SEMI_COLON),
+                ),
+                |value| match value {
+                    Some(expr) => Return::Expr {
+                        expr: Box::new(expr),
+                        metadata: Metadata::default(),
+                    },
+                    None => Return::Unit,
+                },
             ),
-            |value| match value {
-                Some(expr) => Return::Expr {
-                    expr: Box::new(expr),
+            map(
+                terminated(wst(lexem::BREAK), wst(lexem::SEMI_COLON)),
+                |_| Return::Break,
+            ),
+            map(
+                terminated(wst(lexem::CONTINUE), wst(lexem::SEMI_COLON)),
+                |_| Return::Continue,
+            ),
+            map(
+                delimited(wst(lexem::YIELD), Expression::parse, wst(lexem::SEMI_COLON)),
+                |e| Return::Yield {
+                    expr: Box::new(e),
                     metadata: Metadata::default(),
                 },
-                None => Return::Unit,
-            },
-        )(input)
+            ),
+        ))(input)
     }
 }
 impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
@@ -103,6 +133,31 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
                     }
                 }
             }
+            Return::Break => {
+                if scope.as_ref().borrow().state().is_loop {
+                    Ok(())
+                } else {
+                    Err(SemanticError::ExpectedLoop)
+                }
+            }
+            Return::Continue => {
+                if scope.as_ref().borrow().state().is_loop {
+                    Ok(())
+                } else {
+                    Err(SemanticError::ExpectedLoop)
+                }
+            }
+            Return::Yield { expr, metadata } => {
+                let _ = expr.resolve(scope, &context, extra)?;
+                if scope.as_ref().borrow().state().is_loop
+                    && scope.as_ref().borrow().state().is_generator
+                {
+                    resolve_metadata!(metadata, self, scope, context);
+                    Ok(())
+                } else {
+                    Err(SemanticError::ExpectedLoop)
+                }
+            }
         }
     }
 }
@@ -118,6 +173,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
                 <StaticType as BuildStaticType<Scope>>::build_unit().into(),
             )),
             Return::Expr { expr, metadata } => expr.type_of(&scope),
+            Return::Break => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
+            Return::Continue => Ok(Either::Static(
+                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            )),
+            Return::Yield { expr, metadata } => expr.type_of(&scope),
         }
     }
 }
@@ -142,6 +204,13 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
                 instructions.push(Casm::StackFrame(StackFrame::Return { return_size }));
                 Ok(())
             }
+            Return::Break => {
+                instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
+                instructions.push(Casm::StackFrame(StackFrame::CleanAndGo));
+                Ok(())
+            }
+            Return::Continue => todo!(),
+            Return::Yield { expr, metadata } => todo!(),
         }
     }
 }
@@ -169,6 +238,25 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Return::Unit, value);
+
+        let res = Return::<MockScope>::parse(
+            r#"
+            break ;
+        "#
+            .into(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(Return::Break, value);
+        let res = Return::<MockScope>::parse(
+            r#"
+            continue ;
+        "#
+            .into(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(Return::Continue, value);
     }
 
     #[test]
@@ -182,11 +270,9 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
+
         let res = return_statement.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -196,13 +282,70 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
         let res = return_statement.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(
             Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
+            return_type
+        );
+
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            break ;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+
+        let inner_scope = scope_impl::Scope::spawn(&scope, Vec::default())
+            .expect("Scope should be able to have child scope");
+        inner_scope.as_ref().borrow_mut().to_loop();
+
+        let res = return_statement.resolve(&inner_scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+
+        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
+
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            continue ;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+
+        let res = return_statement.resolve(&inner_scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+
+        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
+
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            yield 10;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
+        inner_scope.as_ref().borrow_mut().to_generator();
+        let res = return_statement.resolve(
+            &inner_scope,
+            &Some(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            &(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        assert_eq!(
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
             return_type
         );
     }

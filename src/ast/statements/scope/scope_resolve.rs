@@ -6,7 +6,7 @@ use super::Scope;
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::var_impl::Var;
+use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
 use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
 
@@ -24,18 +24,28 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     where
         Self: Sized,
     {
-        let mut inner_scope = OuterScope::child_scope_with(scope, extra.clone())?;
+        let mut inner_scope = OuterScope::spawn(scope, extra.clone())?;
         {
-            if self.can_capture.get() {
-                inner_scope.as_ref().borrow().to_capturing();
+            if self.is_loop.get() {
+                inner_scope.as_ref().borrow_mut().to_loop();
             }
+            if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
+                let caller = caller.clone();
+                caller.state.set(VarState::Parameter);
+                let _ = inner_scope.as_ref().borrow_mut().register_var(caller)?;
+            }
+            inner_scope
+                .as_ref()
+                .borrow_mut()
+                .to_closure(self.can_capture.get());
         }
+
         for instruction in &self.instructions {
             let _ = instruction.resolve(&mut inner_scope, context, &())?;
         }
-        {
-            inner_scope.as_ref().borrow_mut().capture_needed_vars();
-        }
+        // {
+        //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
+        // }
         {
             let mut mut_self = self.inner_scope.borrow_mut();
             mut_self.replace(inner_scope);
@@ -79,9 +89,9 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
-        let (var_x, _) = res_scope.borrow().find_var(&"x".into()).unwrap();
+        let var_x = res_scope.borrow().find_var(&"x".into()).unwrap();
         let x_type = var_x.type_of(&res_scope.borrow()).unwrap();
-        let (var_y, _) = res_scope.borrow().find_var(&"y".into()).unwrap();
+        let var_y = res_scope.borrow().find_var(&"y".into()).unwrap();
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(

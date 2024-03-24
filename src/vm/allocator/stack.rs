@@ -11,7 +11,7 @@ use crate::{
     vm::vm::RuntimeError,
 };
 
-pub const STACK_SIZE: usize = 512;
+pub const STACK_SIZE: usize = 2048;
 
 #[derive(Debug, Clone)]
 pub enum StackError {
@@ -35,6 +35,13 @@ pub enum Offset {
     FB(usize),
     FZ(isize),
     FP(usize),
+    FE(usize),
+}
+
+impl Default for Offset {
+    fn default() -> Self {
+        Offset::ST(0)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -533,6 +540,7 @@ impl Stack {
                 }
                 Ok(frame_params_start + idx)
             }
+            Offset::FE(_) => unreachable!(),
         }
     }
 
