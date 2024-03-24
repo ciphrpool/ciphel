@@ -1,4 +1,7 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
+use crate::ast::expressions::data::{Data, ExprScope};
+use crate::ast::expressions::{Atomic, Expression};
+use crate::ast::statements::assignation::AssignValue;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
@@ -38,8 +41,31 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
-                let _ = right.resolve(scope, &Some(var_type), &())?;
-                let _ = scope.borrow_mut().register_var(var)?;
+
+                if value.rec {
+                    match right {
+                        AssignValue::Expr(expr) => match expr.as_ref() {
+                            Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {
+                                match &closure.scope {
+                                    ExprScope::Scope(s) => s.set_caller(var.clone()),
+                                    ExprScope::Expr(s) => s.set_caller(var.clone()),
+                                }
+                            }
+                            _ => {
+                                return Err(SemanticError::IncompatibleTypes);
+                            }
+                        },
+                        _ => {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                    }
+                    let _ = scope.borrow_mut().register_var(var)?;
+                    let _ = right.resolve(scope, &Some(var_type), &())?;
+                } else {
+                    let _ = right.resolve(scope, &Some(var_type), &())?;
+                    let _ = scope.borrow_mut().register_var(var)?;
+                }
+
                 Ok(())
             }
             Declaration::Assigned { left, right } => {

@@ -22,7 +22,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::{
+        scope::{ClosureState, ScopeApi},
+        Metadata,
+    },
     vm::{allocator::align, platform},
 };
 use nom::{
@@ -342,16 +345,20 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                delimited(
-                    wst(lexem::PAR_O),
-                    separated_list0(wst(lexem::COMA), ClosureParam::parse),
-                    wst(lexem::PAR_C),
+                pair(
+                    opt(wst(lexem::MOVE)),
+                    delimited(
+                        wst(lexem::PAR_O),
+                        separated_list0(wst(lexem::COMA), ClosureParam::parse),
+                        wst(lexem::PAR_C),
+                    ),
                 ),
                 preceded(wst(lexem::ARROW), ExprScope::parse),
             ),
-            |(params, scope)| Closure {
+            |((state, params), scope)| Closure {
                 params,
                 scope,
+                closed: state.is_some(),
                 metadata: Metadata::default(),
             },
         )(input)
@@ -371,9 +378,10 @@ impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
                         expr: Box::new(value),
                         metadata: Metadata::default(),
                     })],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 })
             }),
@@ -566,7 +574,7 @@ mod tests {
 
     use crate::{
         ast::expressions::{data::Number, Atomic},
-        semantic::scope::scope_impl::MockScope,
+        semantic::scope::{scope_impl::MockScope, ClosureState},
     };
 
     use super::*;
@@ -685,6 +693,7 @@ mod tests {
                     ClosureParam::Minimal("x".into()),
                     ClosureParam::Minimal("y".into())
                 ],
+                closed: false,
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -696,9 +705,46 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
+                    caller: Default::default(),
+                    inner_scope: RefCell::new(None)
+                }),
+                metadata: Metadata::default()
+            },
+            value
+        )
+    }
+
+    #[test]
+    fn valid_closure_closed() {
+        let res = Closure::<MockScope>::parse("move (x,y) -> x".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+
+        assert_eq!(
+            Closure {
+                params: vec![
+                    ClosureParam::Minimal("x".into()),
+                    ClosureParam::Minimal("y".into())
+                ],
+                closed: true,
+                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                    metadata: Metadata::default(),
+                    instructions: vec![Statement::Return(Return::Expr {
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                            Variable::Var(VarID {
+                                id: "x".into(),
+                                metadata: Metadata::default()
+                            })
+                        )))),
+                        metadata: Metadata::default()
+                    })],
+                    can_capture: Cell::new(ClosureState::DEFAULT),
+                    is_loop: Cell::new(false),
+                    is_yieldable: Cell::new(false),
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()
@@ -707,7 +753,7 @@ mod tests {
         )
     }
     #[test]
-    fn valid_closure_full() {
+    fn valid_closure_typed_args() {
         let res = Closure::<MockScope>::parse("(x:u64) -> x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
@@ -718,8 +764,11 @@ mod tests {
                     id: "x".into(),
                     signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
                         NumberType::U64
-                    ))
+                    )),
+                    rec: false,
                 }),],
+                closed: false,
+
                 scope: ExprScope::Expr(ast::statements::scope::Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
@@ -731,9 +780,10 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 }),
                 metadata: Metadata::default()

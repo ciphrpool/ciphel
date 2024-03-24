@@ -17,7 +17,7 @@ use super::{
     event_impl::Event,
     user_type_impl::UserType,
     var_impl::{Var, VarState},
-    ScopeApi, ScopeState,
+    ClosureState, ScopeApi, ScopeState,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,13 +224,23 @@ impl ScopeApi for Scope {
                                     AccessLevel::Direct => AccessLevel::Backward(1),
                                     AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
                                 };
-                                if is_closure {
+                                if is_closure == ClosureState::CAPTURING {
                                     let level = match level {
                                         AccessLevel::Backward(1) => AccessLevel::Direct,
                                         AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
                                         _ => level,
                                     };
-                                    Some((var, Offset::FP(0), level))
+                                    let offset = {
+                                        let mut idx = 0;
+                                        for env_var in borrowed_scope.env_vars() {
+                                            if env_var.id == var.id {
+                                                break;
+                                            }
+                                            idx += env_var.as_ref().type_sig.size_of();
+                                        }
+                                        idx
+                                    };
+                                    Some((var, Offset::FE(offset), level))
                                 } else {
                                     Some((var, offset, level))
                                 }
@@ -259,10 +269,50 @@ impl ScopeApi for Scope {
         }
     }
 
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let is_closure = self.state().is_closure;
+        match self {
+            Scope::Inner {
+                data,
+                parent,
+                general,
+                ..
+            } => match parent {
+                Some(parent) => parent.upgrade().and_then(|p| {
+                    let borrowed_scope = p.as_ref().borrow();
+                    match borrowed_scope.access_var(id) {
+                        Ok((var, offset, level)) => {
+                            let level = match level {
+                                AccessLevel::General => AccessLevel::General,
+                                AccessLevel::Direct => AccessLevel::Backward(1),
+                                AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
+                            };
+                            Some((var, offset, level))
+                        }
+                        Err(_) => None,
+                    }
+                }),
+                None => {
+                    let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                    let borrowed_scope = borrowed_scope.borrow();
+
+                    match borrowed_scope.access_var(id) {
+                        Ok(var) => Some(var),
+                        Err(_) => None,
+                    }
+                }
+            }
+            .ok_or(CodeGenerationError::UnresolvedError),
+            Scope::General { data, .. } => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
     fn capture(&self, var: Rc<Var>) -> bool {
         match self {
             Scope::Inner { data, .. } => {
-                if data.state.get().is_closure {
+                if data.state.get().is_closure != ClosureState::DEFAULT {
                     data.env_vars.as_ref().borrow_mut().insert(var);
                     return true;
                 }
@@ -320,9 +370,9 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn to_closure(&mut self) {
+    fn to_closure(&mut self, state: ClosureState) {
         match self {
-            Scope::Inner { data, .. } => data.state.get_mut().is_closure = true,
+            Scope::Inner { data, .. } => data.state.get_mut().is_closure = state,
             _ => {}
         }
     }
@@ -461,7 +511,7 @@ impl ScopeApi for MockScope {
         unimplemented!("Mock function call")
     }
 
-    fn to_closure(&mut self) {
+    fn to_closure(&mut self, state: ClosureState) {
         unimplemented!("Mock function call")
     }
 
@@ -497,6 +547,13 @@ impl ScopeApi for MockScope {
     }
 
     fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        unimplemented!("Mock function call")
+    }
+
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
         unimplemented!("Mock function call")
     }
 }

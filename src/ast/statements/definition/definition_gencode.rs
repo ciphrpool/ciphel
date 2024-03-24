@@ -60,37 +60,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
         instructions.push_label_id(end_closure, "end_closure".into());
 
         instructions.push(Casm::MemCopy(MemCopy::LabelOffset(closure_label)));
-        let mut alloc_size = 16;
-        let mut env_size = 0;
-        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
-            let var_type = &var.as_ref().type_sig;
-            let var_size = var_type.size_of();
-            alloc_size += var_size;
-            env_size += var_size;
-        }
-        // Load Env Size
-        instructions.push(Casm::Serialize(Serialized {
-            data: env_size.to_le_bytes().to_vec(),
-        }));
-        // Load Env variables
-        for (_, (var, _)) in self.env.as_ref().borrow().iter() {
-            let (var, address, level) = scope.as_ref().borrow().access_var(&var.id)?;
-            let var_type = &var.as_ref().type_sig;
-            let var_size = var_type.size_of();
-            instructions.push(Casm::Access(Access::Static {
-                address: MemoryAddress::Stack {
-                    offset: address,
-                    level: level,
-                },
-                size: var_size,
-            }));
-        }
-        instructions.push(Casm::Alloc(Alloc::Heap { size: alloc_size }));
-        instructions.push(Casm::MemCopy(MemCopy::TakeToHeap { size: alloc_size }));
 
         let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
-        let _var_size = var_type.size_of();
+        let var_size = var_type.size_of();
 
         instructions.push(Casm::Locate(Locate {
             address: MemoryAddress::Stack {
@@ -98,7 +71,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
                 level,
             },
         }));
-        instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: 8 }));
+        instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }));
         Ok(())
     }
 }
@@ -166,11 +139,11 @@ mod tests {
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
     #[test]
     fn valid_function_with_stack_env() {
@@ -218,11 +191,11 @@ mod tests {
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(88))));
     }
 
     #[test]
@@ -268,11 +241,11 @@ mod tests {
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
     }
 
     #[test]
@@ -284,7 +257,7 @@ mod tests {
                 if x == 0u64 {
                     return 0;
                 }
-                return rec(x-1);
+                return 1u64 + rec(x-1);
             }
             return rec(3); 
         };
@@ -319,63 +292,63 @@ mod tests {
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(3))));
     }
 
-    // #[test]
-    // fn valid_function_fibonacci() {
-    //     let statement = Statement::parse(
-    //         r##"
-    //     let x = {
-    //         fn fibonacci(x:u64) -> u64 {
-    //             if x == 0u64 {
-    //                 return 0;
-    //             } else if x == 1u64 or x == 2u64 {
-    //                 return 1;
-    //             }
-    //             return fibonacci(x-1) + fibonacci(x-2);
-    //         }
-    //         return fibonacci(3);
-    //     };
+    #[test]
+    fn valid_function_fibonacci() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            fn fibonacci(x:u64) -> u64 {
+                if x == 0u64 {
+                    return 0;
+                } else if x == 1u64 or x == 2u64 {
+                    return 1;
+                }
+                return fibonacci(x-1) + fibonacci(x-2);
+            }
+            return fibonacci(10);
+        };
 
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
 
-    //     let scope = Scope::new();
-    //     let _ = statement
-    //         .resolve(&scope, &None, &())
-    //         .expect("Semantic resolution should have succeeded");
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
 
-    //     // Code generation.
-    //     let instructions = CasmProgram::default();
-    //     statement
-    //         .gencode(&scope, &instructions)
-    //         .expect("Code generation should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
 
-    //     // dbg!(&instructions);
-    //     assert!(instructions.len() > 0);
-    //     let mut runtime = Runtime::new();
-    //     let tid = runtime
-    //         .spawn()
-    //         .expect("Thread spawning should have succeeded");
-    //     let thread = runtime.get(tid).expect("Thread should exist");
-    //     thread.push_instr(instructions);
-    //     thread.run().expect("Execution should have succeeded");
-    //     let memory = &thread.memory();
-    //     let data = clear_stack!(memory);
+        // dbg!(&instructions);
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
 
-    //     let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-    //         &PrimitiveType::Number(NumberType::I64),
-    //         &data,
-    //     )
-    //     .expect("Deserialization should have succeeded");
-    //     assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
-    // }
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(55))));
+    }
 }

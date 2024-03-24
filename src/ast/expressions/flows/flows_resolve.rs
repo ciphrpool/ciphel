@@ -806,7 +806,7 @@ mod tests {
                 state: Cell::default(),
                 id: "f".into(),
                 type_sig: Either::Static(
-                    StaticType::Fn(FnType {
+                    StaticType::StaticFn(FnType {
                         params: vec![
                             Either::Static(
                                 StaticType::Primitive(PrimitiveType::Number(NumberType::I64))

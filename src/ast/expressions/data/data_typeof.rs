@@ -293,7 +293,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
         }
         let ret_type = self.scope.type_of(&scope)?;
 
-        StaticType::build_fn_from(&params_types, &ret_type, scope)
+        StaticType::build_closure(&params_types, &ret_type, self.closed, scope)
             .map(|value| Either::Static(value.into()))
     }
 }

@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    AddrType, ChanType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
-    TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, NumberType, PrimitiveType,
+    SliceType, StaticType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
@@ -139,33 +139,27 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         Self::Error
     }
 
-    fn build_fn(type_sig: &ast::types::FnType, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
-        let mut params = Vec::with_capacity(type_sig.params.len());
-        for subtype in &type_sig.params {
-            let subtype = subtype.type_of(&scope)?;
-            params.push(subtype);
-        }
-        let ret_type = type_sig.ret.type_of(&scope)?;
-        Ok(Self::Fn(FnType {
-            params,
-            ret: Box::new(ret_type),
+    fn build_fn(
+        params: &Vec<EType>,
+        ret: &EType,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        Ok(Self::StaticFn(FnType {
+            params: params.clone(),
+            ret: Box::new(ret.clone()),
         }))
     }
 
-    fn build_fn_from(
+    fn build_closure(
         params: &Vec<Either<UserType, Self>>,
         ret: &Either<UserType, Self>,
+        closed: bool,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let mut out_params = Vec::with_capacity(params.len());
-        for subtype in params {
-            let subtype = subtype.type_of(&scope)?;
-            out_params.push(subtype);
-        }
-        let ret_type = ret.type_of(&scope)?;
-        Ok(Self::Fn(FnType {
-            params: out_params,
-            ret: Box::new(ret_type),
+        Ok(Self::Closure(ClosureType {
+            params: params.clone(),
+            ret: Box::new(ret.clone()),
+            closed,
         }))
     }
 

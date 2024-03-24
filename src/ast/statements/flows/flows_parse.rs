@@ -172,7 +172,10 @@ mod tests {
                 Statement,
             },
         },
-        semantic::{scope::scope_impl::MockScope, Metadata},
+        semantic::{
+            scope::{scope_impl::MockScope, ClosureState},
+            Metadata,
+        },
     };
 
     use super::*;
@@ -211,10 +214,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
                 else_if_branches: Vec::default(),
@@ -233,10 +236,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }))
             },
@@ -281,10 +284,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
                 else_if_branches: vec![(
@@ -304,10 +307,10 @@ mod tests {
                                 platform: Rc::default(),
                             }
                         }))],
-                        can_capture: Cell::new(false),
+                        can_capture: Cell::new(ClosureState::DEFAULT),
                         is_loop: Cell::new(false),
                         is_yieldable: Cell::new(false),
-
+                        caller: Default::default(),
                         inner_scope: RefCell::new(None),
                     }
                 )],
@@ -326,10 +329,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }))
             },
@@ -368,10 +371,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
                 else_branch: Some(Box::new(Scope {
@@ -389,10 +392,10 @@ mod tests {
                             platform: Rc::default(),
                         }
                     }))],
-                    can_capture: Cell::new(false),
+                    can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
                     is_yieldable: Cell::new(false),
-
+                    caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }))
             },

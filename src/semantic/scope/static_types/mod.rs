@@ -26,7 +26,8 @@ pub enum StaticType {
     String(StringType),
     StrSlice(StrSliceType),
     Vec(VecType),
-    Fn(FnType),
+    Closure(ClosureType),
+    StaticFn(FnType),
     Chan(ChanType),
     Tuple(TupleType),
     Unit,
@@ -78,6 +79,14 @@ pub struct FnType {
     pub params: Types,
     pub ret: SubType,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosureType {
+    pub params: Types,
+    pub ret: SubType,
+    pub closed: bool,
+}
+
 pub type Types = Vec<EType>;
 
 #[derive(Debug, Clone, PartialEq)]

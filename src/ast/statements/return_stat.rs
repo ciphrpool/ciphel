@@ -270,14 +270,26 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let mut inner_scope = scope_impl::Scope::spawn(&scope, Vec::default())
-            .expect("Scope should be able to have child scope");
-        inner_scope.as_ref().borrow_mut().to_loop();
+
+        let res = return_statement.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+
+        let return_statement = Return::<scope_impl::Scope>::parse(
+            r#"
+            return 10;
+        "#
+            .into(),
+        )
+        .unwrap()
+        .1;
         let res = return_statement.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
+        assert_eq!(
+            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
+            return_type
+        );
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -287,7 +299,11 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+
+        let inner_scope = scope_impl::Scope::spawn(&scope, Vec::default())
+            .expect("Scope should be able to have child scope");
+        inner_scope.as_ref().borrow_mut().to_loop();
+
         let res = return_statement.resolve(&inner_scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -311,29 +327,13 @@ mod tests {
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
-            return 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        let res = return_statement.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            return_type
-        );
-
-        let return_statement = Return::<scope_impl::Scope>::parse(
-            r#"
             yield 10;
         "#
             .into(),
         )
         .unwrap()
         .1;
+        inner_scope.as_ref().borrow_mut().to_generator();
         let res = return_statement.resolve(
             &inner_scope,
             &Some(Either::Static(

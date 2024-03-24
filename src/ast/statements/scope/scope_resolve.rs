@@ -6,7 +6,7 @@ use super::Scope;
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::var_impl::Var;
+use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
 use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
 
@@ -26,13 +26,20 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
     {
         let mut inner_scope = OuterScope::spawn(scope, extra.clone())?;
         {
-            if self.can_capture.get() {
-                inner_scope.as_ref().borrow_mut().to_closure();
-            }
             if self.is_loop.get() {
                 inner_scope.as_ref().borrow_mut().to_loop();
             }
+            if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
+                let caller = caller.clone();
+                caller.state.set(VarState::Parameter);
+                let _ = inner_scope.as_ref().borrow_mut().register_var(caller)?;
+            }
+            inner_scope
+                .as_ref()
+                .borrow_mut()
+                .to_closure(self.can_capture.get());
         }
+
         for instruction in &self.instructions {
             let _ = instruction.resolve(&mut inner_scope, context, &())?;
         }

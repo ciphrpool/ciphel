@@ -8,14 +8,16 @@ use crate::{
     semantic::{
         scope::{
             var_impl::{Var, VarState},
-            ScopeApi,
+            ClosureState, ScopeApi,
         },
         MutRc, SizeOf,
     },
     vm::{
-        allocator::stack::Offset,
+        allocator::{stack::Offset, MemoryAddress},
         casm::{
-            alloc::{Alloc, StackFrame},
+            alloc::{Access, Alloc, StackFrame},
+            locate::Locate,
+            memcopy::MemCopy,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode, RuntimeError},
@@ -45,7 +47,7 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
 
         let mut offset_idx = 0;
 
-        if borrowed.state().is_closure {
+        if borrowed.state().is_closure == ClosureState::CAPTURING {
             offset_idx = 8;
         }
 
@@ -53,11 +55,6 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
             // Already allocated
-            offset.set(Offset::FP(offset_idx));
-            // let _ = scope
-            //     .borrow()
-            //     .update_var_offset(&var.id, Offset::FP(offset_idx))
-            //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
             offset.set(Offset::FP(offset_idx));
             offset_idx += var_size;
         }
@@ -68,24 +65,41 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             let var_size = var.type_sig.size_of();
 
             if var.state.get() != VarState::Parameter {
-                // let _ = scope
-                //     .borrow()
-                //     .update_var_offset(&var.id, Offset::FZ(offset_idx as isize))
-                //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
                 offset.set(Offset::FZ(offset_idx as isize));
                 // Alloc and push heap address on stack
                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+                offset_idx += var_size;
             }
-            offset_idx += var_size;
         }
 
+        // if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
+        //     for (var, _) in borrowed.vars() {
+        //         if var.id == caller.id {
+        //             let (_, offset, level) = borrowed.access_var(&var.id)?;
+        //             let (_, offset_parent, level_parent) =
+        //                 borrowed.access_var_in_parent(&var.id)?;
+        //             /* Assign the value of the caller to the caller reference inside the current scope */
+        //             instructions.push(Casm::Access(Access::Static {
+        //                 address: MemoryAddress::Stack {
+        //                     offset: offset_parent,
+        //                     level: level_parent,
+        //                 },
+        //                 size: 8,
+        //             }));
+        //             instructions.push(Casm::Locate(Locate {
+        //                 address: MemoryAddress::Stack { offset, level },
+        //             }));
+        //             instructions.push(Casm::MemCopy(MemCopy::Take { size: 8 }));
+        //             break;
+        //         }
+        //     }
+        // }
         drop(borrowed);
 
         let inner_scope = self.inner_scope.borrow();
         let Some(inner_scope) = inner_scope.as_ref() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-
         for statement in &self.instructions {
             let _ = statement.gencode(inner_scope, instructions)?;
         }

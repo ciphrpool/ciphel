@@ -14,7 +14,7 @@ pub enum Type {
     StrSlice(StrSliceType),
     UserType(ID),
     Vec(VecType),
-    Fn(FnType),
+    Closure(ClosureType),
     Chan(ChanType),
     Tuple(TupleType),
     Unit,
@@ -61,9 +61,10 @@ pub struct StringType();
 pub struct VecType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnType {
+pub struct ClosureType {
     pub params: Types,
     pub ret: SubType,
+    pub closed: bool,
 }
 pub type Types = Vec<Type>;
 

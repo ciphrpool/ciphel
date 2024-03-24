@@ -9,7 +9,7 @@ use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
-use crate::semantic::scope::BuildVar;
+use crate::semantic::scope::{BuildVar, ClosureState};
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
@@ -578,9 +578,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
             Some(context) => <EType as GetSubTypes>::get_return(context),
             None => None,
         };
-        self.scope.to_capturing();
-        let _ = self.scope.resolve(scope, &context_return, &vars)?;
+        if self.closed {
+            self.scope.to_capturing(ClosureState::CAPTURING);
+        } else {
+            self.scope.to_capturing(ClosureState::NOT_CAPTURING);
+        }
 
+        let _ = self.scope.resolve(scope, &context_return, &vars)?;
+        if !self.closed && self.scope.scope()?.borrow().env_vars().len() > 0 {
+            return Err(SemanticError::ExpectedMovedClosure);
+        }
         {
             let mut borrowed_metadata = self
                 .metadata

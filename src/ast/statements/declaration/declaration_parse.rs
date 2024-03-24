@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::map,
+    combinator::{map, opt},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
@@ -55,8 +55,16 @@ impl TryParse for TypedVar {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            separated_pair(parse_id, wst(lexem::COLON), Type::parse),
-            |(id, signature)| TypedVar { id, signature },
+            separated_pair(
+                pair(opt(wst(lexem::REC)), parse_id),
+                wst(lexem::COLON),
+                Type::parse,
+            ),
+            |((rec, id), signature)| TypedVar {
+                id,
+                signature,
+                rec: rec.is_some(),
+            },
         )(input)
     }
 }
@@ -153,7 +161,8 @@ mod tests {
         assert_eq!(
             Declaration::Declared(TypedVar {
                 id: "x".into(),
-                signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
+                rec: false,
             }),
             value
         );
@@ -168,7 +177,8 @@ mod tests {
             Declaration::Assigned {
                 left: DeclaredVar::Typed(TypedVar {
                     id: "x".into(),
-                    signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
+                    signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
+                    rec: false,
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))

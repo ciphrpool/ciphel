@@ -10,7 +10,7 @@ use crate::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             var_impl::Var,
-            ScopeApi,
+            ClosureState, ScopeApi,
         },
         AccessLevel, EType, Either, Metadata, MutRc, SemanticError,
     },
@@ -130,7 +130,8 @@ pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
-    scope: ExprScope<InnerScope>,
+    pub scope: ExprScope<InnerScope>,
+    pub closed: bool,
     pub metadata: Metadata,
 }
 
@@ -147,10 +148,10 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
             ExprScope::Expr(scope) => scope.scope(),
         }
     }
-    pub fn to_capturing(&self) {
+    pub fn to_capturing(&self, state: ClosureState) {
         match self {
-            ExprScope::Scope(value) => value.to_capturing(),
-            ExprScope::Expr(value) => value.to_capturing(),
+            ExprScope::Scope(value) => value.to_capturing(state),
+            ExprScope::Expr(value) => value.to_capturing(state),
         }
     }
 }
@@ -278,11 +279,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                 length,
                 capacity,
             }) => metadata.signature(),
-            Data::Closure(Closure {
-                params,
-                scope,
-                metadata,
-            }) => metadata.signature(),
+            Data::Closure(Closure { metadata, .. }) => metadata.signature(),
             Data::Tuple(Tuple { value, metadata }) => metadata.signature(),
             Data::Address(Address { value, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),

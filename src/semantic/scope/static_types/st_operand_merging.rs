@@ -469,18 +469,13 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
             },
 
             // VEC
-            StaticType::Vec(_) => Err(SemanticError::IncompatibleOperands),
-            StaticType::Fn(_) => Err(SemanticError::IncompatibleOperands),
-            StaticType::Chan(_) => Err(SemanticError::IncompatibleOperands),
-            StaticType::Tuple(_) => Err(SemanticError::IncompatibleOperands),
             StaticType::Unit => match other_type.as_ref() {
                 StaticType::Unit => Ok(Either::Static(StaticType::Unit.into())),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
             StaticType::Any => Ok(Either::Static(other_type)),
             StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
-            StaticType::Address(_) => Err(SemanticError::IncompatibleOperands),
-            StaticType::Map(_) => Err(SemanticError::IncompatibleOperands),
+            _ => Err(SemanticError::IncompatibleOperands),
         }
     }
 

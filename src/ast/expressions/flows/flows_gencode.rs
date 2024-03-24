@@ -6,7 +6,7 @@ use crate::{
     ast::expressions::data::{Number, Primitive, VarID, Variable},
     semantic::{
         scope::{
-            static_types::{NumberType, StaticType, StrSliceType},
+            static_types::{ClosureType, NumberType, StaticType, StrSliceType},
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
             ScopeApi,
@@ -327,61 +327,100 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
             }
             platform_api.gencode(scope, instructions, params_size)
         } else {
-            let _ = self.fn_var.gencode(scope, instructions)?;
-
-            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
-            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
-
-            instructions.push(Casm::Access(Access::Runtime { size: Some(16) }));
-            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None))); // env size
-            instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None))); // function pointer
-
-            // Load Env
-            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
-            instructions.push(Casm::Serialize(Serialized {
-                data: (16u64).to_le_bytes().to_vec(),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Addition(Addition {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
-            }));
-            // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
-            // instructions.push(Casm::Access(Access::Runtime { size: None }));
-
-            // Load Param
-            for param in &self.params {
-                let _ = param.gencode(scope, instructions)?;
-            }
-            // Load function address
-            instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R2)));
-            // Call function
-
-            // Load param size
-            // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
-            instructions.push(Casm::Serialize(Serialized {
-                data: (8 as u64).to_le_bytes().to_vec(),
-            }));
-            instructions.push(Casm::Serialize(Serialized {
-                data: (params_size as u64).to_le_bytes().to_vec(),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Addition(Addition {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
-            }));
-            // Load return size
+            let params_size = params_size + 8;
+            let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
             let Some(signature) = self.metadata.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             let return_size = signature.size_of();
-            instructions.push(Casm::Serialize(Serialized {
-                data: (return_size as u64).to_le_bytes().to_vec(),
-            }));
 
-            instructions.push(Casm::Call(Call::Stack));
+            match fn_sig.as_ref() {
+                StaticType::Closure(ClosureType { closed: false, .. })
+                | StaticType::StaticFn(_) => {
+                    /* Call static function */
+                    // Load Param
+                    for param in &self.params {
+                        let _ = param.gencode(scope, instructions)?;
+                    }
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+
+                    // Load function address
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    // Call function
+                    // Load param size
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (params_size as u64).to_le_bytes().to_vec(),
+                    }));
+                    // Load return size
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (return_size as u64).to_le_bytes().to_vec(),
+                    }));
+
+                    instructions.push(Casm::Call(Call::Stack));
+                }
+                StaticType::Closure(ClosureType { closed: true, .. }) => {
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
+                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
+
+                    instructions.push(Casm::Access(Access::Runtime { size: Some(16) }));
+                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None))); // env size
+                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None))); // function pointer
+
+                    // Load Env
+                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (16u64).to_le_bytes().to_vec(),
+                    }));
+                    instructions.push(Casm::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                    }));
+                    // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+                    // instructions.push(Casm::Access(Access::Runtime { size: None }));
+
+                    // Load Param
+                    for param in &self.params {
+                        let _ = param.gencode(scope, instructions)?;
+                    }
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    // Load function address
+                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R2)));
+                    // Call function
+
+                    // Load param size
+                    // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (8 as u64).to_le_bytes().to_vec(),
+                    }));
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (params_size as u64).to_le_bytes().to_vec(),
+                    }));
+                    instructions.push(Casm::Operation(Operation {
+                        kind: OperationKind::Addition(Addition {
+                            left: OpPrimitive::Number(NumberType::U64),
+                            right: OpPrimitive::Number(NumberType::U64),
+                        }),
+                    }));
+                    // Load return size
+                    let Some(signature) = self.metadata.signature() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    let return_size = signature.size_of();
+                    instructions.push(Casm::Serialize(Serialized {
+                        data: (return_size as u64).to_le_bytes().to_vec(),
+                    }));
+
+                    instructions.push(Casm::Call(Call::Stack));
+                }
+                _ => {
+                    return Err(CodeGenerationError::UnresolvedError);
+                }
+            }
             Ok(())
         }
     }

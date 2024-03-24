@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use super::{
-    AddrType, ChanType, FnType, MapType, PrimitiveType, SliceType, StrSliceType, StringType,
+    AddrType, ChanType, ClosureType, MapType, PrimitiveType, SliceType, StrSliceType, StringType,
     TupleType, Type, VecType,
 };
 use crate::semantic::scope::static_types::{self, StaticType};
@@ -28,7 +28,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
                 Ok(user_type)
             }
             Type::Vec(value) => value.type_of(&scope),
-            Type::Fn(value) => value.type_of(&scope),
+            Type::Closure(value) => value.type_of(&scope),
             Type::Chan(value) => value.type_of(&scope),
             Type::Tuple(value) => value.type_of(&scope),
             Type::Unit => {
@@ -220,15 +220,22 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::VecType {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for FnType {
+impl<Scope: ScopeApi> TypeOf<Scope> for ClosureType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Scope: ScopeApi,
         Self: Sized,
     {
-        let static_type: StaticType = StaticType::build_fn(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
-        Ok(static_type)
+        let params = {
+            let mut params = Vec::with_capacity(self.params.len());
+            for p in &self.params {
+                params.push(p.type_of(scope)?);
+            }
+            params
+        };
+        let static_type: StaticType =
+            StaticType::build_closure(&params, &self.ret.type_of(scope)?, self.closed, scope)?;
+        Ok(Either::Static(static_type.into()))
     }
 }
 
@@ -239,12 +246,48 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::FnType {
     {
         let other_type = other.type_of(&scope)?;
         if let Either::Static(other_type) = other_type {
-            if let StaticType::Fn(static_types::FnType {
+            if let StaticType::StaticFn(static_types::FnType {
                 params: other_params,
                 ret: other_ret,
             }) = other_type.as_ref()
             {
                 if self.params.len() != other_params.len() {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+                for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
+                    let self_param = self_param.type_of(&scope)?;
+                    let other_param = other_param.type_of(&scope)?;
+                    let _ = self_param.compatible_with(&other_param, scope)?;
+                }
+                let ret = self.ret.type_of(&scope)?;
+                let other_ret = other_ret.type_of(&scope)?;
+                return ret.compatible_with(&other_ret, scope);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+    }
+}
+
+impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::ClosureType {
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        if let Either::Static(other_type) = other_type {
+            if let StaticType::Closure(static_types::ClosureType {
+                params: other_params,
+                ret: other_ret,
+                closed: other_closed,
+            }) = other_type.as_ref()
+            {
+                if self.params.len() != other_params.len()
+                    // || self.rec != *other_rec
+                    || self.closed != *other_closed
+                {
                     return Err(SemanticError::IncompatibleTypes);
                 }
                 for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
