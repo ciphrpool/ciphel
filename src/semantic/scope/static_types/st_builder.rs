@@ -142,11 +142,13 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
     fn build_fn(
         params: &Vec<EType>,
         ret: &EType,
+        scope_params_size: usize,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::StaticFn(FnType {
             params: params.clone(),
             ret: Box::new(ret.clone()),
+            scope_params_size,
         }))
     }
 
@@ -154,12 +156,14 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         params: &Vec<Either<UserType, Self>>,
         ret: &Either<UserType, Self>,
         closed: bool,
+        scope_params_size: usize,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Closure(ClosureType {
             params: params.clone(),
             ret: Box::new(ret.clone()),
             closed,
+            scope_params_size,
         }))
     }
 

@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use nom::{
     branch::alt,
     combinator::{map, opt, value},
@@ -174,6 +176,7 @@ impl TryParse for ClosureType {
                 params,
                 ret: Box::new(ret),
                 closed: opt_dyn.is_some(),
+                scope_params_size: Cell::new(0),
             },
         )(input)
     }
@@ -379,6 +382,7 @@ mod tests {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
                 closed: false,
+                scope_params_size: Cell::new(0),
             },
             value
         );
@@ -391,6 +395,7 @@ mod tests {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
                 closed: true,
+                scope_params_size: Cell::new(0),
             },
             value
         );

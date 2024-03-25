@@ -47,10 +47,6 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
 
         let mut offset_idx = 0;
 
-        if borrowed.state().is_closure == ClosureState::CAPTURING {
-            offset_idx = 8;
-        }
-
         for (var, offset) in parameters {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();

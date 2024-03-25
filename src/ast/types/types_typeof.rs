@@ -7,6 +7,7 @@ use super::{
 use crate::semantic::scope::static_types::{self, StaticType};
 
 use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::SizeOf;
 
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{scope::ScopeApi, Either, SemanticError, TypeOf};
@@ -233,8 +234,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ClosureType {
             }
             params
         };
-        let static_type: StaticType =
-            StaticType::build_closure(&params, &self.ret.type_of(scope)?, self.closed, scope)?;
+        let static_type: StaticType = StaticType::build_closure(
+            &params,
+            &self.ret.type_of(scope)?,
+            self.closed,
+            params.iter().map(|p| p.size_of()).sum::<usize>() + if self.closed { 8 } else { 0 },
+            scope,
+        )?;
         Ok(Either::Static(static_type.into()))
     }
 }
@@ -249,9 +255,12 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::FnType {
             if let StaticType::StaticFn(static_types::FnType {
                 params: other_params,
                 ret: other_ret,
+                scope_params_size: other_scope_params_size,
             }) = other_type.as_ref()
             {
-                if self.params.len() != other_params.len() {
+                if self.params.len() != other_params.len()
+                    || self.scope_params_size != *other_scope_params_size
+                {
                     return Err(SemanticError::IncompatibleTypes);
                 }
                 for (self_param, other_param) in self.params.iter().zip(other_params.iter()) {
@@ -282,6 +291,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::ClosureType {
                 params: other_params,
                 ret: other_ret,
                 closed: other_closed,
+                scope_params_size: other_scope_params_size,
             }) = other_type.as_ref()
             {
                 if self.params.len() != other_params.len()

@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use super::utils::strings::ID;
 
 pub mod types_parse;
@@ -63,6 +65,7 @@ pub struct VecType(pub SubType);
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClosureType {
     pub params: Types,
+    pub scope_params_size: Cell<usize>,
     pub ret: SubType,
     pub closed: bool,
 }

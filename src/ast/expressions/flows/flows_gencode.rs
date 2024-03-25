@@ -23,7 +23,7 @@ use crate::{
             branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
             locate::Locate,
             memcopy::MemCopy,
-            operation::{Addition, OpPrimitive, Operation, OperationKind},
+            operation::{Addition, OpPrimitive, Operation, OperationKind, Substraction},
             serialize::Serialized,
             Casm, CasmProgram,
         },
@@ -327,12 +327,16 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
             }
             platform_api.gencode(scope, instructions, params_size)
         } else {
-            let params_size = params_size + 8;
             let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             let Some(signature) = self.metadata.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
+            };
+            let sig_params_size = match fn_sig.as_ref() {
+                StaticType::Closure(value) => value.scope_params_size,
+                StaticType::StaticFn(value) => value.scope_params_size,
+                _ => return Err(CodeGenerationError::UnresolvedError),
             };
             let return_size = signature.size_of();
 
@@ -345,13 +349,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                         let _ = param.gencode(scope, instructions)?;
                     }
                     let _ = self.fn_var.gencode(scope, instructions)?;
-
-                    // Load function address
-                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    if let Some(8) = sig_params_size.checked_sub(params_size) {
+                        // Load function address
+                        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                    }
                     // Call function
                     // Load param size
                     instructions.push(Casm::Serialize(Serialized {
-                        data: (params_size as u64).to_le_bytes().to_vec(),
+                        data: (sig_params_size as u64).to_le_bytes().to_vec(),
                     }));
                     // Load return size
                     instructions.push(Casm::Serialize(Serialized {
@@ -361,50 +366,73 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                     instructions.push(Casm::Call(Call::Stack));
                 }
                 StaticType::Closure(ClosureType { closed: true, .. }) => {
-                    let _ = self.fn_var.gencode(scope, instructions)?;
-                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
-                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
-
-                    instructions.push(Casm::Access(Access::Runtime { size: Some(16) }));
-                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None))); // env size
-                    instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None))); // function pointer
-
-                    // Load Env
-                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R1))); // heap pointer
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (16u64).to_le_bytes().to_vec(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                    }));
-                    // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
-                    // instructions.push(Casm::Access(Access::Runtime { size: None }));
-
                     // Load Param
                     for param in &self.params {
                         let _ = param.gencode(scope, instructions)?;
                     }
+
                     let _ = self.fn_var.gencode(scope, instructions)?;
-                    // Load function address
-                    instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R2)));
+                    match sig_params_size.checked_sub(params_size) {
+                        Some(16) => {
+                            /* Rec and closed */
+                            /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            // Load Env heap address
+                            instructions.push(Casm::Serialize(Serialized {
+                                data: (16u64).to_le_bytes().to_vec(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Addition(Addition {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            instructions.push(Casm::Serialize(Serialized {
+                                data: (16u64).to_le_bytes().to_vec(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Substraction(Substraction {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        }
+                        Some(8) => {
+                            /* closed */
+                            /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+                            // Load Env heap address
+                            instructions.push(Casm::Serialize(Serialized {
+                                data: (16u64).to_le_bytes().to_vec(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Addition(Addition {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            instructions.push(Casm::Serialize(Serialized {
+                                data: (16u64).to_le_bytes().to_vec(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Substraction(Substraction {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        }
+                        _ => return Err(CodeGenerationError::UnresolvedError),
+                    }
+
                     // Call function
 
                     // Load param size
                     // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
                     instructions.push(Casm::Serialize(Serialized {
-                        data: (8 as u64).to_le_bytes().to_vec(),
-                    }));
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (params_size as u64).to_le_bytes().to_vec(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
+                        data: (sig_params_size).to_le_bytes().to_vec(),
                     }));
                     // Load return size
                     let Some(signature) = self.metadata.signature() else {

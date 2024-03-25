@@ -12,7 +12,7 @@ use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{EType, MergeType};
+use crate::semantic::{EType, MergeType, SizeOf};
 use crate::{
     ast::types::SliceType,
     semantic::{
@@ -292,9 +292,18 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
             params_types.push(expr_type);
         }
         let ret_type = self.scope.type_of(&scope)?;
-
-        StaticType::build_closure(&params_types, &ret_type, self.closed, scope)
-            .map(|value| Either::Static(value.into()))
+        let mut scope_params_size = 0;
+        for (v, _) in self.scope.scope()?.borrow().vars() {
+            scope_params_size += v.type_sig.size_of();
+        }
+        StaticType::build_closure(
+            &params_types,
+            &ret_type,
+            self.closed,
+            scope_params_size,
+            scope,
+        )
+        .map(|value| Either::Static(value.into()))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {

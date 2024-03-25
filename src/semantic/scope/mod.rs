@@ -71,12 +71,14 @@ pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_fn(
         params: &Vec<EType>,
         ret: &EType,
+        scope_params_size: usize,
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
     fn build_closure(
         params: &Vec<EType>,
         ret: &EType,
         closed: bool,
+        scope_params_size: usize,
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
 

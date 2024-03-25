@@ -78,6 +78,7 @@ pub struct VecType(pub SubType);
 pub struct FnType {
     pub params: Types,
     pub ret: SubType,
+    pub scope_params_size: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,6 +86,7 @@ pub struct ClosureType {
     pub params: Types,
     pub ret: SubType,
     pub closed: bool,
+    pub scope_params_size: usize,
 }
 
 pub type Types = Vec<EType>;

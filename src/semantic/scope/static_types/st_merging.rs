@@ -1,4 +1,4 @@
-use std::cell::Ref;
+use std::{cell::Ref, cmp::max};
 
 use nom::Err;
 
@@ -233,12 +233,13 @@ impl<Scope: ScopeApi> MergeType<Scope> for ClosureType {
         if self.closed != other_type.closed {
             return Err(SemanticError::IncompatibleTypes);
         }
-
+        let scope_params_size = max(self.scope_params_size, other_type.scope_params_size);
         Ok(Either::Static(
             StaticType::Closure(ClosureType {
                 params: merged_params,
                 ret: Box::new(merged_ret),
                 closed: self.closed,
+                scope_params_size,
             })
             .into(),
         ))

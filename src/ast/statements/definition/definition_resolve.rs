@@ -7,6 +7,7 @@ use crate::semantic::scope::BuildVar;
 use crate::semantic::EType;
 use crate::semantic::Either;
 use crate::semantic::MutRc;
+use crate::semantic::SizeOf;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
     Resolve, SemanticError, TypeOf,
@@ -183,6 +184,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         let static_type: StaticType = StaticType::build_fn(
             &params,
             &self.ret.type_of(&scope.borrow())?,
+            params.iter().map(|p| p.size_of()).sum::<usize>() + 8,
             &scope.borrow(),
         )?;
         let fn_type_sig = Either::Static(static_type.into());
@@ -549,7 +551,8 @@ mod tests {
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
-                    ret: Box::new(Either::Static(StaticType::Unit.into()))
+                    ret: Box::new(Either::Static(StaticType::Unit.into())),
+                    scope_params_size: 8,
                 })
                 .into()
             )
@@ -588,7 +591,8 @@ mod tests {
                         ),
                         Either::Static(StaticType::String(StringType()).into())
                     ],
-                    ret: Box::new(Either::Static(StaticType::Unit.into()))
+                    ret: Box::new(Either::Static(StaticType::Unit.into())),
+                    scope_params_size: 24,
                 })
                 .into()
             )
@@ -651,7 +655,8 @@ mod tests {
                     params: vec![],
                     ret: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-                    ))
+                    )),
+                    scope_params_size: 8,
                 })
                 .into()
             )
@@ -800,7 +805,8 @@ mod tests {
                     params: vec![],
                     ret: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-                    ))
+                    )),
+                    scope_params_size: 8,
                 })
                 .into()
             )

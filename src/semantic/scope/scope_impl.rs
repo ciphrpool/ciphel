@@ -8,13 +8,14 @@ use std::{
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{AccessLevel, MutRc, SemanticError, SizeOf},
+    semantic::{AccessLevel, Either, MutRc, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 
 use super::{
     chan_impl::Chan,
     event_impl::Event,
+    static_types::{NumberType, PrimitiveType, StaticType},
     user_type_impl::UserType,
     var_impl::{Var, VarState},
     ClosureState, ScopeApi, ScopeState,
@@ -240,7 +241,11 @@ impl ScopeApi for Scope {
                                         }
                                         idx
                                     };
-                                    Some((var, Offset::FE(offset), level))
+                                    let env_offset = match self.access_var(&"$ENV".into()).ok() {
+                                        Some((_, Offset::FP(o), _)) => o,
+                                        _ => return None,
+                                    };
+                                    Some((var, Offset::FE(env_offset, offset), level))
                                 } else {
                                     Some((var, offset, level))
                                 }
@@ -372,7 +377,28 @@ impl ScopeApi for Scope {
 
     fn to_closure(&mut self, state: ClosureState) {
         match self {
-            Scope::Inner { data, .. } => data.state.get_mut().is_closure = state,
+            Scope::Inner { data, .. } => {
+                data.state.get_mut().is_closure = state;
+                if state == ClosureState::CAPTURING {
+                    let mut offset = 0;
+                    for (var, o) in &data.vars {
+                        if var.state.get() == VarState::Parameter {
+                            offset += var.type_sig.size_of();
+                        }
+                    }
+                    data.vars.push((
+                        Rc::new(Var {
+                            id: "$ENV".into(),
+                            type_sig: Either::Static(
+                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                    .into(),
+                            ),
+                            state: VarState::Parameter.into(),
+                        }),
+                        Cell::new(Offset::FP(offset)),
+                    ));
+                }
+            }
             _ => {}
         }
     }

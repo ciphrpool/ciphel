@@ -2,6 +2,7 @@ use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::ast::expressions::data::{Data, ExprScope};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::ast::statements::assignation::AssignValue;
+use crate::semantic::scope::static_types::ClosureType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
@@ -43,6 +44,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
                 let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
 
                 if value.rec {
+                    /* update params size */
+                    let var_type = match var_type {
+                        Either::Static(value) => match value.as_ref() {
+                            StaticType::Closure(ClosureType {
+                                params,
+                                ret,
+                                closed,
+                                scope_params_size,
+                            }) => Either::Static(
+                                StaticType::Closure(ClosureType {
+                                    params: params.clone(),
+                                    ret: ret.clone(),
+                                    closed: closed.clone(),
+                                    scope_params_size: scope_params_size + 8,
+                                })
+                                .into(),
+                            ),
+                            _ => {
+                                return Err(SemanticError::IncompatibleTypes);
+                            }
+                        },
+                        _ => {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                    };
+                    let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
                     match right {
                         AssignValue::Expr(expr) => match expr.as_ref() {
                             Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {

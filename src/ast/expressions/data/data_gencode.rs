@@ -2197,7 +2197,7 @@ mod tests {
             let f = move (x:u64) -> {
                 return env + x;
             };
-            env = 50;
+            env = 0;
             return f(38); 
         };
 

@@ -35,7 +35,7 @@ pub enum Offset {
     FB(usize),
     FZ(isize),
     FP(usize),
-    FE(usize),
+    FE(usize, usize),
 }
 
 impl Default for Offset {
@@ -540,7 +540,7 @@ impl Stack {
                 }
                 Ok(frame_params_start + idx)
             }
-            Offset::FE(_) => unreachable!(),
+            Offset::FE(_, _) => unreachable!(),
         }
     }
 

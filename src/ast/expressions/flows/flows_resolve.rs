@@ -820,6 +820,7 @@ mod tests {
                         ret: Box::new(Either::Static(
                             StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                         )),
+                        scope_params_size: 24,
                     })
                     .into(),
                 ),

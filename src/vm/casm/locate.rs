@@ -25,16 +25,16 @@ impl Executable for Locate {
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
-                if let Offset::FE(idx) = offset {
+                if let Offset::FE(stack_idx, heap_idx) = offset {
                     let heap_address = thread
                         .env
                         .stack
-                        .read(Offset::FP(0), *level, 8)
+                        .read(Offset::FP(*stack_idx), *level, 8)
                         .map_err(|err| err.into())?;
                     let data = TryInto::<&[u8; 8]>::try_into(heap_address.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
-                    let data = (heap_address + *idx as u64).to_le_bytes();
+                    let data = (heap_address + *heap_idx as u64).to_le_bytes();
                     let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                     thread.env.program.incr();
                     return Ok(());
