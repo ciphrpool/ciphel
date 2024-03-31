@@ -1,7 +1,10 @@
 use crate::{
     semantic::{
-        scope::{static_types::NumberType, ScopeApi},
-        MutRc, SizeOf, TypeOf,
+        scope::{
+            static_types::{NumberType, RangeType, StaticType},
+            ScopeApi,
+        },
+        Either, MutRc, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -11,11 +14,14 @@ use crate::{
                 NotEqual, OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight,
                 Substraction,
             },
+            serialize::Serialized,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
 };
+
+use super::Range;
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
     fn gencode(
@@ -48,6 +54,46 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
                 Ok(())
             }
         }
+    }
+}
+
+impl<Scope: ScopeApi> GenerateCode<Scope> for Range<Scope> {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(signature) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        let (num_type, incr_data) = match signature {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Range(RangeType { num, .. }) => (
+                    num.size_of(),
+                    match num {
+                        NumberType::U8 => (1u8).to_le_bytes().to_vec(),
+                        NumberType::U16 => (1u16).to_le_bytes().to_vec(),
+                        NumberType::U32 => (1u32).to_le_bytes().to_vec(),
+                        NumberType::U64 => (1u64).to_le_bytes().to_vec(),
+                        NumberType::U128 => (1u128).to_le_bytes().to_vec(),
+                        NumberType::I8 => (1i8).to_le_bytes().to_vec(),
+                        NumberType::I16 => (1i16).to_le_bytes().to_vec(),
+                        NumberType::I32 => (1i32).to_le_bytes().to_vec(),
+                        NumberType::I64 => (1i64).to_le_bytes().to_vec(),
+                        NumberType::I128 => (1i128).to_le_bytes().to_vec(),
+                        NumberType::F64 => (1f64).to_le_bytes().to_vec(),
+                    },
+                ),
+                _ => return Err(CodeGenerationError::UnresolvedError),
+            },
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        };
+
+        let _ = self.lower.gencode(scope, instructions)?;
+        let _ = self.upper.gencode(scope, instructions)?;
+        instructions.push(Casm::Serialize(Serialized { data: incr_data }));
+        Ok(())
     }
 }
 
@@ -1419,7 +1465,7 @@ mod tests {
 
         let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
             &StrSliceType {
-                size: "Hello ".len() + "world".len(),
+                size: "Hello ".chars().count() * 4 + "world".chars().count() * 4,
             },
             &data,
         )

@@ -1,8 +1,8 @@
 use crate::semantic::SizeOf;
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, MapType, PrimitiveType, SliceType, StaticType,
-    StrSliceType, StringType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, MapType, NumberType, PrimitiveType, RangeType,
+    SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
 impl SizeOf for StaticType {
@@ -22,27 +22,33 @@ impl SizeOf for StaticType {
             StaticType::Map(value) => value.size_of(),
             StaticType::String(value) => value.size_of(),
             StaticType::StrSlice(value) => value.size_of(),
+            StaticType::Range(value) => value.size_of(),
         }
     }
 }
 
+impl SizeOf for NumberType {
+    fn size_of(&self) -> usize {
+        match self {
+            super::NumberType::U8 => 1,
+            super::NumberType::U16 => 2,
+            super::NumberType::U32 => 4,
+            super::NumberType::U64 => 8,
+            super::NumberType::U128 => 16,
+            super::NumberType::I8 => 1,
+            super::NumberType::I16 => 2,
+            super::NumberType::I32 => 4,
+            super::NumberType::I64 => 8,
+            super::NumberType::I128 => 16,
+            super::NumberType::F64 => 8,
+        }
+    }
+}
 impl SizeOf for PrimitiveType {
     fn size_of(&self) -> usize {
         match self {
-            PrimitiveType::Number(num) => match num {
-                super::NumberType::U8 => 1,
-                super::NumberType::U16 => 2,
-                super::NumberType::U32 => 4,
-                super::NumberType::U64 => 8,
-                super::NumberType::U128 => 16,
-                super::NumberType::I8 => 1,
-                super::NumberType::I16 => 2,
-                super::NumberType::I32 => 4,
-                super::NumberType::I64 => 8,
-                super::NumberType::I128 => 16,
-                super::NumberType::F64 => 8,
-            },
-            PrimitiveType::Char => 1,
+            PrimitiveType::Number(num) => num.size_of(),
+            PrimitiveType::Char => 4,
             PrimitiveType::Bool => 1,
         }
     }
@@ -62,6 +68,12 @@ impl SizeOf for StringType {
 impl SizeOf for StrSliceType {
     fn size_of(&self) -> usize {
         self.size
+    }
+}
+
+impl SizeOf for RangeType {
+    fn size_of(&self) -> usize {
+        self.num.size_of() * 3
     }
 }
 

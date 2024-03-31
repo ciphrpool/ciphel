@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     combinator::{map, opt, value},
-    sequence::preceded,
+    sequence::{pair, preceded, tuple},
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::wst,
+            strings::{eater, wst},
         },
         TryParse,
     },
@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
-    Inclusion, LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
+    Inclusion, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
@@ -46,6 +46,32 @@ impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
         ))(input)
     }
 }
+
+impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Range<InnerScope> {
+    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+        let (remainder, left) = LogicalOr::parse(input)?;
+        let (remainder, op) = opt(pair(wst(lexem::RANGE_SEP), opt(wst(lexem::EQUAL))))(remainder)?;
+
+        if let Some((_, inclusive)) = op {
+            let (remainder, upper) = LogicalOr::parse(remainder)?;
+            let lower = Box::new(left);
+            let upper = Box::new(upper);
+            Ok((
+                remainder,
+                Expression::Range(Range {
+                    lower,
+                    upper,
+                    incr: None,
+                    inclusive: inclusive.is_some(),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 pub trait TryParseOperation<InnerScope: ScopeApi> {
     fn parse(input: Span) -> PResult<Expression<InnerScope>>
     where
@@ -763,6 +789,63 @@ mod tests {
                 right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Number(Cell::new(Number::Unresolved(5)))
                 )))),
+                metadata: Metadata::default()
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_range() {
+        let res = Range::<MockScope>::parse("1..10".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Range(Range {
+                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::Unresolved(1).into())
+                )))),
+                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::Unresolved(10).into())
+                )))),
+                incr: None,
+                inclusive: false,
+                metadata: Metadata::default()
+            }),
+            value
+        );
+
+        let res = Range::<MockScope>::parse("1..=10".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Range(Range {
+                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::Unresolved(1).into())
+                )))),
+                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::Unresolved(10).into())
+                )))),
+                incr: None,
+                inclusive: true,
+                metadata: Metadata::default()
+            }),
+            value
+        );
+
+        let res = Range::<MockScope>::parse("1u64..10u64".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Range(Range {
+                lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::U64(1).into())
+                )))),
+                upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Number::U64(10).into())
+                )))),
+                incr: None,
+                inclusive: false,
                 metadata: Metadata::default()
             }),
             value

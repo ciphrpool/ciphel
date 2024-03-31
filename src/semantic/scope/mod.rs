@@ -12,7 +12,10 @@ use crate::{
 };
 
 use self::{
-    chan_impl::Chan, event_impl::Event, static_types::StaticType, user_type_impl::UserType,
+    chan_impl::Chan,
+    event_impl::Event,
+    static_types::{NumberType, StaticType},
+    user_type_impl::UserType,
     var_impl::Var,
 };
 
@@ -67,6 +70,17 @@ pub trait BuildStaticType<Scope: ScopeApi> {
     fn build_vec_from(type_sig: &EType, scope: &Ref<Scope>) -> Result<StaticType, SemanticError>;
 
     fn build_error() -> StaticType;
+
+    fn build_range(
+        type_sig: &types::RangeType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError>;
+
+    fn build_range_from(
+        type_sig: NumberType,
+        inclusiv: bool,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError>;
 
     fn build_fn(
         params: &Vec<EType>,

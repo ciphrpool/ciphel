@@ -17,8 +17,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-    StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, RangeType,
+    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -36,6 +36,7 @@ impl TryParse for Type {
             value(Type::Unit, wst(lexem::UUNIT)),
             map(VecType::parse, |value| Type::Vec(value)),
             map(ClosureType::parse, |value| Type::Closure(value)),
+            map(RangeType::parse, |value| Type::Range(value)),
             map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
             map(AddrType::parse, |value| Type::Address(value)),
@@ -225,6 +226,39 @@ impl TryParse for TupleType {
             delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
             |params| TupleType(params),
         )(input)
+    }
+}
+
+impl TryParse for RangeType {
+    /*
+     * @desc Parse Primitive types
+     *
+     * @grammar
+     * Primitive := num | float | char | bool
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        alt((
+            map(
+                preceded(
+                    wst(lexem::RANGE_E),
+                    delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
+                ),
+                |num| RangeType {
+                    num,
+                    inclusive: false,
+                },
+            ),
+            map(
+                preceded(
+                    wst(lexem::RANGE_I),
+                    delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
+                ),
+                |num| RangeType {
+                    num,
+                    inclusive: true,
+                },
+            ),
+        ))(input)
     }
 }
 

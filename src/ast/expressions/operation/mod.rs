@@ -1,9 +1,11 @@
+use std::cell::Cell;
+
 use crate::{
     ast::types::Type,
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::{scope::ScopeApi, EType, Metadata},
 };
 
-use super::{Atomic, Expression};
+use super::{data::Number, Atomic, Expression};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
@@ -20,6 +22,22 @@ pub enum UnaryOperation<InnerScope: ScopeApi> {
         metadata: Metadata,
     },
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Range<InnerScope: ScopeApi> {
+    pub lower: Box<Expression<InnerScope>>,
+    pub upper: Box<Expression<InnerScope>>,
+    pub incr: Option<Cell<Number>>,
+    pub inclusive: bool,
+    pub metadata: Metadata,
+}
+
+impl<Scope: ScopeApi> Range<Scope> {
+    pub fn signature(&self) -> Option<EType> {
+        self.metadata.signature()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Product<InnerScope: ScopeApi> {
     Mult {

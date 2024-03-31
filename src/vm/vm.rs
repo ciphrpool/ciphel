@@ -4,6 +4,8 @@ use std::{
     rc::Rc,
 };
 
+use ulid::Ulid;
+
 use crate::semantic::{scope::ScopeApi, MutRc};
 
 use super::{
@@ -93,4 +95,16 @@ pub trait DeserializeFrom<Scope: ScopeApi> {
 
 pub trait Printer {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+}
+
+pub trait NextItem {
+    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+
+    fn build_item(
+        &self,
+        instructions: &CasmProgram,
+        end_label: Ulid,
+    ) -> Result<(), CodeGenerationError>;
+
+    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
 }

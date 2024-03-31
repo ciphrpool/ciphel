@@ -14,7 +14,7 @@ use crate::{
     vm::{
         allocator::Memory,
         casm::{Casm, CasmProgram},
-        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
+        vm::{CodeGenerationError, DeserializeFrom, NextItem, Printer, RuntimeError},
     },
 };
 
@@ -524,6 +524,33 @@ impl Printer for EType {
         match self {
             Either::Static(value) => value.build_printer(instructions),
             Either::User(value) => value.build_printer(instructions),
+        }
+    }
+}
+
+impl NextItem for EType {
+    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        match self {
+            Either::Static(value) => value.init_index(instructions),
+            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
+
+    fn build_item(
+        &self,
+        instructions: &CasmProgram,
+        end_label: ulid::Ulid,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Either::Static(value) => value.build_item(instructions, end_label),
+            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
+
+    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        match self {
+            Either::Static(value) => value.next(instructions),
+            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
 }

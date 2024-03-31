@@ -358,6 +358,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
                 if let Some(api) = Lib::from(id) {
                     let _ = api.resolve(scope, context, &self.params)?;
                     *self.platform.as_ref().borrow_mut() = Some(api);
+                    resolve_metadata!(self.metadata, self, scope, context);
                     return Ok(());
                 }
             }

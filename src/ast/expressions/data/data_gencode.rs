@@ -10,7 +10,7 @@ use crate::{
     ast::utils::strings::ID,
     semantic::{
         scope::{
-            static_types::{NumberType, StaticType},
+            static_types::{NumberType, RangeType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
             ScopeApi,
@@ -33,8 +33,8 @@ use crate::{
 };
 
 use super::{
-    Address, Closure, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess, Primitive,
-    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess, Number,
+    Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
 impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
@@ -59,6 +59,53 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
             Data::Enum(value) => value.gencode(scope, instructions),
             Data::StrSlice(value) => value.gencode(scope, instructions),
         }
+    }
+}
+
+impl<Scope: ScopeApi> GenerateCode<Scope> for Number {
+    fn gencode(
+        &self,
+        _scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let casm = match self {
+            super::Number::U8(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::U16(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::U32(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::U64(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::U128(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::I8(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::I16(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::I32(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::I64(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::I128(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::F64(data) => Serialized {
+                data: data.to_le_bytes().to_vec(),
+            },
+            super::Number::Unresolved(_) => return Err(CodeGenerationError::UnresolvedError),
+        };
+        instructions.push(Casm::Serialize(casm));
+        Ok(())
     }
 }
 
@@ -108,9 +155,13 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
             Primitive::Bool(data) => Serialized {
                 data: [*data as u8].to_vec(),
             },
-            Primitive::Char(data) => Serialized {
-                data: [*data as u8].to_vec(),
-            },
+            Primitive::Char(data) => {
+                let mut buffer = [0u8; 4];
+                let _ = data.encode_utf8(&mut buffer);
+                Serialized {
+                    data: buffer.to_vec(),
+                }
+            }
         };
         instructions.push(Casm::Serialize(casm));
         Ok(())
@@ -948,8 +999,15 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let str_bytes = self.value.clone().into_bytes();
-        let bytes_len = str_bytes.len();
+        let str_bytes: Vec<u8> = self
+            .value
+            .chars()
+            .flat_map(|c| {
+                let mut buffer = [0u8; 4];
+                c.encode_utf8(&mut buffer);
+                buffer
+            })
+            .collect();
         instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
         Ok(())
         // let mut borrowed = instructions

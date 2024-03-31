@@ -40,8 +40,8 @@ use nom_supreme::error::ErrorTree;
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    MultiData, NumAccess, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
+    VarID, Variable, Vector,
 };
 impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
@@ -186,6 +186,33 @@ impl<InnerScope: ScopeApi> TryParse for Variable<InnerScope> {
     }
 }
 
+impl TryParse for Number {
+    fn parse(input: Span) -> PResult<Self>
+    where
+        Self: Sized,
+    {
+        map(
+            pair(parse_number, opt(NumberType::parse)),
+            |(value, opt_type)| match opt_type {
+                Some(number_type) => match number_type {
+                    NumberType::U8 => super::Number::U8(value as u8).into(),
+                    NumberType::U16 => super::Number::U16(value as u16).into(),
+                    NumberType::U32 => super::Number::U32(value as u32).into(),
+                    NumberType::U64 => super::Number::U64(value as u64).into(),
+                    NumberType::U128 => super::Number::U128(value as u128).into(),
+                    NumberType::I8 => super::Number::I8(value as i8).into(),
+                    NumberType::I16 => super::Number::I16(value as i16).into(),
+                    NumberType::I32 => super::Number::I32(value as i32).into(),
+                    NumberType::I64 => super::Number::I64(value as i64).into(),
+                    NumberType::I128 => super::Number::I128(value as i128).into(),
+                    NumberType::F64 => super::Number::F64(value as f64).into(),
+                },
+                None => super::Number::Unresolved(value as i64).into(),
+            },
+        )(input)
+    }
+}
+
 impl TryParse for Primitive {
     /*
      * @desc Parse Primitive data
@@ -198,43 +225,7 @@ impl TryParse for Primitive {
             map(pair(parse_float, opt(wst(lexem::FLOAT))), |(value, _)| {
                 Primitive::Number(super::Number::F64(value as f64).into())
             }),
-            map(
-                pair(parse_number, opt(NumberType::parse)),
-                |(value, opt_type)| match opt_type {
-                    Some(number_type) => match number_type {
-                        NumberType::U8 => Primitive::Number(super::Number::U8(value as u8).into()),
-                        NumberType::U16 => {
-                            Primitive::Number(super::Number::U16(value as u16).into())
-                        }
-                        NumberType::U32 => {
-                            Primitive::Number(super::Number::U32(value as u32).into())
-                        }
-                        NumberType::U64 => {
-                            Primitive::Number(super::Number::U64(value as u64).into())
-                        }
-                        NumberType::U128 => {
-                            Primitive::Number(super::Number::U128(value as u128).into())
-                        }
-                        NumberType::I8 => Primitive::Number(super::Number::I8(value as i8).into()),
-                        NumberType::I16 => {
-                            Primitive::Number(super::Number::I16(value as i16).into())
-                        }
-                        NumberType::I32 => {
-                            Primitive::Number(super::Number::I32(value as i32).into())
-                        }
-                        NumberType::I64 => {
-                            Primitive::Number(super::Number::I64(value as i64).into())
-                        }
-                        NumberType::I128 => {
-                            Primitive::Number(super::Number::I128(value as i128).into())
-                        }
-                        NumberType::F64 => {
-                            Primitive::Number(super::Number::F64(value as f64).into())
-                        }
-                    },
-                    None => Primitive::Number(super::Number::Unresolved(value as i64).into()),
-                },
-            ),
+            map(Number::parse, |value| Primitive::Number(value.into())),
             map(
                 alt((
                     value(true, wst(lexem::TRUE)),

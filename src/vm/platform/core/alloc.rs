@@ -4,13 +4,13 @@ use nom_supreme::parser_ext::Value;
 use num_traits::ToBytes;
 
 use crate::{
-    ast::expressions::Expression,
+    ast::{expressions::Expression, types::PrimitiveType},
     semantic::{
         scope::{
-            static_types::{NumberType, StaticType, StringType},
+            static_types::{self, NumberType, StaticType, StringType},
             ScopeApi,
         },
-        AccessLevel, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+        AccessLevel, EType, Either, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{align, stack::Offset, MemoryAddress},

@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
 use super::{
-    AddrType, ChanType, ClosureType, MapType, PrimitiveType, SliceType, StrSliceType, StringType,
-    TupleType, Type, VecType,
+    AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
+    StringType, TupleType, Type, VecType,
 };
 use crate::semantic::scope::static_types::{self, StaticType};
 
@@ -34,12 +34,13 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
             Type::Tuple(value) => value.type_of(&scope),
             Type::Unit => {
                 let static_type: StaticType = <StaticType as BuildStaticType<Scope>>::build_unit();
-                let static_type = static_type.type_of(&scope)?;
+                let static_type = Either::Static(static_type.into());
                 Ok(static_type)
             }
             Type::Address(value) => value.type_of(&scope),
             Type::Map(value) => value.type_of(&scope),
             Type::String(value) => value.type_of(&scope),
+            Type::Range(value) => value.type_of(&scope),
         }
     }
 }
@@ -50,7 +51,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PrimitiveType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_primitive(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -94,7 +95,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for SliceType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_slice(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -105,7 +106,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StrSliceType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_str_slice(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -117,7 +118,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StringType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_string(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -196,7 +197,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for VecType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_vec(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -324,7 +325,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ChanType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_chan(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -356,7 +357,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TupleType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_tuple(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -394,7 +395,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AddrType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_addr(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }
@@ -420,6 +421,41 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::AddrType {
     }
 }
 
+impl<Scope: ScopeApi> TypeOf<Scope> for RangeType {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized,
+    {
+        let static_type: StaticType = StaticType::build_range(&self, scope)?;
+        let static_type = Either::Static(static_type.into());
+        Ok(static_type)
+    }
+}
+
+impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::RangeType {
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        if let Either::Static(other_type) = other_type {
+            if let StaticType::Range(static_types::RangeType {
+                num: other_subtype, ..
+            }) = other_type.as_ref()
+            {
+                return (self.num == *other_subtype)
+                    .then(|| ())
+                    .ok_or(SemanticError::IncompatibleTypes);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for MapType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
@@ -427,7 +463,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MapType {
         Self: Sized,
     {
         let static_type: StaticType = StaticType::build_map(&self, scope)?;
-        let static_type = static_type.type_of(&scope)?;
+        let static_type = Either::Static(static_type.into());
         Ok(static_type)
     }
 }

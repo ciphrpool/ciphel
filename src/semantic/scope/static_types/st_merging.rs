@@ -8,7 +8,7 @@ use crate::semantic::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, SliceType,
+    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
     StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
@@ -49,6 +49,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::Map(value) => value.merge(other, scope),
             StaticType::String(value) => value.merge(other, scope),
             StaticType::StrSlice(value) => value.merge(other, scope),
+            StaticType::Range(value) => value.merge(other, scope),
         }
     }
 }
@@ -115,6 +116,23 @@ impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
                 .into(),
             ))
         }
+    }
+}
+
+impl<Scope: ScopeApi> MergeType<Scope> for RangeType {
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let Either::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Range(other_type) = other_type.as_ref() else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+
+        todo!()
     }
 }
 

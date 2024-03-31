@@ -17,6 +17,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
             StaticType::Closure(value) => value.compatible_with(other, scope),
             StaticType::Chan(value) => value.compatible_with(other, scope),
             StaticType::Tuple(value) => value.compatible_with(other, scope),
+            StaticType::Range(value) => value.compatible_with(other, scope),
             StaticType::Unit => {
                 let other_type = other.type_of(&scope)?;
                 if let Either::Static(other_type) = other_type {

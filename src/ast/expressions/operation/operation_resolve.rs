@@ -1,11 +1,11 @@
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
-    LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
+    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 use crate::ast::expressions::Expression;
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
 
@@ -91,6 +91,42 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnaryOperation<Scope> {
         }
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for Range<Scope> {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+        Scope: ScopeApi,
+    {
+        let inner_context = match context {
+            Some(context) => match context {
+                Either::Static(context) => match context.as_ref() {
+                    StaticType::Range(RangeType { num, .. }) => Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(num.clone())).into(),
+                    )),
+                    _ => None,
+                },
+                _ => None,
+            },
+            None => None,
+        };
+
+        let _ = self.lower.resolve(scope, &inner_context, extra)?;
+        let _ = self.upper.resolve(scope, &inner_context, extra)?;
+
+        let _ = resolve_metadata!(self.metadata, self, scope, context);
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
     type Output = ();
     type Context = Option<EType>;

@@ -45,6 +45,8 @@ pub const UUNIT: &str = "Unit";
 pub const UVEC: &str = "Vec";
 pub const UMAP: &str = "Map";
 pub const UCHAN: &str = "Chan";
+pub const RANGE_I: &str = "RangeI";
+pub const RANGE_E: &str = "RangeE";
 pub const FN: &str = "fn";
 
 // PONCTUATION
@@ -68,6 +70,7 @@ pub const FALSE: &str = "false";
 pub const COLON: &str = ":";
 pub const ADDR: &str = "&";
 pub const SEP: &str = "::";
+pub const RANGE_SEP: &str = "..";
 pub const ACCESS: &str = "*";
 pub const BAR: &str = "|";
 

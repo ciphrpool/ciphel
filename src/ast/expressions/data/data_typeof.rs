@@ -7,7 +7,7 @@ use super::{
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType, StringType};
 
-use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::static_types::{self, StaticType};
 
 use crate::semantic::scope::user_type_impl::UserType;
 
@@ -242,7 +242,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StrSlice {
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.len(),
+                size: self.value.chars().count() * 4,
             },
             scope,
         )
@@ -264,6 +264,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
         StaticType::build_vec_from(&expr_type, scope).map(|value| Either::Static(value.into()))
     }
 }
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where

@@ -3,7 +3,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, one_of},
-    combinator::{map_res, opt, recognize},
+    combinator::{map_res, not, opt, recognize},
     multi::{many0, many1},
     sequence::{preceded, terminated, tuple},
     IResult,
@@ -60,7 +60,7 @@ fn float(input: Span) -> IResult<Span, Span> {
         recognize(tuple((
             opt(one_of("+-")),
             float_decimal,
-            char('.'),
+            terminated(char('.'), not(char('.'))),
             opt(float_decimal),
         ))),
     ))(input)

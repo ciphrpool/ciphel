@@ -6,7 +6,7 @@ use super::{
     VarID, Variable, Vector,
 };
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
@@ -327,16 +327,56 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
                                 match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Number(value)) => {
                                         match value {
-                                            NumberType::U8 => n.set(Number::U8(v as u8)),
-                                            NumberType::U16 => n.set(Number::U16(v as u16)),
-                                            NumberType::U32 => n.set(Number::U32(v as u32)),
-                                            NumberType::U64 => n.set(Number::U64(v as u64)),
-                                            NumberType::U128 => n.set(Number::U128(v as u128)),
-                                            NumberType::I8 => n.set(Number::I8(v as i8)),
-                                            NumberType::I16 => n.set(Number::I16(v as i16)),
-                                            NumberType::I32 => n.set(Number::I32(v as i32)),
-                                            NumberType::I64 => n.set(Number::I64(v as i64)),
-                                            NumberType::I128 => n.set(Number::I128(v as i128)),
+                                            NumberType::U8 => {
+                                                n.set(Number::U8(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::U16 => {
+                                                n.set(Number::U16(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::U32 => {
+                                                n.set(Number::U32(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::U64 => {
+                                                n.set(Number::U64(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::U128 => {
+                                                n.set(Number::U128(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::I8 => {
+                                                n.set(Number::I8(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::I16 => {
+                                                n.set(Number::I16(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::I32 => {
+                                                n.set(Number::I32(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::I64 => {
+                                                n.set(Number::I64(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
+                                            NumberType::I128 => {
+                                                n.set(Number::I128(v.try_into().map_err(|_| {
+                                                    SemanticError::IncompatibleTypes
+                                                })?))
+                                            }
                                             NumberType::F64 => n.set(Number::F64(v as f64)),
                                         }
                                     }
@@ -480,6 +520,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
         Ok(())
     }
 }
+
 impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
     type Output = ();
     type Context = Option<EType>;
@@ -942,7 +983,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::StrSlice(StrSliceType {
-                    size: "Hello World".len(),
+                    size: "Hello World".chars().count() * 4,
                 })
                 .into(),
             )),

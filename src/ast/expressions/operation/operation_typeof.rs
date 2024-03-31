@@ -2,14 +2,17 @@ use std::cell::Ref;
 
 use crate::semantic::{
     scope::{
-        static_types::StaticType, type_traits::OperandMerging, user_type_impl::UserType, ScopeApi,
+        static_types::{self, StaticType},
+        type_traits::OperandMerging,
+        user_type_impl::UserType,
+        BuildStaticType, ScopeApi,
     },
-    EType, Either, Resolve, SemanticError, TypeOf,
+    EType, Either, MergeType, Resolve, SemanticError, TypeOf,
 };
 
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
-    LogicalAnd, LogicalOr, Product, Shift, Substraction, UnaryOperation,
+    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
@@ -24,6 +27,29 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
         }
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Range<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let type_sig = match self
+            .lower
+            .type_of(scope)?
+            .merge(self.upper.as_ref(), scope)?
+        {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Primitive(static_types::PrimitiveType::Number(value)) => value.clone(),
+                _ => return Err(SemanticError::IncompatibleTypes),
+            },
+            Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+        };
+        StaticType::build_range_from(type_sig, self.inclusive, scope)
+            .map(|value| Either::Static(value.into()))
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where

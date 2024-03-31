@@ -12,6 +12,7 @@ pub mod st_builder;
 pub mod st_compatible_with;
 pub mod st_deserialize;
 pub mod st_merging;
+pub mod st_next;
 pub mod st_operand_merging;
 pub mod st_sizeof;
 pub mod st_subtypes;
@@ -28,6 +29,7 @@ pub enum StaticType {
     Vec(VecType),
     Closure(ClosureType),
     StaticFn(FnType),
+    Range(RangeType),
     Chan(ChanType),
     Tuple(TupleType),
     Unit,
@@ -93,6 +95,12 @@ pub type Types = Vec<EType>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChanType(pub SubType);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RangeType {
+    pub num: NumberType,
+    pub inclusive: bool,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType(pub Types);

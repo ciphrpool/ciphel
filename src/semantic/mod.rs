@@ -37,10 +37,13 @@ pub enum SemanticError {
     UnknownType,
     UnknownField,
 
+    DoubleInfinitRange,
+
     IncorrectArguments,
     IncorrectStruct,
     IncorrectVariant,
     InvalidPattern,
+    InvalidRange,
 
     IncompatibleTypes,
     IncompatibleOperation,

@@ -38,13 +38,6 @@ pub enum ForItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForIterator<InnerScope: ScopeApi> {
-    // Id(ID),
-    // Vec(Vector<InnerScope>),
-    // Slice(Slice<InnerScope>),
-    // Receive {
-    //     addr: Address<InnerScope>,
-    //     timeout: usize,
-    // },
     expr: Expression<InnerScope>,
 }
 

@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     AddrType, ChanType, ClosureType, FnType, KeyType, MapType, NumberType, PrimitiveType,
-    SliceType, StaticType, TupleType, VecType,
+    RangeType, SliceType, StaticType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
@@ -296,6 +296,39 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         Ok(Self::Map(MapType {
             keys_type: key_type,
             values_type: Box::new(subtype),
+        }))
+    }
+
+    fn build_range(
+        type_sig: &ast::types::RangeType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError> {
+        Ok(Self::Range(RangeType {
+            num: match type_sig.num {
+                ast::types::NumberType::U8 => NumberType::U8,
+                ast::types::NumberType::U16 => NumberType::U16,
+                ast::types::NumberType::U32 => NumberType::U32,
+                ast::types::NumberType::U64 => NumberType::U64,
+                ast::types::NumberType::U128 => NumberType::U128,
+                ast::types::NumberType::I8 => NumberType::I8,
+                ast::types::NumberType::I16 => NumberType::I16,
+                ast::types::NumberType::I32 => NumberType::I32,
+                ast::types::NumberType::I64 => NumberType::I64,
+                ast::types::NumberType::I128 => NumberType::I128,
+                ast::types::NumberType::F64 => NumberType::F64,
+            },
+            inclusive: type_sig.inclusive,
+        }))
+    }
+
+    fn build_range_from(
+        type_sig: NumberType,
+        inclusive: bool,
+        scope: &Ref<Scope>,
+    ) -> Result<Self, SemanticError> {
+        Ok(Self::Range(RangeType {
+            num: type_sig,
+            inclusive,
         }))
     }
 }

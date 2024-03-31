@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
+use nom::AsBytes;
 use num_traits::ToBytes;
 
 use crate::{
@@ -40,7 +41,9 @@ use crate::{
     },
 };
 
-use super::{NumberType, PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType};
+use super::{
+    NumberType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType, TupleType, VecType,
+};
 
 impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
     type Output = Data<Scope>;
@@ -75,6 +78,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
                     <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
                 ))
             }
+            StaticType::Range(_) => unimplemented!(),
         }
     }
 }
@@ -91,6 +95,7 @@ impl Printer for StaticType {
             StaticType::Closure(value) => todo!(),
             StaticType::Chan(value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(instructions),
+            StaticType::Range(value) => value.build_printer(instructions),
             StaticType::Unit => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
                     IOCasm::Print(PrintCasm::PrintID("unit".into())),
@@ -234,9 +239,15 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
                     .map(|n| Primitive::Number(n.into()))
             }
             PrimitiveType::Char => {
-                let data = TryInto::<&[u8; 1]>::try_into(bytes)
+                let data = TryInto::<&[u8; 4]>::try_into(bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
-                Ok(Primitive::Char(data[0] as char))
+                Ok(Primitive::Char(
+                    std::str::from_utf8(data.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?
+                        .chars()
+                        .next()
+                        .ok_or(RuntimeError::Deserialization)?,
+                ))
             }
             PrimitiveType::Bool => {
                 let data = TryInto::<&[u8; 1]>::try_into(bytes)
@@ -374,9 +385,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
 }
 impl Printer for StringType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer(
-            PrimitiveType::Char.size_of(),
-        )));
+        instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer(1)));
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintString,
         )))));
@@ -387,10 +396,16 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StrSliceType {
     type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let str_slice = std::str::from_utf8(&bytes).map_err(|_| RuntimeError::Deserialization)?;
-
+        let reconstructed_string: String = bytes
+            .chunks(4)
+            .flat_map(|chunk| {
+                std::str::from_utf8(chunk)
+                    .ok()
+                    .and_then(|s| s.chars().next())
+            })
+            .collect();
         Ok(StrSlice {
-            value: str_slice.to_string(),
+            value: reconstructed_string,
             metadata: Metadata {
                 info: Rc::new(RefCell::new(Info::Resolved {
                     context: None,
@@ -513,6 +528,70 @@ impl Printer for SliceType {
         let _ = self.item_type.build_printer(instructions)?;
         instructions.push_label_id(continue_label, "print_continue".into());
         instructions.push_label_id(end_label, "print_end".into());
+        Ok(())
+    }
+}
+
+// impl<Scope: ScopeApi> DeserializeFrom<Scope> for RangeType {
+//     type Output = Range<Scope>;
+
+//     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
+//         if bytes.len() < self.size_of() {
+//             return Err(RuntimeError::Deserialization);
+//         }
+//         let (bytes_lower, rest) = bytes.split_at(self.num.size_of());
+//         let lower =
+//             <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_lower)?;
+
+//         let (bytes_upper, rest) = rest.split_at(self.num.size_of());
+//         let upper =
+//             <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_upper)?;
+
+//         let (bytes_incr, rest) = rest.split_at(self.num.size_of());
+//         let incr = <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_incr)?;
+//         Ok(Range {
+//             lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+//                 Primitive::Number(lower.into()),
+//             )))),
+//             upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+//                 Primitive::Number(lower.into()),
+//             )))),
+//             incr: Some(incr.into()),
+//             inclusive: self.inclusive,
+//             metadata: Metadata {
+//                 info: Rc::new(RefCell::new(Info::Resolved {
+//                     context: None,
+//                     signature: Some(Either::Static(Rc::new(StaticType::Range(self.clone())))),
+//                 })),
+//             },
+//         })
+//     }
+// }
+
+impl Printer for RangeType {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufOpen,
+        )))));
+
+        /* Increment printing */
+        self.num.build_printer(instructions);
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::COLON),
+        )))));
+        /* Upper printing */
+        self.num.build_printer(instructions);
+
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::PrintLexem(lexem::RANGE_SEP),
+        )))));
+
+        /* Lower printing */
+        self.num.build_printer(instructions);
+
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+            PrintCasm::StdOutBufRevFlush,
+        )))));
         Ok(())
     }
 }

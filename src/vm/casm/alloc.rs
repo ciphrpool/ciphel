@@ -188,6 +188,7 @@ impl Executable for Access {
                     .stack
                     .read(offset, level, size)
                     .map_err(|err| err.into())?;
+                // dbg!(&data);
                 // Copy data onto stack;
                 let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 thread.env.program.incr();

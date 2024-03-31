@@ -194,12 +194,24 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                             _ => return Err(CodeGenerationError::UnresolvedError),
                         },
                         Primitive::Bool(data) => [*data as u8].to_vec(),
-                        Primitive::Char(data) => [*data as u8].to_vec(),
+                        Primitive::Char(data) => {
+                            let mut buffer = [0u8; 4];
+                            let _ = data.encode_utf8(&mut buffer);
+                            buffer.to_vec()
+                        }
                     };
                     switch.push((data, label));
                 }
                 Pattern::String(value) => {
-                    let data = value.value.as_bytes().to_vec();
+                    let data: Vec<u8> = value
+                        .value
+                        .chars()
+                        .flat_map(|c| {
+                            let mut buffer = [0u8; 4];
+                            c.encode_utf8(&mut buffer);
+                            buffer
+                        })
+                        .collect();
                     switch.push((data, label));
                 }
             }

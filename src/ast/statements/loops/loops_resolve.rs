@@ -1,5 +1,6 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
@@ -114,6 +115,9 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
         let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
         let item_vars = self.item.resolve(scope, &item_type, &())?;
+        for var in &item_vars {
+            var.state.set(VarState::Parameter);
+        }
         // attach the item to the scope
         self.scope.to_loop();
         let _ = self.scope.resolve(scope, context, &item_vars)?;
@@ -205,6 +209,60 @@ mod tests {
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                ),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
+    fn valid_for_loop_range() {
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for i in 0..10 {
+            x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "x".into(),
+                type_sig: Either::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
+                ),
+            })
+            .unwrap();
+        let res = expr_loop.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
+    fn valid_for_loop_range_u64() {
+        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+            r##"
+        for i in 0u64..10u64 {
+            x = i;
+        }
+        "##
+            .into(),
+        )
+        .unwrap()
+        .1;
+        let scope = scope_impl::Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "x".into(),
+                type_sig: Either::Static(
+                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
             })
             .unwrap();
