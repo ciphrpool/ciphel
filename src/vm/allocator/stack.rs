@@ -191,46 +191,37 @@ impl Stack {
         }
     }
 
-    pub fn frame(
-        &self,
-        return_size: usize,
-        params_size: usize,
-        link: usize,
-    ) -> Result<(), StackError> {
+    pub fn frame(&self, params_size: usize, link: usize) -> Result<(), StackError> {
         let bottom = self.registers.top.get();
 
-        let _ = self.push(
-            return_size
-                + Registers::link_size()
-                + Registers::bottom_size()
-                + Registers::zero_size()
-                + Registers::params_start_size()
-                + params_size,
-        )?;
+        let frame_meta_size = Registers::link_size()
+            + Registers::bottom_size()
+            + Registers::zero_size()
+            + Registers::params_start_size()
+            + params_size;
+        let _ = self.push_with_zero(frame_meta_size)?;
+
         let mut borrowed_buffer = self.stack.borrow_mut();
         // Copy past link
-        borrowed_buffer[bottom + return_size..bottom + return_size + Registers::link_size()]
+        borrowed_buffer[bottom..bottom + Registers::link_size()]
             .copy_from_slice(&(self.registers.link.get() as u64).to_le_bytes());
         // Copy past FB
-        borrowed_buffer[bottom + return_size + Registers::link_size()
-            ..bottom + return_size + Registers::link_size() + Registers::bottom_size()]
+        borrowed_buffer[bottom + Registers::link_size()
+            ..bottom + Registers::link_size() + Registers::bottom_size()]
             .copy_from_slice(&(self.registers.bottom.get() as u64).to_le_bytes());
         // Copy past FParamStart
-        borrowed_buffer[bottom + return_size + Registers::link_size() + Registers::bottom_size()
+        borrowed_buffer[bottom + Registers::link_size() + Registers::bottom_size()
             ..bottom
-                + return_size
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()]
             .copy_from_slice(&(self.registers.params_start.get() as u64).to_le_bytes());
         // Copy past FZ
         borrowed_buffer[bottom
-            + return_size
             + Registers::link_size()
             + Registers::bottom_size()
             + Registers::params_start_size()
             ..bottom
-                + return_size
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()
@@ -242,7 +233,6 @@ impl Stack {
         // Update FZ
         self.registers.zero.set(
             bottom
-                + return_size
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()
@@ -252,7 +242,6 @@ impl Stack {
         // Update FP
         self.registers.params_start.set(
             bottom
-                + return_size
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()
@@ -282,13 +271,8 @@ impl Stack {
                 link,
             } = Frame::from((&self.registers).into(), borrowed_buffer.as_ref())?;
             // update registers
-            self.registers.top.set(
-                self.registers.params_start.get()
-                    - (Registers::link_size()
-                        + Registers::bottom_size()
-                        + Registers::zero_size()
-                        + Registers::params_start_size()),
-            );
+            self.registers.top.set(self.registers.bottom.get());
+
             self.registers.link.set(link);
             self.registers.bottom.set(bottom);
             self.registers.params_start.set(params_start);
@@ -415,7 +399,9 @@ impl Stack {
         self.registers.top.set(top + data.len());
         Ok(())
     }
-
+    pub fn push_with_zero(&self, size: usize) -> Result<(), StackError> {
+        self.push_with(&vec![0; size])
+    }
     pub fn pop(&self, size: usize) -> Result<Vec<u8>, StackError> {
         let mut top = self.top();
         if top < size {
@@ -665,24 +651,24 @@ mod tests {
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
-            .frame(8, 0, 0)
+            .frame(0, 0)
             .expect("Frame creation should have succeeded");
         let _ = stack.push(8).expect("Push should have succeeded");
         assert_eq!(stack.registers.bottom.get(), 8);
-        assert_eq!(stack.registers.zero.get(), 48);
+        assert_eq!(stack.registers.zero.get(), 40);
 
-        assert_eq!(stack.top(), 56);
+        assert_eq!(stack.top(), 48);
     }
 
     #[test]
     fn valid_frame_clean() {
         let stack = Stack::new();
         let _ = stack
-            .frame(8, 0, 0)
+            .frame(0, 0)
             .expect("Frame creation should have succeeded");
         let _ = stack.push(8).expect("Push should have succeeded");
         let _ = stack.clean().expect("Clean should have succeeded");
 
-        assert_eq!(stack.top(), 8);
+        assert_eq!(stack.top(), 0);
     }
 }

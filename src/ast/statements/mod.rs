@@ -161,10 +161,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Statement<Scope> {
                 instructions.push_label_id(end_scope_label, "end_scope".into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
-                    return_size: 0,
                     param_size: 0,
                 }));
-
+                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
                 Ok(())
             }
             Statement::Flow(value) => value.gencode(scope, instructions),

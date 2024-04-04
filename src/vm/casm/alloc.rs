@@ -45,29 +45,72 @@ impl Executable for Alloc {
 pub enum StackFrame {
     Clean,
     SoftClean,
-    CleanAndGo,
+    Break,
+    Continue,
     Set {
-        return_size: usize,
         params_size: usize,
         cursor_offset: usize,
     },
     Return {
-        return_size: usize,
+        return_size: Option<usize>,
     },
 }
 
 impl Executable for StackFrame {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            StackFrame::CleanAndGo => {
-                let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                thread.env.program.cursor_set(idx);
+            StackFrame::Break => {
+                // let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                // thread.env.program.cursor_set(idx);
+
+                thread
+                    .env
+                    .program
+                    .cursor
+                    .set(thread.env.stack.registers.link.get());
+
                 let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&0u64.to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&[2u8]).map_err(|e| e.into())?; /* return flag set to BREAK */
+
+                Ok(())
+            }
+            StackFrame::Continue => {
+                // let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                // thread.env.program.cursor_set(idx);
+
+                thread
+                    .env
+                    .program
+                    .cursor
+                    .set(thread.env.stack.registers.link.get());
+
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&0u64.to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&[3u8]).map_err(|e| e.into())?; /* return flag set to CONTINUE */
+
                 Ok(())
             }
             StackFrame::SoftClean => {
                 thread.env.program.incr();
                 let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&0u64.to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Clean => {
@@ -77,10 +120,16 @@ impl Executable for StackFrame {
                     .cursor
                     .set(thread.env.stack.registers.link.get());
                 let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&0u64.to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Set {
-                return_size,
                 params_size,
                 cursor_offset,
             } => {
@@ -88,7 +137,6 @@ impl Executable for StackFrame {
                     .env
                     .stack
                     .frame(
-                        *return_size,
                         *params_size,
                         thread.env.program.cursor.get() + cursor_offset,
                     )
@@ -97,19 +145,34 @@ impl Executable for StackFrame {
                 Ok(())
             }
             StackFrame::Return { return_size } => {
-                let return_data = thread.env.stack.pop(*return_size).map_err(|e| e.into())?;
+                let return_size = match return_size {
+                    Some(size) => *size,
+                    None => {
+                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        size as usize
+                    }
+                };
+                let return_data = thread.env.stack.pop(return_size).map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .write(Offset::FB(0), AccessLevel::Direct, &return_data)
-                    .map_err(|e| e.into())?;
                 thread
                     .env
                     .program
                     .cursor
                     .set(thread.env.stack.registers.link.get());
                 let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&return_data)
+                    .map_err(|e| e.into())?;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&return_size.to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?; /* return flag set to true */
+
                 Ok(())
             }
         }

@@ -79,18 +79,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
 
                 value.gencode(scope, instructions)?;
 
-                let size = value
-                    .metadata
-                    .signature()
-                    .map(|t| t.size_of())
-                    .ok_or(CodeGenerationError::UnresolvedError)?;
-
                 instructions.push_label_id(end_scope_label, "End_Scope".into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
-                    return_size: size,
                     param_size: 0,
                 }));
+                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
             }
             AssignValue::Expr(value) => value.gencode(scope, instructions)?,
         }

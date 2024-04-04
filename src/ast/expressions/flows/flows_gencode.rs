@@ -80,9 +80,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
         instructions.push(Casm::Call(Call::From {
             label: if_scope_label,
-            return_size,
             param_size: 0,
         }));
+        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
         instructions.push(Casm::Goto(Goto {
             label: Some(end_ifelse_label),
         }));
@@ -98,9 +98,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
         instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
         instructions.push(Casm::Call(Call::From {
             label: else_scope_label,
-            return_size,
             param_size: 0,
         }));
+        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
         instructions.push(Casm::Goto(Goto {
             label: Some(end_ifelse_label),
         }));
@@ -276,9 +276,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
             instructions.push_label_id(end_scope_label, "End_Scope".into());
             instructions.push(Casm::Call(Call::From {
                 label: scope_label,
-                return_size,
                 param_size,
             }));
+            instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_match_label),
             }));
@@ -296,9 +296,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                 instructions.push_label_id(end_scope_label, "End_Scope".into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
-                    return_size,
                     param_size: 0,
                 }));
+                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_match_label),
                 }));
@@ -370,12 +370,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                     instructions.push(Casm::Serialize(Serialized {
                         data: (sig_params_size as u64).to_le_bytes().to_vec(),
                     }));
-                    // Load return size
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (return_size as u64).to_le_bytes().to_vec(),
-                    }));
 
                     instructions.push(Casm::Call(Call::Stack));
+                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
                 }
                 StaticType::Closure(ClosureType { closed: true, .. }) => {
                     // Load Param
@@ -446,16 +443,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                     instructions.push(Casm::Serialize(Serialized {
                         data: (sig_params_size).to_le_bytes().to_vec(),
                     }));
-                    // Load return size
-                    let Some(signature) = self.metadata.signature() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    let return_size = signature.size_of();
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (return_size as u64).to_le_bytes().to_vec(),
-                    }));
 
                     instructions.push(Casm::Call(Call::Stack));
+                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
                 }
                 _ => {
                     return Err(CodeGenerationError::UnresolvedError);

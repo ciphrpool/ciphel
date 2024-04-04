@@ -137,6 +137,7 @@ pub enum Casm {
     Call(branch::Call),
     Goto(branch::Goto),
     Switch(branch::BranchTable),
+    Pop(usize),
 }
 
 impl Executable for Casm {
@@ -156,6 +157,11 @@ impl Executable for Casm {
             Casm::Switch(value) => value.execute(thread),
             Casm::Locate(value) => value.execute(thread),
             Casm::Platform(value) => value.execute(thread),
+            Casm::Pop(size) => {
+                thread.env.stack.pop(*size).map_err(|e| e.into())?;
+                thread.env.program.incr();
+                Ok(())
+            }
         }
     }
 }

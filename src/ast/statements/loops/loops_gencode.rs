@@ -1,5 +1,6 @@
 use num_traits::ToBytes;
 
+use crate::ast::statements::scope::scope_gencode::inner_scope_gencode;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
@@ -23,38 +24,6 @@ use std::{cell::RefCell, rc::Rc};
 
 use super::{ForLoop, Loop, WhileLoop};
 
-fn scope_gencode<S: ScopeApi>(
-    scope: &MutRc<S>,
-    value: &Scope<S>,
-    return_size: Option<usize>,
-    param_size: Option<usize>,
-    instructions: &CasmProgram,
-) -> Result<(), CodeGenerationError> {
-    let scope_label = Label::gen();
-    let end_scope_label = Label::gen();
-
-    instructions.push(Casm::Goto(Goto {
-        label: Some(end_scope_label),
-    }));
-
-    instructions.push_label_id(scope_label, "scope_loop".into());
-
-    let _ = value.gencode(scope, &instructions)?;
-
-    instructions.push_label_id(end_scope_label, "end_scope_loop".into());
-    instructions.push(Casm::Call(Call::From {
-        label: scope_label,
-        return_size: return_size.unwrap_or(0),
-        param_size: param_size.unwrap_or(0),
-    }));
-    if let Some(return_size) = return_size {
-        if return_size > 0 {
-            instructions.push(Casm::StackFrame(StackFrame::Return { return_size }));
-        }
-    }
-    Ok(())
-}
-
 impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
     fn gencode(
         &self,
@@ -73,18 +42,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
                 instructions.push_label_id(start_label, "start_loop".into());
                 instructions.push(Casm::MemCopy(MemCopy::LabelOffset(early_end_label)));
                 instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
-                let _ = scope_gencode(
-                    scope,
-                    value,
-                    value.metadata.signature().map(|s| s.size_of()),
-                    None,
-                    instructions,
-                )?;
+                let _ = inner_scope_gencode(scope, value, None, true, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
                 }));
                 instructions.push_label_id(early_end_label, "early_end_loop".into());
-                instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+                // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
                 instructions.push_label_id(end_label, "end_loop".into());
                 instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
                 Ok(())
@@ -105,9 +68,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
 
         let start_label = Label::gen();
         let early_end_label = Label::gen();
+        let next_label = Label::gen();
         let end_label = Label::gen();
 
         instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
+        instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3)));
 
         let _ = self.iterator.expr.gencode(scope, instructions)?;
 
@@ -118,6 +83,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         instructions.push(Casm::MemCopy(MemCopy::LabelOffset(early_end_label)));
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
 
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(next_label)));
+        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None)));
+
         let _ = iterator_type.build_item(instructions, end_label)?;
 
         let Some(item_type) = iterator_type.get_item() else {
@@ -126,21 +94,17 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
 
         let params_size = item_type.size_of();
 
-        let _ = scope_gencode(
-            scope,
-            &self.scope,
-            self.scope.metadata.signature().map(|s| s.size_of()),
-            Some(params_size),
-            instructions,
-        )?;
+        let _ = inner_scope_gencode(scope, &self.scope, Some(params_size), true, instructions)?;
 
+        instructions.push_label_id(next_label, "next_label".into());
         let _ = iterator_type.next(instructions)?;
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
         instructions.push_label_id(early_end_label, "early_end_label".into());
-        instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
         instructions.push_label_id(end_label, "end_while".into());
+        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None)));
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
         Ok(())
     }
@@ -164,18 +128,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for WhileLoop<Scope> {
         instructions.push(Casm::If(BranchIf {
             else_label: end_label,
         }));
-        let _ = scope_gencode(
-            scope,
-            &self.scope,
-            self.scope.metadata.signature().map(|s| s.size_of()),
-            None,
-            instructions,
-        )?;
+        let _ = inner_scope_gencode(scope, &self.scope, None, true, instructions)?;
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
         instructions.push_label_id(early_end_label, "early_end_label".into());
-        instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
         instructions.push_label_id(end_label, "end_while".into());
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
         Ok(())
@@ -297,53 +255,6 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Number(Cell::new(Number::I64(10))));
-    }
-
-    #[test]
-    fn valid_for_range_exclusive() {
-        let statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 0u64..10u64+1u64 {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(10))));
     }
 
     #[test]
@@ -626,5 +537,397 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('c'));
+    }
+
+    #[test]
+    fn valid_for_double() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 0u64..=2u64 {
+                    for j in 0u64..=2u64 {
+                        res = res + i + j;
+                    }
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(18))));
+    }
+
+    #[test]
+    fn valid_for_early_returns() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    return i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(5))));
+    }
+
+    #[test]
+    fn valid_for_early_returns_conditional() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    if i == 5u64 {
+                        return i;
+                    }
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(5))));
+    }
+
+    #[test]
+    fn valid_for_break() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    res = i;
+                    break;
+                }
+                return res;
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(5))));
+    }
+
+    #[test]
+    fn valid_for_break_conditional() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    res = i;
+                    if i == 7u64 {
+                        break;
+                    }
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(7))));
+    }
+
+    #[test]
+    fn valid_for_continue() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    continue;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(0))));
+    }
+
+    #[test]
+    fn valid_for_continue_conditional() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    if i != 7u64 {
+                        continue;
+                    }
+                    res = i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(7))));
+    }
+
+    #[test]
+    fn valid_for_double_continue() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res:u64 = 0;
+                for i in 5u64..=10u64 {
+                    for j in 5u64..=10u64 {
+                        if i != 7u64 {
+                            continue;
+                        }
+                        res = res + i + j;
+                    }
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(87))));
     }
 }

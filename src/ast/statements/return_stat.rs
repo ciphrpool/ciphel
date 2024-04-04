@@ -192,7 +192,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Return::Unit => {
-                instructions.push(Casm::StackFrame(StackFrame::Return { return_size: 0 }));
+                instructions.push(Casm::StackFrame(StackFrame::Return {
+                    return_size: Some(0),
+                }));
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
@@ -201,15 +203,19 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
                 };
                 let _ = expr.gencode(scope, instructions)?;
 
-                instructions.push(Casm::StackFrame(StackFrame::Return { return_size }));
+                instructions.push(Casm::StackFrame(StackFrame::Return {
+                    return_size: Some(return_size),
+                }));
                 Ok(())
             }
             Return::Break => {
-                instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
-                instructions.push(Casm::StackFrame(StackFrame::CleanAndGo));
+                instructions.push(Casm::StackFrame(StackFrame::Break));
                 Ok(())
             }
-            Return::Continue => todo!(),
+            Return::Continue => {
+                instructions.push(Casm::StackFrame(StackFrame::Continue));
+                Ok(())
+            }
             Return::Yield { expr, metadata } => todo!(),
         }
     }

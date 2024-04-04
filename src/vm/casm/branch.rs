@@ -32,32 +32,24 @@ impl Executable for Label {
 
 #[derive(Debug, Clone)]
 pub enum Call {
-    From {
-        label: Ulid,
-        return_size: usize,
-        param_size: usize,
-    },
+    From { label: Ulid, param_size: usize },
     Stack,
 }
 
 impl Executable for Call {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        let (return_size, param_size, function_offset) = match self {
-            Call::From {
-                label,
-                return_size,
-                param_size,
-            } => {
+        let (param_size, function_offset) = match self {
+            Call::From { label, param_size } => {
                 let Some(function_offset) = thread.env.program.get(&label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
-                (*return_size, *param_size, function_offset)
+                (*param_size, function_offset)
             }
             Call::Stack => {
-                let return_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                //let return_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
                 let param_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
                 let function_offset = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                (return_size, param_size, function_offset)
+                (param_size, function_offset)
             }
         };
         if param_size != 0 {
@@ -65,7 +57,11 @@ impl Executable for Call {
             let _ = thread
                 .env
                 .stack
-                .frame(return_size, param_size, thread.env.program.cursor.get() + 1)
+                .frame(
+                    //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
+                    param_size,
+                    thread.env.program.cursor.get() + 1,
+                )
                 .map_err(|e| e.into())?;
             let _ = thread
                 .env
@@ -76,7 +72,11 @@ impl Executable for Call {
             let _ = thread
                 .env
                 .stack
-                .frame(return_size, param_size, thread.env.program.cursor.get() + 1)
+                .frame(
+                    //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
+                    param_size,
+                    thread.env.program.cursor.get() + 1,
+                )
                 .map_err(|e| e.into())?;
         }
 
@@ -117,7 +117,7 @@ pub struct BranchIf {
 impl Executable for BranchIf {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::get_bool(&thread.memory())?;
-
+        // dbg!(condition);
         let Some(else_label) = thread.env.program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };

@@ -100,9 +100,9 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Atomic::parse(remainder)?;
+            let (remainder, right) = Product::<InnerScope>::parse(remainder)?;
             let left = Box::new(Expression::Atomic(left));
-            let right = Box::new(Expression::Atomic(right));
+            let right = Box::new(right);
             Ok((
                 remainder,
                 Expression::Product(match op {
@@ -150,7 +150,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Addition<InnerScope
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Product::parse(remainder)?;
+            let (remainder, right) = Addition::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -194,7 +194,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Addition::parse(remainder)?;
+            let (remainder, right) = Shift::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -230,7 +230,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerSco
         let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = Shift::parse(remainder)?;
+            let (remainder, right) = BitwiseAnd::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -259,7 +259,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerSco
         let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = BitwiseAnd::parse(remainder)?;
+            let (remainder, right) = BitwiseXOR::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -288,7 +288,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScop
         let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = BitwiseXOR::parse(remainder)?;
+            let (remainder, right) = BitwiseOR::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -310,7 +310,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
      * @desc Parse bitwise xor operation
      *
      * @grammar
-     * XOr := BAnd as Type | BAnd
+     * Cast := BOr as Type | BOr
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
         let (remainder, left) = BitwiseOR::parse(input)?;
@@ -428,7 +428,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerSco
         let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = Comparaison::<InnerScope>::parse(remainder)?;
+            let (remainder, right) = LogicalAnd::<InnerScope>::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -457,7 +457,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScop
         let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = LogicalAnd::<InnerScope>::parse(remainder)?;
+            let (remainder, right) = LogicalOr::<InnerScope>::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -624,6 +624,75 @@ mod tests {
                     Primitive::Number(Cell::new(Number::Unresolved(2)))
                 )))),
                 metadata: Metadata::default()
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_multiple_binary() {
+        let res = Addition::<MockScope>::parse("10 + 10 + 10".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Addition(Addition {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
+                )))),
+                right: Box::new(Expression::Addition(Addition {
+                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(Cell::new(Number::Unresolved(10)))
+                    )))),
+                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(Cell::new(Number::Unresolved(10)))
+                    )))),
+                    metadata: Metadata::default(),
+                })),
+                metadata: Metadata::default(),
+            }),
+            value
+        );
+
+        let res = Product::<MockScope>::parse("10 * 10 * 10".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::Product(Product::Mult {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Number(Cell::new(Number::Unresolved(10)))
+                )))),
+                right: Box::new(Expression::Product(Product::Mult {
+                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(Cell::new(Number::Unresolved(10)))
+                    )))),
+                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(Cell::new(Number::Unresolved(10)))
+                    )))),
+                    metadata: Metadata::default(),
+                })),
+                metadata: Metadata::default(),
+            }),
+            value
+        );
+
+        let res = LogicalAnd::<MockScope>::parse("true and true and true".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::LogicalAnd(LogicalAnd {
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                    Primitive::Bool(true)
+                )))),
+                right: Box::new(Expression::LogicalAnd(LogicalAnd {
+                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Bool(true)
+                    )))),
+                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Bool(true)
+                    )))),
+                    metadata: Metadata::default(),
+                })),
+                metadata: Metadata::default(),
             }),
             value
         );
