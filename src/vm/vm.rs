@@ -35,6 +35,7 @@ pub enum RuntimeError {
     Deserialization,
     UnsupportedOperation,
     MathError,
+    ReturnFlagError,
     Exit,
     CodeSegmentation,
     IncorrectVariant,

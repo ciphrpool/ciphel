@@ -5,7 +5,7 @@ use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, StackSlice, STACK_SIZE},
+            stack::{Offset, StackSlice, UReg, STACK_SIZE},
             Memory, MemoryAddress,
         },
         casm::operation::OpPrimitive,
@@ -54,7 +54,15 @@ pub enum StackFrame {
     Return {
         return_size: Option<usize>,
     },
+    Transfer {
+        is_direct_loop: bool,
+    },
 }
+
+const FLAG_VOID: u8 = 0u8;
+const FLAG_RETURN: u8 = 1u8;
+const FLAG_BREAK: u8 = 2u8;
+const FLAG_CONTINUE: u8 = 3u8;
 
 impl Executable for StackFrame {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
@@ -76,7 +84,11 @@ impl Executable for StackFrame {
                     .stack
                     .push_with(&0u64.to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread.env.stack.push_with(&[2u8]).map_err(|e| e.into())?; /* return flag set to BREAK */
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_BREAK])
+                    .map_err(|e| e.into())?; /* return flag set to BREAK */
 
                 Ok(())
             }
@@ -97,7 +109,11 @@ impl Executable for StackFrame {
                     .stack
                     .push_with(&0u64.to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread.env.stack.push_with(&[3u8]).map_err(|e| e.into())?; /* return flag set to CONTINUE */
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_CONTINUE])
+                    .map_err(|e| e.into())?; /* return flag set to CONTINUE */
 
                 Ok(())
             }
@@ -110,7 +126,11 @@ impl Executable for StackFrame {
                     .stack
                     .push_with(&0u64.to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_VOID])
+                    .map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Clean => {
@@ -126,7 +146,11 @@ impl Executable for StackFrame {
                     .stack
                     .push_with(&0u64.to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_VOID])
+                    .map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Set {
@@ -169,10 +193,102 @@ impl Executable for StackFrame {
                 let _ = thread
                     .env
                     .stack
-                    .push_with(&return_size.to_le_bytes())
+                    .push_with(&(return_size as u64).to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?; /* return flag set to true */
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_RETURN])
+                    .map_err(|e| e.into())?; /* return flag set to true */
 
+                Ok(())
+            }
+            StackFrame::Transfer { is_direct_loop } => {
+                let flag = OpPrimitive::get_num1::<u8>(&thread.memory())?;
+                let return_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                match flag {
+                    FLAG_BREAK => {
+                        if !*is_direct_loop {
+                            thread
+                                .env
+                                .program
+                                .cursor
+                                .set(thread.env.stack.registers.link.get());
+
+                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&0u64.to_le_bytes())
+                                .map_err(|e| e.into())?;
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&[FLAG_BREAK])
+                                .map_err(|e| e.into())?; /* return flag set to BREAK */
+                        } else {
+                            let break_link = thread.env.stack.get_reg(UReg::R4);
+                            thread.env.program.cursor.set(break_link as usize);
+                        }
+                    }
+                    FLAG_CONTINUE => {
+                        if !*is_direct_loop {
+                            thread
+                                .env
+                                .program
+                                .cursor
+                                .set(thread.env.stack.registers.link.get());
+
+                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&0u64.to_le_bytes())
+                                .map_err(|e| e.into())?;
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&[FLAG_CONTINUE])
+                                .map_err(|e| e.into())?; /* return flag set to BREAK */
+                        } else {
+                            let break_link = thread.env.stack.get_reg(UReg::R3);
+                            thread.env.program.cursor.set(break_link as usize);
+                        }
+                    }
+                    FLAG_RETURN => {
+                        let return_data =
+                            thread.env.stack.pop(return_size).map_err(|e| e.into())?;
+
+                        thread
+                            .env
+                            .program
+                            .cursor
+                            .set(thread.env.stack.registers.link.get());
+                        let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&return_data)
+                            .map_err(|e| e.into())?;
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&(return_size as u64).to_le_bytes())
+                            .map_err(|e| e.into())?;
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&[FLAG_RETURN])
+                            .map_err(|e| e.into())?; /* return flag set to true */
+                    }
+                    FLAG_VOID => {
+                        thread.env.program.incr();
+                    }
+                    _ => return Err(RuntimeError::ReturnFlagError),
+                }
                 Ok(())
             }
         }
