@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
 use super::{
-    AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
-    StringType, TupleType, Type, VecType,
+    AddrType, ChanType, ClosureType, GeneratorType, MapType, PrimitiveType, RangeType, SliceType,
+    StrSliceType, StringType, TupleType, Type, VecType,
 };
 use crate::semantic::scope::static_types::{self, StaticType};
 
@@ -41,6 +41,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
             Type::Map(value) => value.type_of(&scope),
             Type::String(value) => value.type_of(&scope),
             Type::Range(value) => value.type_of(&scope),
+            Type::Generator(value) => value.type_of(&scope),
         }
     }
 }
@@ -441,12 +442,52 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::RangeType {
         let other_type = other.type_of(&scope)?;
         if let Either::Static(other_type) = other_type {
             if let StaticType::Range(static_types::RangeType {
-                num: other_subtype, ..
+                num: other_subtype,
+                inclusive: other_inclusive,
             }) = other_type.as_ref()
             {
-                return (self.num == *other_subtype)
+                return (self.num == *other_subtype && self.inclusive == *other_inclusive)
                     .then(|| ())
                     .ok_or(SemanticError::IncompatibleTypes);
+            } else {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+    }
+}
+
+impl<Scope: ScopeApi> TypeOf<Scope> for GeneratorType {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized,
+    {
+        let static_type: StaticType = StaticType::build_generator(&self, scope)?;
+        let static_type = Either::Static(static_type.into());
+        Ok(static_type)
+    }
+}
+
+impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::GeneratorType {
+    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        if let Either::Static(other_type) = other_type {
+            if let StaticType::Generator(static_types::GeneratorType {
+                iterator: other_iterator,
+                item_type: other_item,
+            }) = other_type.as_ref()
+            {
+                let _ = self
+                    .iterator
+                    .compatible_with(other_iterator.as_ref(), scope)?;
+                let _ = self.item_type.compatible_with(other_item.as_ref(), scope)?;
+
+                Ok(())
             } else {
                 return Err(SemanticError::IncompatibleTypes);
             }

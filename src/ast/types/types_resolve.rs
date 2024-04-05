@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    AddrType, ChanType, ClosureType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
-    StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, GeneratorType, KeyType, MapType, PrimitiveType, RangeType,
+    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 use crate::semantic::{
     scope::{type_traits::IsEnum, ScopeApi},
@@ -40,6 +40,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
             Type::Map(value) => value.resolve(scope, context, extra),
             Type::String(value) => value.resolve(scope, context, extra),
             Type::Range(value) => value.resolve(scope, context, extra),
+            Type::Generator(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -244,6 +245,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for RangeType {
         Ok(())
     }
 }
+
+impl<Scope: ScopeApi> Resolve<Scope> for GeneratorType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let _ = self.iterator.resolve(scope, context, extra)?;
+        let _ = self.item_type.resolve(scope, context, extra)?;
+        Ok(())
+    }
+}
+
 impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     type Output = ();
     type Context = ();

@@ -29,6 +29,7 @@ impl GetSubTypes for StaticType {
             StaticType::String(_) => None,
             StaticType::StrSlice(_) => None,
             StaticType::Range(_) => None,
+            StaticType::Generator(_) => None,
         }
     }
 
@@ -55,6 +56,7 @@ impl GetSubTypes for StaticType {
             StaticType::Range(value) => Some(Either::Static(
                 Self::Primitive(PrimitiveType::Number(value.num)).into(),
             )),
+            StaticType::Generator(value) => Some(value.item_type.as_ref().clone()),
         }
     }
 
@@ -134,6 +136,7 @@ impl GetSubTypes for StaticType {
             StaticType::String(_) => None,
             StaticType::StrSlice(_) => None,
             StaticType::Range(_) => None,
+            StaticType::Generator(_) => None,
         }
     }
 
@@ -154,6 +157,7 @@ impl GetSubTypes for StaticType {
             StaticType::String(_) => None,
             StaticType::StrSlice(StrSliceType { size }) => Some(size.clone()),
             StaticType::Range(_) => None,
+            StaticType::Generator(value) => value.iterator.get_length(),
         }
     }
 
@@ -176,6 +180,7 @@ impl GetSubTypes for StaticType {
             StaticType::String(_) => None,
             StaticType::StrSlice(_) => None,
             StaticType::Range(_) => None,
+            StaticType::Generator(_) => None,
         }
     }
 }

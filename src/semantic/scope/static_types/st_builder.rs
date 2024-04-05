@@ -152,6 +152,26 @@ impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
         }))
     }
 
+    fn build_generator(
+        type_sig: &ast::types::GeneratorType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError> {
+        Ok(StaticType::Generator(super::GeneratorType {
+            iterator: Box::new(type_sig.iterator.type_of(scope)?),
+            item_type: Box::new(type_sig.item_type.type_of(scope)?),
+        }))
+    }
+    fn build_generator_from(
+        iterator: &EType,
+        item_type: &EType,
+        scope: &Ref<Scope>,
+    ) -> Result<StaticType, SemanticError> {
+        Ok(StaticType::Generator(super::GeneratorType {
+            iterator: Box::new(iterator.clone()),
+            item_type: Box::new(item_type.clone()),
+        }))
+    }
+
     fn build_closure(
         params: &Vec<Either<UserType, Self>>,
         ret: &Either<UserType, Self>,

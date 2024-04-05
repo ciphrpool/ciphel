@@ -8,8 +8,8 @@ use crate::semantic::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
-    StaticType, StrSliceType, StringType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, GeneratorType, KeyType, MapType, PrimitiveType,
+    RangeType, SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
@@ -50,6 +50,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::String(value) => value.merge(other, scope),
             StaticType::StrSlice(value) => value.merge(other, scope),
             StaticType::Range(value) => value.merge(other, scope),
+            StaticType::Generator(value) => value.merge(other, scope),
         }
     }
 }
@@ -132,7 +133,40 @@ impl<Scope: ScopeApi> MergeType<Scope> for RangeType {
             return Err(SemanticError::IncompatibleTypes);
         };
 
-        todo!()
+        if self.num != other_type.num || self.inclusive != other_type.inclusive {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+
+        Ok(Either::Static(
+            StaticType::Range(RangeType {
+                num: self.num,
+                inclusive: self.inclusive,
+            })
+            .into(),
+        ))
+    }
+}
+
+impl<Scope: ScopeApi> MergeType<Scope> for GeneratorType {
+    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Other: TypeOf<Scope>,
+    {
+        let other_type = other.type_of(&scope)?;
+        let Either::Static(other_type) = other_type else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let StaticType::Generator(other_type) = other_type.as_ref() else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+
+        Ok(Either::Static(
+            StaticType::Generator(GeneratorType {
+                iterator: Box::new(self.iterator.merge(other_type.iterator.as_ref(), scope)?),
+                item_type: Box::new(self.item_type.merge(other_type.item_type.as_ref(), scope)?),
+            })
+            .into(),
+        ))
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::semantic::SizeOf;
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, MapType, NumberType, PrimitiveType, RangeType,
-    SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, GeneratorType, MapType, NumberType, PrimitiveType,
+    RangeType, SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
 impl SizeOf for StaticType {
@@ -23,6 +23,7 @@ impl SizeOf for StaticType {
             StaticType::String(value) => value.size_of(),
             StaticType::StrSlice(value) => value.size_of(),
             StaticType::Range(value) => value.size_of(),
+            StaticType::Generator(value) => value.size_of(),
         }
     }
 }
@@ -74,6 +75,12 @@ impl SizeOf for StrSliceType {
 impl SizeOf for RangeType {
     fn size_of(&self) -> usize {
         self.num.size_of() * 3
+    }
+}
+
+impl SizeOf for GeneratorType {
+    fn size_of(&self) -> usize {
+        todo!()
     }
 }
 
