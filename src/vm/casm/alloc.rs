@@ -299,12 +299,34 @@ impl Executable for StackFrame {
 pub enum Access {
     Static { address: MemoryAddress, size: usize },
     Runtime { size: Option<usize> },
+    RuntimeCharUTF8,
+    RuntimeCharUTF8AtIdx,
 }
 
 impl Executable for Access {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let index = match self {
+            Access::RuntimeCharUTF8AtIdx => Some(OpPrimitive::get_num8::<u64>(&thread.memory())?),
+            _ => None,
+        };
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),
+            Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let address = {
+                    if address < STACK_SIZE as u64 {
+                        MemoryAddress::Stack {
+                            offset: Offset::SB(address as usize),
+                            level: AccessLevel::General,
+                        }
+                    } else {
+                        MemoryAddress::Heap {
+                            offset: address as usize,
+                        }
+                    }
+                };
+                (address, 1)
+            }
             Access::Runtime { size } => {
                 let size = match size {
                     Some(size) => *size,
@@ -332,11 +354,27 @@ impl Executable for Access {
         match address {
             MemoryAddress::Heap { offset } => {
                 // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                let data = thread
-                    .runtime
-                    .heap
-                    .read(offset, size)
-                    .map_err(|err| err.into())?;
+
+                let data = match self {
+                    Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                        let (bytes, _) = thread
+                            .runtime
+                            .heap
+                            .read_utf8(offset, index.unwrap_or(0) as usize)
+                            .map_err(|err| err.into())?;
+
+                        bytes.to_vec()
+                    }
+                    _ => {
+                        let bytes = thread
+                            .runtime
+                            .heap
+                            .read(offset, size)
+                            .map_err(|err| err.into())?;
+                        bytes
+                    }
+                };
+
                 let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 thread.env.program.incr();
                 Ok(())
@@ -352,21 +390,54 @@ impl Executable for Access {
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
 
-                    let data = thread
-                        .runtime
-                        .heap
-                        .read(heap_address as usize + heap_udx, size)
-                        .map_err(|err| err.into())?;
+                    let data = match self {
+                        Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                            let (bytes, _) = thread
+                                .runtime
+                                .heap
+                                .read_utf8(
+                                    heap_address as usize + heap_udx,
+                                    index.unwrap_or(0) as usize,
+                                )
+                                .map_err(|err| err.into())?;
+
+                            bytes.to_vec()
+                        }
+                        _ => {
+                            let bytes = thread
+                                .runtime
+                                .heap
+                                .read(heap_address as usize + heap_udx, size)
+                                .map_err(|err| err.into())?;
+                            bytes
+                        }
+                    };
+
                     let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                     thread.env.program.incr();
                     return Ok(());
                 }
 
-                let data = thread
-                    .env
-                    .stack
-                    .read(offset, level, size)
-                    .map_err(|err| err.into())?;
+                let data = match self {
+                    Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                        let (bytes, _) = thread
+                            .env
+                            .stack
+                            .read_utf8(offset, level, index.unwrap_or(0) as usize)
+                            .map_err(|err| err.into())?;
+
+                        bytes.to_vec()
+                    }
+                    _ => {
+                        let bytes = thread
+                            .env
+                            .stack
+                            .read(offset, level, size)
+                            .map_err(|err| err.into())?;
+                        bytes
+                    }
+                };
+
                 // dbg!(&data);
                 // Copy data onto stack;
                 let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;

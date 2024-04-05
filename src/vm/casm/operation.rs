@@ -154,18 +154,9 @@ impl OpPrimitive {
         Ok(chara)
     }
     pub fn get_str_slice(size: usize, memory: &Memory) -> Result<String, RuntimeError> {
-        dbg!(size);
         let data = memory.stack.pop(size).map_err(|e| e.into())?;
-        let reconstructed_string: String = data
-            .chunks(4)
-            .flat_map(|chunk| {
-                std::str::from_utf8(chunk)
-                    .ok()
-                    .and_then(|s| s.chars().next())
-            })
-            .collect();
-
-        Ok(reconstructed_string)
+        let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
+        Ok(data.to_string())
     }
     pub fn get_string(memory: &Memory) -> Result<String, RuntimeError> {
         let heap_address = OpPrimitive::get_num8::<u64>(memory)?;
@@ -179,15 +170,8 @@ impl OpPrimitive {
             .heap
             .read(heap_address as usize + 16, length as usize)
             .expect("Heap Read should have succeeded");
-        let reconstructed_string: String = data
-            .chunks(4)
-            .flat_map(|chunk| {
-                std::str::from_utf8(chunk)
-                    .ok()
-                    .and_then(|s| s.chars().next())
-            })
-            .collect();
-        Ok(reconstructed_string)
+        let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
+        Ok(data.to_string())
     }
 }
 
@@ -290,16 +274,8 @@ impl Executable for Addition {
             (OpPrimitive::String(left_size), OpPrimitive::String(right_size)) => {
                 let right = OpPrimitive::get_str_slice(left_size, &thread.memory())?;
                 let left = OpPrimitive::get_str_slice(right_size, &thread.memory())?;
-                dbg!(&left);
 
-                let str_bytes: Vec<u8> = (left + &right)
-                    .chars()
-                    .flat_map(|c| {
-                        let mut buffer = [0u8; 4];
-                        c.encode_utf8(&mut buffer);
-                        buffer
-                    })
-                    .collect();
+                let str_bytes: Vec<u8> = (left + &right).into_bytes();
 
                 thread
                     .env

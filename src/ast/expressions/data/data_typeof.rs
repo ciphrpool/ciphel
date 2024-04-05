@@ -242,7 +242,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StrSlice {
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.chars().count() * 4,
+                size: self.value.len(),
             },
             scope,
         )

@@ -748,6 +748,133 @@ impl Heap {
         Ok(res)
     }
 
+    pub fn read_utf8(&self, address: Pointer, idx: usize) -> Result<([u8; 4], usize), HeapError> {
+        if address < STACK_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let address = address - STACK_SIZE;
+
+        if address >= HEAP_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let binding = self.heap.borrow();
+        let borrowed = binding.as_ref();
+        let mut offset = 0;
+        let mut current_idx = 0;
+        let mut byte = borrowed[address + offset];
+
+        while current_idx < idx {
+            byte = borrowed[address + offset];
+            match byte {
+                // 7-bit ASCII character (U+0000 to U+007F)
+                0x00..=0x7F => {
+                    offset += 1;
+                    current_idx += 1;
+                }
+                // Two-byte character (U+0080 to U+07FF)
+                0xC0..=0xDF => {
+                    if (address + offset) + 1 >= HEAP_SIZE {
+                        return Err(HeapError::ReadError);
+                    }
+                    let in_byte = borrowed[(address + offset) + 1];
+                    if (in_byte & 0xC0) != 0x80 {
+                        return Err(HeapError::ReadError);
+                    }
+                    offset += 2;
+                    current_idx += 1;
+                }
+                // Three-byte character (U+0800 to U+FFFF)
+                0xE0..=0xEF => {
+                    for i in 1..3 {
+                        if (address + offset) + i >= HEAP_SIZE {
+                            return Err(HeapError::ReadError);
+                        }
+                        let in_byte = borrowed[(address + offset) + i];
+                        if (in_byte & 0xC0) != 0x80 {
+                            return Err(HeapError::ReadError);
+                        }
+                    }
+                    offset += 3;
+                    current_idx += 1;
+                }
+                // Four-byte character (U+10000 to U+10FFFF)
+                0xF0..=0xF7 => {
+                    for i in 1..4 {
+                        if (address + offset) + i >= HEAP_SIZE {
+                            return Err(HeapError::ReadError);
+                        }
+                        let in_byte = borrowed[(address + offset) + i];
+                        if (in_byte & 0xC0) != 0x80 {
+                            return Err(HeapError::ReadError);
+                        }
+                    }
+                    offset += 4;
+                    current_idx += 1;
+                }
+                _ => {
+                    return Err(HeapError::ReadError);
+                }
+            }
+        }
+
+        if current_idx != idx {
+            return Err(HeapError::ReadError);
+        }
+
+        byte = borrowed[address + offset];
+        let mut bytes = [byte, 0u8, 0u8, 0u8];
+        let mut size = 1;
+        match byte {
+            // 7-bit ASCII character (U+0000 to U+007F)
+            0x00..=0x7F => {}
+            // Two-byte character (U+0080 to U+07FF)
+            0xC0..=0xDF => {
+                if (address + offset) + 1 >= HEAP_SIZE {
+                    return Err(HeapError::ReadError);
+                }
+                let in_byte = borrowed[(address + offset) + 1];
+                if (in_byte & 0xC0) != 0x80 {
+                    return Err(HeapError::ReadError);
+                }
+                bytes[1] = in_byte;
+                size = 2;
+            }
+            // Three-byte character (U+0800 to U+FFFF)
+            0xE0..=0xEF => {
+                for i in 1..3 {
+                    if (address + offset) + i >= HEAP_SIZE {
+                        return Err(HeapError::ReadError);
+                    }
+                    let in_byte = borrowed[(address + offset) + i];
+                    if (in_byte & 0xC0) != 0x80 {
+                        return Err(HeapError::ReadError);
+                    }
+                    bytes[i] = in_byte;
+                }
+                size = 3;
+            }
+            // Four-byte character (U+10000 to U+10FFFF)
+            0xF0..=0xF7 => {
+                for i in 1..4 {
+                    if (address + offset) + i >= HEAP_SIZE {
+                        return Err(HeapError::ReadError);
+                    }
+                    let in_byte = borrowed[(address + offset) + i];
+                    if (in_byte & 0xC0) != 0x80 {
+                        return Err(HeapError::ReadError);
+                    }
+                    bytes[i] = in_byte;
+                }
+                size = 4;
+            }
+            _ => {
+                return Err(HeapError::ReadError);
+            }
+        }
+
+        Ok((bytes, offset))
+    }
+
     pub fn write(&self, address: Pointer, data: &Vec<u8>) -> Result<(), HeapError> {
         if address < STACK_SIZE {
             return Err(HeapError::ReadError);

@@ -8,7 +8,7 @@ use crate::{
         casm::{
             alloc::Access,
             branch::BranchIf,
-            locate::Locate,
+            locate::{Locate, LocateNextUTF8Char},
             memcopy::MemCopy,
             operation::{
                 Addition, Greater, GreaterEqual, Less, LessEqual, Mult, OpPrimitive, Operation,
@@ -188,20 +188,11 @@ impl NextItem for StringType {
         }));
 
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
-        instructions.push(Casm::Access(Access::Runtime { size: Some(4) }));
+        instructions.push(Casm::Access(Access::RuntimeCharUTF8));
         Ok(())
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::Serialize(Serialized {
-            data: 4u64.to_le_bytes().to_vec(),
-        }));
-
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
+        instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
 
         Ok(())
     }
@@ -215,7 +206,7 @@ impl NextItem for StrSliceType {
                 level: AccessLevel::Direct,
             },
         }));
-        dbg!(self.size_of());
+
         instructions.push(Casm::Locate(Locate {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-(self.size_of() as isize + 8)),
@@ -244,20 +235,11 @@ impl NextItem for StrSliceType {
         }));
 
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
-        instructions.push(Casm::Access(Access::Runtime { size: Some(4) }));
+        instructions.push(Casm::Access(Access::RuntimeCharUTF8));
         Ok(())
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::Serialize(Serialized {
-            data: 4u64.to_le_bytes().to_vec(),
-        }));
-
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
+        instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
 
         Ok(())
     }

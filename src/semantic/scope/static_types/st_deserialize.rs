@@ -396,16 +396,10 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StrSliceType {
     type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let reconstructed_string: String = bytes
-            .chunks(4)
-            .flat_map(|chunk| {
-                std::str::from_utf8(chunk)
-                    .ok()
-                    .and_then(|s| s.chars().next())
-            })
-            .collect();
+        let str_slice = std::str::from_utf8(&bytes).map_err(|_| RuntimeError::Deserialization)?;
+
         Ok(StrSlice {
-            value: reconstructed_string,
+            value: str_slice.to_string(),
             metadata: Metadata {
                 info: Rc::new(RefCell::new(Info::Resolved {
                     context: None,

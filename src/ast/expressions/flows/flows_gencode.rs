@@ -203,15 +203,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
                     switch.push((data, label));
                 }
                 Pattern::String(value) => {
-                    let data: Vec<u8> = value
-                        .value
-                        .chars()
-                        .flat_map(|c| {
-                            let mut buffer = [0u8; 4];
-                            c.encode_utf8(&mut buffer);
-                            buffer
-                        })
-                        .collect();
+                    let data: Vec<u8> = value.value.as_bytes().to_vec();
                     switch.push((data, label));
                 }
             }

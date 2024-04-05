@@ -22,7 +22,7 @@ use crate::{
         casm::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
-            locate::Locate,
+            locate::{Locate, LocateNextUTF8Char},
             memcopy::MemCopy,
             operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             serialize::Serialized,
@@ -524,6 +524,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
 
                 // Access the field
                 let _ = index.gencode(scope, instructions)?;
+
+                match var
+                    .signature()
+                    .ok_or(CodeGenerationError::UnresolvedError)?
+                {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::String(_) | StaticType::StrSlice(_) => {
+                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
+                            return Ok(());
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -691,6 +706,21 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     }
                 }
                 let _ = index.gencode(scope, instructions)?;
+
+                match var
+                    .signature()
+                    .ok_or(CodeGenerationError::UnresolvedError)?
+                {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::String(_) | StaticType::StrSlice(_) => {
+                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
+                            return Ok(());
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -820,6 +850,22 @@ impl<Scope: ScopeApi> Variable<Scope> {
                     }
                 }
                 let _ = index.gencode(scope, instructions)?;
+
+                match var
+                    .signature()
+                    .ok_or(CodeGenerationError::UnresolvedError)?
+                {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::String(_) | StaticType::StrSlice(_) => {
+                            instructions
+                                .push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeAtIdx));
+                            return Ok(());
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                }
+
                 let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -999,15 +1045,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let str_bytes: Vec<u8> = self
-            .value
-            .chars()
-            .flat_map(|c| {
-                let mut buffer = [0u8; 4];
-                c.encode_utf8(&mut buffer);
-                buffer
-            })
-            .collect();
+        let str_bytes = self.value.as_bytes().to_vec();
         instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
         Ok(())
         // let mut borrowed = instructions

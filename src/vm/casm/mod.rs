@@ -133,6 +133,7 @@ pub enum Casm {
     Locate(locate::Locate),
     If(branch::BranchIf),
     Assign(alloc::Assign),
+    LocateNextUTF8Char(locate::LocateNextUTF8Char),
     Label(branch::Label),
     Call(branch::Call),
     Goto(branch::Goto),
@@ -156,6 +157,7 @@ impl Executable for Casm {
             Casm::MemCopy(value) => value.execute(thread),
             Casm::Switch(value) => value.execute(thread),
             Casm::Locate(value) => value.execute(thread),
+            Casm::LocateNextUTF8Char(value) => value.execute(thread),
             Casm::Platform(value) => value.execute(thread),
             Casm::Pop(size) => {
                 thread.env.stack.pop(*size).map_err(|e| e.into())?;

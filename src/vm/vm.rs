@@ -36,6 +36,7 @@ pub enum RuntimeError {
     UnsupportedOperation,
     MathError,
     ReturnFlagError,
+    InvalidUTF8Char,
     Exit,
     CodeSegmentation,
     IncorrectVariant,

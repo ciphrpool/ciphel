@@ -983,7 +983,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::StrSlice(StrSliceType {
-                    size: "Hello World".chars().count() * 4,
+                    size: "Hello World".len(),
                 })
                 .into(),
             )),
