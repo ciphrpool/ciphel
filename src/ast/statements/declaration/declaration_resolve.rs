@@ -70,6 +70,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
                         }
                     };
                     let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
+                    var.is_declared.set(true);
                     match right {
                         AssignValue::Expr(expr) => match expr.as_ref() {
                             Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {

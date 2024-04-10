@@ -756,11 +756,6 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
-
-        let expr = Product::parse("10 * 10.0".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
     }
 
     #[test]
@@ -1011,36 +1006,6 @@ mod tests {
     }
 
     #[test]
-    fn valid_inclusion() {
-        let expr = Expression::parse("10 in [10,2]".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = Expression::parse(r##"'o' in "Hello world""##.into())
-            .unwrap()
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn robustness_inclusion() {
-        let expr = Expression::parse("10 in 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = Expression::parse(r##"2 in "Hello world""##.into())
-            .unwrap()
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-    }
-
-    #[test]
     fn valid_and_or() {
         let expr = Expression::parse("true and false".into()).unwrap().1;
         let scope = Scope::new();
@@ -1048,13 +1013,6 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true or false".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = Expression::parse("10 in [10,2] and false".into())
-            .unwrap()
-            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);

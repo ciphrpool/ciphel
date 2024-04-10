@@ -89,6 +89,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
             let vars = value.pattern.resolve(scope, &expr_type, &())?;
             for (index, var) in vars.iter().enumerate() {
                 var.state.set(VarState::Parameter);
+                var.is_declared.set(true);
             }
             // create a scope and Scope::child_scope())variable to it before resolving the expression
             let _ = value.scope.resolve(scope, &context, &vars)?;

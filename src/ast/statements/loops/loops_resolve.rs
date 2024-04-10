@@ -117,6 +117,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
         let item_vars = self.item.resolve(scope, &item_type, &())?;
         for var in &item_vars {
             var.state.set(VarState::Parameter);
+            var.is_declared.set(true);
         }
         // attach the item to the scope
         self.scope.to_loop();

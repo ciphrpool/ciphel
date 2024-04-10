@@ -611,6 +611,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                 };
                 let var = <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap());
                 var.state.set(VarState::Parameter);
+                var.is_declared.set(true);
                 var
             })
             .collect::<Vec<Var>>();

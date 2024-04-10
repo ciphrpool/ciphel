@@ -2260,7 +2260,7 @@ mod tests {
         let statement = Statement::parse(
             r##"
         let x = {
-            let f = (x:u64) -> x+1u64;
+            let f = (x:u64) -> x+1;
             return f(68); 
         };
 
@@ -2405,7 +2405,7 @@ mod tests {
         let x = {
             let blob = 5;
             let rec f : fn(u64) -> u64 = (x:u64) -> {
-                if x >= 5u64 {
+                if x >= 5 {
                     return 5u64;
                 }
                 return f(x+1);
@@ -2456,7 +2456,7 @@ mod tests {
         let x = {
             let env = 1u64;
             let rec f : dyn fn(u64) -> u64 = move (x:u64) -> {
-                if x >= 5u64 {
+                if x >= 5 {
                     return 5u64;
                 }
                 return f(x+env);

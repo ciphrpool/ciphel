@@ -203,6 +203,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
         let vars = self.pattern.resolve(scope, &extra, &())?;
         for (index, var) in vars.iter().enumerate() {
             var.state.set(VarState::Parameter);
+            var.is_declared.set(true);
         }
         // create a scope and assign the pattern variable to it before resolving the expression
         let _ = self.expr.resolve(scope, context, &vars)?;

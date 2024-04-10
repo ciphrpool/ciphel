@@ -169,6 +169,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             .map(|(index, (id, param))| {
                 let var = <Var as BuildVar<Scope>>::build_var(&id, &param);
                 var.state.set(VarState::Parameter);
+                var.is_declared.set(true);
                 var
             })
             .collect::<Vec<Var>>();
@@ -189,6 +190,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         )?;
         let fn_type_sig = Either::Static(static_type.into());
         let var = <Var as BuildVar<Scope>>::build_var(&self.id, &fn_type_sig);
+        var.is_declared.set(true);
         self.scope.set_caller(var.clone());
         let _ = scope.borrow_mut().register_var(var)?;
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
