@@ -447,26 +447,6 @@ where
         }
     }
 
-    fn can_include_right(&self) -> Result<(), SemanticError> {
-        match self {
-            Either::Static(value) => value.can_include_right(),
-            Either::User(value) => value.can_include_right(),
-        }
-    }
-    fn merge_inclusion<Other>(
-        &self,
-        other: &Other,
-        scope: &Ref<Scope>,
-    ) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf<Scope>,
-    {
-        match self {
-            Either::Static(value) => value.merge_inclusion(other, scope),
-            Either::User(value) => value.merge_inclusion(other, scope),
-        }
-    }
-
     fn can_logical_and(&self) -> Result<(), SemanticError> {
         match self {
             Either::Static(value) => value.can_logical_and(),

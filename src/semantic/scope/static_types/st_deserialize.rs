@@ -66,7 +66,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
             StaticType::Unit => Ok(Data::Unit),
             StaticType::Any => Err(RuntimeError::Deserialization),
             StaticType::Error => Err(RuntimeError::Deserialization),
-            StaticType::Address(_value) => todo!(),
+            StaticType::Address(_value) => unimplemented!(),
             StaticType::Map(_value) => unimplemented!(),
             StaticType::String(value) => {
                 Ok(Data::StrSlice(
@@ -91,8 +91,18 @@ impl Printer for StaticType {
             StaticType::String(value) => value.build_printer(instructions),
             StaticType::StrSlice(value) => value.build_printer(instructions),
             StaticType::Vec(value) => value.build_printer(instructions),
-            StaticType::StaticFn(value) => todo!(),
-            StaticType::Closure(value) => todo!(),
+            StaticType::StaticFn(value) => {
+                let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
+                    IOCasm::Print(PrintCasm::PrintAddr),
+                ))));
+                Ok(())
+            }
+            StaticType::Closure(value) => {
+                let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
+                    IOCasm::Print(PrintCasm::PrintAddr),
+                ))));
+                Ok(())
+            }
             StaticType::Chan(value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(instructions),
             StaticType::Range(value) => value.build_printer(instructions),

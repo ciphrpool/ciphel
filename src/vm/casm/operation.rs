@@ -53,7 +53,6 @@ pub enum OperationKind {
     GreaterEqual(GreaterEqual),
     Equal(Equal),
     NotEqual(NotEqual),
-    Inclusion(Inclusion),
     LogicalAnd(LogicalAnd),
     LogicalOr(LogicalOr),
     Minus(Minus),
@@ -195,7 +194,6 @@ impl Executable for OperationKind {
             OperationKind::GreaterEqual(value) => value.execute(thread),
             OperationKind::Equal(value) => value.execute(thread),
             OperationKind::NotEqual(value) => value.execute(thread),
-            OperationKind::Inclusion(value) => value.execute(thread),
             OperationKind::LogicalAnd(value) => value.execute(thread),
             OperationKind::LogicalOr(value) => value.execute(thread),
             OperationKind::Minus(value) => value.execute(thread),
@@ -601,20 +599,6 @@ impl Executable for NotEqual {
         thread.env.stack.push_with(&data).map_err(|e| e.into())
     }
 }
-#[derive(Debug, Clone)]
-pub struct Inclusion {
-    left: usize,
-    iterator_addr: MemoryAddress,
-    item_size: usize,
-}
-
-impl Executable for Inclusion {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        let _left_data = thread.env.stack.pop(self.left).map_err(|e| e.into())?;
-
-        todo!()
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct LogicalAnd();
@@ -958,7 +942,7 @@ impl Executable for Cast {
                 Err(RuntimeError::UnsupportedOperation)
             }
             (OpPrimitive::Bool, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_char(&thread.memory())? as u8;
+                let data = OpPrimitive::get_num1::<u8>(&thread.memory())? as u8;
                 match number {
                     NumberType::U8 => thread
                         .env
@@ -1021,12 +1005,12 @@ impl Executable for Cast {
             (OpPrimitive::Bool, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Bool, OpPrimitive::String(_)) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_char(&thread.memory())? as u8;
+                let data = OpPrimitive::get_num4::<u32>(&thread.memory())?;
                 match number {
                     NumberType::U8 => thread
                         .env
                         .stack
-                        .push_with(&data.to_le_bytes())
+                        .push_with(&(data as u8).to_le_bytes())
                         .map_err(|e| e.into()),
                     NumberType::U16 => thread
                         .env
@@ -1052,7 +1036,7 @@ impl Executable for Cast {
                 }
             }
             (OpPrimitive::Char, OpPrimitive::Bool) => Err(RuntimeError::UnsupportedOperation),
-            (OpPrimitive::Char, OpPrimitive::Char) => Ok(()),
+            (OpPrimitive::Char, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::String(_)) => Ok(()),
             (OpPrimitive::String(_), OpPrimitive::Number(_)) => {
                 Err(RuntimeError::UnsupportedOperation)

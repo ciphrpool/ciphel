@@ -549,16 +549,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Inclusion<Scope> {
-    fn gencode(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        todo!()
-    }
-}
-
 impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
     fn gencode(
         &self,
@@ -758,6 +748,7 @@ mod tests {
             Primitive::Number(Cell::new(Number::U64(400))),
             U64
         );
+
         eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
         eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
         eval_and_compare_bool!(r##"20u128 >= 2u128"##, Primitive::Bool(true));
@@ -770,6 +761,110 @@ mod tests {
         eval_and_compare_bool!(r##"20u128 == 2u128"##, Primitive::Bool(false));
         eval_and_compare_bool!(r##"20u128 != 2u128"##, Primitive::Bool(true));
         eval_and_compare_bool!(r##"20u128 != 20u128"##, Primitive::Bool(false));
+    }
+
+    #[test]
+    fn valid_cast() {
+        eval_and_compare!(
+            r##"126u8 as u16"##,
+            Primitive::Number(Cell::new(Number::U16(126))),
+            U16
+        );
+        eval_and_compare!(
+            r##"126u8 as u32"##,
+            Primitive::Number(Cell::new(Number::U32(126))),
+            U32
+        );
+        eval_and_compare!(
+            r##"126u8 as u64"##,
+            Primitive::Number(Cell::new(Number::U64(126))),
+            U64
+        );
+        eval_and_compare!(
+            r##"126u8 as u128"##,
+            Primitive::Number(Cell::new(Number::U128(126))),
+            U128
+        );
+        eval_and_compare!(
+            r##"126u16 as u16"##,
+            Primitive::Number(Cell::new(Number::U16(126))),
+            U16
+        );
+        eval_and_compare!(
+            r##"126u16 as u32"##,
+            Primitive::Number(Cell::new(Number::U32(126))),
+            U32
+        );
+        eval_and_compare!(
+            r##"126u16 as u64"##,
+            Primitive::Number(Cell::new(Number::U64(126))),
+            U64
+        );
+        eval_and_compare!(
+            r##"126u16 as u128"##,
+            Primitive::Number(Cell::new(Number::U128(126))),
+            U128
+        );
+        eval_and_compare!(
+            r##"126u32 as u16"##,
+            Primitive::Number(Cell::new(Number::U16(126))),
+            U16
+        );
+        eval_and_compare!(
+            r##"126u32 as u32"##,
+            Primitive::Number(Cell::new(Number::U32(126))),
+            U32
+        );
+        eval_and_compare!(
+            r##"126u32 as u64"##,
+            Primitive::Number(Cell::new(Number::U64(126))),
+            U64
+        );
+        eval_and_compare!(
+            r##"126u32 as u128"##,
+            Primitive::Number(Cell::new(Number::U128(126))),
+            U128
+        );
+        eval_and_compare!(
+            r##"126u64 as u16"##,
+            Primitive::Number(Cell::new(Number::U16(126))),
+            U16
+        );
+        eval_and_compare!(
+            r##"126u64 as u32"##,
+            Primitive::Number(Cell::new(Number::U32(126))),
+            U32
+        );
+        eval_and_compare!(
+            r##"126u64 as u64"##,
+            Primitive::Number(Cell::new(Number::U64(126))),
+            U64
+        );
+        eval_and_compare!(
+            r##"126u64 as u128"##,
+            Primitive::Number(Cell::new(Number::U128(126))),
+            U128
+        );
+        eval_and_compare!(
+            r##"126u128 as u16"##,
+            Primitive::Number(Cell::new(Number::U16(126))),
+            U16
+        );
+        eval_and_compare!(
+            r##"126u128 as u32"##,
+            Primitive::Number(Cell::new(Number::U32(126))),
+            U32
+        );
+        eval_and_compare!(
+            r##"126u128 as u64"##,
+            Primitive::Number(Cell::new(Number::U64(126))),
+            U64
+        );
+        eval_and_compare!(
+            r##"126u128 as u128"##,
+            Primitive::Number(Cell::new(Number::U128(126))),
+            U128
+        );
     }
 
     #[test]

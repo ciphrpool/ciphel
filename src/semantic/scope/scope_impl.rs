@@ -213,7 +213,7 @@ impl ScopeApi for Scope {
                 .vars
                 .iter()
                 .rev()
-                .find(|(var, _)| &var.as_ref().id == id)
+                .find(|(var, _)| &var.as_ref().id == id && var.is_declared.get())
                 .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::Direct))
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
@@ -394,6 +394,7 @@ impl ScopeApi for Scope {
                                     .into(),
                             ),
                             state: VarState::Parameter.into(),
+                            is_declared: Cell::new(true),
                         }),
                         Cell::new(Offset::FP(offset)),
                     ));

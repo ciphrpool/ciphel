@@ -24,7 +24,8 @@ impl Executable for Locate {
         match &self.address {
             MemoryAddress::Heap { offset } => {
                 // let _ = memory.stack.push_with(&data).map_err(|e| e.into())?;
-                todo!();
+                let data = (STACK_SIZE as u64 + *offset as u64).to_le_bytes();
+                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
                 thread.env.program.incr();
                 Ok(())
             }

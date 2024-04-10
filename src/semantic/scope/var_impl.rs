@@ -35,6 +35,7 @@ pub struct Var {
     pub id: ID,
     pub type_sig: EType,
     pub state: Cell<VarState>,
+    pub is_declared: Cell<bool>,
 }
 
 impl PartialOrd for Var {
@@ -80,6 +81,7 @@ impl<Scope: ScopeApi> BuildVar<Scope> for Var {
             id: id.clone(),
             type_sig: type_sig.clone(),
             state: Cell::new(VarState::Local),
+            is_declared: Cell::new(false),
         }
     }
 }

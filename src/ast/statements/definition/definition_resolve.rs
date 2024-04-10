@@ -687,6 +687,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
 
@@ -739,6 +740,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
         let _ = scope
@@ -749,6 +751,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
         let res = function.resolve(&scope, &(), &());

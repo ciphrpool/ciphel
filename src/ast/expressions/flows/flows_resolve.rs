@@ -460,6 +460,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -515,6 +516,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -560,6 +562,7 @@ mod tests {
                 state: Cell::default(),
                 id: "x".into(),
                 type_sig: Either::Static(StaticType::String(StringType()).into()),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -607,6 +610,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -633,6 +637,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -773,6 +778,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -825,6 +831,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -852,6 +859,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -931,6 +939,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -954,6 +963,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -974,6 +984,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -997,6 +1008,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1014,6 +1026,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1034,6 +1047,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1134,6 +1148,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1157,6 +1172,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1177,6 +1193,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1200,6 +1217,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());
@@ -1217,6 +1235,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
         let res = expr.resolve(&scope, &None, &());

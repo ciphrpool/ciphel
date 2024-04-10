@@ -11,8 +11,8 @@ use crate::semantic::{
 };
 
 use super::{
-    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
-    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
+    LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
@@ -258,18 +258,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
                 left_type.merge_equation(&right_type, scope)
             }
         }
-    }
-}
-
-impl<Scope: ScopeApi> TypeOf<Scope> for Inclusion<Scope> {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
-    {
-        let left_type = self.left.type_of(&scope)?;
-        let right_type = self.right.type_of(&scope)?;
-        left_type.merge_inclusion(&right_type, scope)
     }
 }
 

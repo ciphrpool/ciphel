@@ -186,6 +186,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -210,6 +211,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -237,6 +239,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -264,6 +267,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -291,6 +295,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -315,6 +320,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
 
@@ -326,6 +332,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -353,6 +360,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -380,6 +388,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());
@@ -407,6 +416,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &());

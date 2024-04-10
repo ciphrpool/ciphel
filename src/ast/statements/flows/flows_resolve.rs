@@ -243,6 +243,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());

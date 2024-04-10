@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::statements::assignation::AssignValue,
+    ast::{expressions::data::PtrAccess, statements::assignation::AssignValue},
     semantic::{scope::ScopeApi, MutRc, SizeOf},
     vm::{
         casm::{
@@ -57,7 +57,16 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
 
                 instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
             }
-            Assignee::PtrAccess(_) => todo!(),
+            Assignee::PtrAccess(PtrAccess { value, metadata }) => {
+                let _ = value.gencode(scope, instructions)?;
+                let var_size = {
+                    let Some(var_type) = metadata.signature() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    var_type.size_of()
+                };
+                instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
+            }
         }
         Ok(())
     }

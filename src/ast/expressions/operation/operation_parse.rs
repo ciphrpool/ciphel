@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
-    Inclusion, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
@@ -92,7 +92,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
      * HighM := Atom (* | / | % ) Atom | Atom
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = Atomic::parse(input)?;
+        let (remainder, left) = Cast::parse(input)?;
         let (remainder, op) = opt(alt((
             value(HighOrdMathOPERATOR::Mult, wst(lexem::MULT)),
             value(HighOrdMathOPERATOR::Div, wst(lexem::DIV)),
@@ -101,7 +101,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
 
         if let Some(op) = op {
             let (remainder, right) = Product::<InnerScope>::parse(remainder)?;
-            let left = Box::new(Expression::Atomic(left));
+            let left = Box::new(left);
             let right = Box::new(right);
             Ok((
                 remainder,
@@ -124,7 +124,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
                 }),
             ))
         } else {
-            Ok((remainder, Expression::Atomic(left)))
+            Ok((remainder, left))
         }
     }
 }
@@ -313,12 +313,12 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
      * Cast := BOr as Type | BOr
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = BitwiseOR::parse(input)?;
+        let (remainder, left) = Atomic::parse(input)?;
         let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) = Type::parse(remainder)?;
-            let left = Box::new(left);
+            let left = Box::new(Expression::Atomic(left));
             Ok((
                 remainder,
                 Expression::Cast(Cast {
@@ -328,7 +328,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
                 }),
             ))
         } else {
-            Ok((remainder, left))
+            Ok((remainder, Expression::Atomic(left)))
         }
     }
 }
@@ -341,7 +341,6 @@ enum ComparaisonOPERATOR {
     GreaterEqual,
     Equal,
     NotEqual,
-    In,
 }
 impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerScope> {
     /*
@@ -351,7 +350,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
      * CompOp := BOr (< |<= | >= | > | == | != | in ) BOr | BOr
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = Cast::parse(input)?;
+        let (remainder, left) = BitwiseOR::parse(input)?;
         let (remainder, op) = opt(alt((
             value(ComparaisonOPERATOR::LessEqual, wst(lexem::ELE)),
             value(ComparaisonOPERATOR::Less, wst(lexem::LE)),
@@ -359,11 +358,10 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
             value(ComparaisonOPERATOR::Greater, wst(lexem::GE)),
             value(ComparaisonOPERATOR::Equal, wst(lexem::EQ)),
             value(ComparaisonOPERATOR::NotEqual, wst(lexem::NEQ)),
-            value(ComparaisonOPERATOR::In, wst(lexem::IN)),
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Cast::parse(remainder)?;
+            let (remainder, right) = BitwiseOR::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -399,11 +397,6 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
                         metadata: Metadata::default(),
                     }),
                     ComparaisonOPERATOR::NotEqual => Expression::Equation(Equation::NotEqual {
-                        left,
-                        right,
-                        metadata: Metadata::default(),
-                    }),
-                    ComparaisonOPERATOR::In => Expression::Inclusion(Inclusion {
                         left,
                         right,
                         metadata: Metadata::default(),
@@ -751,22 +744,6 @@ mod tests {
 
     #[test]
     fn valid_binary_comparaison() {
-        let res = Comparaison::<MockScope>::parse("true in true".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::Inclusion(Inclusion {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                metadata: Metadata::default()
-            }),
-            value
-        );
-
         let res = Comparaison::<MockScope>::parse("10 < 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;

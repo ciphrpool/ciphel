@@ -148,13 +148,6 @@ pub enum Equation<InnerScope: ScopeApi> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Inclusion<InnerScope: ScopeApi> {
-    left: Box<Expression<InnerScope>>,
-    right: Box<Expression<InnerScope>>,
-    pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct LogicalAnd<InnerScope: ScopeApi> {
     left: Box<Expression<InnerScope>>,
     right: Box<Expression<InnerScope>>,

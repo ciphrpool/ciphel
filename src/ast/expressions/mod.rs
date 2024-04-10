@@ -26,8 +26,7 @@ use crate::{
 
 use self::operation::{
     operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
-    Comparaison, Equation, Inclusion, LogicalAnd, Product, Range, Shift, Substraction,
-    UnaryOperation,
+    Comparaison, Equation, LogicalAnd, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
 use super::TryParse;
@@ -49,7 +48,6 @@ pub enum Expression<InnerScope: ScopeApi> {
     Cast(operation::Cast<InnerScope>),
     Comparaison(operation::Comparaison<InnerScope>),
     Equation(operation::Equation<InnerScope>),
-    Inclusion(operation::Inclusion<InnerScope>),
     LogicalAnd(operation::LogicalAnd<InnerScope>),
     LogicalOr(operation::LogicalOr<InnerScope>),
     Range(operation::Range<InnerScope>),
@@ -178,7 +176,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
             Expression::Comparaison(value) => value.resolve(scope, context, extra),
             Expression::LogicalAnd(value) => value.resolve(scope, context, extra),
             Expression::Equation(value) => value.resolve(scope, context, extra),
-            Expression::Inclusion(value) => value.resolve(scope, context, extra),
             Expression::LogicalOr(value) => value.resolve(scope, context, extra),
             Expression::Atomic(value) => value.resolve(scope, context, extra),
             Expression::Cast(value) => value.resolve(scope, context, extra),
@@ -205,7 +202,6 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
             Expression::LogicalAnd(value) => value.type_of(&scope),
             Expression::LogicalOr(value) => value.type_of(&scope),
             Expression::Equation(value) => value.type_of(&scope),
-            Expression::Inclusion(value) => value.type_of(&scope),
             Expression::Atomic(value) => value.type_of(&scope),
             Expression::Cast(value) => value.type_of(&scope),
             Expression::Range(value) => value.type_of(&scope),
@@ -230,7 +226,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
             Expression::Cast(value) => value.gencode(scope, instructions),
             Expression::Comparaison(value) => value.gencode(scope, instructions),
             Expression::Equation(value) => value.gencode(scope, instructions),
-            Expression::Inclusion(value) => value.gencode(scope, instructions),
             Expression::LogicalAnd(value) => value.gencode(scope, instructions),
             Expression::LogicalOr(value) => value.gencode(scope, instructions),
             Expression::Atomic(value) => value.gencode(scope, instructions),
@@ -278,7 +273,6 @@ impl<Scope: ScopeApi> Expression<Scope> {
             }
             Expression::Equation(Equation::Equal { metadata, .. }) => metadata.signature(),
             Expression::Equation(Equation::NotEqual { metadata, .. }) => metadata.signature(),
-            Expression::Inclusion(Inclusion { metadata, .. }) => metadata.signature(),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => metadata.signature(),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
             Expression::Atomic(value) => value.signature(),

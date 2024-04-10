@@ -57,7 +57,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
             Data::Address(value) => value.gencode(scope, instructions),
             Data::PtrAccess(value) => value.gencode(scope, instructions),
             Data::Variable(value) => value.gencode(scope, instructions),
-            Data::Unit => todo!(),
+            Data::Unit => Ok(()),
             Data::Map(value) => value.gencode(scope, instructions),
             Data::Struct(value) => value.gencode(scope, instructions),
             Data::Union(value) => value.gencode(scope, instructions),
@@ -1266,7 +1266,18 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let _ = self.value.gencode(scope, instructions)?;
+
+        instructions.push(Casm::Access(Access::Runtime {
+            size: Some(
+                self.metadata
+                    .signature()
+                    .ok_or(CodeGenerationError::UnresolvedError)?
+                    .size_of(),
+            ),
+        }));
+
+        Ok(())
     }
 }
 

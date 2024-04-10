@@ -722,7 +722,16 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
-        resolve_metadata!(self.metadata, self, scope, context);
+        let mut borrowed_metadata = self
+            .metadata
+            .info
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| SemanticError::Default)?;
+        *borrowed_metadata = Info::Resolved {
+            context: context.clone(),
+            signature: context.clone(),
+        };
         Ok(())
     }
 }
@@ -1120,6 +1129,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1148,6 +1158,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1168,6 +1179,7 @@ mod tests {
                     ))))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1191,6 +1203,7 @@ mod tests {
                     })
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1216,6 +1229,7 @@ mod tests {
                     ]))
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1269,6 +1283,7 @@ mod tests {
                     )
                     .into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &());
@@ -1295,6 +1310,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = address.resolve(&scope, &None, &());

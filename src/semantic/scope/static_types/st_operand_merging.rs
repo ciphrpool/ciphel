@@ -529,33 +529,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
         ))
     }
 
-    fn can_include_right(&self) -> Result<(), SemanticError> {
-        match self {
-            StaticType::Slice(_) => Ok(()),
-            StaticType::String(_) => Ok(()),
-            StaticType::Map(_) => Ok(()),
-            StaticType::Vec(_) => Ok(()),
-            StaticType::StrSlice(_) => Ok(()),
-            StaticType::Error => Ok(()),
-            StaticType::Address(value) => {
-                <EType as OperandMerging<Scope>>::can_include_right(&value.0)
-            }
-            _ => Err(SemanticError::IncompatibleOperation),
-        }
-    }
-    fn merge_inclusion<Other>(
-        &self,
-        _other: &Other,
-        _scope: &Ref<Scope>,
-    ) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf<Scope>,
-    {
-        Ok(Either::Static(
-            StaticType::Primitive(PrimitiveType::Bool).into(),
-        ))
-    }
-
     fn can_logical_and(&self) -> Result<(), SemanticError> {
         match self {
             StaticType::Primitive(value) => match value {

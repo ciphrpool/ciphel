@@ -351,10 +351,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let _addr_type = self.value.type_of(&scope)?;
-        Ok(Either::Static(
-            <StaticType as BuildStaticType<Scope>>::build_any().into(),
-        ))
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for Struct<Scope> {

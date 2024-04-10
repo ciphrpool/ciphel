@@ -1,3 +1,4 @@
+use core::borrow;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
@@ -29,19 +30,27 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 // When the variable is created in the general scope,
                 // the scope can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
+                let borrow = scope.as_ref().borrow();
+                for (v, o) in borrow.vars() {
+                    if v.id == *id && !v.is_declared.get() {
+                        let var = v;
 
-                if let Some(stack_top) = scope.borrow().stack_top() {
-                    let var = scope
-                        .borrow()
-                        .update_var_offset(id, Offset::SB(stack_top))
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                    instructions.push(Casm::Alloc(Alloc::Stack {
-                        size: var.type_sig.size_of(),
-                    }));
-                    scope
-                        .borrow()
-                        .update_stack_top(stack_top + var.type_sig.size_of());
+                        var.is_declared.set(true);
+
+                        if let Some(stack_top) = scope.borrow().stack_top() {
+                            o.set(Offset::SB(stack_top));
+                            instructions.push(Casm::Alloc(Alloc::Stack {
+                                size: var.type_sig.size_of(),
+                            }));
+                            let _ = scope
+                                .borrow()
+                                .update_stack_top(stack_top + var.type_sig.size_of())
+                                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                        }
+                        break;
+                    }
                 }
+
                 // let (address, level) = scope
                 //     .borrow()
                 //     .address_of(id)
@@ -70,22 +79,35 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                 };
 
                 for id in &vars {
-                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                    let borrow = scope.as_ref().borrow();
+                    for (v, o) in borrow.vars() {
+                        if v.id == *id && !v.is_declared.get() {
+                            let var = v;
+                            let var_size = var.type_sig.size_of();
 
-                    let var_size = var.type_sig.size_of();
-
-                    if let Some(stack_top) = scope.borrow().stack_top() {
-                        let var = scope
-                            .borrow()
-                            .update_var_offset(id, Offset::SB(stack_top))
-                            .map_err(|_| CodeGenerationError::UnresolvedError)?;
-                        instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                        let _ = scope.borrow().update_stack_top(stack_top + var_size)?;
+                            if let Some(stack_top) = scope.borrow().stack_top() {
+                                o.set(Offset::SB(stack_top));
+                                instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
+                                let _ = scope.borrow().update_stack_top(stack_top + var_size)?;
+                            }
+                            break;
+                        }
                     }
                 }
 
                 // Generate right side code
                 let _ = right.gencode(scope, instructions)?;
+
+                for id in &vars {
+                    let borrow = scope.as_ref().borrow();
+                    for (v, o) in borrow.vars() {
+                        if v.id == *id && !v.is_declared.get() {
+                            v.is_declared.set(true);
+                            break;
+                        }
+                    }
+                }
+
                 // Generate the left side code : the variable declaration
                 // reverse the variables in order to pop the stack and assign in order of stack push
                 vars.reverse();
@@ -422,5 +444,148 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
         assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
+    }
+
+    #[test]
+    fn valid_shadowing_same_type() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let var = 5;
+                var = 6;
+                let var = var + 4;
+                return var + 10; 
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data[0..8],
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
+    }
+
+    #[test]
+    fn valid_shadowing_different_type() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let var = 5u8;
+                var = 6u8;
+                let var = var as i64 + 4;
+                return var + 10; 
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data[0..8],
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
+    }
+
+    #[test]
+    fn valid_shadowing_outer_scope() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let var = 5u8;
+                let outer = {
+                    let var = 10;
+                    return var;
+                };
+                return outer + 10; 
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data[0..8],
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
     }
 }

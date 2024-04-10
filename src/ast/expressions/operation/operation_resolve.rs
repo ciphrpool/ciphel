@@ -1,9 +1,10 @@
 use super::{
-    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Inclusion,
-    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
+    LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
-use crate::ast::expressions::Expression;
+use crate::ast::expressions::data::{Data, Primitive};
+use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
 use crate::semantic::scope::type_traits::GetSubTypes;
@@ -158,11 +159,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Product<Scope> {
                 metadata,
             } => (left, right, metadata),
         };
-        let _ = left.resolve(scope, context, extra)?;
+
+        match (left.as_ref(), right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = right.type_of(&scope.borrow())?;
+                let _ = left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = left.type_of(&scope.borrow())?;
+                let _ = right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = left.resolve(scope, context, extra)?;
+                let _ = right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_product(&left_type)?;
 
-        let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_product(&right_type)?;
 
@@ -185,11 +202,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for Addition<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_add(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_add(&right_type)?;
 
@@ -213,11 +245,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for Substraction<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_substract(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_substract(&right_type)?;
 
@@ -253,11 +300,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for Shift<Scope> {
                 metadata,
             } => (left, right, metadata),
         };
-        let _ = left.resolve(scope, context, extra)?;
+
+        match (left.as_ref(), right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = right.type_of(&scope.borrow())?;
+                let _ = left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = left.type_of(&scope.borrow())?;
+                let _ = right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = left.resolve(scope, context, extra)?;
+                let _ = right.resolve(scope, context, extra)?;
+            }
+        }
         let left_type = left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_shift(&left_type)?;
 
-        let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_shift(&right_type)?;
 
@@ -280,11 +342,25 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseAnd<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_and(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_and(&right_type)?;
 
@@ -307,11 +383,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseXOR<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_xor(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_xor(&right_type)?;
 
@@ -334,11 +425,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for BitwiseOR<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_or(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_bitwise_or(&right_type)?;
 
@@ -406,11 +512,27 @@ impl<Scope: ScopeApi> Resolve<Scope> for Comparaison<Scope> {
                 metadata,
             } => (left, right, metadata),
         };
-        let _ = left.resolve(scope, context, extra)?;
+
+        match (left.as_ref(), right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = right.type_of(&scope.borrow())?;
+                let _ = left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = left.type_of(&scope.borrow())?;
+                let _ = right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = left.resolve(scope, context, extra)?;
+                let _ = right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_comparaison(&left_type)?;
 
-        let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_comparaison(&right_type)?;
 
@@ -446,48 +568,32 @@ impl<Scope: ScopeApi> Resolve<Scope> for Equation<Scope> {
                 metadata,
             } => (left, right, metadata),
         };
-        let _ = left.resolve(scope, context, extra)?;
+
+        match (left.as_ref(), right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = right.type_of(&scope.borrow())?;
+                let _ = left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = left.type_of(&scope.borrow())?;
+                let _ = right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = left.resolve(scope, context, extra)?;
+                let _ = right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_equate(&left_type)?;
 
-        let _ = right.resolve(scope, context, extra)?;
         let right_type = right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_equate(&right_type)?;
 
         let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
         resolve_metadata!(metadata, self, scope, context);
-        Ok(())
-    }
-}
-
-impl<Scope: ScopeApi> Resolve<Scope> for Inclusion<Scope> {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        let _ = self.left.resolve(scope, context, extra)?;
-        let left_type = self.left.type_of(&scope.borrow())?;
-        let _ = <EType as OperandMerging<Scope>>::can_include_left(&left_type)?;
-
-        let _ = self.right.resolve(scope, context, extra)?;
-        let right_type = self.right.type_of(&scope.borrow())?;
-        let _ = <EType as OperandMerging<Scope>>::can_include_right(&right_type)?;
-
-        let Some(right_item) = <EType as GetSubTypes>::get_item(&right_type) else {
-            return Err(SemanticError::IncompatibleOperands);
-        };
-
-        let _ = left_type.compatible_with(&right_item, &scope.borrow())?;
-        resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
@@ -506,11 +612,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalAnd<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_logical_and(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_logical_and(&right_type)?;
 
@@ -533,11 +654,26 @@ impl<Scope: ScopeApi> Resolve<Scope> for LogicalOr<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
+        match (self.left.as_ref(), self.right.as_ref()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let right_type = self.right.type_of(&scope.borrow())?;
+                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve(scope, context, extra)?;
+                let left_type = self.left.type_of(&scope.borrow())?;
+                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+            }
+            _ => {
+                let _ = self.left.resolve(scope, context, extra)?;
+                let _ = self.right.resolve(scope, context, extra)?;
+            }
+        }
+
         let left_type = self.left.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_logical_or(&left_type)?;
 
-        let _ = self.right.resolve(scope, context, extra)?;
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging<Scope>>::can_logical_or(&right_type)?;
 
@@ -597,6 +733,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
@@ -678,6 +815,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
                 ),
+                is_declared: Cell::new(false),
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &());
