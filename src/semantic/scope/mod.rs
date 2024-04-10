@@ -88,7 +88,6 @@ pub trait BuildStaticType<Scope: ScopeApi> {
     ) -> Result<StaticType, SemanticError>;
 
     fn build_generator_from(
-        iterator: &EType,
         item_type: &EType,
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;

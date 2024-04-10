@@ -135,9 +135,7 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         }
 
         // End Stack Frame
-        if return_size == 0 {
-            instructions.push(Casm::StackFrame(StackFrame::Clean));
-        }
+        instructions.push(Casm::StackFrame(StackFrame::Clean));
         Ok(())
     }
 }

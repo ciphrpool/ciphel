@@ -477,15 +477,10 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for static_types::GeneratorType {
     {
         let other_type = other.type_of(&scope)?;
         if let Either::Static(other_type) = other_type {
-            if let StaticType::Generator(static_types::GeneratorType {
-                iterator: other_iterator,
-                item_type: other_item,
-            }) = other_type.as_ref()
+            if let StaticType::Generator(static_types::GeneratorType { item: other_item }) =
+                other_type.as_ref()
             {
-                let _ = self
-                    .iterator
-                    .compatible_with(other_iterator.as_ref(), scope)?;
-                let _ = self.item_type.compatible_with(other_item.as_ref(), scope)?;
+                let _ = self.item.compatible_with(other_item.as_ref(), scope)?;
 
                 Ok(())
             } else {

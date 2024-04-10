@@ -274,15 +274,10 @@ impl TryParse for GeneratorType {
         map(
             preceded(
                 wst(lexem::GENERATOR),
-                delimited(
-                    wst(lexem::LE),
-                    separated_pair(Type::parse, wst(lexem::COMA), Type::parse),
-                    wst(lexem::GE),
-                ),
+                delimited(wst(lexem::LE), Type::parse, wst(lexem::GE)),
             ),
-            |(iterator, item_type)| GeneratorType {
-                iterator: Box::new(iterator),
-                item_type: Box::new(item_type),
+            |item_type| GeneratorType {
+                item: Box::new(item_type),
             },
         )(input)
     }

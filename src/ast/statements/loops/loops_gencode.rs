@@ -35,21 +35,21 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
             Loop::While(value) => value.gencode(scope, instructions),
             Loop::Loop(value) => {
                 let start_label = Label::gen();
-                let early_end_label = Label::gen();
                 let end_label = Label::gen();
 
-                instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
+                instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+                instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
                 instructions.push_label_id(start_label, "start_loop".into());
-                instructions.push(Casm::MemCopy(MemCopy::LabelOffset(early_end_label)));
+                instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
                 instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
                 let _ = inner_scope_gencode(scope, value, None, true, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
                 }));
-                instructions.push_label_id(early_end_label, "early_end_loop".into());
-                // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+
                 instructions.push_label_id(end_label, "end_loop".into());
-                instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
+                instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
+                instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
                 Ok(())
             }
         }
@@ -67,12 +67,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         };
 
         let start_label = Label::gen();
-        let early_end_label = Label::gen();
         let next_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
-        instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3)));
+        instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+        instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
 
         let _ = self.iterator.expr.gencode(scope, instructions)?;
 
@@ -80,13 +79,13 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         let _ = iterator_type.init_index(instructions)?;
 
         instructions.push_label_id(start_label, "start_for".into());
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(early_end_label)));
+
+        let _ = iterator_type.build_item(instructions, end_label)?;
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
 
         instructions.push(Casm::MemCopy(MemCopy::LabelOffset(next_label)));
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None)));
-
-        let _ = iterator_type.build_item(instructions, end_label)?;
 
         let Some(item_type) = iterator_type.get_item() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -101,11 +100,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
-        instructions.push_label_id(early_end_label, "early_end_label".into());
-        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
-        instructions.push_label_id(end_label, "end_while".into());
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
+
+        instructions.push_label_id(end_label, "end_for".into());
+        instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
+        instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
         Ok(())
     }
 }
@@ -117,12 +115,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for WhileLoop<Scope> {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();
-        let early_end_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R4)));
+        instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+        instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
         instructions.push_label_id(start_label, "start_while".into());
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(early_end_label)));
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
         instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
         let _ = self.condition.gencode(scope, instructions)?;
         instructions.push(Casm::If(BranchIf {
@@ -132,10 +130,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for WhileLoop<Scope> {
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
-        instructions.push_label_id(early_end_label, "early_end_label".into());
-        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+
         instructions.push_label_id(end_label, "end_while".into());
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
+        instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
+        instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
         Ok(())
     }
 }
@@ -311,6 +309,54 @@ mod tests {
             let x = {
                 let res = 0;
                 for i in [1,2,3,4] {
+                    res = res + i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(10))));
+    }
+
+    #[test]
+    fn valid_for_slice_assigned() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let res = 0;
+                let tab = [1,2,3,4];
+                for i in tab {
                     res = res + i;
                 }
                 return res; 

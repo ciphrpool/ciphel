@@ -1,6 +1,7 @@
 use std::cell::Ref;
 
 use super::Scope;
+use crate::ast::statements::return_stat::Return;
 use crate::ast::statements::Statement;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
@@ -34,6 +35,14 @@ impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
                     return_type = return_type.merge(&value_type, &inner_scope)?;
                 }
                 Statement::Return(value) => {
+                    if self.is_generator.get() {
+                        match value {
+                            Return::Expr { .. } | Return::Unit => {
+                                return Err(SemanticError::CantReturn)
+                            }
+                            _ => {}
+                        }
+                    }
                     let value_type = value.type_of(&inner_scope)?;
                     return_type = return_type.merge(&value_type, &inner_scope)?;
                 }

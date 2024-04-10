@@ -60,6 +60,7 @@ pub struct Registers {
     pub zero: Cell<usize>,
     pub params_start: Cell<usize>,
     pub link: Cell<usize>,
+    pub window: Cell<usize>,
     pub r1: Cell<u64>,
     pub r2: Cell<u64>,
     pub r3: Cell<u64>,
@@ -150,6 +151,7 @@ impl Default for Registers {
             zero: Cell::new(0),
             params_start: Cell::new(0),
             link: Cell::new(0),
+            window: Cell::new(0),
             r1: Cell::new(0),
             r2: Cell::new(0),
             r3: Cell::new(0),
@@ -189,6 +191,26 @@ impl Stack {
             stack: Rc::new(RefCell::new(Box::new([0; STACK_SIZE]))),
             registers: Registers::default(),
         }
+    }
+
+    pub fn open_window(&self) -> Result<(), StackError> {
+        let bottom = self.registers.top.get();
+        let _ = self.push_with(&(self.registers.window.get() as u64).to_le_bytes())?;
+        self.registers.window.set(bottom);
+        Ok(())
+    }
+
+    pub fn close_window(&self) -> Result<(), StackError> {
+        let bottom = self.registers.window.get();
+        let borrowed = self.stack.borrow();
+
+        let previous_windows = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&borrowed[bottom..bottom + 8])
+                .map_err(|_| StackError::ReadError)?,
+        );
+        self.registers.window.set(previous_windows as usize);
+        self.registers.top.set(bottom);
+        Ok(())
     }
 
     pub fn frame(&self, params_size: usize, link: usize) -> Result<(), StackError> {

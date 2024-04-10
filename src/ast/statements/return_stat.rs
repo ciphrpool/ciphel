@@ -149,9 +149,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
             }
             Return::Yield { expr, metadata } => {
                 let _ = expr.resolve(scope, &context, extra)?;
-                if scope.as_ref().borrow().state().is_loop
-                    && scope.as_ref().borrow().state().is_generator
-                {
+                if scope.as_ref().borrow().state().is_generator {
                     resolve_metadata!(metadata, self, scope, context);
                     Ok(())
                 } else {
@@ -216,7 +214,17 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
                 instructions.push(Casm::StackFrame(StackFrame::Continue));
                 Ok(())
             }
-            Return::Yield { expr, metadata } => todo!(),
+            Return::Yield { expr, metadata } => {
+                let Some(return_size) = metadata.signature().map(|t| t.size_of()) else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let _ = expr.gencode(scope, instructions)?;
+
+                instructions.push(Casm::StackFrame(StackFrame::Yield {
+                    return_size: Some(return_size),
+                }));
+                Ok(())
+            }
         }
     }
 }

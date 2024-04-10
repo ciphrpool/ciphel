@@ -1,4 +1,5 @@
 use num_traits::ToBytes;
+use ulid::Ulid;
 
 use super::CasmProgram;
 use crate::{
@@ -43,26 +44,25 @@ impl Executable for Alloc {
 
 #[derive(Debug, Clone)]
 pub enum StackFrame {
+    Yield { return_size: Option<usize> },
+    LastYield { next_label: Ulid },
+    LastYieldNone,
     Clean,
     SoftClean,
     Break,
     Continue,
-    Set {
-        params_size: usize,
-        cursor_offset: usize,
-    },
-    Return {
-        return_size: Option<usize>,
-    },
-    Transfer {
-        is_direct_loop: bool,
-    },
+    OpenWindow,
+    CloseWindow,
+    Return { return_size: Option<usize> },
+    Transfer { is_direct_loop: bool },
 }
 
-const FLAG_VOID: u8 = 0u8;
-const FLAG_RETURN: u8 = 1u8;
-const FLAG_BREAK: u8 = 2u8;
-const FLAG_CONTINUE: u8 = 3u8;
+pub const FLAG_VOID: u8 = 0u8;
+pub const FLAG_RETURN: u8 = 1u8;
+pub const FLAG_BREAK: u8 = 2u8;
+pub const FLAG_CONTINUE: u8 = 3u8;
+pub const FLAG_YIELD: u8 = 4u8;
+pub const FLAG_YIELD_NONE: u8 = 5u8;
 
 impl Executable for StackFrame {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
@@ -153,18 +153,13 @@ impl Executable for StackFrame {
                     .map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
-            StackFrame::Set {
-                params_size,
-                cursor_offset,
-            } => {
-                let _ = thread
-                    .env
-                    .stack
-                    .frame(
-                        *params_size,
-                        thread.env.program.cursor.get() + cursor_offset,
-                    )
-                    .map_err(|e| e.into())?;
+            StackFrame::OpenWindow => {
+                let _ = thread.env.stack.open_window().map_err(|e| e.into())?;
+                thread.env.program.incr();
+                Ok(())
+            }
+            StackFrame::CloseWindow => {
+                let _ = thread.env.stack.open_window().map_err(|e| e.into())?;
                 thread.env.program.incr();
                 Ok(())
             }
@@ -257,6 +252,49 @@ impl Executable for StackFrame {
                             thread.env.program.cursor.set(break_link as usize);
                         }
                     }
+
+                    FLAG_YIELD => {
+                        if !*is_direct_loop {
+                            let return_data =
+                                thread.env.stack.pop(return_size).map_err(|e| e.into())?;
+
+                            thread
+                                .env
+                                .program
+                                .cursor
+                                .set(thread.env.stack.registers.link.get());
+                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&return_data)
+                                .map_err(|e| e.into())?;
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&(return_size as u64).to_le_bytes())
+                                .map_err(|e| e.into())?;
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&[FLAG_YIELD])
+                                .map_err(|e| e.into())?; /* return flag set to true */
+                        } else {
+                            let break_link = thread.env.stack.get_reg(UReg::R2);
+                            let _ = thread
+                                .env
+                                .stack
+                                .push_with(&(return_size as u64).to_le_bytes())
+                                .map_err(|e| e.into())?;
+                            thread.env.program.cursor.set(break_link as usize);
+                        }
+                    }
+
+                    FLAG_YIELD_NONE => {
+                        /* */
+                        unreachable!()
+                    }
                     FLAG_RETURN => {
                         let return_data =
                             thread.env.stack.pop(return_size).map_err(|e| e.into())?;
@@ -289,6 +327,99 @@ impl Executable for StackFrame {
                     }
                     _ => return Err(RuntimeError::ReturnFlagError),
                 }
+                Ok(())
+            }
+            StackFrame::Yield { return_size } => {
+                let return_size = match return_size {
+                    Some(size) => *size,
+                    None => {
+                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        size as usize
+                    }
+                };
+                let return_data = thread.env.stack.pop(return_size).map_err(|e| e.into())?;
+                thread
+                    .env
+                    .program
+                    .cursor
+                    .set(thread.env.stack.registers.link.get());
+
+                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&return_data)
+                    .map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&(return_size as u64).to_le_bytes())
+                    .map_err(|e| e.into())?;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_YIELD])
+                    .map_err(|e| e.into())?; /* return flag set to YIELD */
+                Ok(())
+            }
+            StackFrame::LastYield { next_label } => {
+                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let return_data = thread.env.stack.pop(size as usize).map_err(|e| e.into())?;
+
+                // for reg in [UReg::R4, UReg::R3, UReg::R2, UReg::R1] {
+                //     let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                //     let _ = thread.env.stack.set_reg(reg, idx);
+                // }
+
+                let Some(next_label) = thread.env.program.get(next_label) else {
+                    return Err(RuntimeError::CodeSegmentation);
+                };
+                let next_label = next_label as u64;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&next_label.to_le_bytes())
+                    .map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&return_data)
+                    .map_err(|e| e.into())?;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&(size + 8/* loop index */ + 8/* label */).to_le_bytes())
+                    .map_err(|e| e.into())?;
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_YIELD])
+                    .map_err(|e| e.into())?; /* return flag set to YIELD */
+
+                let break_link = thread.env.stack.get_reg(UReg::R1);
+                thread.env.program.cursor.set(break_link as usize);
+
+                Ok(())
+            }
+            StackFrame::LastYieldNone => {
+                // for reg in [UReg::R4, UReg::R3, UReg::R2, UReg::R1] {
+                //     let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                //     let _ = thread.env.stack.set_reg(reg, idx);
+                // }
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&[FLAG_YIELD_NONE])
+                    .map_err(|e| e.into())?; /* return flag set to YIELD */
+
+                let break_link = thread.env.stack.get_reg(UReg::R1);
+                thread.env.program.cursor.set(break_link as usize);
                 Ok(())
             }
         }

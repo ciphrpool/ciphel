@@ -19,6 +19,7 @@ pub enum SemanticError {
     NotResolvedYet,
     PlatformAPIOverriding,
 
+    CantReturn,
     CantInferType,
     CantRegisterType,
     CantRegisterVar,

@@ -25,7 +25,7 @@ pub struct Scope<Inner: ScopeApi> {
     pub inner_scope: RefCell<Option<MutRc<Inner>>>,
     pub can_capture: Cell<ClosureState>,
     pub is_loop: Cell<bool>,
-    pub is_yieldable: Cell<bool>,
+    pub is_generator: Cell<bool>,
     pub caller: MutRc<Option<Var>>,
     pub metadata: Metadata,
 }
@@ -62,7 +62,7 @@ impl<InnerScope: ScopeApi> Scope<InnerScope> {
     pub fn to_loop(&self) {
         self.is_loop.set(true);
     }
-    pub fn to_yieldable(&self) {
-        self.is_yieldable.set(true);
+    pub fn to_generator(&self) {
+        self.is_generator.set(true);
     }
 }

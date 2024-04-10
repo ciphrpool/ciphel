@@ -1,13 +1,18 @@
+use std::vec;
+
 use num_traits::ToBytes;
 use ulid::Ulid;
 
 use crate::{
     semantic::{scope::static_types::NumberType, AccessLevel, SizeOf},
     vm::{
-        allocator::{stack::Offset, MemoryAddress},
+        allocator::{
+            stack::{Offset, UReg},
+            MemoryAddress,
+        },
         casm::{
-            alloc::Access,
-            branch::BranchIf,
+            alloc::{Access, FLAG_YIELD, FLAG_YIELD_NONE},
+            branch::{BranchIf, BranchTable, BranchTableExprInfo, Goto, Label},
             locate::{Locate, LocateNextUTF8Char},
             memcopy::MemCopy,
             operation::{
@@ -21,7 +26,7 @@ use crate::{
     },
 };
 
-use super::{RangeType, SliceType, StaticType, StrSliceType, StringType, VecType};
+use super::{GeneratorType, RangeType, SliceType, StaticType, StrSliceType, StringType, VecType};
 
 impl NextItem for StaticType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
@@ -31,6 +36,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.init_index(instructions),
             StaticType::Vec(value) => value.init_index(instructions),
             StaticType::Range(value) => value.init_index(instructions),
+            StaticType::Generator(value) => value.init_index(instructions),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -49,6 +55,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.build_item(instructions, end_label),
             StaticType::Vec(value) => value.build_item(instructions, end_label),
             StaticType::Range(value) => value.build_item(instructions, end_label),
+            StaticType::Generator(value) => value.build_item(instructions, end_label),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -63,6 +70,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.next(instructions),
             StaticType::Vec(value) => value.next(instructions),
             StaticType::Range(value) => value.next(instructions),
+            StaticType::Generator(value) => value.next(instructions),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -86,6 +94,7 @@ impl NextItem for SliceType {
                 level: AccessLevel::Direct,
             },
         }));
+        /* STACK + 16 : UPPER | START */
         Ok(())
     }
     fn build_item(
@@ -110,9 +119,12 @@ impl NextItem for SliceType {
         instructions.push(Casm::Access(Access::Runtime {
             size: Some(self.item_type.size_of()),
         }));
+
+        /* STACK : UPPER | INDEX (8) | ITEM (item_size) */
         Ok(())
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : UPPER | INDEX (8) */
         instructions.push(Casm::Serialize(Serialized {
             data: self.item_type.size_of().to_le_bytes().to_vec(),
         }));
@@ -130,10 +142,13 @@ impl NextItem for SliceType {
 
 impl NextItem for StringType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : POINTER TO STRING */
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        /* STACK : POINTER | POINTER | POINTER */
         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
 
+        /* STACK : POINTER | POINTER | SIZE OF STRING  */
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
                 left: OpPrimitive::Number(NumberType::U64),
@@ -149,6 +164,7 @@ impl NextItem for StringType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
+        /* STACK : POINTER | UPPER */
 
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
@@ -158,6 +174,8 @@ impl NextItem for StringType {
             size: 8,
         }));
 
+        /* STACK : POINTER | UPPER | POINTER */
+
         instructions.push(Casm::Serialize(Serialized {
             data: (16u64).to_le_bytes().to_vec(),
         }));
@@ -167,6 +185,8 @@ impl NextItem for StringType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
+        /* STACK : POINTER (original) | UPPER | START */
+        /* STACK +16 : UPPER | START (8) */
         Ok(())
     }
     fn build_item(
@@ -189,9 +209,11 @@ impl NextItem for StringType {
 
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
+        /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : UPPER | INDEX */
         instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
 
         Ok(())
@@ -207,13 +229,14 @@ impl NextItem for StrSliceType {
             },
         }));
 
+        /* STACK : TOP */
         instructions.push(Casm::Locate(Locate {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-(self.size_of() as isize + 8)),
                 level: AccessLevel::Direct,
             },
         }));
-
+        /* STACK +16 : UPPER | START*/
         Ok(())
     }
     fn build_item(
@@ -236,9 +259,11 @@ impl NextItem for StrSliceType {
 
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
+        /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : UPPER | INDEX */
         instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
 
         Ok(())
@@ -247,18 +272,25 @@ impl NextItem for StrSliceType {
 
 impl NextItem for VecType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : POINTER TO VEC */
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
         instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        /* STACK : POINTER | POINTER | POINTER */
         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+        /* STACK : POINTER | POINTER | LENGTH */
+
         instructions.push(Casm::Serialize(Serialized {
             data: self.0.size_of().to_le_bytes().to_vec(),
         }));
+
+        /* STACK : POINTER | POINTER | LENGTH | ITEM_SIZE */
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Mult(Mult {
                 left: OpPrimitive::Number(NumberType::U64),
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
+        /* STACK : POINTER | POINTER | LENGTH * ITEM_SIZE */
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
                 left: OpPrimitive::Number(NumberType::U64),
@@ -274,6 +306,7 @@ impl NextItem for VecType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
+        /* STACK : POINTER | UPPER */
 
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
@@ -282,7 +315,7 @@ impl NextItem for VecType {
             },
             size: 8,
         }));
-
+        /* STACK : POINTER | UPPER | POINTER */
         instructions.push(Casm::Serialize(Serialized {
             data: (16u64).to_le_bytes().to_vec(),
         }));
@@ -292,6 +325,8 @@ impl NextItem for VecType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
+        /* STACK : POINTER (original) | UPPER | START */
+        /* STACK +16 : UPPER | START */
         Ok(())
     }
 
@@ -317,10 +352,12 @@ impl NextItem for VecType {
         instructions.push(Casm::Access(Access::Runtime {
             size: Some(self.0.size_of()),
         }));
+        /* STACK : UPPER | INDEX (8) | ITEM_SIZE */
         Ok(())
     }
 
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : UPPER | INDEX (8) */
         instructions.push(Casm::Serialize(Serialized {
             data: self.0.size_of().to_le_bytes().to_vec(),
         }));
@@ -337,6 +374,7 @@ impl NextItem for VecType {
 }
 impl NextItem for RangeType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : LOWER | UPPER | INCR */
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
                 offset: Offset::ST(-(self.size_of() as isize)),
@@ -345,6 +383,8 @@ impl NextItem for RangeType {
             size: self.num.size_of(),
         }));
 
+        /* STACK : LOWER | UPPER | INCR | LOWER */
+        /* STACK +(num size) : LOWER */
         Ok(())
     }
 
@@ -353,9 +393,12 @@ impl NextItem for RangeType {
         instructions: &CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
+        /* STACK : (LOWER | UPPER | INCR ) (original) | INDEX */
+
         /* Dup loop index */
         instructions.push(Casm::MemCopy(MemCopy::Dup(self.num.size_of())));
 
+        /* STACK : LOWER | UPPER | INCR | INDEX | INDEX */
         /* Get upper bound value */
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
@@ -364,6 +407,7 @@ impl NextItem for RangeType {
             },
             size: self.num.size_of(),
         }));
+        /* STACK : LOWER | UPPER | INCR | INDEX | INDEX | UPPER*/
 
         if self.inclusive {
             instructions.push(Casm::Operation(Operation {
@@ -380,6 +424,7 @@ impl NextItem for RangeType {
                 }),
             }));
         }
+        /* STACK : LOWER | UPPER | INCR | INDEX | CONTINUE boolean */
 
         instructions.push(Casm::If(BranchIf {
             else_label: end_label,
@@ -387,11 +432,14 @@ impl NextItem for RangeType {
 
         /* Only the loop index left in the stack */
         instructions.push(Casm::MemCopy(MemCopy::Dup(self.num.size_of())));
+        /* STACK : LOWER | UPPER | INCR | INDEX | INDEX*/
 
         Ok(())
     }
 
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        /* STACK : LOWER | UPPER | INCR | INDEX */
+
         /* Get increment value */
         instructions.push(Casm::Access(Access::Static {
             address: MemoryAddress::Stack {
@@ -406,6 +454,62 @@ impl NextItem for RangeType {
                 right: OpPrimitive::Number(self.num),
             }),
         }));
+
+        Ok(())
+    }
+}
+
+impl NextItem for GeneratorType {
+    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        let end_init_gen_label = Label::gen();
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_init_gen_label)));
+        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None)));
+        /* Present top of the stack : LABEL_GEN_INIT   */
+
+        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the init section of the generator */
+
+        /* STACK : init data (includes at the end LABEL_GEN_BUILD_ITEM )*/
+
+        instructions.push_label_id(end_init_gen_label, "end_init_generator".into());
+
+        Ok(())
+    }
+
+    fn build_item(
+        &self,
+        instructions: &CasmProgram,
+        end_label: Ulid,
+    ) -> Result<(), CodeGenerationError> {
+        let end_build_gen_label = Label::gen();
+        let label = Label::gen();
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_build_gen_label)));
+        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
+
+        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the build item section of the generator */
+        instructions.push_label_id(end_build_gen_label, "end_build_item_gen".into());
+
+        instructions.push(Casm::Switch(BranchTable::Swith {
+            info: BranchTableExprInfo::Primitive(1),
+            table: vec![
+                (vec![FLAG_YIELD], label),
+                (vec![FLAG_YIELD_NONE], end_label),
+            ],
+            else_label: None,
+        })); /* Dup return Flag */
+        instructions.push_label_id(label, "preparing_param_after_yield".into());
+        instructions.push(Casm::Pop(8)); /* Pop unused size */
+
+        /* STACK : LOOP_INDEX | NEXT_LABEL | PARAM_DATA */
+        Ok(())
+    }
+
+    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        let end_next_label = Label::gen();
+        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_next_label)));
+        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
+        /* STACK : LOOP_INDEX | NEXT_LABEL */
+        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the next section of the generator */
+        instructions.push_label_id(end_next_label, "end_next_label".into());
 
         Ok(())
     }

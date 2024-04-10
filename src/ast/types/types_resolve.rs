@@ -260,8 +260,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for GeneratorType {
     where
         Self: Sized,
     {
-        let _ = self.iterator.resolve(scope, context, extra)?;
-        let _ = self.item_type.resolve(scope, context, extra)?;
+        let _ = self.item.resolve(scope, context, extra)?;
         Ok(())
     }
 }

@@ -162,8 +162,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for GeneratorType {
 
         Ok(Either::Static(
             StaticType::Generator(GeneratorType {
-                iterator: Box::new(self.iterator.merge(other_type.iterator.as_ref(), scope)?),
-                item_type: Box::new(self.item_type.merge(other_type.item_type.as_ref(), scope)?),
+                item: Box::new(self.item.merge(other_type.item.as_ref(), scope)?),
             })
             .into(),
         ))

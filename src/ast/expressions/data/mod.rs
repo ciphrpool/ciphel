@@ -5,7 +5,14 @@ use std::{
 };
 
 use crate::{
-    ast::{self, statements::declaration::TypedVar, utils::strings::ID},
+    ast::{
+        self,
+        statements::{
+            declaration::TypedVar,
+            loops::{ForItem, ForIterator},
+        },
+        utils::strings::ID,
+    },
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -29,6 +36,7 @@ pub enum Data<InnerScope: ScopeApi> {
     Slice(Slice<InnerScope>),
     StrSlice(StrSlice),
     Vec(Vector<InnerScope>),
+    Generator(Generator<InnerScope>),
     Closure(Closure<InnerScope>),
     Tuple(Tuple<InnerScope>),
     Address(Address<InnerScope>),
@@ -132,6 +140,14 @@ pub struct Closure<InnerScope: ScopeApi> {
     params: Vec<ClosureParam>,
     pub scope: ExprScope<InnerScope>,
     pub closed: bool,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Generator<InnerScope: ScopeApi> {
+    pub iterator: Box<ForIterator<InnerScope>>,
+    pub item: ForItem,
+    pub scope: ast::statements::scope::Scope<InnerScope>,
     pub metadata: Metadata,
 }
 
@@ -303,6 +319,7 @@ impl<Scope: ScopeApi> Data<Scope> {
                 metadata,
             }) => metadata.signature(),
             Data::StrSlice(StrSlice { value, metadata }) => metadata.signature(),
+            Data::Generator(Generator { metadata, .. }) => metadata.signature(),
         }
     }
 }

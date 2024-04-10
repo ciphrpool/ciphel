@@ -1,9 +1,9 @@
 use std::cell::Ref;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, Generator, KeyData,
+    ListAccess, Map, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple,
+    Union, VarID, Variable, Vector,
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType, StringType};
 
@@ -44,6 +44,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Data<Scope> {
             Data::Union(value) => value.type_of(&scope),
             Data::Enum(value) => value.type_of(&scope),
             Data::StrSlice(value) => value.type_of(&scope),
+            Data::Generator(value) => value.type_of(&scope),
         }
     }
 }
@@ -307,6 +308,18 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
         .map(|value| Either::Static(value.into()))
     }
 }
+
+impl<Scope: ScopeApi> TypeOf<Scope> for Generator<Scope> {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Scope: ScopeApi,
+        Self: Sized + Resolve<Scope>,
+    {
+        let item = self.scope.type_of(scope)?;
+        StaticType::build_generator_from(&item, scope).map(|value| Either::Static(value.into()))
+    }
+}
+
 impl<Scope: ScopeApi> TypeOf<Scope> for ExprScope<Scope> {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where

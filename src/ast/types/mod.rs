@@ -66,8 +66,7 @@ pub struct VecType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeneratorType {
-    pub iterator: SubType,
-    pub item_type: SubType,
+    pub item: SubType,
 }
 
 #[derive(Debug, Clone, PartialEq)]

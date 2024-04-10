@@ -80,7 +80,7 @@ impl SizeOf for RangeType {
 
 impl SizeOf for GeneratorType {
     fn size_of(&self) -> usize {
-        todo!()
+        8
     }
 }
 

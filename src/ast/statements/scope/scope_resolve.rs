@@ -29,6 +29,9 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
             if self.is_loop.get() {
                 inner_scope.as_ref().borrow_mut().to_loop();
             }
+            if self.is_generator.get() {
+                inner_scope.as_ref().borrow_mut().to_generator();
+            }
             if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
                 let caller = caller.clone();
                 caller.state.set(VarState::Parameter);

@@ -86,8 +86,7 @@ pub struct FnType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeneratorType {
-    pub iterator: Box<EType>,
-    pub item_type: Box<EType>,
+    pub item: Box<EType>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

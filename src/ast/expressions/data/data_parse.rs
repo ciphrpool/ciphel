@@ -8,7 +8,12 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::{declaration::TypedVar, return_stat::Return, Statement},
+        statements::{
+            declaration::TypedVar,
+            loops::{ForItem, ForIterator},
+            return_stat::Return,
+            Statement,
+        },
         types::NumberType,
         utils::{
             io::{PResult, Span},
@@ -39,9 +44,9 @@ use nom::{
 use nom_supreme::error::ErrorTree;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
-    VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, Generator, KeyData,
+    ListAccess, Map, MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct,
+    Tuple, Union, VarID, Variable, Vector,
 };
 impl<Scope: ScopeApi> TryParse for Data<Scope> {
     fn parse(input: Span) -> PResult<Self> {
@@ -49,6 +54,7 @@ impl<Scope: ScopeApi> TryParse for Data<Scope> {
             map(Primitive::parse, |value| Data::Primitive(value)),
             map(StrSlice::parse, |value| Data::StrSlice(value)),
             map(Slice::parse, |value| Data::Slice(value)),
+            map(Generator::parse, |value| Data::Generator(value)),
             map(Vector::parse, |value| Data::Vec(value)),
             map(Closure::parse, |value| Data::Closure(value)),
             map(Tuple::parse, |value| Data::Tuple(value)),
@@ -303,6 +309,33 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
     }
 }
 
+impl<Scope: ScopeApi> TryParse for Generator<Scope> {
+    /*
+     * @desc Parse Vector
+     *
+     * @grammar
+     * Forloop := for ITEM in ITERATOR Scope
+     * ITERATOR := ID | VecData | SliceData | receive\[ Addr \]\(  UNumber \) | TupleData
+     * ITEM := ID | TypedVar | PatternVar
+     *
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            tuple((
+                preceded(wst(lexem::FOR), ForItem::parse),
+                preceded(wst(lexem::IN), ForIterator::parse),
+                ast::statements::scope::Scope::parse,
+            )),
+            |(item, iterator, scope)| Generator {
+                item,
+                iterator: Box::new(iterator),
+                scope,
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
 impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
@@ -371,7 +404,7 @@ impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_yieldable: Cell::new(false),
+                    is_generator: Cell::new(false),
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 })
@@ -564,7 +597,10 @@ mod tests {
     use std::cell::Cell;
 
     use crate::{
-        ast::expressions::{data::Number, Atomic},
+        ast::{
+            expressions::{data::Number, operation::Range, Atomic},
+            statements::scope::Scope,
+        },
         semantic::scope::{scope_impl::MockScope, ClosureState},
     };
 
@@ -698,7 +734,7 @@ mod tests {
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_yieldable: Cell::new(false),
+                    is_generator: Cell::new(false),
                     caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 }),
@@ -734,7 +770,7 @@ mod tests {
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_yieldable: Cell::new(false),
+                    is_generator: Cell::new(false),
                     caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 }),
@@ -773,7 +809,7 @@ mod tests {
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_yieldable: Cell::new(false),
+                    is_generator: Cell::new(false),
                     caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 }),
@@ -1057,5 +1093,57 @@ mod tests {
             }),
             value
         );
+    }
+
+    #[test]
+    fn valid_generator() {
+        let res = Generator::<MockScope>::parse(
+            r#"
+        for i in 0..10 {
+            yield i;
+        }
+        
+        "#
+            .into(),
+        );
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Generator {
+                metadata: Metadata::default(),
+                iterator: Box::new(ForIterator {
+                    expr: Expression::Range(Range {
+                        lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(Number::Unresolved(0).into())
+                        )))),
+                        upper: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
+                            Primitive::Number(Number::Unresolved(10).into())
+                        )))),
+                        incr: None,
+                        inclusive: false,
+                        metadata: Metadata::default()
+                    })
+                }),
+                item: ForItem::Id("i".into()),
+                scope: Scope {
+                    instructions: vec![Statement::Return(Return::Yield {
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                            Variable::Var(VarID {
+                                id: "i".into(),
+                                metadata: Metadata::default()
+                            })
+                        )))),
+                        metadata: Metadata::default()
+                    })],
+                    can_capture: Cell::new(ClosureState::DEFAULT),
+                    is_loop: Cell::new(false),
+                    is_generator: Cell::new(false),
+                    caller: Default::default(),
+                    inner_scope: RefCell::new(None),
+                    metadata: Metadata::default(),
+                }
+            },
+            value
+        )
     }
 }

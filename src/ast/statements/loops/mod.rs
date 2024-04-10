@@ -38,7 +38,7 @@ pub enum ForItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForIterator<InnerScope: ScopeApi> {
-    expr: Expression<InnerScope>,
+    pub expr: Expression<InnerScope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
