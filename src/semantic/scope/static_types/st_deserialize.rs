@@ -79,7 +79,6 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
                 ))
             }
             StaticType::Range(_) => unimplemented!(),
-            StaticType::Generator(_) => unimplemented!(),
         }
     }
 }
@@ -122,7 +121,6 @@ impl Printer for StaticType {
                 Ok(())
             }
             StaticType::Map(value) => todo!(),
-            StaticType::Generator(_) => todo!(),
         }
     }
 }

@@ -30,7 +30,6 @@ pub enum StaticType {
     Closure(ClosureType),
     StaticFn(FnType),
     Range(RangeType),
-    Generator(GeneratorType),
     Chan(ChanType),
     Tuple(TupleType),
     Unit,
@@ -82,11 +81,6 @@ pub struct FnType {
     pub params: Types,
     pub ret: SubType,
     pub scope_params_size: usize,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GeneratorType {
-    pub item: Box<EType>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

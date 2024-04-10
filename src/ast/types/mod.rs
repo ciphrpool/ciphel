@@ -15,7 +15,6 @@ pub enum Type {
     String(StringType),
     StrSlice(StrSliceType),
     Range(RangeType),
-    Generator(GeneratorType),
     UserType(ID),
     Vec(VecType),
     Closure(ClosureType),
@@ -63,11 +62,6 @@ pub struct StringType();
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VecType(pub SubType);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GeneratorType {
-    pub item: SubType,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClosureType {

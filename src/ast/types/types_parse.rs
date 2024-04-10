@@ -17,8 +17,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, ClosureType, GeneratorType, KeyType, MapType, NumberType, PrimitiveType,
-    RangeType, SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, RangeType,
+    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -37,7 +37,6 @@ impl TryParse for Type {
             map(VecType::parse, |value| Type::Vec(value)),
             map(ClosureType::parse, |value| Type::Closure(value)),
             map(RangeType::parse, |value| Type::Range(value)),
-            map(GeneratorType::parse, |value| Type::Generator(value)),
             map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
             map(AddrType::parse, |value| Type::Address(value)),
@@ -260,26 +259,6 @@ impl TryParse for RangeType {
                 },
             ),
         ))(input)
-    }
-}
-
-impl TryParse for GeneratorType {
-    /*
-     * @desc Parse Primitive types
-     *
-     * @grammar
-     * Primitive := Gen<Type,Type>
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            preceded(
-                wst(lexem::GENERATOR),
-                delimited(wst(lexem::LE), Type::parse, wst(lexem::GE)),
-            ),
-            |item_type| GeneratorType {
-                item: Box::new(item_type),
-            },
-        )(input)
     }
 }
 

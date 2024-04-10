@@ -23,7 +23,6 @@ impl TypeChecking for StaticType {
             StaticType::String(_) => true,
             StaticType::StrSlice(_) => true,
             StaticType::Range(_) => true,
-            StaticType::Generator(_) => true,
         }
     }
     fn is_indexable(&self) -> bool {
@@ -43,7 +42,6 @@ impl TypeChecking for StaticType {
             StaticType::String(_) => true,
             StaticType::StrSlice(_) => true,
             StaticType::Range(_) => false,
-            StaticType::Generator(_) => false,
         }
     }
     fn is_dotnum_indexable(&self) -> bool {
@@ -65,7 +63,6 @@ impl TypeChecking for StaticType {
             StaticType::String(_) => false,
             StaticType::StrSlice(_) => false,
             StaticType::Range(_) => true,
-            StaticType::Generator(_) => false,
         }
     }
     fn is_channel(&self) -> bool {

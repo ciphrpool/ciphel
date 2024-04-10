@@ -101,9 +101,9 @@ impl CasmProgram {
             let cursor = self.cursor.get();
             match borrowed_main.get(cursor) {
                 Some(instruction) => {
-                    dbg!((cursor, instruction, thread.env.stack.top(),));
-                    let mut buffer = String::new();
-                    io::stdin().read_line(&mut buffer);
+                    // dbg!((cursor, instruction, thread.env.stack.top(),));
+                    // let mut buffer = String::new();
+                    // io::stdin().read_line(&mut buffer);
 
                     match instruction.execute(thread) {
                         Ok(_) => {}

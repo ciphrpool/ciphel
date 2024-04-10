@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-use super::{GeneratorType, RangeType, SliceType, StaticType, StrSliceType, StringType, VecType};
+use super::{RangeType, SliceType, StaticType, StrSliceType, StringType, VecType};
 
 impl NextItem for StaticType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
@@ -36,7 +36,6 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.init_index(instructions),
             StaticType::Vec(value) => value.init_index(instructions),
             StaticType::Range(value) => value.init_index(instructions),
-            StaticType::Generator(value) => value.init_index(instructions),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -55,7 +54,6 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.build_item(instructions, end_label),
             StaticType::Vec(value) => value.build_item(instructions, end_label),
             StaticType::Range(value) => value.build_item(instructions, end_label),
-            StaticType::Generator(value) => value.build_item(instructions, end_label),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -70,7 +68,6 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.next(instructions),
             StaticType::Vec(value) => value.next(instructions),
             StaticType::Range(value) => value.next(instructions),
-            StaticType::Generator(value) => value.next(instructions),
             StaticType::Chan(_) => todo!(),
             StaticType::Error => todo!(),
             StaticType::Address(_) => todo!(),
@@ -454,62 +451,6 @@ impl NextItem for RangeType {
                 right: OpPrimitive::Number(self.num),
             }),
         }));
-
-        Ok(())
-    }
-}
-
-impl NextItem for GeneratorType {
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let end_init_gen_label = Label::gen();
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_init_gen_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R2, None)));
-        /* Present top of the stack : LABEL_GEN_INIT   */
-
-        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the init section of the generator */
-
-        /* STACK : init data (includes at the end LABEL_GEN_BUILD_ITEM )*/
-
-        instructions.push_label_id(end_init_gen_label, "end_init_generator".into());
-
-        Ok(())
-    }
-
-    fn build_item(
-        &self,
-        instructions: &CasmProgram,
-        end_label: Ulid,
-    ) -> Result<(), CodeGenerationError> {
-        let end_build_gen_label = Label::gen();
-        let label = Label::gen();
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_build_gen_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
-
-        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the build item section of the generator */
-        instructions.push_label_id(end_build_gen_label, "end_build_item_gen".into());
-
-        instructions.push(Casm::Switch(BranchTable::Swith {
-            info: BranchTableExprInfo::Primitive(1),
-            table: vec![
-                (vec![FLAG_YIELD], label),
-                (vec![FLAG_YIELD_NONE], end_label),
-            ],
-            else_label: None,
-        })); /* Dup return Flag */
-        instructions.push_label_id(label, "preparing_param_after_yield".into());
-        instructions.push(Casm::Pop(8)); /* Pop unused size */
-
-        /* STACK : LOOP_INDEX | NEXT_LABEL | PARAM_DATA */
-        Ok(())
-    }
-
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let end_next_label = Label::gen();
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_next_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R1, None)));
-        /* STACK : LOOP_INDEX | NEXT_LABEL */
-        instructions.push(Casm::Goto(Goto { label: None })); /* Pop 8byte from stack to go to the next section of the generator */
-        instructions.push_label_id(end_next_label, "end_next_label".into());
 
         Ok(())
     }

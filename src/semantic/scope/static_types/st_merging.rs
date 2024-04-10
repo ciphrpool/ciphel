@@ -8,8 +8,8 @@ use crate::semantic::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, GeneratorType, KeyType, MapType, PrimitiveType,
-    RangeType, SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
+    StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
 impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
@@ -50,7 +50,6 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::String(value) => value.merge(other, scope),
             StaticType::StrSlice(value) => value.merge(other, scope),
             StaticType::Range(value) => value.merge(other, scope),
-            StaticType::Generator(value) => value.merge(other, scope),
         }
     }
 }
@@ -141,28 +140,6 @@ impl<Scope: ScopeApi> MergeType<Scope> for RangeType {
             StaticType::Range(RangeType {
                 num: self.num,
                 inclusive: self.inclusive,
-            })
-            .into(),
-        ))
-    }
-}
-
-impl<Scope: ScopeApi> MergeType<Scope> for GeneratorType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf<Scope>,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::Static(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let StaticType::Generator(other_type) = other_type.as_ref() else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-
-        Ok(Either::Static(
-            StaticType::Generator(GeneratorType {
-                item: Box::new(self.item.merge(other_type.item.as_ref(), scope)?),
             })
             .into(),
         ))

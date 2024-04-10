@@ -1,9 +1,9 @@
 use nom_supreme::context;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, Generator, KeyData,
-    ListAccess, Map, MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct,
-    Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
+    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
+    VarID, Variable, Vector,
 };
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType};
@@ -45,7 +45,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
             Data::Union(value) => value.resolve(scope, context, extra),
             Data::Enum(value) => value.resolve(scope, context, extra),
             Data::StrSlice(value) => value.resolve(scope, context, extra),
-            Data::Generator(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -852,38 +851,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Generator<Scope> {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        _extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-        Scope: ScopeApi,
-    {
-        let _ = self.iterator.resolve(scope, &(), &())?;
-        let item_type = self.iterator.type_of(&scope.borrow())?;
-        let item_type = <EType as GetSubTypes>::get_item(&item_type);
-
-        let item_vars = self.item.resolve(scope, &item_type, &())?;
-        for var in &item_vars {
-            var.state.set(VarState::Parameter);
-        }
-        // attach the item to the scope
-        self.scope.to_generator();
-        let _ = self.scope.resolve(scope, context, &item_vars)?;
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
-        // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
-        // Ok(())
-    }
-}
-
 impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
     type Output = ();
     type Context = Option<EType>;
@@ -962,8 +929,8 @@ mod tests {
         semantic::scope::{
             scope_impl::Scope,
             static_types::{
-                AddrType, ChanType, GeneratorType, KeyType, MapType, NumberType, PrimitiveType,
-                SliceType, StaticType, StrSliceType, StringType, TupleType, VecType,
+                AddrType, ChanType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
+                StaticType, StrSliceType, StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},
             var_impl::Var,
@@ -1714,117 +1681,5 @@ mod tests {
             .unwrap();
         let res = object.resolve(&scope, &None, &());
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn valid_generator() {
-        let statement = Generator::parse(
-            r##"
-                for i in 0..10 {
-                    yield i;
-                }
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        let statement_type = statement
-            .metadata
-            .signature()
-            .expect("Generator should have a type");
-
-        assert_eq!(
-            statement_type,
-            Either::Static(
-                StaticType::Generator(GeneratorType {
-                    item: Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
-                    ))
-                })
-                .into()
-            )
-        )
-    }
-
-    #[test]
-    fn valid_generator_complex() {
-        let statement = Generator::parse(
-            r##"
-                for i in 0..10 {
-                    if true {
-                        yield i;
-                    }
-                }
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        let statement_type = statement
-            .metadata
-            .signature()
-            .expect("Generator should have a type");
-
-        assert_eq!(
-            statement_type,
-            Either::Static(
-                StaticType::Generator(GeneratorType {
-                    item: Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
-                    ))
-                })
-                .into()
-            )
-        )
-    }
-
-    #[test]
-    fn valid_generator_double() {
-        let statement = Generator::parse(
-            r##"
-                for i in 0..10 {
-                    for j in 0..10 {
-                        yield i + j;
-                    }
-                }
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        let statement_type = statement
-            .metadata
-            .signature()
-            .expect("Generator should have a type");
-
-        assert_eq!(
-            statement_type,
-            Either::Static(
-                StaticType::Generator(GeneratorType {
-                    item: Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
-                    ))
-                })
-                .into()
-            )
-        )
     }
 }
