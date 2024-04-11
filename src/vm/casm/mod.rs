@@ -126,6 +126,7 @@ pub enum Casm {
     Platform(platform::LibCasm),
     StackFrame(alloc::StackFrame),
     Alloc(alloc::Alloc),
+    Realloc(alloc::Realloc),
     MemCopy(memcopy::MemCopy),
     Operation(operation::Operation),
     Serialize(serialize::Serialized),
@@ -164,6 +165,7 @@ impl Executable for Casm {
                 thread.env.program.incr();
                 Ok(())
             }
+            Casm::Realloc(value) => value.execute(thread),
         }
     }
 }

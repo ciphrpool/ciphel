@@ -4,6 +4,7 @@ use nom::{
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
+use nom_supreme::ParserExt;
 
 use crate::{
     ast::{
@@ -34,7 +35,7 @@ impl<Scope: ScopeApi> TryParse for Declaration<Scope> {
             wst(lexem::LET),
             alt((
                 map(
-                    terminated(TypedVar::parse, wst(lexem::SEMI_COLON)),
+                    terminated(TypedVar::parse, wst(lexem::SEMI_COLON)).context("expected a ;"),
                     |value| Declaration::Declared(value),
                 ),
                 map(

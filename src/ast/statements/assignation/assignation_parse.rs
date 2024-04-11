@@ -3,6 +3,7 @@ use nom::{
     combinator::map,
     sequence::{separated_pair, terminated},
 };
+use nom_supreme::ParserExt;
 
 use crate::{
     ast::{
@@ -56,7 +57,7 @@ impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
                     AssignValue::Expr(Box::new(value))
                 }),
             )),
-            wst(lexem::SEMI_COLON),
+            wst(lexem::SEMI_COLON).context("expected a ;"),
         )(input)
     }
 }

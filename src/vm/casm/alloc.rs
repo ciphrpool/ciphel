@@ -17,7 +17,7 @@ use crate::{
 use std::{cell::Cell, mem};
 #[derive(Debug, Clone)]
 pub enum Alloc {
-    Heap { size: usize },
+    Heap { size: Option<usize> },
     Stack { size: usize },
 }
 
@@ -25,7 +25,14 @@ impl Executable for Alloc {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
-                let address = thread.runtime.heap.alloc(*size).map_err(|e| e.into())?;
+                let size = match size {
+                    Some(size) => *size,
+                    None => {
+                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        size as usize
+                    }
+                };
+                let address = thread.runtime.heap.alloc(size).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = (address as u64).to_le_bytes().to_vec();
@@ -39,6 +46,36 @@ impl Executable for Alloc {
                 Ok(())
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Realloc {
+    pub size: Option<usize>,
+}
+
+impl Executable for Realloc {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let size = match self.size {
+            Some(size) => size,
+            None => {
+                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                size as usize
+            }
+        };
+
+        let heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())? - 8;
+        let address = thread
+            .runtime
+            .heap
+            .realloc(heap_address as usize, size)
+            .map_err(|e| e.into())?;
+        let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+
+        let data = (address as u64).to_le_bytes().to_vec();
+        let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
+        thread.env.program.incr();
+        Ok(())
     }
 }
 

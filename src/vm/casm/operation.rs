@@ -7,7 +7,7 @@ use crate::{
         EType, Either, SizeOf,
     },
     vm::{
-        allocator::{Memory, MemoryAddress},
+        allocator::{align, Memory, MemoryAddress},
         scheduler::Thread,
         vm::{CodeGenerationError, Executable, Runtime, RuntimeError},
     },
@@ -36,6 +36,7 @@ impl Executable for Operation {
 
 #[derive(Debug, Clone)]
 pub enum OperationKind {
+    Align,
     Mult(Mult),
     Div(Division),
     Mod(Mod),
@@ -198,6 +199,15 @@ impl Executable for OperationKind {
             OperationKind::LogicalOr(value) => value.execute(thread),
             OperationKind::Minus(value) => value.execute(thread),
             OperationKind::Not(value) => value.execute(thread),
+            OperationKind::Align => {
+                let num = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let aligned_num = align(num as usize) as u64;
+                thread
+                    .env
+                    .stack
+                    .push_with(&aligned_num.to_le_bytes())
+                    .map_err(|e| e.into())
+            }
         }
     }
 }

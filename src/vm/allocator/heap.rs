@@ -408,7 +408,6 @@ impl Heap {
 
     pub fn alloc(&self, size: usize) -> Result<Pointer, HeapError> {
         let aligned_size = BlockData::fit(align(size));
-
         let Some(block) = self.best_fit(aligned_size)? else {
             return Err(HeapError::AllocationError);
         };
@@ -488,7 +487,29 @@ impl Heap {
         }
 
         let address = block.pointer + STACK_SIZE;
+
         Ok(address)
+    }
+
+    pub fn realloc(&self, address: Pointer, size: usize) -> Result<Pointer, HeapError> {
+        if address < STACK_SIZE {
+            return Err(HeapError::ReadError);
+        }
+        let address = address - STACK_SIZE;
+        let block = {
+            let binding = self.heap.borrow();
+            let borrowed = binding.as_ref();
+            Block::read(borrowed, address)?
+        };
+        let prev_size = block.data_size();
+        let data = self.read(address + STACK_SIZE + 8, prev_size)?;
+
+        let _ = self.free(address + STACK_SIZE)?;
+
+        let new_address = self.alloc(size)?;
+        let _ = self.write(new_address + 8, &data)?;
+
+        Ok(new_address)
     }
 
     pub fn free(&self, address: Pointer) -> Result<(), HeapError> {

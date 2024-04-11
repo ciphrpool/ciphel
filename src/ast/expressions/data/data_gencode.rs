@@ -1136,7 +1136,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
 
         // Alloc and push heap address on stack
         instructions.push(Casm::Alloc(Alloc::Heap {
-            size: item_size * self.capacity + 16,
+            size: Some(item_size * self.capacity + 16),
         }));
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
@@ -1242,7 +1242,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
                     size: var_size,
                 }));
             }
-            instructions.push(Casm::Alloc(Alloc::Heap { size: alloc_size }));
+            instructions.push(Casm::Alloc(Alloc::Heap {
+                size: Some(alloc_size),
+            }));
             instructions.push(Casm::MemCopy(MemCopy::TakeToHeap { size: alloc_size }));
         }
 

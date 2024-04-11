@@ -10,7 +10,7 @@ use crate::{
 };
 
 use self::{
-    alloc::{AllocCasm, AllocFn},
+    alloc::AllocFn,
     chan::{ChanCasm, ChanFn},
     cursor::{CursorCasm, CursorFn},
     thread::{ThreadCasm, ThreadFn},
@@ -33,7 +33,6 @@ pub enum CoreFn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreCasm {
-    Alloc(AllocCasm),
     Thread(ThreadCasm),
     Chan(ChanCasm),
     Cursor(CursorCasm),

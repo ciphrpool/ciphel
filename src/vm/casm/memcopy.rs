@@ -76,6 +76,7 @@ impl Executable for MemCopy {
             }
             MemCopy::Take { size } => {
                 let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
                 if address < STACK_SIZE as u64 {
                     let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
                     let _ = thread
@@ -85,6 +86,7 @@ impl Executable for MemCopy {
                         .map_err(|e| e.into())?;
                 } else {
                     let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
+
                     let _ = thread
                         .runtime
                         .heap

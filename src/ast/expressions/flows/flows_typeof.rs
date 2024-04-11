@@ -97,8 +97,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {
-                if let Some(api) = Lib::from(id) {
-                    return api.type_of(scope);
+                let borrow = self.platform.as_ref().borrow();
+                match borrow.as_ref() {
+                    Some(api) => return api.type_of(scope),
+                    None => {}
                 }
             }
             _ => {}
