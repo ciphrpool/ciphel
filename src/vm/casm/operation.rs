@@ -37,6 +37,7 @@ impl Executable for Operation {
 #[derive(Debug, Clone)]
 pub enum OperationKind {
     Align,
+    CastCharToUTF8,
     Mult(Mult),
     Div(Division),
     Mod(Mod),
@@ -206,6 +207,17 @@ impl Executable for OperationKind {
                     .env
                     .stack
                     .push_with(&aligned_num.to_le_bytes())
+                    .map_err(|e| e.into())
+            }
+            OperationKind::CastCharToUTF8 => {
+                let chara = OpPrimitive::get_char(&thread.memory())?;
+                let chara = chara.to_string();
+                let chara = chara.as_bytes();
+                let _ = thread.env.stack.push_with(chara).map_err(|e| e.into())?;
+                thread
+                    .env
+                    .stack
+                    .push_with(&(chara.len() as u64).to_le_bytes())
                     .map_err(|e| e.into())
             }
         }

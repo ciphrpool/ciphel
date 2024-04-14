@@ -16,6 +16,7 @@ pub const APPEND: &str = "append";
 pub const INSERT: &str = "insert";
 pub const DELETE: &str = "delete";
 pub const FREE: &str = "free";
+pub const ALLOC: &str = "alloc";
 pub const VEC: &str = "vec";
 pub const MAP: &str = "map";
 pub const CHAN: &str = "chan";

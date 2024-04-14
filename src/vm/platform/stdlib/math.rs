@@ -2,7 +2,6 @@ use std::cell::Ref;
 
 use crate::semantic::TypeOf;
 use crate::vm::platform::utils::lexem;
-use crate::vm::platform::GenerateCodePlatform;
 use crate::{
     ast::expressions::Expression,
     semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError},
@@ -49,12 +48,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MathFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for MathFn {
+impl<Scope: ScopeApi> GenerateCode<Scope> for MathFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
-        params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

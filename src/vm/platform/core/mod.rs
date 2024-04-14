@@ -5,18 +5,17 @@ use crate::{
     semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
-        vm::{CodeGenerationError, GenerateCode},
+        scheduler::Thread,
+        vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
 
 use self::{
-    alloc::AllocFn,
+    alloc::{AllocCasm, AllocFn},
     chan::{ChanCasm, ChanFn},
     cursor::{CursorCasm, CursorFn},
     thread::{ThreadCasm, ThreadFn},
 };
-
-use super::GenerateCodePlatform;
 
 pub mod alloc;
 pub mod chan;
@@ -33,6 +32,7 @@ pub enum CoreFn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreCasm {
+    Alloc(AllocCasm),
     Thread(ThreadCasm),
     Chan(ChanCasm),
     Cursor(CursorCasm),
@@ -90,18 +90,28 @@ impl<Scope: ScopeApi> TypeOf<Scope> for CoreFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for CoreFn {
+impl<Scope: ScopeApi> GenerateCode<Scope> for CoreFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
-        params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            CoreFn::Alloc(value) => value.gencode(scope, instructions, params_size),
-            CoreFn::Thread(value) => value.gencode(scope, instructions, params_size),
-            CoreFn::Chan(value) => value.gencode(scope, instructions, params_size),
-            CoreFn::Cursor(value) => value.gencode(scope, instructions, params_size),
+            CoreFn::Alloc(value) => value.gencode(scope, instructions),
+            CoreFn::Thread(value) => value.gencode(scope, instructions),
+            CoreFn::Chan(value) => value.gencode(scope, instructions),
+            CoreFn::Cursor(value) => value.gencode(scope, instructions),
+        }
+    }
+}
+
+impl Executable for CoreCasm {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        match self {
+            CoreCasm::Alloc(value) => value.execute(thread),
+            CoreCasm::Thread(value) => todo!(),
+            CoreCasm::Chan(value) => todo!(),
+            CoreCasm::Cursor(value) => todo!(),
         }
     }
 }

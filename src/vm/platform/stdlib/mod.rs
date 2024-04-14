@@ -7,7 +7,7 @@ use crate::{
         allocator::Memory,
         casm::CasmProgram,
         scheduler::Thread,
-        vm::{CodeGenerationError, Executable, Runtime, RuntimeError},
+        vm::{CodeGenerationError, Executable, GenerateCode, Runtime, RuntimeError},
     },
 };
 
@@ -16,8 +16,6 @@ use self::{
     math::{MathCasm, MathFn},
     strings::{StringsCasm, StringsFn},
 };
-
-use super::GenerateCodePlatform;
 
 pub mod io;
 pub mod math;
@@ -83,17 +81,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StdFn {
         }
     }
 }
-impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for StdFn {
+impl<Scope: ScopeApi> GenerateCode<Scope> for StdFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
-        params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            StdFn::IO(value) => value.gencode(scope, instructions, params_size),
-            StdFn::Math(value) => value.gencode(scope, instructions, params_size),
-            StdFn::Strings(value) => value.gencode(scope, instructions, params_size),
+            StdFn::IO(value) => value.gencode(scope, instructions),
+            StdFn::Math(value) => value.gencode(scope, instructions),
+            StdFn::Strings(value) => value.gencode(scope, instructions),
         }
     }
 }

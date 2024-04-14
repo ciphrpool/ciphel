@@ -378,13 +378,19 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
         };
         let _ = self.left.gencode(scope, instructions)?;
 
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Cast(Cast {
-                from: left_type.try_into()?,
-                to: right_type.try_into()?,
-            }),
-            // result: OpPrimitive::Number(NumberType::U64),
-        }));
+        let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
+        let op_right_type: Result<OpPrimitive, CodeGenerationError> = right_type.try_into();
+
+        if op_left_type.is_ok() && op_right_type.is_ok() {
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Cast(Cast {
+                    from: op_left_type.unwrap(),
+                    to: op_right_type.unwrap(),
+                }),
+                // result: OpPrimitive::Number(NumberType::U64),
+            }));
+        }
+
         Ok(())
     }
 }

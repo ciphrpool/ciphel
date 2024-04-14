@@ -78,32 +78,22 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Lib {
     }
 }
 
-pub trait GenerateCodePlatform<Scope: ScopeApi> {
+impl<Scope: ScopeApi> GenerateCode<Scope> for Lib {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
-        params_size: usize,
-    ) -> Result<(), CodeGenerationError>;
-}
-
-impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for Lib {
-    fn gencode(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-        params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Lib::Core(value) => value.gencode(scope, instructions, params_size),
-            Lib::Std(value) => value.gencode(scope, instructions, params_size),
+            Lib::Core(value) => value.gencode(scope, instructions),
+            Lib::Std(value) => value.gencode(scope, instructions),
         }
     }
 }
 impl Executable for LibCasm {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
-            LibCasm::Core(_) => todo!(),
+            LibCasm::Core(value) => value.execute(thread),
             LibCasm::Std(value) => value.execute(thread),
         }
     }

@@ -80,6 +80,26 @@ impl Executable for Realloc {
 }
 
 #[derive(Debug, Clone)]
+pub struct Free();
+
+impl Executable for Free {
+    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        let address = OpPrimitive::get_num8::<u64>(&thread.memory())? - 8;
+        if address < STACK_SIZE as u64 {
+            todo!("Decide wether runtime error or noop");
+        } else {
+            thread
+                .runtime
+                .heap
+                .free(address as usize)
+                .map_err(|e| e.into())?;
+        }
+        thread.env.program.incr();
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum StackFrame {
     Yield { return_size: Option<usize> },
     LastYield { next_label: Ulid },

@@ -6,7 +6,7 @@ use super::{
     VarID, Variable, Vector,
 };
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType};
+use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, RangeType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
@@ -723,16 +723,49 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
-        let mut borrowed_metadata = self
-            .metadata
-            .info
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| SemanticError::Default)?;
-        *borrowed_metadata = Info::Resolved {
-            context: context.clone(),
-            signature: context.clone(),
-        };
+
+        let address_type = self.value.type_of(&scope.borrow())?;
+        match &address_type {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Address(AddrType(sub)) => {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(sub.as_ref().clone()),
+                    };
+                }
+                _ => {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(Either::Static(StaticType::Any.into())),
+                    };
+                }
+            },
+            _ => {
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(Either::Static(StaticType::Any.into())),
+                };
+            }
+        }
+
         Ok(())
     }
 }

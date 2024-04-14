@@ -37,6 +37,7 @@ impl Into<RuntimeError> for HeapError {
 pub struct Heap {
     heap: MutRc<[u8; HEAP_SIZE]>,
     first_freed_block_offset: Cell<usize>,
+    allocated_size: Cell<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -299,6 +300,7 @@ impl Block {
             };
             BlockData::read_free(data_previous, data_next)
         };
+
         let Ok(block_end) = TryInto::<&[u8; 8]>::try_into(
             &buffer[offset + block_header.size as usize - 8..offset + block_header.size as usize],
         ) else {
@@ -346,6 +348,7 @@ impl Heap {
         let res = Self {
             heap: Rc::new(RefCell::new([0; HEAP_SIZE])),
             first_freed_block_offset: Cell::new(0),
+            allocated_size: Cell::new(0),
         };
         {
             // Store the header and the footer of the heap as freed
@@ -359,6 +362,10 @@ impl Heap {
             borrowed[HEAP_SIZE - 8..HEAP_SIZE].copy_from_slice(&HEAP_SIZE.to_be_bytes());
         }
         res
+    }
+
+    pub fn allocated_size(&self) -> usize {
+        self.allocated_size.get()
     }
 
     fn best_fit(&self, aligned_size: usize) -> Result<Option<Block>, HeapError> {
@@ -487,7 +494,8 @@ impl Heap {
         }
 
         let address = block.pointer + STACK_SIZE;
-
+        self.allocated_size
+            .set(self.allocated_size.get() + aligned_size);
         Ok(address)
     }
 
@@ -526,6 +534,9 @@ impl Heap {
         if !block.header.allocated {
             return Err(HeapError::FreeError);
         }
+
+        let freed_size = block.data_size();
+
         let block = {
             let binding = self.heap.borrow();
             let borrowed = binding.as_ref();
@@ -715,6 +726,9 @@ impl Heap {
             }
         }
 
+        self.allocated_size
+            .set(self.allocated_size.get() - freed_size);
+
         Ok(())
     }
 
@@ -724,6 +738,7 @@ impl Heap {
         /*offset: usize,*/ size: usize,
     ) -> Result<Vec<u8>, HeapError> {
         if address < STACK_SIZE {
+            dbg!("here");
             return Err(HeapError::ReadError);
         }
         let address = address - STACK_SIZE;
@@ -739,6 +754,7 @@ impl Heap {
         //     return Err(HeapError::InvalidPointer);
         // }
         if address + size >= HEAP_SIZE {
+            dbg!("here 2");
             return Err(HeapError::ReadError);
         }
         let res = {
@@ -898,9 +914,12 @@ impl Heap {
 
     pub fn write(&self, address: Pointer, data: &Vec<u8>) -> Result<(), HeapError> {
         if address < STACK_SIZE {
-            return Err(HeapError::ReadError);
+            return Err(HeapError::WriteError);
         }
         let address = address - STACK_SIZE;
+        if address + data.len() > HEAP_SIZE {
+            return Err(HeapError::WriteError);
+        }
         // let block = {
         //     let binding = self.heap.borrow();
         //     let borrowed = binding.as_ref();

@@ -11,7 +11,7 @@ use crate::vm::casm::branch::Label;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
-use crate::vm::platform::{GenerateCodePlatform, LibCasm};
+use crate::vm::platform::LibCasm;
 use crate::vm::scheduler::Thread;
 use crate::vm::vm::{DeserializeFrom, Executable, Printer, Runtime, RuntimeError};
 use crate::{
@@ -107,12 +107,11 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IOFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCodePlatform<Scope> for IOFn {
+impl<Scope: ScopeApi> GenerateCode<Scope> for IOFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
-        params_size: usize,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IOFn::Print(inner) => {

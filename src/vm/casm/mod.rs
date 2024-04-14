@@ -127,6 +127,7 @@ pub enum Casm {
     StackFrame(alloc::StackFrame),
     Alloc(alloc::Alloc),
     Realloc(alloc::Realloc),
+    Free(alloc::Free),
     MemCopy(memcopy::MemCopy),
     Operation(operation::Operation),
     Serialize(serialize::Serialized),
@@ -166,6 +167,7 @@ impl Executable for Casm {
                 Ok(())
             }
             Casm::Realloc(value) => value.execute(thread),
+            Casm::Free(value) => value.execute(thread),
         }
     }
 }

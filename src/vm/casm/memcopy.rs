@@ -18,6 +18,7 @@ use std::{cell::Cell, os::raw::c_uint};
 
 #[derive(Debug, Clone)]
 pub enum MemCopy {
+    MemCopy,
     Dup(usize),
     DumpRegisters,
     RecoverRegisters,
@@ -76,7 +77,6 @@ impl Executable for MemCopy {
             }
             MemCopy::Take { size } => {
                 let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-
                 if address < STACK_SIZE as u64 {
                     let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
                     let _ = thread
@@ -86,7 +86,6 @@ impl Executable for MemCopy {
                         .map_err(|e| e.into())?;
                 } else {
                     let data = thread.env.stack.pop(*size).map_err(|e| e.into())?;
-
                     let _ = thread
                         .runtime
                         .heap
@@ -194,7 +193,80 @@ impl Executable for MemCopy {
                     let _ = thread.env.stack.set_reg(reg, idx);
                 }
             }
-        }
+            MemCopy::MemCopy => {
+                let size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let from_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let to_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let from_address = {
+                    if from_address < STACK_SIZE as u64 {
+                        MemoryAddress::Stack {
+                            offset: Offset::SB(from_address as usize),
+                            level: AccessLevel::General,
+                        }
+                    } else {
+                        MemoryAddress::Heap {
+                            offset: from_address as usize,
+                        }
+                    }
+                };
+
+                let from_data = match from_address {
+                    MemoryAddress::Heap { offset } => {
+                        // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                        let bytes = thread
+                            .runtime
+                            .heap
+                            .read(offset, size)
+                            .map_err(|err| err.into())?;
+                        bytes
+                    }
+                    MemoryAddress::Stack { offset, level } => {
+                        if let Offset::FE(stack_idx, heap_udx) = offset {
+                            let heap_address = thread
+                                .env
+                                .stack
+                                .read(Offset::FP(stack_idx), level, 8)
+                                .map_err(|err| err.into())?;
+                            let data = TryInto::<&[u8; 8]>::try_into(heap_address.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let heap_address = u64::from_le_bytes(*data);
+
+                            let bytes = thread
+                                .runtime
+                                .heap
+                                .read(heap_address as usize + heap_udx, size)
+                                .map_err(|err| err.into())?;
+                            bytes
+                        } else {
+                            let bytes = thread
+                                .env
+                                .stack
+                                .read(offset, level, size)
+                                .map_err(|err| err.into())?;
+                            bytes
+                        }
+                    }
+                };
+                if to_address < STACK_SIZE as u64 {
+                    let _ = thread
+                        .env
+                        .stack
+                        .write(
+                            Offset::SB(to_address as usize),
+                            AccessLevel::General,
+                            &from_data,
+                        )
+                        .map_err(|e| e.into())?;
+                } else {
+                    let _ = thread
+                        .runtime
+                        .heap
+                        .write(to_address as usize, &from_data)
+                        .map_err(|e| e.into())?;
+                }
+            }
+        };
 
         thread.env.program.incr();
         Ok(())

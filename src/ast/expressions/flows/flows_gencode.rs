@@ -27,7 +27,7 @@ use crate::{
             serialize::Serialized,
             Casm, CasmProgram,
         },
-        platform::{self, GenerateCodePlatform, Lib},
+        platform::{self, Lib},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -329,7 +329,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
             for param in &self.params {
                 let _ = param.gencode(scope, instructions)?;
             }
-            platform_api.gencode(scope, instructions, params_size)
+            platform_api.gencode(scope, instructions)
         } else {
             let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);

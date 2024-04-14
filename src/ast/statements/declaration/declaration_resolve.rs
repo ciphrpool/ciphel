@@ -99,7 +99,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
             Declaration::Assigned { left, right } => {
                 let _ = right.resolve(scope, &None, extra)?;
                 let right_type = right.type_of(&scope.borrow())?;
-
                 let vars = left.resolve(scope, &Some(right_type), &())?;
                 for var in vars {
                     let _ = scope.borrow_mut().register_var(var)?;
