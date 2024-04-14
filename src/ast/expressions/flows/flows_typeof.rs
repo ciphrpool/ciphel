@@ -4,7 +4,10 @@ use crate::{
     ast::expressions::data::{VarID, Variable},
     semantic::{
         scope::{
-            static_types::StaticType, type_traits::GetSubTypes, user_type_impl::UserType, ScopeApi,
+            static_types::{NumberType, PrimitiveType, StaticType},
+            type_traits::GetSubTypes,
+            user_type_impl::UserType,
+            ScopeApi,
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
@@ -24,6 +27,9 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
             ExprFlow::Match(value) => value.type_of(&scope),
             ExprFlow::Try(value) => value.type_of(&scope),
             ExprFlow::Call(value) => value.type_of(&scope),
+            ExprFlow::SizeOf(..) => Ok(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
         }
     }
 }

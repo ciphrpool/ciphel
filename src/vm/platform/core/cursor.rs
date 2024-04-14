@@ -44,7 +44,7 @@ impl CursorFn {
             lexem::SHOW => Some(CursorFn::Show),
             lexem::HIDE => Some(CursorFn::Hide),
             lexem::WRITE => Some(CursorFn::Write),
-            lexem::CLEAR => Some(CursorFn::Clear),
+            lexem::CLEAR_CELL => Some(CursorFn::Clear),
             _ => None,
         }
     }

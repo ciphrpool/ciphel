@@ -33,6 +33,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
             ExprFlow::Match(value) => value.resolve(scope, context, extra),
             ExprFlow::Try(value) => value.resolve(scope, context, extra),
             ExprFlow::Call(value) => value.resolve(scope, context, extra),
+            ExprFlow::SizeOf(value, metadata) => {
+                value.resolve(scope, &(), extra);
+                resolve_metadata!(metadata, self, scope, context);
+                Ok(())
+            }
         }
     }
 }

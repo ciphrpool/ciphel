@@ -11,7 +11,7 @@ use crate::{
             var_impl::VarState,
             ScopeApi,
         },
-        AccessLevel, Either, MutRc, SizeOf,
+        AccessLevel, Either, MutRc, SizeOf, TypeOf,
     },
     vm::{
         allocator::{
@@ -45,6 +45,16 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprFlow<Scope> {
             ExprFlow::Match(value) => value.gencode(scope, instructions),
             ExprFlow::Try(value) => value.gencode(scope, instructions),
             ExprFlow::Call(value) => value.gencode(scope, instructions),
+            ExprFlow::SizeOf(value, metadata) => {
+                let value = value
+                    .type_of(&scope.borrow())
+                    .map_err(|_| CodeGenerationError::UnresolvedError)?;
+
+                instructions.push(Casm::Serialize(Serialized {
+                    data: (value.size_of() as u64).to_le_bytes().to_vec(),
+                }));
+                Ok(())
+            }
         }
     }
 }

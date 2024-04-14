@@ -7,7 +7,10 @@ use nom_supreme::parser_ext::Value;
 use num_traits::ToBytes;
 
 use crate::{
-    ast::expressions::Expression,
+    ast::expressions::{
+        data::{Data, VarID, Variable},
+        Atomic, Expression,
+    },
     semantic::{
         scope::{
             static_types::{
@@ -46,6 +49,18 @@ pub enum AppendKind {
     String,
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum DeleteKind {
+    Vec,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ClearKind {
+    Vec,
+    String,
+    Map,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {
     Append {
@@ -53,7 +68,12 @@ pub enum AllocFn {
         append_kind: Cell<AppendKind>,
     },
     Insert,
-    Delete,
+    Delete {
+        item_size: Cell<usize>,
+        delete_kind: Cell<DeleteKind>,
+    },
+    Len,
+    Cap,
     Free,
     Alloc,
     Vec {
@@ -67,6 +87,16 @@ pub enum AllocFn {
         len: Cell<usize>,
         from_char: Cell<bool>,
     },
+
+    SizeOf {
+        size: Cell<usize>,
+    },
+
+    MemCopy,
+    Clear {
+        item_size: Cell<usize>,
+        clear_kind: Cell<ClearKind>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,7 +106,14 @@ pub enum AllocCasm {
     AppendStrSlice(usize),
     AppendString,
     Insert,
-    Delete,
+    DeleteVec(usize),
+
+    ClearVec(usize),
+    ClearString(usize),
+    ClearMap(usize),
+
+    Len,
+    Cap,
     Vec {
         item_size: usize,
         with_capacity: bool,
@@ -97,7 +134,12 @@ impl AllocFn {
                 append_kind: Cell::new(AppendKind::Vec),
             }),
             lexem::INSERT => Some(AllocFn::Insert),
-            lexem::DELETE => Some(AllocFn::Delete),
+            lexem::DELETE => Some(AllocFn::Delete {
+                item_size: Cell::new(0),
+                delete_kind: Cell::new(DeleteKind::Vec),
+            }),
+            lexem::LEN => Some(AllocFn::Len),
+            lexem::CAP => Some(AllocFn::Cap),
             lexem::FREE => Some(AllocFn::Free),
             lexem::VEC => Some(AllocFn::Vec {
                 with_capacity: Cell::new(false),
@@ -111,6 +153,12 @@ impl AllocFn {
                 from_char: Cell::new(false),
             }),
             lexem::ALLOC => Some(AllocFn::Alloc),
+            lexem::MEMCPY => Some(AllocFn::MemCopy),
+            lexem::CLEAR => Some(AllocFn::Clear {
+                item_size: Cell::new(0),
+                clear_kind: Cell::new(ClearKind::Vec),
+            }),
+            lexem::SIZEOF => Some(AllocFn::SizeOf { size: Cell::new(0) }),
             _ => None,
         }
     }
@@ -187,7 +235,65 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
                 }
             }
             AllocFn::Insert => todo!(),
-            AllocFn::Delete => todo!(),
+            AllocFn::Delete {
+                delete_kind,
+                item_size,
+            } => {
+                if extra.len() != 2 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let vector = &extra[0];
+                let index = &extra[1];
+
+                let _ = vector.resolve(scope, &None, &())?;
+                let mut vector_type = vector.type_of(&scope.borrow())?;
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Vec(_) => {
+                            let _ = index.resolve(
+                                scope,
+                                &Some(Either::Static(
+                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
+                                        .into(),
+                                )),
+                                &(),
+                            )?;
+                            let index_type = index.type_of(&scope.borrow())?;
+                            match &index_type {
+                                Either::Static(value) => match value.as_ref() {
+                                    StaticType::Primitive(PrimitiveType::Number(
+                                        NumberType::U64,
+                                    )) => {}
+                                    _ => return Err(SemanticError::IncorrectArguments),
+                                },
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            }
+                            let item_type = vector_type.get_item();
+                            delete_kind.set(DeleteKind::Vec);
+                            let Some(item_type) = item_type else {
+                                return Err(SemanticError::IncorrectArguments);
+                            };
+                            item_size.set(item_type.size_of());
+                            Ok(())
+                        }
+                        StaticType::Map(_) => {
+                            todo!();
+                            Ok(())
+                        }
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+            }
             AllocFn::Free => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -302,6 +408,156 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
                 }
                 Ok(())
             }
+            AllocFn::Len => {
+                if extra.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let address = &extra[0];
+
+                let _ = address.resolve(scope, &None, &())?;
+                let address_type = address.type_of(&scope.borrow())?;
+                match &address_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::String(_) => {}
+                        StaticType::Vec(_) => {}
+                        StaticType::Map(_) => {}
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(())
+            }
+            AllocFn::Cap => {
+                if extra.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let address = &extra[0];
+
+                let _ = address.resolve(scope, &None, &())?;
+                let address_type = address.type_of(&scope.borrow())?;
+                match &address_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::String(_) => {}
+                        StaticType::Vec(_) => {}
+                        StaticType::Map(_) => {}
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(())
+            }
+            AllocFn::SizeOf { size } => {
+                if extra.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let param = &extra[0];
+
+                let _ = param.resolve(scope, &None, &())?;
+                let param_type = param.type_of(&scope.borrow())?;
+
+                size.set(param_type.size_of());
+
+                Ok(())
+            }
+            AllocFn::MemCopy => {
+                if extra.len() != 3 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let dest = &extra[0];
+                let src = &extra[1];
+                let size = &extra[2];
+
+                let _ = dest.resolve(scope, &None, &())?;
+                let _ = src.resolve(scope, &None, &())?;
+                let dest_type = dest.type_of(&scope.borrow())?;
+                let src_type = src.type_of(&scope.borrow())?;
+                match &dest_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(_) => {}
+                        StaticType::String(_) => {}
+                        StaticType::Vec(_) => {}
+                        StaticType::Map(_) => {}
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                match &src_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(_) => {}
+                        StaticType::String(_) => {}
+                        StaticType::Vec(_) => {}
+                        StaticType::Map(_) => {}
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                let _ = size.resolve(
+                    scope,
+                    &Some(Either::Static(
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+                    )),
+                    &(),
+                )?;
+                let size_type = size.type_of(&scope.borrow())?;
+                match &size_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                Ok(())
+            }
+            AllocFn::Clear {
+                clear_kind,
+                item_size,
+            } => {
+                if extra.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let src = &extra[0];
+
+                let _ = src.resolve(scope, &None, &())?;
+                let src_type = src.type_of(&scope.borrow())?;
+
+                match &src_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(inner)) => match inner.as_ref() {
+                            Either::Static(value) => match value.as_ref() {
+                                StaticType::String(_) => {
+                                    clear_kind.set(ClearKind::String);
+                                    item_size.set(1);
+                                }
+                                StaticType::Vec(_) => {
+                                    clear_kind.set(ClearKind::Vec);
+                                    let item_type = src_type.get_item();
+                                    let Some(item_type) = item_type else {
+                                        return Err(SemanticError::IncorrectArguments);
+                                    };
+                                    item_size.set(item_type.size_of());
+                                }
+                                StaticType::Map(_) => {
+                                    clear_kind.set(ClearKind::Map);
+                                    let item_type = src_type.get_item();
+                                    let Some(item_type) = item_type else {
+                                        return Err(SemanticError::IncorrectArguments);
+                                    };
+                                    item_size.set(item_type.size_of());
+                                }
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            },
+                            _ => return Err(SemanticError::IncorrectArguments),
+                        },
+
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+
+                Ok(())
+            }
         }
     }
 }
@@ -314,7 +570,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AllocFn {
         match self {
             AllocFn::Append { .. } => Ok(Either::Static(StaticType::Unit.into())),
             AllocFn::Insert => todo!(),
-            AllocFn::Delete => todo!(),
+            AllocFn::Delete { .. } => Ok(Either::Static(StaticType::Unit.into())),
             AllocFn::Free => Ok(Either::Static(StaticType::Unit.into())),
             AllocFn::Vec { metadata, .. } => {
                 metadata.signature().ok_or(SemanticError::NotResolvedYet)
@@ -323,6 +579,17 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AllocFn {
             AllocFn::Chan => todo!(),
             AllocFn::String { .. } => Ok(Either::Static(StaticType::String(StringType()).into())),
             AllocFn::Alloc => Ok(Either::Static(StaticType::Any.into())),
+            AllocFn::Len => Ok(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            AllocFn::Cap => Ok(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            AllocFn::SizeOf { .. } => Ok(Either::Static(
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
+            )),
+            AllocFn::MemCopy => Ok(Either::Static(StaticType::Unit.into())),
+            AllocFn::Clear { .. } => Ok(Either::Static(StaticType::Unit.into())),
         }
     }
 }
@@ -352,9 +619,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AllocFn {
                 ))),
             },
             AllocFn::Insert => todo!(),
-            AllocFn::Delete => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Delete),
-            ))),
+            AllocFn::Delete {
+                delete_kind,
+                item_size,
+            } => match delete_kind.get() {
+                DeleteKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(item_size.get())),
+                ))),
+            },
             AllocFn::Free => {
                 instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
                 instructions.push(Casm::Free(Free()));
@@ -385,6 +657,33 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AllocFn {
             AllocFn::Alloc => {
                 instructions.push(Casm::Alloc(Alloc::Heap { size: None }));
             }
+            AllocFn::Len => instructions.push(Casm::Platform(LibCasm::Core(
+                super::CoreCasm::Alloc(AllocCasm::Len),
+            ))),
+            AllocFn::Cap => instructions.push(Casm::Platform(LibCasm::Core(
+                super::CoreCasm::Alloc(AllocCasm::Cap),
+            ))),
+            AllocFn::SizeOf { size } => {
+                instructions.push(Casm::Pop(size.get()));
+                instructions.push(Casm::Serialize(Serialized {
+                    data: size.get().to_le_bytes().to_vec(),
+                }));
+            }
+            AllocFn::MemCopy => instructions.push(Casm::MemCopy(MemCopy::MemCopy)),
+            AllocFn::Clear {
+                clear_kind,
+                item_size,
+            } => match clear_kind.get() {
+                ClearKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ClearVec(item_size.get())),
+                ))),
+                ClearKind::String => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ClearString(1)),
+                ))),
+                ClearKind::Map => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ClearMap(item_size.get())),
+                ))),
+            },
         }
         Ok(())
     }
@@ -709,7 +1008,76 @@ impl Executable for AllocCasm {
                     .map_err(|err| err.into())?;
             }
             AllocCasm::Insert => todo!(),
-            AllocCasm::Delete => todo!(),
+            AllocCasm::DeleteVec(item_size) => {
+                let index = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let item_size = *item_size as u64;
+                // let data_to_move_size = previous_len * item_size - (index + 1) * item_size;
+
+                if index < previous_len - 1
+                /* index not last item */
+                {
+                    /* move below */
+                    let data = thread
+                        .runtime
+                        .heap
+                        .read(
+                            vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
+                            (previous_len * item_size - (index + 1) * item_size) as usize,
+                        )
+                        .map_err(|e| e.into())?;
+                    let _ = thread
+                        .runtime
+                        .heap
+                        .write(
+                            vec_heap_address as usize + 16 + (index * item_size) as usize,
+                            &data,
+                        )
+                        .map_err(|e| e.into())?;
+                }
+                /* clear last item */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        vec_heap_address as usize + 16 + ((previous_len - 1) * item_size) as usize,
+                        &vec![0; item_size as usize],
+                    )
+                    .map_err(|e| e.into())?;
+
+                let len_bytes = (previous_len - 1).to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+            }
             AllocCasm::Vec {
                 item_size,
                 with_capacity,
@@ -841,6 +1209,90 @@ impl Executable for AllocCasm {
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
+            AllocCasm::Len => {
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                    .map_err(|_| RuntimeError::Deserialization)?;
+                let len = u64::from_le_bytes(*len_bytes);
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&len.to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
+            AllocCasm::Cap => {
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let cap_bytes = TryInto::<&[u8; 8]>::try_into(cap_bytes.as_slice())
+                    .map_err(|_| RuntimeError::Deserialization)?;
+                let cap = u64::from_le_bytes(*cap_bytes);
+
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&cap.to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
+            AllocCasm::ClearVec(item_size) | AllocCasm::ClearString(item_size) => {
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let item_size = *item_size as u64;
+
+                /* clear */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        vec_heap_address as usize + 16,
+                        &vec![0; (previous_len * item_size) as usize],
+                    )
+                    .map_err(|e| e.into())?;
+
+                let len_bytes = 0u64.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+            }
+            AllocCasm::ClearMap(_) => todo!(),
         }
 
         thread.env.program.incr();
@@ -1741,7 +2193,11 @@ fn gencode_string<Scope: ScopeApi>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{statements::Statement, TryParse},
+        ast::{
+            expressions::data::{Number, Primitive},
+            statements::Statement,
+            TryParse,
+        },
         clear_stack,
         semantic::scope::scope_impl::Scope,
         vm::vm::{DeserializeFrom, Runtime},
@@ -2209,7 +2665,6 @@ mod tests {
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        dbg!(&heap_address);
 
         let data_length = memory
             .heap
@@ -2219,7 +2674,7 @@ mod tests {
             TryInto::<[u8; 8]>::try_into(&data_length[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        dbg!(length);
+
         let data = memory
             .heap
             .read(heap_address, length + 16)
@@ -2231,6 +2686,177 @@ mod tests {
         assert_eq!(result.value, "Hello World");
     }
 
+    #[test]
+    fn valid_len_string() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x = string("Hello World");
+                return len(x);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(11))));
+    }
+
+    #[test]
+    fn valid_cap_string() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x = string("Hello World");
+                return cap(x);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+    }
+
+    #[test]
+    fn valid_len_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x : Vec<u64> = vec(11,16);
+                return len(x);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(11))));
+    }
+
+    #[test]
+    fn valid_cap_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x : Vec<u64> = vec(11,16);
+                return cap(x);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+    }
     #[test]
     fn valid_free() {
         let statement = Statement::parse(
@@ -2321,5 +2947,466 @@ mod tests {
                 .expect("heap address should be deserializable"),
         ) as usize;
         assert_eq!(data, 420);
+    }
+
+    #[test]
+    fn valid_delete_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
+                delete(&x,7);
+                return x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        assert_eq!(length, 7);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, 8 * length + 16)
+            .expect("Heap Read should have succeeded");
+        let data: Vec<u64> = data
+            .chunks(8)
+            .map(|chunk| {
+                u64::from_le_bytes(
+                    TryInto::<[u8; 8]>::try_into(&chunk[0..8])
+                        .expect("heap address should be deserializable"),
+                )
+            })
+            .collect();
+        assert_eq!(data, vec![7, 8, 1, 2, 3, 4, 5, 6, 7]);
+    }
+
+    #[test]
+    fn valid_delete_vec_inner() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
+                delete(&x,2);
+                return x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        assert_eq!(length, 7);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, 8 * length + 16)
+            .expect("Heap Read should have succeeded");
+        let data: Vec<u64> = data
+            .chunks(8)
+            .map(|chunk| {
+                u64::from_le_bytes(
+                    TryInto::<[u8; 8]>::try_into(&chunk[0..8])
+                        .expect("heap address should be deserializable"),
+                )
+            })
+            .collect();
+        assert_eq!(data, vec![7, 8, 1, 2, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn valid_sizeof_type() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                struct Point {
+                    x : u64,
+                    y : u64,
+                }
+                return sizeof(Point);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+    }
+
+    #[test]
+    fn valid_sizeof_expr() {
+        let statement = Statement::parse(
+            r##"
+            let res = sizeof(420u64);
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(8))));
+    }
+
+    #[test]
+    fn valid_memcpy_heap() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
+                let y:Vec<u64> = vec(8);
+                memcpy(y,x,8*8 + 16);
+                return y;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        assert_eq!(length, 8);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, 8 * length + 16)
+            .expect("Heap Read should have succeeded");
+        let data: Vec<u64> = data
+            .chunks(8)
+            .map(|chunk| {
+                u64::from_le_bytes(
+                    TryInto::<[u8; 8]>::try_into(&chunk[0..8])
+                        .expect("heap address should be deserializable"),
+                )
+            })
+            .collect();
+        assert_eq!(data, vec![8, 8, 1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn valid_memcpy_stack() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:[8]u64 = [1,2,3,4,5,6,7,8];
+                let y:[8]u64 = [0,0,0,0,0,0,0,0];
+                memcpy(&y,&x,8*8);
+                return y;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let data: Vec<u64> = data
+            .chunks(8)
+            .map(|chunk| {
+                u64::from_le_bytes(
+                    TryInto::<[u8; 8]>::try_into(&chunk[0..8])
+                        .expect("heap address should be deserializable"),
+                )
+            })
+            .collect();
+        assert_eq!(data, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn valid_clear_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
+                clear(&x);
+                return x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        assert_eq!(length, 0);
+
+        let data = memory
+            .heap
+            .read(heap_address as usize, 8 * 8 + 16)
+            .expect("Heap Read should have succeeded");
+        let data: Vec<u64> = data
+            .chunks(8)
+            .map(|chunk| {
+                u64::from_le_bytes(
+                    TryInto::<[u8; 8]>::try_into(&chunk[0..8])
+                        .expect("heap address should be deserializable"),
+                )
+            })
+            .collect();
+        assert_eq!(data, vec![0, 8, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn valid_clear_str() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x = string("Hello ");
+                clear(&x);
+                return x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+        let data = memory
+            .heap
+            .read(heap_address, 5 + 16)
+            .expect("length should be readable");
+
+        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "");
     }
 }

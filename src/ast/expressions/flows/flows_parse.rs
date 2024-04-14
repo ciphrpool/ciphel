@@ -13,6 +13,7 @@ use crate::{
             data::{ExprScope, Primitive, StrSlice, Variable},
             Expression,
         },
+        types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
@@ -21,6 +22,7 @@ use crate::{
         TryParse,
     },
     semantic::{scope::ScopeApi, Metadata},
+    vm,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
@@ -37,6 +39,13 @@ impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
             map(IfExpr::parse, |value| ExprFlow::If(value)),
             map(MatchExpr::parse, |value| ExprFlow::Match(value)),
             map(TryExpr::parse, |value| ExprFlow::Try(value)),
+            map(
+                preceded(
+                    wst(vm::platform::utils::lexem::SIZEOF),
+                    delimited(wst(lexem::PAR_O), Type::parse, wst(lexem::PAR_C)),
+                ),
+                |value| ExprFlow::SizeOf(value, Metadata::default()),
+            ),
             map(FnCall::parse, |value| ExprFlow::Call(value)),
         ))(input)
     }

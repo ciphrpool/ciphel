@@ -6,7 +6,7 @@ pub const UNLOCK: &str = "unlock";
 pub const SHOW: &str = "show";
 pub const HIDE: &str = "hide";
 pub const WRITE: &str = "write";
-pub const CLEAR: &str = "clear";
+pub const CLEAR_CELL: &str = "clear_cell";
 
 // ERROR
 pub const ERROR: &str = "error";
@@ -15,12 +15,17 @@ pub const ERROR: &str = "error";
 pub const APPEND: &str = "append";
 pub const INSERT: &str = "insert";
 pub const DELETE: &str = "delete";
+pub const LEN: &str = "len";
+pub const CAP: &str = "cap";
 pub const FREE: &str = "free";
 pub const ALLOC: &str = "alloc";
 pub const VEC: &str = "vec";
 pub const MAP: &str = "map";
 pub const CHAN: &str = "chan";
 pub const STRING: &str = "string";
+pub const MEMCPY: &str = "memcpy";
+pub const CLEAR: &str = "clear";
+pub const SIZEOF: &str = "sizeof";
 
 // THREADS
 pub const SPAWN: &str = "spawn";

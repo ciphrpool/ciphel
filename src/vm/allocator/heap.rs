@@ -738,7 +738,6 @@ impl Heap {
         /*offset: usize,*/ size: usize,
     ) -> Result<Vec<u8>, HeapError> {
         if address < STACK_SIZE {
-            dbg!("here");
             return Err(HeapError::ReadError);
         }
         let address = address - STACK_SIZE;
@@ -754,7 +753,6 @@ impl Heap {
         //     return Err(HeapError::InvalidPointer);
         // }
         if address + size >= HEAP_SIZE {
-            dbg!("here 2");
             return Err(HeapError::ReadError);
         }
         let res = {

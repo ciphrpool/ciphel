@@ -6,7 +6,7 @@ pub mod flows_typeof;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::utils::strings::ID,
+    ast::{types::Type, utils::strings::ID},
     semantic::{scope::ScopeApi, EType, Metadata},
     vm::platform::Lib,
 };
@@ -22,6 +22,7 @@ pub enum ExprFlow<InnerScope: ScopeApi> {
     Match(MatchExpr<InnerScope>),
     Try(TryExpr<InnerScope>),
     Call(FnCall<InnerScope>),
+    SizeOf(Type, Metadata),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +89,7 @@ impl<Scope: ScopeApi> ExprFlow<Scope> {
             ExprFlow::Match(MatchExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Try(TryExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Call(FnCall { metadata, .. }) => metadata.signature(),
+            ExprFlow::SizeOf(_, metadata) => metadata.signature(),
         }
     }
 }
