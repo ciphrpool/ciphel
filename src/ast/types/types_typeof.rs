@@ -37,6 +37,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Type {
                 let static_type = Either::Static(static_type.into());
                 Ok(static_type)
             }
+            Type::Any => {
+                let static_type = Either::Static(StaticType::Any.into());
+                Ok(static_type)
+            }
             Type::Address(value) => value.type_of(&scope),
             Type::Map(value) => value.type_of(&scope),
             Type::String(value) => value.type_of(&scope),

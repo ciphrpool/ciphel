@@ -233,6 +233,43 @@ pub enum KeyData<InnerScope: ScopeApi> {
 }
 
 impl<Scope: ScopeApi> Data<Scope> {
+    pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            Data::Primitive(_) => None,
+            Data::Slice(Slice { value, metadata }) => Some(metadata),
+            Data::Vec(Vector {
+                value,
+                metadata,
+                length,
+                capacity,
+            }) => Some(metadata),
+            Data::Closure(Closure { metadata, .. }) => Some(metadata),
+            Data::Tuple(Tuple { value, metadata }) => Some(metadata),
+            Data::Address(Address { value, metadata }) => Some(metadata),
+            Data::PtrAccess(PtrAccess { value, metadata }) => Some(metadata),
+            Data::Variable(v) => v.metadata(),
+            Data::Unit => None,
+            Data::Map(Map { fields, metadata }) => Some(metadata),
+            Data::Struct(Struct {
+                id,
+                fields,
+                metadata,
+            }) => Some(metadata),
+            Data::Union(Union {
+                typename,
+                variant,
+                fields,
+                metadata,
+            }) => Some(metadata),
+            Data::Enum(Enum {
+                typename,
+                value,
+                metadata,
+            }) => Some(metadata),
+            Data::StrSlice(StrSlice { value, metadata }) => Some(metadata),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Data::Primitive(value) => match value {

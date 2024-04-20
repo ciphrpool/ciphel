@@ -2310,6 +2310,51 @@ mod tests {
     }
 
     #[test]
+    fn valid_vec_modify() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let arr : Vec<u64> = vec(8);
+
+                arr[2] = 420;
+                
+                return arr[2];
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+    }
+    #[test]
     fn valid_append() {
         let statement = Statement::parse(
             r##"
@@ -3408,5 +3453,113 @@ mod tests {
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "");
+    }
+
+    #[test]
+    fn valid_alloc_cast() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                struct Point {
+                    x : i64,
+                    y: i64
+                }
+
+                let point_any : &Any = alloc(sizeof(Point)) as &Any;
+
+                let copy = Point {
+                    x : 420,
+                    y : 69,
+                };
+                memcpy(point_any,&copy,sizeof(Point));
+                
+                let point = *point_any as Point;
+                
+                return point.x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+    }
+
+    #[test]
+    fn valid_alloc_modify() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                struct Point {
+                    x : i64,
+                    y: i64
+                }
+
+                let point : &Point = alloc(sizeof(Point)) as &Point;
+
+                point.x = 420;
+                
+                return point.x;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
     }
 }

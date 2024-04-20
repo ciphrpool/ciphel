@@ -356,12 +356,12 @@ impl ScopeApi for Scope {
                         borrowed_scope.find_type(id).ok()
                     }
                 })
-                .ok_or(SemanticError::UnknownVar(id.clone())),
+                .ok_or(SemanticError::UnknownType(id.clone())),
             Scope::General { data, .. } => data
                 .types
                 .get(id)
                 .cloned()
-                .ok_or(SemanticError::UnknownType),
+                .ok_or(SemanticError::UnknownType(id.clone())),
         }
     }
     fn find_event(&self) -> Result<&Event, SemanticError> {

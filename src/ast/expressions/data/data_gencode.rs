@@ -15,7 +15,7 @@ use crate::{
             user_type_impl::UserType,
             ScopeApi,
         },
-        AccessLevel, EType, Either, MutRc, SizeOf,
+        AccessLevel, EType, Either, Metadata, MutRc, SizeOf,
     },
     vm::{
         allocator::{
@@ -591,7 +591,26 @@ impl<Scope: ScopeApi> Variable<Scope> {
             }) => metadata.signature(),
         }
     }
-
+    pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            Variable::Var(VarID { id: _, metadata }) => Some(metadata),
+            Variable::FieldAccess(FieldAccess {
+                var: _,
+                field,
+                metadata,
+            }) => Some(metadata),
+            Variable::NumAccess(NumAccess {
+                var: _,
+                index: _,
+                metadata,
+            }) => Some(metadata),
+            Variable::ListAccess(ListAccess {
+                var: _,
+                index: _,
+                metadata,
+            }) => Some(metadata),
+        }
+    }
     fn name(&self) -> &ID {
         match self {
             Variable::Var(VarID { id, metadata: _ }) => id,
@@ -1269,15 +1288,19 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.gencode(scope, instructions)?;
-
-        instructions.push(Casm::Access(Access::Runtime {
-            size: Some(
-                self.metadata
-                    .signature()
-                    .ok_or(CodeGenerationError::UnresolvedError)?
-                    .size_of(),
-            ),
-        }));
+        let mut size = self
+            .metadata
+            .signature()
+            .ok_or(CodeGenerationError::UnresolvedError)?
+            .size_of();
+        if size == 0 {
+            size = self
+                .metadata
+                .context()
+                .ok_or(CodeGenerationError::UnresolvedError)?
+                .size_of();
+        }
+        instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
 
         Ok(())
     }

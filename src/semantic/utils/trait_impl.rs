@@ -4,7 +4,7 @@ use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
         scope::{
-            static_types::{self, StaticType},
+            static_types::{self, AddrType, StaticType},
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
             user_type_impl::{self, UserType},
             ScopeApi,
@@ -191,13 +191,19 @@ impl GetSubTypes for EType {
 
     fn get_field(&self, field_id: &ID) -> Option<EType> {
         match self {
-            Either::Static(_) => None,
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Address(AddrType(value)) => value.get_field(field_id),
+                _ => None,
+            },
             Either::User(user_type) => user_type.get_field(field_id),
         }
     }
     fn get_variant(&self, field_id: &ID) -> Option<EType> {
         match self {
-            Either::Static(_) => None,
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Address(AddrType(value)) => value.get_variant(field_id),
+                _ => None,
+            },
             Either::User(user_type) => user_type.get_variant(field_id),
         }
     }
@@ -238,7 +244,10 @@ impl GetSubTypes for EType {
 
     fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
         match self {
-            Either::Static(_static_type) => None,
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Address(AddrType(value)) => value.get_field_offset(field_id),
+                _ => None,
+            },
             Either::User(user_type) => user_type.get_field_offset(field_id),
         }
     }

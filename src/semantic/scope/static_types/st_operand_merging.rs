@@ -348,6 +348,9 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
         Other: TypeOf<Scope>,
     {
         let other_type = other.type_of(&scope)?;
+        if let StaticType::Any = self {
+            return Ok(other_type);
+        }
         let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleOperands);
         };
@@ -473,7 +476,6 @@ impl<Scope: ScopeApi> OperandMerging<Scope> for StaticType {
                 StaticType::Unit => Ok(Either::Static(StaticType::Unit.into())),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
-            StaticType::Any => Ok(Either::Static(other_type)),
             StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
             _ => Err(SemanticError::IncompatibleOperands),
         }

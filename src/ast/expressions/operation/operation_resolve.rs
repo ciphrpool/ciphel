@@ -469,8 +469,21 @@ impl<Scope: ScopeApi> Resolve<Scope> for Cast<Scope> {
         Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, context, extra)?;
-
         let _ = self.right.resolve(scope, &(), extra)?;
+        if let Some(l_metadata) = self.left.metadata() {
+            let signature = l_metadata.signature();
+            let new_context = self.right.type_of(&scope.borrow())?;
+            let mut borrowed_metadata = l_metadata
+                .info
+                .as_ref()
+                .try_borrow_mut()
+                .map_err(|_| SemanticError::Default)?;
+
+            *borrowed_metadata = Info::Resolved {
+                context: Some(new_context),
+                signature,
+            };
+        }
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }

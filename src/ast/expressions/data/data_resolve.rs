@@ -725,6 +725,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
         let _ = self.value.resolve(scope, context, extra)?;
 
         let address_type = self.value.type_of(&scope.borrow())?;
+
         match &address_type {
             Either::Static(value) => match value.as_ref() {
                 StaticType::Address(AddrType(sub)) => {

@@ -1,7 +1,9 @@
 use crate::{
+    ast::expressions::Atomic,
     semantic::{
         scope::{
             static_types::{NumberType, RangeType, StaticType},
+            type_traits::TypeChecking,
             ScopeApi,
         },
         Either, MutRc, SizeOf, TypeOf,
@@ -376,6 +378,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
         let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
+
         let _ = self.left.gencode(scope, instructions)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();

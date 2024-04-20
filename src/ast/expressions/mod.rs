@@ -16,7 +16,7 @@ use crate::{
     },
     semantic::{
         scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
-        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+        EType, Either, Metadata, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
         casm::{Casm, CasmProgram},
@@ -250,6 +250,32 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
 }
 
 impl<Scope: ScopeApi> Expression<Scope> {
+    pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            Expression::Product(Product::Div { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mod { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mult { metadata, .. }) => Some(metadata),
+            Expression::Addition(Addition { metadata, .. }) => Some(metadata),
+            Expression::Substraction(Substraction { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Left { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Right { metadata, .. }) => Some(metadata),
+            Expression::BitwiseAnd(BitwiseAnd { metadata, .. }) => Some(metadata),
+            Expression::BitwiseXOR(BitwiseXOR { metadata, .. }) => Some(metadata),
+            Expression::BitwiseOR(BitwiseOR { metadata, .. }) => Some(metadata),
+            Expression::Cast(Cast { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Greater { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::GreaterEqual { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Less { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::LessEqual { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::Equal { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
+            Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
+            Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
+            Expression::Atomic(value) => value.metadata(),
+            Expression::Range(value) => value.metadata(),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Expression::Product(Product::Div { metadata, .. }) => metadata.signature(),
@@ -282,6 +308,17 @@ impl<Scope: ScopeApi> Expression<Scope> {
 }
 
 impl<Scope: ScopeApi> Atomic<Scope> {
+    pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            Atomic::Data(value) => value.metadata(),
+            Atomic::UnaryOperation(UnaryOperation::Minus { value, metadata }) => Some(metadata),
+            Atomic::UnaryOperation(UnaryOperation::Not { value, metadata }) => Some(metadata),
+            Atomic::Paren(value) => value.metadata(),
+            Atomic::ExprFlow(value) => value.metadata(),
+            Atomic::Error(value) => todo!(),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Atomic::Data(value) => value.signature(),

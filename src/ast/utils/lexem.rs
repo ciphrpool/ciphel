@@ -41,6 +41,7 @@ pub const STRING: &str = "string";
 pub const STR: &str = "str";
 pub const BOOL: &str = "bool";
 pub const UNIT: &str = "unit";
+pub const ANY: &str = "Any";
 pub const UUNIT: &str = "Unit";
 pub const UVEC: &str = "Vec";
 pub const UMAP: &str = "Map";

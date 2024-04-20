@@ -21,6 +21,7 @@ pub enum Type {
     Chan(ChanType),
     Tuple(TupleType),
     Unit,
+    Any,
     Address(AddrType),
     Map(MapType),
 }

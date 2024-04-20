@@ -36,6 +36,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
             Type::Chan(value) => value.resolve(scope, context, extra),
             Type::Tuple(value) => value.resolve(scope, context, extra),
             Type::Unit => Ok(()),
+            Type::Any => Ok(()),
             Type::Address(value) => value.resolve(scope, context, extra),
             Type::Map(value) => value.resolve(scope, context, extra),
             Type::String(value) => value.resolve(scope, context, extra),

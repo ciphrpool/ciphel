@@ -36,6 +36,10 @@ impl<Scope: ScopeApi> Range<Scope> {
     pub fn signature(&self) -> Option<EType> {
         self.metadata.signature()
     }
+
+    pub fn metadata(&self) -> Option<&Metadata> {
+        Some(&self.metadata)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -35,7 +35,7 @@ pub enum SemanticError {
     ExpectedMovedClosure,
 
     UnknownVar(ID),
-    UnknownType,
+    UnknownType(ID),
     UnknownField,
 
     DoubleInfinitRange,

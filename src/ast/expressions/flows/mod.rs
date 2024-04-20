@@ -83,6 +83,15 @@ pub struct FnCall<InnerScope: ScopeApi> {
 }
 
 impl<Scope: ScopeApi> ExprFlow<Scope> {
+    pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Call(FnCall { metadata, .. }) => Some(metadata),
+            ExprFlow::SizeOf(_, metadata) => Some(metadata),
+        }
+    }
     pub fn signature(&self) -> Option<EType> {
         match self {
             ExprFlow::If(IfExpr { metadata, .. }) => metadata.signature(),

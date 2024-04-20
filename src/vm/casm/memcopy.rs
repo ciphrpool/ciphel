@@ -198,6 +198,8 @@ impl Executable for MemCopy {
                 let from_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 let to_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
 
+                // dbg!(to_address, from_address, size);
+
                 let from_address = {
                     if from_address < STACK_SIZE as u64 {
                         MemoryAddress::Stack {
