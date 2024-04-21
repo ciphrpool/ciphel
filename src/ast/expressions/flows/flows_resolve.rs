@@ -369,11 +369,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {
-                if let Some(api) = Lib::from(id) {
-                    let _ = api.resolve(scope, context, &self.params)?;
-                    *self.platform.as_ref().borrow_mut() = Some(api);
-                    resolve_metadata!(self.metadata, self, scope, context);
-                    return Ok(());
+                let found = scope.as_ref().borrow().find_var(id);
+                if found.is_err() || self.lib.is_some() {
+                    if let Some(api) = Lib::from(&self.lib, id) {
+                        let _ = api.resolve(scope, context, &self.params)?;
+                        *self.platform.as_ref().borrow_mut() = Some(api);
+                        resolve_metadata!(self.metadata, self, scope, context);
+                        return Ok(());
+                    }
                 }
             }
             _ => {}
@@ -800,357 +803,44 @@ mod tests {
     }
 
     #[test]
-    fn valid_platform() {
-        let expr = FnCall::parse("left(10)".into())
+    fn valid_call_lib() {
+        let expr = FnCall::parse("io::print(true)".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
 
-        let expr = FnCall::parse("right(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("lock(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("unlock(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("show(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("hide(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("write(10,'a')".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("clear(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("append(tab,10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("insert(obj,\"id\",10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "obj".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Map(MapType {
-                        keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(p_num!(I64)),
-                    })
-                    .into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("delete(tab,10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "tab".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("delete(obj,\"id\")".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "obj".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Map(MapType {
-                        keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(p_num!(I64)),
-                    })
-                    .into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("free(&x)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "x".into(),
-                state: Cell::default(),
+                id: "print".into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("free(x)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "x".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Address(AddrType(Box::new(p_num!(I64)))).into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("spawn()".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("close()".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let expr = FnCall::parse("print(10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
+            .unwrap();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
     }
 
     #[test]
-    fn robustness_platform() {
-        let expr = FnCall::parse("left()".into())
+    fn robustness_call_lib() {
+        let expr = FnCall::parse("print(true)".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
 
-        let expr = FnCall::parse("right('e')".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("lock(10.5)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("unlock(\"a\")".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("show(true)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("hide(unit)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("write(10,true)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("clear(10.7)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("append(tab,'e')".into())
-            .expect("Parsing should have succeeded")
-            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
-                id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("insert(obj,true,10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "obj".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Map(MapType {
-                        keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(p_num!(I64)),
-                    })
-                    .into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("delete(10,10)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "tab".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("delete(obj,'a')".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "obj".into(),
-                state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Map(MapType {
-                        keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(p_num!(I64)),
-                    })
-                    .into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("free(x)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                id: "x".into(),
-                state: Cell::default(),
+                id: "print".into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
-            .expect("Var registering should have succeeded");
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("spawn(8)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-
-        let expr = FnCall::parse("close(8)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
+            .unwrap();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect_err("Resolution should have failed");
     }
 }

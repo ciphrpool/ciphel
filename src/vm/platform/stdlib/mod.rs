@@ -36,14 +36,14 @@ pub enum StdCasm {
 }
 
 impl StdFn {
-    pub fn from(id: &String) -> Option<Self> {
-        if let Some(value) = IOFn::from(id) {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        if let Some(value) = IOFn::from(suffixe, id) {
             return Some(StdFn::IO(value));
         }
-        if let Some(value) = MathFn::from(id) {
+        if let Some(value) = MathFn::from(suffixe, id) {
             return Some(StdFn::Math(value));
         }
-        if let Some(value) = StringsFn::from(id) {
+        if let Some(value) = StringsFn::from(suffixe, id) {
             return Some(StdFn::Strings(value));
         }
         None

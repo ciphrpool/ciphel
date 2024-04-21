@@ -39,17 +39,17 @@ pub enum CoreCasm {
 }
 
 impl CoreFn {
-    pub fn from(id: &String) -> Option<Self> {
-        if let Some(value) = AllocFn::from(id) {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        if let Some(value) = AllocFn::from(suffixe, id) {
             return Some(CoreFn::Alloc(value));
         }
-        if let Some(value) = ChanFn::from(id) {
+        if let Some(value) = ChanFn::from(suffixe, id) {
             return Some(CoreFn::Chan(value));
         }
-        if let Some(value) = ThreadFn::from(id) {
+        if let Some(value) = ThreadFn::from(suffixe, id) {
             return Some(CoreFn::Thread(value));
         }
-        if let Some(value) = CursorFn::from(id) {
+        if let Some(value) = CursorFn::from(suffixe, id) {
             return Some(CoreFn::Cursor(value));
         }
         None

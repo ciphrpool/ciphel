@@ -15,7 +15,15 @@ pub enum MathFn {}
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathCasm {}
 impl MathFn {
-    pub fn from(id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        match suffixe {
+            Some(suffixe) => {
+                if suffixe != lexem::STD {
+                    return None;
+                }
+            }
+            None => {}
+        }
         match id.as_str() {
             _ => None,
         }

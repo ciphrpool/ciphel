@@ -66,7 +66,15 @@ pub enum PrintCasm {
 }
 
 impl IOFn {
-    pub fn from(id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        match suffixe {
+            Some(suffixe) => {
+                if suffixe != lexem::IO {
+                    return None;
+                }
+            }
+            None => {}
+        }
         match id.as_str() {
             lexem::PRINT => Some(IOFn::Print(RefCell::default())),
             _ => None,

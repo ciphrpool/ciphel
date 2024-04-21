@@ -147,9 +147,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(_api) = Lib::from(&self.id) {
-            return Err(SemanticError::PlatformAPIOverriding);
-        }
         for value in &self.params {
             let _ = value.resolve(scope, context, extra)?;
         }

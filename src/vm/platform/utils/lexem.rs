@@ -1,3 +1,7 @@
+//LIB
+pub const CORE: &str = "core";
+pub const STD: &str = "std";
+pub const IO: &str = "io";
 // CURSOR
 pub const LEFT: &str = "left";
 pub const RIGHT: &str = "right";
@@ -12,6 +16,7 @@ pub const CLEAR_CELL: &str = "clear_cell";
 pub const ERROR: &str = "error";
 
 // ALLOC
+
 pub const APPEND: &str = "append";
 pub const INSERT: &str = "insert";
 pub const DELETE: &str = "delete";

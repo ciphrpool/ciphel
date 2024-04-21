@@ -202,6 +202,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()
@@ -224,6 +225,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()
@@ -272,6 +274,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()
@@ -295,6 +298,7 @@ mod tests {
                         metadata: Metadata::default(),
                         instructions: vec![Statement::Flow(Flow::Call(CallStat {
                             call: FnCall {
+                                lib: None,
                                 fn_var: Variable::Var(VarID {
                                     id: "f".into(),
                                     metadata: Metadata::default()
@@ -317,6 +321,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()
@@ -359,6 +364,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()
@@ -380,6 +386,7 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
+                            lib: None,
                             fn_var: Variable::Var(VarID {
                                 id: "f".into(),
                                 metadata: Metadata::default()

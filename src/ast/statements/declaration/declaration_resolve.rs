@@ -122,9 +122,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
         Self: Sized,
         Scope: ScopeApi,
     {
-        if let Some(_api) = Lib::from(&self.id) {
-            return Err(SemanticError::PlatformAPIOverriding);
-        }
         self.signature.resolve(scope, context, extra)
     }
 }
@@ -144,9 +141,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     {
         match self {
             DeclaredVar::Id(id) => {
-                if let Some(_api) = Lib::from(&id) {
-                    return Err(SemanticError::PlatformAPIOverriding);
-                }
                 let mut vars = Vec::with_capacity(1);
                 let Some(var_type) = context else {
                     return Err(SemanticError::CantInferType);
@@ -154,9 +148,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
                 if var_type.is_any() || var_type.is_unit() {
                     return Err(SemanticError::CantInferType);
                 }
-                if let Some(_api) = Lib::from(&id) {
-                    return Err(SemanticError::PlatformAPIOverriding);
-                }
+
                 let var = <Var as BuildVar<Scope>>::build_var(id, var_type);
                 vars.push(var);
                 Ok(vars)
@@ -207,9 +199,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
                     }
-                    if let Some(_api) = Lib::from(&var_name) {
-                        return Err(SemanticError::PlatformAPIOverriding);
-                    }
                     scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
@@ -229,9 +218,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     let var_name = &value[index];
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
-                    }
-                    if let Some(_api) = Lib::from(&var_name) {
-                        return Err(SemanticError::PlatformAPIOverriding);
                     }
                     scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
                 }

@@ -22,7 +22,15 @@ pub enum ThreadCasm {
     Close,
 }
 impl ThreadFn {
-    pub fn from(id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        match suffixe {
+            Some(suffixe) => {
+                if suffixe != lexem::CORE {
+                    return None;
+                }
+            }
+            None => {}
+        }
         match id.as_str() {
             lexem::SPAWN => Some(ThreadFn::Spawn),
             lexem::CLOSE => Some(ThreadFn::Close),

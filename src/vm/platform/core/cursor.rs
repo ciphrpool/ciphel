@@ -35,7 +35,7 @@ pub enum CursorCasm {
 }
 
 impl CursorFn {
-    pub fn from(id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
         match id.as_str() {
             lexem::LEFT => Some(CursorFn::Left),
             lexem::RIGHT => Some(CursorFn::Right),

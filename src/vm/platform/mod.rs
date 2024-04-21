@@ -37,11 +37,11 @@ pub enum LibCasm {
 }
 
 impl Lib {
-    pub fn from(id: &String) -> Option<Self> {
-        if let Some(value) = CoreFn::from(id) {
+    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+        if let Some(value) = CoreFn::from(suffixe, id) {
             return Some(Lib::Core(value));
         }
-        if let Some(value) = StdFn::from(id) {
+        if let Some(value) = StdFn::from(suffixe, id) {
             return Some(Lib::Std(value));
         }
         None

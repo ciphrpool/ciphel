@@ -4,7 +4,7 @@ use nom::{
     branch::alt,
     combinator::{map, opt},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
 
 use crate::{
@@ -230,14 +230,15 @@ impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                Variable::parse,
+                pair(opt(terminated(parse_id, wst(lexem::SEP))), Variable::parse),
                 delimited(
                     wst(lexem::PAR_O),
                     separated_list0(wst(lexem::COMA), Expression::parse),
                     wst(lexem::PAR_C),
                 ),
             ),
-            |(fn_var, params)| FnCall {
+            |((lib, fn_var), params)| FnCall {
+                lib,
                 fn_var,
                 params,
                 metadata: Metadata::default(),
@@ -541,6 +542,35 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnCall {
+                lib: None,
+                fn_var: Variable::Var(VarID {
+                    id: "f".into(),
+                    metadata: Metadata::default()
+                }),
+                params: vec![
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
+                        id: "x".into(),
+                        metadata: Metadata::default()
+                    })))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::Unresolved(10).into()
+                    ))))
+                ],
+                metadata: Metadata::default(),
+                platform: Rc::default(),
+            },
+            value
+        );
+    }
+
+    #[test]
+    fn valid_lib_call() {
+        let res = FnCall::<MockScope>::parse("core::f(x,10)".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            FnCall {
+                lib: Some("core".into()),
                 fn_var: Variable::Var(VarID {
                     id: "f".into(),
                     metadata: Metadata::default()
