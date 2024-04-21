@@ -2,6 +2,7 @@ use std::cell::Ref;
 
 use crate::{
     ast::expressions::data::{VarID, Variable},
+    p_num,
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -27,9 +28,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
             ExprFlow::Match(value) => value.type_of(&scope),
             ExprFlow::Try(value) => value.type_of(&scope),
             ExprFlow::Call(value) => value.type_of(&scope),
-            ExprFlow::SizeOf(..) => Ok(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
+            ExprFlow::SizeOf(..) => Ok(p_num!(U64)),
         }
     }
 }

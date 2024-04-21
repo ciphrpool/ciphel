@@ -94,6 +94,7 @@ mod tests {
 
     use crate::{
         ast::TryParse,
+        p_num,
         semantic::scope::{
             scope_impl::Scope,
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -113,9 +114,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -140,9 +139,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();

@@ -13,6 +13,7 @@ use crate::{
         },
         utils::strings::ID,
     },
+    e_static, p_num,
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -274,39 +275,17 @@ impl<Scope: ScopeApi> Data<Scope> {
         match self {
             Data::Primitive(value) => match value {
                 Primitive::Number(value) => match value.get() {
-                    Number::U8(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U8)).into(),
-                    )),
-                    Number::U16(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U16)).into(),
-                    )),
-                    Number::U32(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U32)).into(),
-                    )),
-                    Number::U64(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                    )),
-                    Number::U128(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U128)).into(),
-                    )),
-                    Number::I8(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I8)).into(),
-                    )),
-                    Number::I16(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I16)).into(),
-                    )),
-                    Number::I32(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I32)).into(),
-                    )),
-                    Number::I64(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    )),
-                    Number::I128(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I128)).into(),
-                    )),
-                    Number::F64(_) => Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
-                    )),
+                    Number::U8(_) => Some(p_num!(U8)),
+                    Number::U16(_) => Some(p_num!(U16)),
+                    Number::U32(_) => Some(p_num!(U32)),
+                    Number::U64(_) => Some(p_num!(U64)),
+                    Number::U128(_) => Some(p_num!(U128)),
+                    Number::I8(_) => Some(p_num!(I8)),
+                    Number::I16(_) => Some(p_num!(I16)),
+                    Number::I32(_) => Some(p_num!(I32)),
+                    Number::I64(_) => Some(p_num!(I64)),
+                    Number::I128(_) => Some(p_num!(I128)),
+                    Number::F64(_) => Some(p_num!(F64)),
                     Number::Unresolved(_) => None,
                 },
                 Primitive::Bool(_) => Some(Either::Static(
@@ -328,7 +307,7 @@ impl<Scope: ScopeApi> Data<Scope> {
             Data::Address(Address { value, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),
             Data::Variable(v) => v.signature(),
-            Data::Unit => Some(Either::Static(StaticType::Unit.into())),
+            Data::Unit => Some(e_static!(StaticType::Unit)),
             Data::Map(Map { fields, metadata }) => metadata.signature(),
             Data::Struct(Struct {
                 id,

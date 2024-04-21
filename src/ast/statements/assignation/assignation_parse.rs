@@ -89,6 +89,7 @@ mod tests {
             Atomic,
         },
         semantic::{scope::scope_impl::MockScope, Metadata},
+        v_num,
     };
 
     use super::*;
@@ -105,7 +106,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
+                    Data::Primitive(v_num!(Unresolved, 10))
                 ))))
             },
             value
@@ -124,7 +125,7 @@ mod tests {
                     metadata: Metadata::default()
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
+                    Data::Primitive(v_num!(Unresolved, 10))
                 ))))
             },
             value
@@ -147,7 +148,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
-                    Data::Primitive(Primitive::Number(Cell::new(Number::Unresolved(10))))
+                    Data::Primitive(v_num!(Unresolved, 10))
                 ))))
             },
             value

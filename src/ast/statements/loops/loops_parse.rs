@@ -3,6 +3,7 @@ use nom::{
     combinator::map,
     sequence::{delimited, pair, preceded, tuple},
 };
+use nom_supreme::ParserExt;
 
 use crate::{
     ast::{
@@ -126,6 +127,7 @@ mod tests {
             scope::{scope_impl::MockScope, ClosureState},
             Metadata,
         },
+        v_num,
     };
 
     use super::*;
@@ -160,7 +162,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -203,7 +205,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -241,9 +243,9 @@ mod tests {
                             id: "f".into(),
                             metadata: Metadata::default()
                         }),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Cell::new(Number::Unresolved(10)))
-                        )))],
+                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                            Unresolved, 10
+                        ))))],
                         metadata: Metadata::default(),
                         platform: Rc::default(),
                     }

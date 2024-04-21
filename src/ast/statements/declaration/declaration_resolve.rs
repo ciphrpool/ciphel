@@ -246,6 +246,7 @@ mod tests {
 
     use crate::{
         ast::TryParse,
+        e_static, p_num,
         semantic::scope::{
             scope_impl::Scope,
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -264,10 +265,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            x_type.type_sig
-        );
+        assert_eq!(p_num!(U64), x_type.type_sig);
 
         let decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
 
@@ -276,10 +274,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into()),
-            x_type.type_sig
-        );
+        assert_eq!(p_num!(F64), x_type.type_sig);
     }
 
     #[test]
@@ -300,13 +295,10 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            x_type.type_sig
-        );
+        assert_eq!(p_num!(I64), x_type.type_sig);
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
         assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Char).into()),
+            e_static!(StaticType::Primitive(PrimitiveType::Char)),
             y_type.type_sig
         );
     }
@@ -326,20 +318,8 @@ mod tests {
                     id: "Point".into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push((
-                            "x".into(),
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                    .into(),
-                            ),
-                        ));
-                        res.push((
-                            "y".into(),
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                    .into(),
-                            ),
-                        ));
+                        res.push(("x".into(), p_num!(I64)));
+                        res.push(("y".into(), p_num!(I64)));
                         res
                     },
                 }),
@@ -349,14 +329,8 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".into()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            x_type.type_sig
-        );
+        assert_eq!(p_num!(I64), x_type.type_sig);
         let y_type = scope.borrow().find_var(&"y".into()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            y_type.type_sig
-        );
+        assert_eq!(p_num!(I64), y_type.type_sig);
     }
 }

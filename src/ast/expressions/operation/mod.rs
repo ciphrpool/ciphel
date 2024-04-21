@@ -1,11 +1,14 @@
 use std::cell::Cell;
 
 use crate::{
-    ast::types::Type,
+    ast::{types::Type, utils::strings::ID},
     semantic::{scope::ScopeApi, EType, Metadata},
 };
 
-use super::{data::Number, Atomic, Expression};
+use super::{
+    data::{ExprScope, Number},
+    Atomic, Expression,
+};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
@@ -30,16 +33,6 @@ pub struct Range<InnerScope: ScopeApi> {
     pub incr: Option<Cell<Number>>,
     pub inclusive: bool,
     pub metadata: Metadata,
-}
-
-impl<Scope: ScopeApi> Range<Scope> {
-    pub fn signature(&self) -> Option<EType> {
-        self.metadata.signature()
-    }
-
-    pub fn metadata(&self) -> Option<&Metadata> {
-        Some(&self.metadata)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

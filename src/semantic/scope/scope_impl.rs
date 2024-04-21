@@ -8,6 +8,7 @@ use std::{
 
 use crate::{
     ast::utils::strings::ID,
+    p_num,
     semantic::{AccessLevel, Either, MutRc, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
@@ -389,10 +390,7 @@ impl ScopeApi for Scope {
                     data.vars.push((
                         Rc::new(Var {
                             id: "$ENV".into(),
-                            type_sig: Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
-                                    .into(),
-                            ),
+                            type_sig: p_num!(U64),
                             state: VarState::Parameter.into(),
                             is_declared: Cell::new(true),
                         }),

@@ -23,16 +23,6 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignation<Scope> {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
-        // match &self.right {
-        //     AssignValue::Scope(right) => {
-
-        //     },
-        //     AssignValue::Expr(right) => {
-        //         let _ = right.gencode(scope, instructions)?;
-        //         self.left.gencode(scope, instructions)
-        //     }
-        // }
-
         self.left.gencode(scope, instructions)
     }
 }
@@ -46,25 +36,31 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
         match self {
             Assignee::Variable(variable) => {
                 // Push the address of the variable on the stack
-                let _ = variable.locate(scope, instructions)?;
-
                 let var_size = {
                     let Some(var_type) = variable.signature() else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
                     var_type.size_of()
                 };
+                if var_size == 0 {
+                    return Ok(());
+                }
+
+                let _ = variable.locate(scope, instructions)?;
 
                 instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
             }
             Assignee::PtrAccess(PtrAccess { value, metadata }) => {
-                let _ = value.gencode(scope, instructions)?;
                 let var_size = {
                     let Some(var_type) = metadata.signature() else {
                         return Err(CodeGenerationError::UnresolvedError);
                     };
                     var_type.size_of()
                 };
+                if var_size == 0 {
+                    return Ok(());
+                }
+                let _ = value.gencode(scope, instructions)?;
                 instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
             }
         }
@@ -115,7 +111,7 @@ mod tests {
             statements::{declaration, Statement},
             TryParse,
         },
-        clear_stack,
+        clear_stack, compile_statement, e_static, p_num,
         semantic::{
             scope::{
                 scope_impl::Scope,
@@ -124,6 +120,7 @@ mod tests {
             },
             Either, Resolve,
         },
+        v_num,
         vm::{
             allocator::Memory,
             vm::{DeserializeFrom, Executable, Runtime},
@@ -146,35 +143,14 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -229,7 +205,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -238,18 +214,8 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -356,12 +322,9 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Tuple<Scope> = TupleType(vec![
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-        ])
-        .deserialize_from(&data)
-        .expect("Deserialization should have succeeded");
+        let result: Tuple<Scope> = TupleType(vec![p_num!(U64), p_num!(U64)])
+            .deserialize_from(&data)
+            .expect("Deserialization should have succeeded");
         let result: Vec<Option<u64>> = result
             .value
             .into_iter()
@@ -392,34 +355,11 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result: Slice<Scope> = SliceType {
             size: 4,
-            item_type: Box::new(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
+            item_type: Box::new(p_num!(U64)),
         }
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
@@ -445,18 +385,8 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -529,33 +459,14 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
                 res.push((
                     "y".into(),
                     Either::Static(
                         StaticType::Slice(SliceType {
                             size: 4,
                             item_type: Box::new(Either::Static(
-                                StaticType::Tuple(TupleType(vec![
-                                    Either::Static(
-                                        StaticType::Primitive(PrimitiveType::Number(
-                                            NumberType::U64,
-                                        ))
-                                        .into(),
-                                    ),
-                                    Either::Static(
-                                        StaticType::Primitive(PrimitiveType::Number(
-                                            NumberType::U64,
-                                        ))
-                                        .into(),
-                                    ),
-                                ]))
-                                .into(),
+                                StaticType::Tuple(TupleType(vec![p_num!(U64), p_num!(U64)])).into(),
                             )),
                         })
                         .into(),
@@ -648,18 +559,8 @@ mod tests {
             id: "Point3D".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -667,12 +568,7 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
                 res.push((
                     "y".into(),
                     Either::User(Rc::new(UserType::Struct(user_type_point3d.clone()))),

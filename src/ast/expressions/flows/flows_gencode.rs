@@ -471,7 +471,7 @@ mod tests {
             statements::Statement,
             TryParse,
         },
-        clear_stack,
+        clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
                 scope_impl::Scope,
@@ -480,6 +480,7 @@ mod tests {
             },
             Either, Resolve,
         },
+        v_num,
         vm::{
             allocator::Memory,
             vm::{DeserializeFrom, Executable, Runtime},
@@ -544,7 +545,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
 
         let mut runtime = Runtime::new();
         let tid = runtime
@@ -561,7 +562,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, v_num!(I64, 69));
     }
 
     #[test]
@@ -626,7 +627,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
 
         let mut runtime = Runtime::new();
         let tid = runtime
@@ -643,7 +644,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, v_num!(I64, 69));
     }
 
     #[test]
@@ -652,18 +653,8 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -833,7 +824,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -846,22 +837,7 @@ mod tests {
                     "Point".into(),
                     user_type_impl::Struct {
                         id: "Point".into(),
-                        fields: vec![
-                            (
-                                "x".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ),
-                            (
-                                "y".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ),
-                        ],
+                        fields: vec![("x".into(), p_num!(I64)), ("y".into(), p_num!(I64))],
                     },
                 ));
                 res.push((
@@ -870,13 +846,7 @@ mod tests {
                         id: "Axe".into(),
                         fields: {
                             let mut res = Vec::new();
-                            res.push((
-                                "x".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ));
+                            res.push(("x".into(), p_num!(I64)));
                             res
                         },
                     },
@@ -934,7 +904,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -947,22 +917,7 @@ mod tests {
                     "Point".into(),
                     user_type_impl::Struct {
                         id: "Point".into(),
-                        fields: vec![
-                            (
-                                "x".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ),
-                            (
-                                "y".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ),
-                        ],
+                        fields: vec![("x".into(), p_num!(I64)), ("y".into(), p_num!(I64))],
                     },
                 ));
                 res.push((
@@ -971,13 +926,7 @@ mod tests {
                         id: "Axe".into(),
                         fields: {
                             let mut res = Vec::new();
-                            res.push((
-                                "x".into(),
-                                Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                        .into(),
-                                ),
-                            ));
+                            res.push(("x".into(), p_num!(I64)));
                             res
                         },
                     },
@@ -1035,7 +984,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(27))));
+        assert_eq!(result, v_num!(I64, 27));
     }
 
     #[test]
@@ -1052,34 +1001,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -1096,34 +1025,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, v_num!(I64, 69));
     }
 
     #[test]
@@ -1140,34 +1049,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -1184,33 +1073,13 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(result, v_num!(I64, 69));
     }
 }

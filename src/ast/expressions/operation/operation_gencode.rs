@@ -606,19 +606,16 @@ mod tests {
                 Expression,
             },
             TryParse,
-        },
-        clear_stack,
-        semantic::{
+        }, clear_stack, semantic::{
             scope::{
                 scope_impl::Scope,
                 static_types::{PrimitiveType, StrSliceType, StringType},
             },
             Resolve,
-        },
-        vm::{
+        }, v_num, vm::{
             allocator::Memory,
             vm::{DeserializeFrom, Runtime},
-        },
+        }
     };
 
     use super::*;
@@ -702,11 +699,7 @@ mod tests {
 
     #[test]
     fn valid_operation_u128() {
-        eval_and_compare!(
-            r##"400u128 + 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(420))),
-            U128
-        );
+        eval_and_compare!(r##"400u128 + 20u128"##, v_num!(U128, 420), U128);
         eval_and_compare!(
             r##"400u128 - 20u128"##,
             Primitive::Number(Cell::new(Number::U128(400 - 20))),
@@ -752,11 +745,7 @@ mod tests {
             Primitive::Number(Cell::new(Number::U128(400u128 ^ 420u128))),
             U128
         );
-        eval_and_compare!(
-            r##"400u128 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(400))),
-            U64
-        );
+        eval_and_compare!(r##"400u128 as u64"##, v_num!(U64, 400), U64);
 
         eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
         eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
@@ -774,115 +763,31 @@ mod tests {
 
     #[test]
     fn valid_cast() {
-        eval_and_compare!(
-            r##"126u8 as u16"##,
-            Primitive::Number(Cell::new(Number::U16(126))),
-            U16
-        );
-        eval_and_compare!(
-            r##"126u8 as u32"##,
-            Primitive::Number(Cell::new(Number::U32(126))),
-            U32
-        );
-        eval_and_compare!(
-            r##"126u8 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(126))),
-            U64
-        );
-        eval_and_compare!(
-            r##"126u8 as u128"##,
-            Primitive::Number(Cell::new(Number::U128(126))),
-            U128
-        );
-        eval_and_compare!(
-            r##"126u16 as u16"##,
-            Primitive::Number(Cell::new(Number::U16(126))),
-            U16
-        );
-        eval_and_compare!(
-            r##"126u16 as u32"##,
-            Primitive::Number(Cell::new(Number::U32(126))),
-            U32
-        );
-        eval_and_compare!(
-            r##"126u16 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(126))),
-            U64
-        );
-        eval_and_compare!(
-            r##"126u16 as u128"##,
-            Primitive::Number(Cell::new(Number::U128(126))),
-            U128
-        );
-        eval_and_compare!(
-            r##"126u32 as u16"##,
-            Primitive::Number(Cell::new(Number::U16(126))),
-            U16
-        );
-        eval_and_compare!(
-            r##"126u32 as u32"##,
-            Primitive::Number(Cell::new(Number::U32(126))),
-            U32
-        );
-        eval_and_compare!(
-            r##"126u32 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(126))),
-            U64
-        );
-        eval_and_compare!(
-            r##"126u32 as u128"##,
-            Primitive::Number(Cell::new(Number::U128(126))),
-            U128
-        );
-        eval_and_compare!(
-            r##"126u64 as u16"##,
-            Primitive::Number(Cell::new(Number::U16(126))),
-            U16
-        );
-        eval_and_compare!(
-            r##"126u64 as u32"##,
-            Primitive::Number(Cell::new(Number::U32(126))),
-            U32
-        );
-        eval_and_compare!(
-            r##"126u64 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(126))),
-            U64
-        );
-        eval_and_compare!(
-            r##"126u64 as u128"##,
-            Primitive::Number(Cell::new(Number::U128(126))),
-            U128
-        );
-        eval_and_compare!(
-            r##"126u128 as u16"##,
-            Primitive::Number(Cell::new(Number::U16(126))),
-            U16
-        );
-        eval_and_compare!(
-            r##"126u128 as u32"##,
-            Primitive::Number(Cell::new(Number::U32(126))),
-            U32
-        );
-        eval_and_compare!(
-            r##"126u128 as u64"##,
-            Primitive::Number(Cell::new(Number::U64(126))),
-            U64
-        );
-        eval_and_compare!(
-            r##"126u128 as u128"##,
-            Primitive::Number(Cell::new(Number::U128(126))),
-            U128
-        );
+        eval_and_compare!(r##"126u8 as u16"##, v_num!(U16, 126), U16);
+        eval_and_compare!(r##"126u8 as u32"##, v_num!(U32, 126), U32);
+        eval_and_compare!(r##"126u8 as u64"##, v_num!(U64, 126), U64);
+        eval_and_compare!(r##"126u8 as u128"##, v_num!(U128, 126), U128);
+        eval_and_compare!(r##"126u16 as u16"##, v_num!(U16, 126), U16);
+        eval_and_compare!(r##"126u16 as u32"##, v_num!(U32, 126), U32);
+        eval_and_compare!(r##"126u16 as u64"##, v_num!(U64, 126), U64);
+        eval_and_compare!(r##"126u16 as u128"##, v_num!(U128, 126), U128);
+        eval_and_compare!(r##"126u32 as u16"##, v_num!(U16, 126), U16);
+        eval_and_compare!(r##"126u32 as u32"##, v_num!(U32, 126), U32);
+        eval_and_compare!(r##"126u32 as u64"##, v_num!(U64, 126), U64);
+        eval_and_compare!(r##"126u32 as u128"##, v_num!(U128, 126), U128);
+        eval_and_compare!(r##"126u64 as u16"##, v_num!(U16, 126), U16);
+        eval_and_compare!(r##"126u64 as u32"##, v_num!(U32, 126), U32);
+        eval_and_compare!(r##"126u64 as u64"##, v_num!(U64, 126), U64);
+        eval_and_compare!(r##"126u64 as u128"##, v_num!(U128, 126), U128);
+        eval_and_compare!(r##"126u128 as u16"##, v_num!(U16, 126), U16);
+        eval_and_compare!(r##"126u128 as u32"##, v_num!(U32, 126), U32);
+        eval_and_compare!(r##"126u128 as u64"##, v_num!(U64, 126), U64);
+        eval_and_compare!(r##"126u128 as u128"##, v_num!(U128, 126), U128);
     }
 
     #[test]
     fn valid_operation_u64() {
-        eval_and_compare!(
-            r##"400 + 20"##,
-            Primitive::Number(Cell::new(Number::U64(420))),
-            U64
-        );
+        eval_and_compare!(r##"400 + 20"##, v_num!(U64, 420), U64);
         eval_and_compare!(
             r##"400 - 20"##,
             Primitive::Number(Cell::new(Number::U64(400 - 20))),
@@ -944,11 +849,7 @@ mod tests {
 
     #[test]
     fn valid_operation_u32() {
-        eval_and_compare!(
-            r##"400u32 + 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(420))),
-            U32
-        );
+        eval_and_compare!(r##"400u32 + 20u32"##, v_num!(U32, 420), U32);
         eval_and_compare!(
             r##"400u32 - 20u32"##,
             Primitive::Number(Cell::new(Number::U32(400 - 20))),
@@ -1009,11 +910,7 @@ mod tests {
     }
     #[test]
     fn valid_operation_u16() {
-        eval_and_compare!(
-            r##"400u16 + 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(420))),
-            U16
-        );
+        eval_and_compare!(r##"400u16 + 20u16"##, v_num!(U16, 420), U16);
         eval_and_compare!(
             r##"400u16 - 20u16"##,
             Primitive::Number(Cell::new(Number::U16(400 - 20))),
@@ -1074,11 +971,7 @@ mod tests {
     }
     #[test]
     fn valid_operation_u8() {
-        eval_and_compare!(
-            r##"100u8 + 20u8"##,
-            Primitive::Number(Cell::new(Number::U8(120))),
-            U8
-        );
+        eval_and_compare!(r##"100u8 + 20u8"##, v_num!(U8, 120), U8);
         eval_and_compare!(
             r##"50u8 - 2u8"##,
             Primitive::Number(Cell::new(Number::U8(50 - 2))),
@@ -1140,11 +1033,7 @@ mod tests {
 
     #[test]
     fn valid_operation_i128() {
-        eval_and_compare!(
-            r##"400i128 + 20i128"##,
-            Primitive::Number(Cell::new(Number::I128(420))),
-            I128
-        );
+        eval_and_compare!(r##"400i128 + 20i128"##, v_num!(I128, 420), I128);
         eval_and_compare!(
             r##"400i128 - 800i128"##,
             Primitive::Number(Cell::new(Number::I128(400 - 800))),
@@ -1211,11 +1100,7 @@ mod tests {
 
     #[test]
     fn valid_operation_i64() {
-        eval_and_compare!(
-            r##"400i64 + 20i64"##,
-            Primitive::Number(Cell::new(Number::I64(420))),
-            I64
-        );
+        eval_and_compare!(r##"400i64 + 20i64"##, v_num!(I64, 420), I64);
         eval_and_compare!(
             r##"400i64 - 800i64"##,
             Primitive::Number(Cell::new(Number::I64(400 - 800))),
@@ -1286,11 +1171,7 @@ mod tests {
     }
     #[test]
     fn valid_operation_i32() {
-        eval_and_compare!(
-            r##"400i32 + 20i32"##,
-            Primitive::Number(Cell::new(Number::I32(420))),
-            I32
-        );
+        eval_and_compare!(r##"400i32 + 20i32"##, v_num!(I32, 420), I32);
         eval_and_compare!(
             r##"400i32 - 800i32"##,
             Primitive::Number(Cell::new(Number::I32(400 - 800))),
@@ -1356,11 +1237,7 @@ mod tests {
     }
     #[test]
     fn valid_operation_i16() {
-        eval_and_compare!(
-            r##"400i16 + 20i16"##,
-            Primitive::Number(Cell::new(Number::I16(420))),
-            I16
-        );
+        eval_and_compare!(r##"400i16 + 20i16"##, v_num!(I16, 420), I16);
         eval_and_compare!(
             r##"400i16 - 800i16"##,
             Primitive::Number(Cell::new(Number::I16(400 - 800))),
@@ -1426,11 +1303,7 @@ mod tests {
     }
     #[test]
     fn valid_operation_i8() {
-        eval_and_compare!(
-            r##"100i8 + 20i8"##,
-            Primitive::Number(Cell::new(Number::I8(120))),
-            I8
-        );
+        eval_and_compare!(r##"100i8 + 20i8"##, v_num!(I8, 120), I8);
         eval_and_compare!(
             r##"20i8 - 10i8"##,
             Primitive::Number(Cell::new(Number::I8(20 - 10))),

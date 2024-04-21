@@ -11,6 +11,7 @@ use crate::{
         data::{Data, VarID, Variable},
         Atomic, Expression,
     },
+    e_static, p_num,
     semantic::{
         scope::{
             static_types::{
@@ -259,14 +260,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = index.resolve(
-                                scope,
-                                &Some(Either::Static(
-                                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
-                                        .into(),
-                                )),
-                                &(),
-                            )?;
+                            let _ = index.resolve(scope, &Some(p_num!(U64)), &())?;
                             let index_type = index.type_of(&scope.borrow())?;
                             match &index_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -324,13 +318,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
                     with_capacity.set(true);
                 }
                 for param in extra {
-                    let _ = param.resolve(
-                        scope,
-                        &Some(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                        )),
-                        &(),
-                    )?;
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &())?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -391,13 +379,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
 
                 let size = &extra[0];
 
-                let _ = size.resolve(
-                    scope,
-                    &Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                    )),
-                    &(),
-                )?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &())?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -492,13 +474,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve(
-                    scope,
-                    &Some(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                    )),
-                    &(),
-                )?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &())?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -568,28 +544,22 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AllocFn {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            AllocFn::Append { .. } => Ok(Either::Static(StaticType::Unit.into())),
+            AllocFn::Append { .. } => Ok(e_static!(StaticType::Unit)),
             AllocFn::Insert => todo!(),
-            AllocFn::Delete { .. } => Ok(Either::Static(StaticType::Unit.into())),
-            AllocFn::Free => Ok(Either::Static(StaticType::Unit.into())),
+            AllocFn::Delete { .. } => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Free => Ok(e_static!(StaticType::Unit)),
             AllocFn::Vec { metadata, .. } => {
                 metadata.signature().ok_or(SemanticError::NotResolvedYet)
             }
             AllocFn::Map => todo!(),
             AllocFn::Chan => todo!(),
-            AllocFn::String { .. } => Ok(Either::Static(StaticType::String(StringType()).into())),
-            AllocFn::Alloc => Ok(Either::Static(StaticType::Any.into())),
-            AllocFn::Len => Ok(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            AllocFn::Cap => Ok(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            AllocFn::SizeOf { .. } => Ok(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            AllocFn::MemCopy => Ok(Either::Static(StaticType::Unit.into())),
-            AllocFn::Clear { .. } => Ok(Either::Static(StaticType::Unit.into())),
+            AllocFn::String { .. } => Ok(e_static!(StaticType::String(StringType()))),
+            AllocFn::Alloc => Ok(e_static!(StaticType::Any)),
+            AllocFn::Len => Ok(p_num!(U64)),
+            AllocFn::Cap => Ok(p_num!(U64)),
+            AllocFn::SizeOf { .. } => Ok(p_num!(U64)),
+            AllocFn::MemCopy => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Clear { .. } => Ok(e_static!(StaticType::Unit)),
         }
     }
 }
@@ -2200,6 +2170,7 @@ mod tests {
         },
         clear_stack,
         semantic::scope::scope_impl::Scope,
+        v_num,
         vm::vm::{DeserializeFrom, Runtime},
     };
 
@@ -2352,7 +2323,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, v_num!(U64, 420));
     }
     #[test]
     fn valid_append() {
@@ -2771,7 +2742,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(11))));
+        assert_eq!(result, v_num!(U64, 11));
     }
 
     #[test]
@@ -2814,7 +2785,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+        assert_eq!(result, v_num!(U64, 16));
     }
 
     #[test]
@@ -2857,7 +2828,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(11))));
+        assert_eq!(result, v_num!(U64, 11));
     }
 
     #[test]
@@ -2900,7 +2871,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+        assert_eq!(result, v_num!(U64, 16));
     }
     #[test]
     fn valid_free() {
@@ -3169,7 +3140,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(16))));
+        assert_eq!(result, v_num!(U64, 16));
     }
 
     #[test]
@@ -3209,7 +3180,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(8))));
+        assert_eq!(result, v_num!(U64, 8));
     }
 
     #[test]
@@ -3509,7 +3480,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, v_num!(U64, 420));
     }
 
     #[test]
@@ -3560,6 +3531,6 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(420))));
+        assert_eq!(result, v_num!(U64, 420));
     }
 }

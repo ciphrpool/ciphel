@@ -449,7 +449,7 @@ impl<Scope: ScopeApi> TryParse for Struct<Scope> {
                 parse_id,
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(
+                    separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
@@ -480,7 +480,7 @@ impl<Scope: ScopeApi> TryParse for Union<Scope> {
                 separated_pair(parse_id, wst(lexem::SEP), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(
+                    separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
                     ),
@@ -574,6 +574,7 @@ mod tests {
             statements::scope::Scope,
         },
         semantic::scope::{scope_impl::MockScope, ClosureState},
+        v_num,
     };
 
     use super::*;
@@ -593,12 +594,12 @@ mod tests {
         let res = Primitive::parse("42".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Cell::new(Number::Unresolved(42))), value);
+        assert_eq!(v_num!(Unresolved, 42), value);
 
         let res = Primitive::parse("42i16".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Cell::new(Number::I16(42))), value);
+        assert_eq!(v_num!(I16, 42), value);
 
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok(), "{:?}", res);
@@ -970,9 +971,9 @@ mod tests {
                     id: "x".into(),
                     metadata: Metadata::default()
                 })),
-                index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(3)))
-                )))),
+                index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 3
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -1033,9 +1034,9 @@ mod tests {
                         id: "y".into(),
                         metadata: Metadata::default()
                     })),
-                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(3)))
-                    )))),
+                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 3
+                    ))))),
                     metadata: Metadata::default()
                 })),
                 metadata: Metadata::default()
@@ -1052,9 +1053,9 @@ mod tests {
                         id: "x".into(),
                         metadata: Metadata::default()
                     })),
-                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(3)))
-                    )))),
+                    index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 3
+                    ))))),
                     metadata: Metadata::default()
                 })),
                 field: Box::new(Variable::Var(VarID {

@@ -66,6 +66,7 @@ impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
 mod tests {
     use crate::{
         ast::TryParse,
+        e_static, p_num,
         semantic::scope::{
             scope_impl,
             static_types::{NumberType, PrimitiveType, StaticType},
@@ -97,17 +98,11 @@ mod tests {
         let var_y = res_scope.borrow().find_var(&"y".into()).unwrap();
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            x_type
-        );
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            y_type
-        );
+        assert_eq!(p_num!(I64), x_type);
+        assert_eq!(p_num!(I64), y_type);
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), res)
+        assert_eq!(e_static!(StaticType::Unit), res)
     }
 
     #[test]
@@ -126,21 +121,12 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let res = expr_scope.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-            )),
-            &Vec::default(),
-        );
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            res
-        )
+        assert_eq!(p_num!(I64), res)
     }
 
     #[test]
@@ -163,21 +149,12 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let res = expr_scope.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-            )),
-            &Vec::default(),
-        );
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            res
-        );
+        assert_eq!(p_num!(I64), res);
 
         let expr_scope = Scope::parse(
             r##"
@@ -197,21 +174,12 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let res = expr_scope.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-            )),
-            &Vec::default(),
-        );
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            res
-        )
+        assert_eq!(p_num!(I64), res)
     }
 
     #[test]
@@ -230,21 +198,12 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let res = expr_scope.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-            )),
-            &Vec::default(),
-        );
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            res
-        )
+        assert_eq!(p_num!(I64), res)
     }
 
     #[test]
@@ -265,13 +224,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope_impl::Scope::new();
-        let res = expr_scope.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-            )),
-            &Vec::default(),
-        );
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_err());
     }
 }

@@ -7,6 +7,7 @@ use super::{
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType, StringType};
 
+use crate::e_static;
 use crate::semantic::scope::static_types::{self, StaticType};
 
 use crate::semantic::scope::user_type_impl::UserType;
@@ -151,7 +152,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ListAccess<Scope> {
 //         Self: Sized,
 //     {
 //         StaticType::build_slice(&SliceType::String, scope)
-//             .map(|value| (Either::Static(value.into())))
+//             .map(|value| (e_static!(value)
 //     }
 // }
 impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
@@ -164,54 +165,54 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Primitive {
             Primitive::Number(num) => match num.get() {
                 Number::U8(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U8), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::U16(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U16), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::U32(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U32), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::U64(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U64), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::U128(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U128), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::I8(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I8), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::I16(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I16), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::I32(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I32), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::I64(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I64), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::I128(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::I128), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::F64(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
-                        .map(|value| (Either::Static(value.into())))
+                        .map(|value| (e_static!(value)))
                 }
                 Number::Unresolved(_) => Err(SemanticError::CantInferType),
             },
             Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
-                .map(|value| (Either::Static(value.into()))),
+                .map(|value| (e_static!(value))),
             Primitive::Char(_) => StaticType::build_primitive(&PrimitiveType::Char, scope)
-                .map(|value| (Either::Static(value.into()))),
+                .map(|value| (e_static!(value))),
         }
     }
 }
@@ -222,15 +223,14 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Slice<Scope> {
         Scope: ScopeApi,
         Self: Sized + Resolve<Scope>,
     {
-        let mut list_type =
-            Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into());
+        let mut list_type = e_static!(<StaticType as BuildStaticType<Scope>>::build_unit());
         for expr in &self.value {
             let expr_type = expr.type_of(&scope)?;
             list_type = list_type.merge(&expr_type, scope)?;
         }
 
         StaticType::build_slice_from(&self.value.len(), &list_type, scope)
-            .map(|value| (Either::Static(value.into())))
+            .map(|value| (e_static!(value)))
     }
 }
 
@@ -246,7 +246,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StrSlice {
             },
             scope,
         )
-        .map(|value| (Either::Static(value.into())))
+        .map(|value| (e_static!(value)))
     }
 }
 
@@ -261,7 +261,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Vector<Scope> {
         };
         let expr_type = expr_type?;
 
-        StaticType::build_vec_from(&expr_type, scope).map(|value| Either::Static(value.into()))
+        StaticType::build_vec_from(&expr_type, scope).map(|value| e_static!(value))
     }
 }
 
@@ -277,7 +277,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Tuple<Scope> {
             list_types.push(expr_type);
         }
 
-        StaticType::build_tuple_from(&list_types, scope).map(|value| Either::Static(value.into()))
+        StaticType::build_tuple_from(&list_types, scope).map(|value| e_static!(value))
     }
 }
 
@@ -304,7 +304,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Closure<Scope> {
             scope_params_size,
             scope,
         )
-        .map(|value| Either::Static(value.into()))
+        .map(|value| e_static!(value))
     }
 }
 
@@ -342,7 +342,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Address<Scope> {
     {
         let addr_type = self.value.type_of(&scope)?;
 
-        StaticType::build_addr_from(&addr_type, scope).map(|value| Either::Static(value.into()))
+        StaticType::build_addr_from(&addr_type, scope).map(|value| e_static!(value))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for PtrAccess<Scope> {
@@ -399,8 +399,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Map<Scope> {
         let key_type = key.type_of(&scope)?;
         let value_type = value.type_of(&scope)?;
 
-        StaticType::build_map_from(&key_type, &value_type, scope)
-            .map(|value| Either::Static(value.into()))
+        StaticType::build_map_from(&key_type, &value_type, scope).map(|value| e_static!(value))
     }
 }
 impl<Scope: ScopeApi> TypeOf<Scope> for KeyData<Scope> {

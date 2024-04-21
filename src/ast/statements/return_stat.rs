@@ -231,12 +231,15 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
 
 #[cfg(test)]
 mod tests {
-    use crate::semantic::{
-        scope::{
-            scope_impl::{self, MockScope},
-            static_types::{NumberType, PrimitiveType, StaticType},
+    use crate::{
+        e_static, p_num,
+        semantic::{
+            scope::{
+                scope_impl::{self, MockScope},
+                static_types::{NumberType, PrimitiveType, StaticType},
+            },
+            Either,
         },
-        Either,
     };
 
     use super::*;
@@ -300,10 +303,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            return_type
-        );
+        assert_eq!(p_num!(I64), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -322,7 +322,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
+        assert_eq!(e_static!(StaticType::Unit), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -337,7 +337,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(Either::Static(StaticType::Unit.into()), return_type);
+        assert_eq!(e_static!(StaticType::Unit), return_type);
 
         let return_statement = Return::<scope_impl::Scope>::parse(
             r#"
@@ -348,20 +348,11 @@ mod tests {
         .unwrap()
         .1;
         inner_scope.as_ref().borrow_mut().to_generator();
-        let res = return_statement.resolve(
-            &inner_scope,
-            &Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            &(),
-        );
+        let res = return_statement.resolve(&inner_scope, &Some(p_num!(U64)), &());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            return_type
-        );
+        assert_eq!(p_num!(U64), return_type);
     }
 
     #[test]

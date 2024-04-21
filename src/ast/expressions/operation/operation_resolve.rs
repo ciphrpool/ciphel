@@ -6,7 +6,9 @@ use super::{
 use crate::ast::expressions::data::{Data, Primitive};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
+use crate::semantic::scope::static_types::{
+    ClosureType, FnType, NumberType, PrimitiveType, RangeType, StaticType,
+};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::user_type_impl::UserType;
 
@@ -705,10 +707,11 @@ mod tests {
             expressions::{operation::operation_parse::TryParseOperation, Expression},
             TryParse,
         },
+        e_static, p_num,
         semantic::scope::{
             scope_impl::Scope,
-            static_types::{NumberType, PrimitiveType, SliceType, StaticType, StringType},
-            var_impl::Var,
+            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
+            var_impl::{Var, VarState},
         },
     };
 
@@ -743,9 +746,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -820,9 +821,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -922,58 +921,28 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into()),
-            expr_type
-        );
+        assert_eq!(p_num!(F64), expr_type);
 
         let expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            expr_type
-        );
+        assert_eq!(p_num!(U64), expr_type);
 
         let expr = Cast::parse("'a' as string".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::String(StringType()).into()),
-            expr_type
-        );
+        assert_eq!(e_static!(StaticType::String(StringType())), expr_type);
 
         let expr = Cast::parse("['a'] as string".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::String(StringType()).into()),
-            expr_type
-        );
-
-        // let expr = Cast::parse("\"hello\" as [10]char".into()).unwrap().1;
-        // let scope = Scope::new();
-        // let res = expr.resolve(&scope, &None, &());
-        // assert!(res.is_ok(), "{:?}", res);
-        // let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        // assert_eq!(
-        //     Either::Static(
-        //         StaticType::Slice(SliceType {
-        //             size: 10,
-        //             item_type: Box::new(Either::Static(
-        //                 StaticType::Primitive(PrimitiveType::Char).into()
-        //             ))
-        //         })
-        //         .into()
-        //     ),
-        //     expr_type
-        // );
+        assert_eq!(e_static!(StaticType::String(StringType())), expr_type);
     }
 
     #[test]

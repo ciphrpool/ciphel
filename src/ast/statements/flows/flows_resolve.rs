@@ -1,12 +1,18 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
-use crate::semantic::{
-    scope::{
-        static_types::StaticType, type_traits::TypeChecking, user_type_impl::UserType,
-        var_impl::VarState, ScopeApi,
+use crate::{
+    ast::expressions::flows::Pattern,
+    semantic::{
+        scope::{
+            static_types::StaticType,
+            type_traits::TypeChecking,
+            user_type_impl::{Enum, Union, UserType},
+            var_impl::VarState,
+            ScopeApi,
+        },
+        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
-    EType, Either, MutRc, Resolve, SemanticError, TypeOf,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
     type Output = ();
@@ -85,17 +91,72 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
         let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
-        for value in &self.patterns {
-            let vars = value.pattern.resolve(scope, &expr_type, &())?;
-            for (index, var) in vars.iter().enumerate() {
-                var.state.set(VarState::Parameter);
-                var.is_declared.set(true);
+        let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Primitive(_) => None,
+                StaticType::String(_) => None,
+                StaticType::StrSlice(_) => None,
+                _ => return Err(SemanticError::InvalidPattern),
+            },
+            Either::User(value) => match value.as_ref() {
+                UserType::Struct(_) => return Err(SemanticError::InvalidPattern),
+                UserType::Enum(Enum { id, values }) => Some(values.clone()),
+                UserType::Union(Union { id, variants }) => {
+                    Some(variants.iter().map(|(v, _)| v).cloned().collect())
+                }
+            },
+        };
+
+        match &self.else_branch {
+            Some(else_branch) => {
+                for value in &self.patterns {
+                    let vars = value.pattern.resolve(scope, &expr_type, &())?;
+                    for (index, var) in vars.iter().enumerate() {
+                        var.state.set(VarState::Parameter);
+                        var.is_declared.set(true);
+                    }
+                    // create a scope and Scope::child_scope())variable to it before resolving the expression
+                    let _ = value.scope.resolve(scope, &context, &vars)?;
+                }
+                let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+                if let Some(exhaustive_cases) = exhaustive_cases {
+                    let mut map = HashMap::new();
+                    for case in exhaustive_cases {
+                        *map.entry(case).or_insert(0) += 1;
+                    }
+                    for case in self.patterns.iter().map(|p| match &p.pattern {
+                        Pattern::Primitive(_) => None,
+                        Pattern::String(_) => None,
+                        Pattern::Enum { typename, value } => Some(value),
+                        Pattern::Union {
+                            typename,
+                            variant,
+                            vars,
+                        } => Some(variant),
+                    }) {
+                        match case {
+                            Some(case) => {
+                                *map.entry(case.clone()).or_insert(0) -= 1;
+                            }
+                            None => return Err(SemanticError::InvalidPattern),
+                        }
+                    }
+                    if map.values().all(|&count| count == 0) {
+                        return Err(SemanticError::InvalidPattern);
+                    }
+                }
             }
-            // create a scope and Scope::child_scope())variable to it before resolving the expression
-            let _ = value.scope.resolve(scope, &context, &vars)?;
-        }
-        if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+            None => {
+                for value in &self.patterns {
+                    let vars = value.pattern.resolve(scope, &expr_type, &())?;
+                    for (index, var) in vars.iter().enumerate() {
+                        var.state.set(VarState::Parameter);
+                        var.is_declared.set(true);
+                    }
+                    // create a scope and Scope::child_scope())variable to it before resolving the expression
+                    let _ = value.scope.resolve(scope, &context, &vars)?;
+                }
+            }
         }
         Ok(())
     }
@@ -146,6 +207,7 @@ mod tests {
 
     use super::*;
     use crate::ast::TryParse;
+    use crate::p_num;
     use crate::semantic::scope::scope_impl::Scope;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
     use crate::semantic::scope::var_impl::Var;
@@ -225,10 +287,10 @@ mod tests {
             match x {
                 case 20 => {
                     let x = 1;
-                },
+                }
                 case 30 => {
                     let x = 1;
-                },
+                }
             }
         "##
             .into(),
@@ -241,9 +303,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();

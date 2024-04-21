@@ -93,11 +93,11 @@ mod tests {
     use super::*;
     use crate::ast::expressions::data::{Number, Primitive};
     use crate::ast::TryParse;
-    use crate::clear_stack;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
     use crate::vm::vm::{DeserializeFrom, Runtime};
     use crate::{ast::statements::Statement, semantic::scope::scope_impl::Scope};
+    use crate::{clear_stack, compile_statement, v_num};
 
     #[test]
     fn valid_function() {
@@ -116,34 +116,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, v_num!(U64, 69));
     }
     #[test]
     fn valid_function_with_stack_env() {
@@ -168,34 +148,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(88))));
+        assert_eq!(result, v_num!(U64, 88));
     }
 
     #[test]
@@ -218,34 +178,14 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(69))));
+        assert_eq!(result, v_num!(U64, 69));
     }
 
     #[test]
@@ -296,7 +236,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(3))));
+        assert_eq!(result, v_num!(U64, 3));
     }
 
     #[test]
@@ -349,6 +289,6 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::U64(55))));
+        assert_eq!(result, v_num!(U64, 55));
     }
 }

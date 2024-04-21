@@ -108,6 +108,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
             Pattern::Enum { typename, value } => {
                 let borrowed_scope = scope.borrow();
                 let user_type = borrowed_scope.find_type(typename)?;
+                match user_type.as_ref() {
+                    UserType::Enum(_) => {}
+                    _ => return Err(SemanticError::IncorrectVariant),
+                }
                 let Some(_) = user_type.get_variant(value) else {
                     return Err(SemanticError::IncorrectVariant);
                 };
@@ -120,6 +124,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
             } => {
                 let borrowed_scope = scope.borrow();
                 let user_type = borrowed_scope.find_type(typename)?;
+                match user_type.as_ref() {
+                    UserType::Union(_) => {}
+                    _ => return Err(SemanticError::IncorrectVariant),
+                }
                 let variant_type: Option<EType> = user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
                     return Err(SemanticError::CantInferType);
@@ -403,6 +411,7 @@ mod tests {
 
     use crate::{
         ast::TryParse,
+        e_static, p_num,
         semantic::scope::{
             scope_impl::Scope,
             static_types::{
@@ -463,9 +472,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -473,10 +480,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            match_type
-        );
+        assert_eq!(p_num!(I64), match_type);
 
         let expr = MatchExpr::parse(
             r##"
@@ -528,10 +532,7 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()),
-            match_type
-        );
+        assert_eq!(p_num!(I64), match_type);
 
         let expr = MatchExpr::parse(
             r##"
@@ -567,7 +568,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(StaticType::String(StringType()).into()),
+                type_sig: e_static!(StaticType::String(StringType())),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -613,9 +614,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -640,9 +639,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -676,26 +673,7 @@ mod tests {
                             "Point".into(),
                             Struct {
                                 id: "Point".into(),
-                                fields: vec![
-                                    (
-                                        "x".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                    (
-                                        "y".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                ],
+                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
                             },
                         ));
                         res.push((
@@ -704,15 +682,7 @@ mod tests {
                                 id: "Axe".into(),
                                 fields: {
                                     let mut res = Vec::new();
-                                    res.push((
-                                        "x".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ));
+                                    res.push(("x".into(), p_num!(U64)));
                                     res
                                 },
                             },
@@ -738,24 +708,8 @@ mod tests {
                                     id: "Point".into(),
                                     fields: {
                                         let mut res = Vec::new();
-                                        res.push((
-                                            "x".into(),
-                                            Either::Static(
-                                                StaticType::Primitive(PrimitiveType::Number(
-                                                    NumberType::U64,
-                                                ))
-                                                .into(),
-                                            ),
-                                        ));
-                                        res.push((
-                                            "y".into(),
-                                            Either::Static(
-                                                StaticType::Primitive(PrimitiveType::Number(
-                                                    NumberType::U64,
-                                                ))
-                                                .into(),
-                                            ),
-                                        ));
+                                        res.push(("x".into(), p_num!(U64)));
+                                        res.push(("y".into(), p_num!(U64)));
                                         res
                                     },
                                 },
@@ -766,15 +720,7 @@ mod tests {
                                     id: "Axe".into(),
                                     fields: {
                                         let mut res = Vec::new();
-                                        res.push((
-                                            "x".into(),
-                                            Either::Static(
-                                                StaticType::Primitive(PrimitiveType::Number(
-                                                    NumberType::U64,
-                                                ))
-                                                .into(),
-                                            ),
-                                        ));
+                                        res.push(("x".into(), p_num!(U64)));
                                         res
                                     },
                                 },
@@ -790,10 +736,7 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            match_type
-        );
+        assert_eq!(p_num!(U64), match_type);
     }
 
     #[test]
@@ -820,19 +763,8 @@ mod tests {
                 id: "f".into(),
                 type_sig: Either::Static(
                     StaticType::StaticFn(FnType {
-                        params: vec![
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                    .into(),
-                            ),
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::I64))
-                                    .into(),
-                            ),
-                        ],
-                        ret: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        )),
+                        params: vec![p_num!(I64), p_num!(I64)],
+                        ret: Box::new(p_num!(I64)),
                         scope_params_size: 24,
                     })
                     .into(),
@@ -844,10 +776,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
 
         let ret_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(
-            ret_type,
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into())
-        )
+        assert_eq!(ret_type, p_num!(I64))
     }
 
     #[test]
@@ -862,9 +791,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "f".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .unwrap();
@@ -939,12 +866,7 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
-                ),
+                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
@@ -963,9 +885,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        )),
+                        values_type: Box::new(p_num!(I64)),
                     })
                     .into(),
                 ),
@@ -984,12 +904,7 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
-                ),
+                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
@@ -1008,9 +923,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        )),
+                        values_type: Box::new(p_num!(I64)),
                     })
                     .into(),
                 ),
@@ -1029,9 +942,7 @@ mod tests {
             .register_var(Var {
                 id: "x".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
@@ -1048,10 +959,7 @@ mod tests {
                 id: "x".into(),
                 state: Cell::default(),
                 type_sig: Either::Static(
-                    StaticType::Address(AddrType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
+                    StaticType::Address(AddrType(Box::new(p_num!(I64)))).into(),
                 ),
                 is_declared: Cell::new(false),
             })
@@ -1148,12 +1056,7 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
-                ),
+                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
@@ -1172,9 +1075,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        )),
+                        values_type: Box::new(p_num!(I64)),
                     })
                     .into(),
                 ),
@@ -1193,12 +1094,7 @@ mod tests {
             .register_var(Var {
                 id: "tab".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Vec(VecType(Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ))))
-                    .into(),
-                ),
+                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");
@@ -1217,9 +1113,7 @@ mod tests {
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: KeyType::String(StringType()),
-                        values_type: Box::new(Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        )),
+                        values_type: Box::new(p_num!(I64)),
                     })
                     .into(),
                 ),
@@ -1238,9 +1132,7 @@ mod tests {
             .register_var(Var {
                 id: "x".into(),
                 state: Cell::default(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .expect("Var registering should have succeeded");

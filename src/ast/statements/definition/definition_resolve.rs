@@ -1,5 +1,6 @@
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 use crate::ast::types::Types;
+use crate::e_static;
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildUserType;
@@ -188,7 +189,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             params.iter().map(|p| p.size_of()).sum::<usize>() + 8,
             &scope.borrow(),
         )?;
-        let fn_type_sig = Either::Static(static_type.into());
+        let fn_type_sig = e_static!(static_type);
         let var = <Var as BuildVar<Scope>>::build_var(&self.id, &fn_type_sig);
         var.is_declared.set(true);
         self.scope.set_caller(var.clone());
@@ -242,6 +243,7 @@ mod tests {
 
     use crate::{
         ast::TryParse,
+        e_static, p_num,
         semantic::scope::{
             scope_impl,
             static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
@@ -276,18 +278,8 @@ mod tests {
                 id: "Point".into(),
                 fields: {
                     let mut res = Vec::new();
-                    res.push((
-                        "x".into(),
-                        Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        ),
-                    ));
-                    res.push((
-                        "y".into(),
-                        Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                        ),
-                    ));
+                    res.push(("x".into(), p_num!(I64)));
+                    res.push(("y".into(), p_num!(I64)));
                     res
                 },
             }),
@@ -318,20 +310,8 @@ mod tests {
                     id: "Point".into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push((
-                            "x".into(),
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
-                                    .into(),
-                            ),
-                        ));
-                        res.push((
-                            "y".into(),
-                            Either::Static(
-                                StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
-                                    .into(),
-                            ),
-                        ));
+                        res.push(("x".into(), p_num!(U64)));
+                        res.push(("y".into(), p_num!(U64)));
                         res
                     },
                 }),
@@ -352,26 +332,7 @@ mod tests {
                         Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
-                                fields: vec![
-                                    (
-                                        "x".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                    (
-                                        "y".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                ],
+                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
                             })
                             .into(),
                         ),
@@ -381,26 +342,7 @@ mod tests {
                         Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".into(),
-                                fields: vec![
-                                    (
-                                        "x".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                    (
-                                        "y".into(),
-                                        Either::Static(
-                                            StaticType::Primitive(PrimitiveType::Number(
-                                                NumberType::U64,
-                                            ))
-                                            .into(),
-                                        ),
-                                    ),
-                                ],
+                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
                             })
                             .into(),
                         ),
@@ -447,24 +389,8 @@ mod tests {
                             id: "Point".into(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push((
-                                    "x".into(),
-                                    Either::Static(
-                                        StaticType::Primitive(PrimitiveType::Number(
-                                            NumberType::U64,
-                                        ))
-                                        .into(),
-                                    ),
-                                ));
-                                res.push((
-                                    "y".into(),
-                                    Either::Static(
-                                        StaticType::Primitive(PrimitiveType::Number(
-                                            NumberType::U64,
-                                        ))
-                                        .into(),
-                                    ),
-                                ));
+                                res.push(("x".into(), p_num!(U64)));
+                                res.push(("y".into(), p_num!(U64)));
                                 res
                             },
                         },
@@ -475,15 +401,7 @@ mod tests {
                             id: "Axe".into(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push((
-                                    "x".into(),
-                                    Either::Static(
-                                        StaticType::Primitive(PrimitiveType::Number(
-                                            NumberType::U64,
-                                        ))
-                                        .into(),
-                                    ),
-                                ));
+                                res.push(("x".into(), p_num!(U64)));
                                 res
                             },
                         },
@@ -553,7 +471,7 @@ mod tests {
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
-                    ret: Box::new(Either::Static(StaticType::Unit.into())),
+                    ret: Box::new(e_static!(StaticType::Unit)),
                     scope_params_size: 8,
                 })
                 .into()
@@ -587,13 +505,8 @@ mod tests {
             function_type,
             Either::Static(
                 StaticType::StaticFn(FnType {
-                    params: vec![
-                        Either::Static(
-                            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-                        ),
-                        Either::Static(StaticType::String(StringType()).into())
-                    ],
-                    ret: Box::new(Either::Static(StaticType::Unit.into())),
+                    params: vec![p_num!(U64), e_static!(StaticType::String(StringType()))],
+                    ret: Box::new(e_static!(StaticType::Unit)),
                     scope_params_size: 24,
                 })
                 .into()
@@ -609,10 +522,7 @@ mod tests {
             .borrow()
             .find_var(&"x".into())
             .unwrap();
-        assert_eq!(
-            Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()),
-            x_type.type_sig
-        );
+        assert_eq!(p_num!(U64), x_type.type_sig);
         let text_type = function_scope
             .inner_scope
             .borrow()
@@ -622,7 +532,7 @@ mod tests {
             .find_var(&"text".into())
             .unwrap();
         assert_eq!(
-            Either::Static(StaticType::String(StringType()).into()),
+            e_static!(StaticType::String(StringType())),
             text_type.type_sig
         );
     }
@@ -655,9 +565,7 @@ mod tests {
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
-                    ret: Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-                    )),
+                    ret: Box::new(p_num!(U64)),
                     scope_params_size: 8,
                 })
                 .into()
@@ -686,9 +594,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                ),
+                type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
@@ -739,9 +645,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                ),
+                type_sig: p_num!(U64),
                 is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
@@ -750,9 +654,7 @@ mod tests {
             .register_var(Var {
                 state: Cell::default(),
                 id: "y".into(),
-                type_sig: Either::Static(
-                    StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-                ),
+                type_sig: p_num!(U64),
                 is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
@@ -808,9 +710,7 @@ mod tests {
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
-                    ret: Box::new(Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-                    )),
+                    ret: Box::new(p_num!(U64)),
                     scope_params_size: 8,
                 })
                 .into()

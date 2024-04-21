@@ -271,8 +271,8 @@ impl<Scope: ScopeApi> Expression<Scope> {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
+            Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata(),
-            Expression::Range(value) => value.metadata(),
         }
     }
 
@@ -301,8 +301,8 @@ impl<Scope: ScopeApi> Expression<Scope> {
             Expression::Equation(Equation::NotEqual { metadata, .. }) => metadata.signature(),
             Expression::LogicalAnd(LogicalAnd { metadata, .. }) => metadata.signature(),
             Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
+            Expression::Range(Range { metadata, .. }) => metadata.signature(),
             Expression::Atomic(value) => value.signature(),
-            Expression::Range(value) => value.signature(),
         }
     }
 }

@@ -368,7 +368,7 @@ impl Executable for LibCasm {
 //         }
 
 //         pub fn returns<Scope: ScopeApi>(self) -> EType {
-//             Either::Static(<StaticType as BuildStaticType<Scope>>::build_unit().into())
+//             e_static!(<StaticType as BuildStaticType<Scope>>::build_unit())
 //         }
 //     }
 // }

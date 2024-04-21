@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::{
+use crate::{e_static, semantic::{
     scope::{
         static_types::{self, StaticType},
         type_traits::OperandMerging,
@@ -8,7 +8,7 @@ use crate::semantic::{
         BuildStaticType, ScopeApi,
     },
     EType, Either, MergeType, Resolve, SemanticError, TypeOf,
-};
+}};
 
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
@@ -45,8 +45,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Range<Scope> {
             },
             Either::User(_) => return Err(SemanticError::IncompatibleTypes),
         };
-        StaticType::build_range_from(type_sig, self.inclusive, scope)
-            .map(|value| Either::Static(value.into()))
+        StaticType::build_range_from(type_sig, self.inclusive, scope).map(|value| e_static!(value))
     }
 }
 

@@ -10,6 +10,7 @@ use nom::{
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
+use nom_supreme::ParserExt;
 
 use crate::{
     ast::{
@@ -62,7 +63,7 @@ impl TryParse for StructDef {
                 preceded(wst(lexem::STRUCT), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(
+                    separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                     ),
@@ -95,7 +96,7 @@ impl TryParse for UnionDef {
                             parse_id,
                             delimited(
                                 wst(lexem::BRA_O),
-                                separated_list1(
+                                separated_list0(
                                     wst(lexem::COMA),
                                     separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                                 ),
@@ -215,6 +216,7 @@ mod tests {
             scope::{scope_impl::MockScope, ClosureState},
             Metadata,
         },
+        v_num,
     };
 
     use super::*;
@@ -332,9 +334,9 @@ mod tests {
                 scope: Scope {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                            Primitive::Number(Cell::new(Number::Unresolved(10)))
-                        )))),
+                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                            Unresolved, 10
+                        ))))),
                         metadata: Metadata::default()
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
@@ -368,7 +370,7 @@ mod tests {
         //         scope: Scope {
         //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
         //                 fn_id: "f".into(),
-        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(Cell::new(Number::I64(10)))))]
+        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(I64, 10)))]
         //             }))]
         //         }
         //     },

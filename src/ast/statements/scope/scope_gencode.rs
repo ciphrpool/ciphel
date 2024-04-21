@@ -97,6 +97,9 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
             if var.state.get() != VarState::Parameter {
                 offset.set(Offset::FZ(offset_idx as isize));
                 // Alloc and push heap address on stack
+                if var_size == 0 {
+                    continue;
+                }
                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
                 offset_idx += var_size;
             }

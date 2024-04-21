@@ -2,9 +2,12 @@ use std::{cell::Ref, cmp::max};
 
 use nom::Err;
 
-use crate::semantic::{
-    scope::{user_type_impl::UserType, ScopeApi},
-    EType, Either, MergeType, SemanticError, TypeOf,
+use crate::{
+    e_static,
+    semantic::{
+        scope::{user_type_impl::UserType, ScopeApi},
+        EType, Either, MergeType, SemanticError, TypeOf,
+    },
 };
 
 use super::{
@@ -30,8 +33,8 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             return Err(SemanticError::IncompatibleTypes);
         };
         match static_other_type.as_ref() {
-            Self::Error => return Ok(Either::Static(StaticType::Error.into())),
-            Self::Unit => return Ok(Either::Static(self.clone().into())),
+            Self::Error => return Ok(e_static!(StaticType::Error)),
+            Self::Unit => return Ok(e_static!(self.clone())),
             _ => {}
         }
         match self {
@@ -44,7 +47,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
             StaticType::Any => Err(SemanticError::CantInferType),
-            StaticType::Error => Ok(Either::Static(StaticType::Error.into())),
+            StaticType::Error => Ok(e_static!(StaticType::Error)),
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
             StaticType::String(value) => value.merge(other, scope),
@@ -158,7 +161,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for StringType {
         let StaticType::String(other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        Ok(Either::Static(StaticType::String(StringType()).into()))
+        Ok(e_static!(StaticType::String(StringType())))
     }
 }
 

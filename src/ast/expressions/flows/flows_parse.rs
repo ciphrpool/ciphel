@@ -264,6 +264,7 @@ mod tests {
             scope::{scope_impl::MockScope, ClosureState},
             Metadata,
         },
+        v_num,
     };
 
     use super::*;
@@ -283,7 +284,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -299,7 +300,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(20)))
+                                v_num!(Unresolved, 20)
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -500,7 +501,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))),
                             metadata: Metadata::default()
                         }))
@@ -516,7 +517,7 @@ mod tests {
                     instructions: vec![
                         (Statement::Return(Return::Expr {
                             expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(20)))
+                                v_num!(Unresolved, 20)
                             )))),
                             metadata: Metadata::default()
                         }))

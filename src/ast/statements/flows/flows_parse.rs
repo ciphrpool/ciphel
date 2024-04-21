@@ -5,9 +5,10 @@ use crate::{
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{many0, separated_list1},
+    multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
+use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::{flows::Pattern, Expression},
@@ -75,13 +76,10 @@ impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
                 delimited(
                     wst(lexem::BRA_O),
                     pair(
-                        separated_list1(wst(lexem::COMA), PatternStat::parse),
+                        many1(PatternStat::parse),
                         opt(preceded(
-                            wst(lexem::COMA),
-                            preceded(
-                                wst(lexem::ELSE),
-                                preceded(wst(lexem::BIGARROW), Scope::parse),
-                            ),
+                            wst(lexem::ELSE),
+                            preceded(wst(lexem::BIGARROW), Scope::parse),
                         )),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
@@ -176,6 +174,7 @@ mod tests {
             scope::{scope_impl::MockScope, ClosureState},
             Metadata,
         },
+        v_num,
     };
 
     use super::*;
@@ -208,7 +207,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -230,7 +229,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -278,7 +277,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -301,7 +300,7 @@ mod tests {
                                     metadata: Metadata::default()
                                 }),
                                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                    Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                    v_num!(Unresolved, 10)
                                 )))],
                                 metadata: Metadata::default(),
                                 platform: Rc::default(),
@@ -323,7 +322,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -365,7 +364,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
@@ -386,7 +385,7 @@ mod tests {
                                 metadata: Metadata::default()
                             }),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                Primitive::Number(Cell::new(Number::Unresolved(10)))
+                                v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),

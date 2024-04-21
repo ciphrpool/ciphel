@@ -4,6 +4,7 @@ use std::cell::{Ref, RefCell};
 use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
+use crate::e_static;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
 use crate::vm::allocator::Memory;
@@ -102,7 +103,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IOFn {
         Self: Sized + Resolve<Scope>,
     {
         match self {
-            IOFn::Print(_) => Ok(Either::Static(StaticType::Unit.into())),
+            IOFn::Print(_) => Ok(e_static!(StaticType::Unit)),
         }
     }
 }

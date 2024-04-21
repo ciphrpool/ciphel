@@ -39,6 +39,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
 
                         if let Some(stack_top) = scope.borrow().stack_top() {
                             o.set(Offset::SB(stack_top));
+                            if var.type_sig.size_of() == 0 {
+                                continue;
+                            }
                             instructions.push(Casm::Alloc(Alloc::Stack {
                                 size: var.type_sig.size_of(),
                             }));
@@ -84,7 +87,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                         if v.id == *id && !v.is_declared.get() {
                             let var = v;
                             let var_size = var.type_sig.size_of();
-
+                            if var_size == 0 {
+                                continue;
+                            }
                             if let Some(stack_top) = scope.borrow().stack_top() {
                                 o.set(Offset::SB(stack_top));
                                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
@@ -116,6 +121,9 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
 
                     let var_size = var.type_sig.size_of();
+                    if var_size == 0 {
+                        continue;
+                    }
                     instructions.push(Casm::Locate(Locate {
                         address: MemoryAddress::Stack {
                             offset: address,
@@ -142,7 +150,7 @@ mod tests {
             statements::Statement,
             TryParse,
         },
-        clear_stack,
+        clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
                 scope_impl::Scope,
@@ -151,6 +159,7 @@ mod tests {
             },
             Either, Resolve,
         },
+        v_num,
         vm::{
             allocator::Memory,
             casm::CasmProgram,
@@ -173,34 +182,13 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Number(Cell::new(Number::I64(420))));
+        assert_eq!(result, v_num!(I64, 420));
     }
 
     #[test]
@@ -216,28 +204,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
@@ -248,8 +215,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(x, v_num!(I64, 420));
+        assert_eq!(y, v_num!(I64, 69));
     }
 
     #[test]
@@ -262,28 +229,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0);
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
@@ -294,8 +240,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(x, v_num!(I64, 420));
+        assert_eq!(y, v_num!(I64, 69));
     }
 
     #[test]
@@ -304,18 +250,8 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -369,8 +305,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(x, v_num!(I64, 420));
+        assert_eq!(y, v_num!(I64, 69));
     }
 
     #[test]
@@ -379,18 +315,8 @@ mod tests {
             id: "Point".into(),
             fields: {
                 let mut res = Vec::new();
-                res.push((
-                    "x".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
-                res.push((
-                    "y".into(),
-                    Either::Static(
-                        StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into(),
-                    ),
-                ));
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
                 res
             },
         };
@@ -442,8 +368,8 @@ mod tests {
             &data[8..16],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(x, Primitive::Number(Cell::new(Number::I64(420))));
-        assert_eq!(y, Primitive::Number(Cell::new(Number::I64(69))));
+        assert_eq!(x, v_num!(I64, 420));
+        assert_eq!(y, v_num!(I64, 69));
     }
 
     #[test]
@@ -490,7 +416,7 @@ mod tests {
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
+        assert_eq!(value, v_num!(I64, 20));
     }
 
     #[test]
@@ -537,7 +463,7 @@ mod tests {
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
+        assert_eq!(value, v_num!(I64, 20));
     }
 
     #[test]
@@ -586,6 +512,6 @@ mod tests {
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(value, Primitive::Number(Cell::new(Number::I64(20))));
+        assert_eq!(value, v_num!(I64, 20));
     }
 }

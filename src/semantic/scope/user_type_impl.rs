@@ -16,6 +16,7 @@ use crate::{
         statements::definition,
         utils::{lexem, strings::ID},
     },
+    e_static, e_user,
     semantic::{
         CompatibleWith, EType, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf,
     },
@@ -87,7 +88,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UserType {
         Scope: super::ScopeApi,
         Self: Sized,
     {
-        Ok(Either::User(self.clone().into()))
+        Ok(e_user!(self.clone()))
     }
 }
 
@@ -136,7 +137,7 @@ impl GetSubTypes for UserType {
             UserType::Struct(_) => None,
             UserType::Enum(value) => {
                 if value.values.contains(variant) {
-                    Some(Either::Static(StaticType::Unit.into()))
+                    Some(e_static!(StaticType::Unit))
                 } else {
                     None
                 }
@@ -146,7 +147,7 @@ impl GetSubTypes for UserType {
                 .iter()
                 .find(|(id, _)| id == variant)
                 .map(|(_, field)| field)
-                .map(|field| Either::User(UserType::Struct(field.clone()).into())),
+                .map(|field| e_user!(UserType::Struct(field.clone()))),
         }
     }
     fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
@@ -205,19 +206,19 @@ impl<Scope: ScopeApi> MergeType<Scope> for UserType {
             UserType::Struct(value) => match other_type.as_ref() {
                 UserType::Struct(other_type) => value
                     .merge(&other_type)
-                    .map(|v| Either::User(UserType::Struct(v).into())),
+                    .map(|v| e_user!(UserType::Struct(v))),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             UserType::Enum(value) => match other_type.as_ref() {
-                UserType::Enum(other_type) => value
-                    .merge(&other_type)
-                    .map(|v| Either::User(UserType::Enum(v).into())),
+                UserType::Enum(other_type) => {
+                    value.merge(&other_type).map(|v| e_user!(UserType::Enum(v)))
+                }
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             UserType::Union(value) => match other_type.as_ref() {
                 UserType::Union(other_type) => value
                     .merge(&other_type)
-                    .map(|v| Either::User(UserType::Union(v).into())),
+                    .map(|v| e_user!(UserType::Union(v))),
                 _ => Err(SemanticError::IncompatibleTypes),
             },
         }

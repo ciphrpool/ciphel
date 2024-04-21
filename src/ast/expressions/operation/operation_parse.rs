@@ -1,16 +1,17 @@
 use nom::{
     branch::alt,
     combinator::{map, opt, value},
-    sequence::{pair, preceded, tuple},
+    sequence::{delimited, pair, preceded, tuple},
 };
 
 use crate::{
     ast::{
+        expressions::data::ExprScope,
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{eater, wst},
+            strings::{eater, parse_id, wst},
         },
         TryParse,
     },
@@ -310,7 +311,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
      * @desc Parse bitwise xor operation
      *
      * @grammar
-     * Cast := BOr as Type | BOr
+     * Cast := Atom as Type | Atom
      */
     fn parse(input: Span) -> PResult<Expression<InnerScope>> {
         let (remainder, left) = Atomic::parse(input)?;
@@ -474,6 +475,7 @@ mod tests {
     use crate::{
         ast::expressions::data::{Data, Number, Primitive},
         semantic::scope::scope_impl::MockScope,
+        v_num,
     };
 
     use super::*;
@@ -485,9 +487,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             UnaryOperation::Minus {
-                value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                value: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 metadata: Metadata::default()
             },
             value
@@ -514,12 +516,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Addition(Addition {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 metadata: Metadata::default(),
             }),
             value
@@ -530,12 +532,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Substraction(Substraction {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -546,12 +548,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Mult {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -562,12 +564,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Div {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -578,12 +580,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Mod {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(2)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 2
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -594,12 +596,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Shift(Shift::Left {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(2)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 2
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -610,12 +612,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Shift(Shift::Right {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(2)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 2
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -629,16 +631,16 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Addition(Addition {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 right: Box::new(Expression::Addition(Addition {
-                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(10)))
-                    )))),
-                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(10)))
-                    )))),
+                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
+                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
                     metadata: Metadata::default(),
                 })),
                 metadata: Metadata::default(),
@@ -651,16 +653,16 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Product(Product::Mult {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
                 right: Box::new(Expression::Product(Product::Mult {
-                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(10)))
-                    )))),
-                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Cell::new(Number::Unresolved(10)))
-                    )))),
+                    left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
+                    right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
                     metadata: Metadata::default(),
                 })),
                 metadata: Metadata::default(),
@@ -749,12 +751,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::Less {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -765,12 +767,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::LessEqual {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -781,12 +783,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::Greater {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -797,12 +799,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Comparaison(Comparaison::GreaterEqual {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -813,12 +815,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Equation(Equation::Equal {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value
@@ -829,12 +831,12 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Equation(Equation::NotEqual {
-                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(10)))
-                )))),
-                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Number(Cell::new(Number::Unresolved(5)))
-                )))),
+                left: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 10
+                ))))),
+                right: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                    Unresolved, 5
+                ))))),
                 metadata: Metadata::default()
             }),
             value

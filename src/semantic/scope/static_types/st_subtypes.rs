@@ -1,5 +1,6 @@
 use crate::{
     ast::expressions::data::StrSlice,
+    e_static, e_user, p_num,
     semantic::{
         scope::{type_traits::GetSubTypes, user_type_impl::UserType},
         EType, Either, SizeOf,
@@ -43,15 +44,11 @@ impl GetSubTypes for StaticType {
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
             StaticType::Any => None,
-            StaticType::Error => Some(Either::Static(Self::Error.into())),
+            StaticType::Error => Some(e_static!(Self::Error)),
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_item(value),
             StaticType::Map(value) => Some(value.values_type.as_ref().clone()),
-            StaticType::String(_) => {
-                Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
-            }
-            StaticType::StrSlice(_) => {
-                Some(Either::Static(Self::Primitive(PrimitiveType::Char).into()))
-            }
+            StaticType::String(_) => Some(e_static!(Self::Primitive(PrimitiveType::Char))),
+            StaticType::StrSlice(_) => Some(e_static!(Self::Primitive(PrimitiveType::Char))),
             StaticType::Range(value) => Some(Either::Static(
                 Self::Primitive(PrimitiveType::Number(value.num)).into(),
             )),
@@ -61,28 +58,16 @@ impl GetSubTypes for StaticType {
     fn get_key(&self) -> Option<EType> {
         match self {
             StaticType::Map(value) => match &value.keys_type {
-                KeyType::Primitive(value) => {
-                    Some(Either::Static(StaticType::Primitive(value.clone()).into()))
-                }
-                KeyType::Address(value) => {
-                    Some(Either::Static(StaticType::Address(value.clone()).into()))
-                }
-                KeyType::String(_) => Some(Either::Static(StaticType::String(StringType()).into())),
-                KeyType::Enum(value) => Some(Either::User(UserType::Enum(value.clone()).into())),
+                KeyType::Primitive(value) => Some(e_static!(StaticType::Primitive(value.clone()))),
+                KeyType::Address(value) => Some(e_static!(StaticType::Address(value.clone()))),
+                KeyType::String(_) => Some(e_static!(StaticType::String(StringType()))),
+                KeyType::Enum(value) => Some(e_user!(UserType::Enum(value.clone()))),
             },
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_key(value),
-            StaticType::Slice(_) => Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            StaticType::Vec(_) => Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            StaticType::String(_) => Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
-            StaticType::StrSlice(_) => Some(Either::Static(
-                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
-            )),
+            StaticType::Slice(_) => Some(p_num!(U64)),
+            StaticType::Vec(_) => Some(p_num!(U64)),
+            StaticType::String(_) => Some(p_num!(U64)),
+            StaticType::StrSlice(_) => Some(p_num!(U64)),
             _ => None,
         }
     }
