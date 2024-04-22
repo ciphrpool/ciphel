@@ -99,7 +99,7 @@ impl Executable for StdCasm {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             StdCasm::IO(value) => value.execute(thread),
-            StdCasm::Math(_) => todo!(),
+            StdCasm::Math(value) => value.execute(thread),
             StdCasm::Strings(_) => todo!(),
         }
     }
