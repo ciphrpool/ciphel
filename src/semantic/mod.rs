@@ -104,34 +104,6 @@ pub enum Either<User, Static> {
     User(Rc<User>),
 }
 
-#[macro_export]
-macro_rules! e_static {
-    ($type_def:expr) => {
-        Either::Static($type_def.into())
-    };
-}
-
-#[macro_export]
-macro_rules! e_user {
-    ($type_def:expr) => {
-        Either::User($type_def.into())
-    };
-}
-
-#[macro_export]
-macro_rules! p_num {
-    ($num:ident) => {
-        Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::$num)).into())
-    };
-}
-
-#[macro_export]
-macro_rules! v_num {
-    ($type_def:ident,$num:expr) => {
-        Primitive::Number(Cell::new(Number::$type_def($num)))
-    };
-}
-
 pub type EType = Either<UserType, StaticType>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

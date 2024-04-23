@@ -1,23 +1,15 @@
-use std::{
-    cell::{Ref},
-};
+use std::cell::Ref;
 
-use nom::{
-    branch::alt,
-    combinator::{map},
-};
+use nom::{branch::alt, combinator::map};
 
 use self::return_stat::Return;
 use crate::semantic::scope::scope_impl::Scope;
 
-use super::{
-    TryParse,
-};
+use super::TryParse;
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
-        scope::{static_types::StaticType},
-        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+        scope::static_types::StaticType, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
         casm::{
@@ -27,12 +19,7 @@ use crate::{
         vm::CodeGenerationError,
     },
 };
-use crate::{
-    semantic::{
-        scope::{BuildStaticType},
-    },
-    vm::vm::GenerateCode,
-};
+use crate::{semantic::scope::BuildStaticType, vm::vm::GenerateCode};
 
 pub mod assignation;
 pub mod block;
@@ -167,19 +154,4 @@ impl GenerateCode for Statement {
             Statement::Return(value) => value.gencode(scope, instructions),
         }
     }
-}
-
-#[macro_export]
-macro_rules! resolve_metadata {
-    ($metadata:expr,$self:expr,$scope:expr,$context:expr) => {{
-        let mut borrowed_metadata = $metadata
-            .info
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| SemanticError::Default)?;
-        *borrowed_metadata = Info::Resolved {
-            context: $context.clone(),
-            signature: Some($self.type_of(&$scope.borrow())?),
-        };
-    }};
 }

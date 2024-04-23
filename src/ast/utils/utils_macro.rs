@@ -1,0 +1,247 @@
+#[macro_export]
+macro_rules! e_static {
+    ($type_def:expr) => {
+        Either::Static($type_def.into())
+    };
+}
+
+#[macro_export]
+macro_rules! e_user {
+    ($type_def:expr) => {
+        Either::User($type_def.into())
+    };
+}
+
+#[macro_export]
+macro_rules! p_num {
+    ($num:ident) => {
+        Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::$num)).into())
+    };
+}
+
+#[macro_export]
+macro_rules! v_num {
+    ($type_def:ident,$num:expr) => {
+        Primitive::Number(Cell::new(Number::$type_def($num)))
+    };
+}
+
+#[macro_export]
+macro_rules! resolve_metadata {
+    ($metadata:expr,$self:expr,$scope:expr,$context:expr) => {{
+        let mut borrowed_metadata = $metadata
+            .info
+            .as_ref()
+            .try_borrow_mut()
+            .map_err(|_| SemanticError::Default)?;
+        *borrowed_metadata = Info::Resolved {
+            context: $context.clone(),
+            signature: Some($self.type_of(&$scope.borrow())?),
+        };
+    }};
+}
+
+#[macro_export]
+macro_rules! clear_stack {
+    ($memory:ident) => {{
+        use num_traits::Zero;
+        let top = $memory.stack.top();
+        let data = $memory.stack.pop(top).expect("Read should have succeeded");
+        assert!($memory.stack.top().is_zero());
+        data
+    }};
+}
+#[macro_export]
+macro_rules! assert_number {
+    ($expr:ident,$data:ident,$num_type:ident) => {
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::$num_type),
+            &$data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        // Assert and return the result.
+        assert_eq!(result, $expr);
+    };
+}
+
+#[macro_export]
+macro_rules! compile_expression {
+    ($expr_type:ident,$expr_str:expr) => {{
+        // Parse the expression.
+        let expr = $expr_type::parse($expr_str.into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        // Create a new block.
+        let scope = Scope::new();
+        // Perform semantic check.
+        expr.resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        expr.gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+        assert!(instructions.len() > 0);
+
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        (expr, data)
+    }};
+}
+
+#[macro_export]
+macro_rules! compile_expression_with_type {
+    ($expr_type:ident,$expr_str:expr,$user_type:ident) => {{
+        // Parse the expression.
+        let expr = $expr_type::parse($expr_str.into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        // Create a new block.
+        let scope = Scope::new();
+        let _ = scope
+            .as_ref()
+            .borrow_mut()
+            .register_type(
+                &$user_type.id.clone(),
+                UserType::$expr_type($user_type.clone().into()),
+            )
+            .expect("Type registering should have succeeded");
+        // Perform semantic check.
+        expr.resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        expr.gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+        assert!(instructions.len() > 0);
+
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        (expr, data)
+    }};
+}
+
+#[macro_export]
+macro_rules! compile_statement {
+    ($statement:ident) => {{
+        let scope = Scope::new();
+        let _ = $statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        $statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        data
+    }};
+}
+#[macro_export]
+macro_rules! eval_and_compare {
+    ($expr:expr, $expected:expr,$size:ident) => {{
+        // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
+        let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        expr.gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::$size),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(result, $expected, "Result does not match the expected value");
+    }};
+}
+
+#[macro_export]
+macro_rules! eval_and_compare_bool {
+    ($expr:expr, $expected:expr) => {{
+        // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
+        let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        expr.gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Bool,
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(result, $expected, "Result does not match the expected value");
+    }};
+}

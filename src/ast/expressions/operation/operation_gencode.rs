@@ -1,9 +1,7 @@
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     semantic::{
-        scope::{
-            static_types::{NumberType, RangeType, StaticType},
-        },
+        scope::static_types::{NumberType, RangeType, StaticType},
         Either, MutRc, SizeOf, TypeOf,
     },
     vm::{
@@ -605,7 +603,7 @@ mod tests {
             },
             TryParse,
         },
-        clear_stack,
+        clear_stack, eval_and_compare, eval_and_compare_bool,
         semantic::{
             scope::{
                 scope_impl::Scope,
@@ -621,83 +619,6 @@ mod tests {
     };
 
     use super::*;
-    #[macro_export]
-    macro_rules! eval_and_compare {
-        ($expr:expr, $expected:expr,$size:ident) => {{
-            // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
-            let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
-
-            let scope = Scope::new();
-            let _ = expr
-                .resolve(&scope, &None, &())
-                .expect("Semantic resolution should have succeeded");
-
-            // Code generation.
-            let instructions = CasmProgram::default();
-            expr.gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
-
-            assert!(instructions.len() > 0, "No instructions generated");
-
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-            thread.run().expect("Execution should have succeeded");
-            let memory = &thread.memory();
-            let data = clear_stack!(memory);
-
-            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-                &PrimitiveType::Number(NumberType::$size),
-                &data,
-            )
-            .expect("Deserialization should have succeeded");
-
-            assert_eq!(result, $expected, "Result does not match the expected value");
-        }};
-    }
-
-    #[macro_export]
-    macro_rules! eval_and_compare_bool {
-        ($expr:expr, $expected:expr) => {{
-            // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
-            let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
-
-            let scope = Scope::new();
-            let _ = expr
-                .resolve(&scope, &None, &())
-                .expect("Semantic resolution should have succeeded");
-
-            // Code generation.
-            let instructions = CasmProgram::default();
-            expr.gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
-
-            assert!(instructions.len() > 0, "No instructions generated");
-
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-            thread.run().expect("Execution should have succeeded");
-            let memory = &thread.memory();
-            let data = clear_stack!(memory);
-
-            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-                &PrimitiveType::Bool,
-                &data,
-            )
-            .expect("Deserialization should have succeeded");
-
-            assert_eq!(result, $expected, "Result does not match the expected value");
-        }};
-    }
 
     #[test]
     fn valid_operation_u128() {

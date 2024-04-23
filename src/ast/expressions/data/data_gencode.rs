@@ -1,24 +1,20 @@
-use std::{
-    borrow::{Borrow},
-};
+use std::borrow::Borrow;
 
-use num_traits::{ToBytes};
+use num_traits::ToBytes;
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::{utils::strings::ID},
+    ast::utils::strings::ID,
     semantic::{
         scope::{
             static_types::{NumberType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
-        }, EType, Either, Metadata, MutRc, SizeOf,
+        },
+        EType, Either, Metadata, MutRc, SizeOf,
     },
     vm::{
-        allocator::{
-            align,
-            MemoryAddress,
-        },
+        allocator::{align, MemoryAddress},
         casm::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
@@ -1479,6 +1475,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        assert_number,
         ast::{
             expressions::{
                 data::{Data, Number},
@@ -1487,7 +1484,7 @@ mod tests {
             statements::{self, Statement},
             TryParse,
         },
-        e_static, p_num,
+        compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
                 scope_impl::Scope,
@@ -1505,134 +1502,7 @@ mod tests {
             vm::{DeserializeFrom, Executable, Runtime},
         },
     };
-    #[macro_export]
-    macro_rules! assert_number {
-        ($expr:ident,$data:ident,$num_type:ident) => {
-            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-                &PrimitiveType::Number(NumberType::$num_type),
-                &$data,
-            )
-            .expect("Deserialization should have succeeded");
-
-            // Assert and return the result.
-            assert_eq!(result, $expr);
-        };
-    }
-
-    #[macro_export]
-    macro_rules! compile_expression {
-        ($expr_type:ident,$expr_str:expr) => {{
-            // Parse the expression.
-            let expr = $expr_type::parse($expr_str.into())
-                .expect("Parsing should have succeeded")
-                .1;
-
-            // Create a new block.
-            let scope = Scope::new();
-            // Perform semantic check.
-            expr.resolve(&scope, &None, &())
-                .expect("Semantic resolution should have succeeded");
-
-            // Code generation.
-            let instructions = CasmProgram::default();
-            expr.gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
-            assert!(instructions.len() > 0);
-
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-            thread.run().expect("Execution should have succeeded");
-            let memory = &thread.memory();
-            let data = clear_stack!(memory);
-            (expr, data)
-        }};
-    }
-
-    #[macro_export]
-    macro_rules! compile_expression_with_type {
-        ($expr_type:ident,$expr_str:expr,$user_type:ident) => {{
-            // Parse the expression.
-            let expr = $expr_type::parse($expr_str.into())
-                .expect("Parsing should have succeeded")
-                .1;
-
-            // Create a new block.
-            let scope = Scope::new();
-            let _ = scope
-                .as_ref()
-                .borrow_mut()
-                .register_type(
-                    &$user_type.id.clone(),
-                    UserType::$expr_type($user_type.clone().into()),
-                )
-                .expect("Type registering should have succeeded");
-            // Perform semantic check.
-            expr.resolve(&scope, &None, &())
-                .expect("Semantic resolution should have succeeded");
-
-            // Code generation.
-            let instructions = CasmProgram::default();
-            expr.gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
-            assert!(instructions.len() > 0);
-
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-            thread.run().expect("Execution should have succeeded");
-            let memory = &thread.memory();
-            let data = clear_stack!(memory);
-            (expr, data)
-        }};
-    }
-
-    #[macro_export]
-    macro_rules! clear_stack {
-        ($memory:ident) => {{
-            use num_traits::Zero;
-            let top = $memory.stack.top();
-            let data = $memory.stack.pop(top).expect("Read should have succeeded");
-            assert!($memory.stack.top().is_zero());
-            data
-        }};
-    }
-
-    #[macro_export]
-    macro_rules! compile_statement {
-        ($statement:ident) => {{
-            let scope = Scope::new();
-            let _ = $statement
-                .resolve(&scope, &None, &())
-                .expect("Semantic resolution should have succeeded");
-
-            // Code generation.
-            let instructions = CasmProgram::default();
-            $statement
-                .gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
-
-            assert!(instructions.len() > 0);
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-            thread.run().expect("Execution should have succeeded");
-            let memory = &thread.memory();
-            let data = clear_stack!(memory);
-            data
-        }};
-    }
+    use crate::{clear_stack, compile_expression};
 
     #[test]
     fn valid_number() {
