@@ -1,10 +1,9 @@
-use super::CasmProgram;
+
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, StackError, STACK_SIZE},
-            Memory, MemoryAddress,
+            stack::{Offset, STACK_SIZE}, MemoryAddress,
         },
         casm::operation::OpPrimitive,
         scheduler::Thread,
@@ -12,7 +11,7 @@ use crate::{
     },
 };
 use num_traits::ToBytes;
-use std::{cell::Cell, mem};
+
 
 #[derive(Debug, Clone)]
 pub struct Locate {

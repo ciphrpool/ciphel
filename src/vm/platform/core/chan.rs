@@ -48,9 +48,9 @@ impl Resolve for ChanFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _scope: &MutRc<Scope>,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             ChanFn::Receive => todo!(),
@@ -59,7 +59,7 @@ impl Resolve for ChanFn {
     }
 }
 impl TypeOf for ChanFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -73,8 +73,8 @@ impl TypeOf for ChanFn {
 impl GenerateCode for ChanFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

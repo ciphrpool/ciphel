@@ -1,7 +1,7 @@
 use super::Error;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{MutRc, Resolve, SemanticError};
-use std::{cell::RefCell, rc::Rc};
+
 
 impl Resolve for Error {
     type Output = ();

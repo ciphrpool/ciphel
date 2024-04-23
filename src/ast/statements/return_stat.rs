@@ -1,12 +1,12 @@
 use std::cell::Ref;
 
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::{AccessLevel, Info};
-use crate::vm::allocator::stack::{Offset, UReg};
-use crate::vm::allocator::MemoryAddress;
-use crate::vm::casm::alloc::Access;
-use crate::vm::casm::branch::Goto;
-use crate::vm::casm::mem::Mem;
+use crate::semantic::{Info};
+
+
+
+
+
 use crate::{
     ast::{
         expressions::Expression,
@@ -169,14 +169,14 @@ impl TypeOf for Return {
             Return::Unit => Ok(Either::Static(
                 <StaticType as BuildStaticType>::build_unit().into(),
             )),
-            Return::Expr { expr, metadata } => expr.type_of(&scope),
+            Return::Expr { expr, metadata: _ } => expr.type_of(&scope),
             Return::Break => Ok(Either::Static(
                 <StaticType as BuildStaticType>::build_unit().into(),
             )),
             Return::Continue => Ok(Either::Static(
                 <StaticType as BuildStaticType>::build_unit().into(),
             )),
-            Return::Yield { expr, metadata } => expr.type_of(&scope),
+            Return::Yield { expr, metadata: _ } => expr.type_of(&scope),
         }
     }
 }

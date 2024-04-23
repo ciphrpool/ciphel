@@ -60,7 +60,7 @@ impl BuildStaticType for StaticType {
 
     fn build_str_slice(
         type_sig: &ast::types::StrSliceType,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::StrSlice(super::StrSliceType {
             size: type_sig.size,
@@ -68,8 +68,8 @@ impl BuildStaticType for StaticType {
     }
 
     fn build_string(
-        type_sig: &ast::types::StringType,
-        scope: &Ref<Scope>,
+        _type_sig: &ast::types::StringType,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::String(super::StringType()))
     }
@@ -144,7 +144,7 @@ impl BuildStaticType for StaticType {
         params: &Vec<EType>,
         ret: &EType,
         scope_params_size: usize,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::StaticFn(FnType {
             params: params.clone(),
@@ -158,7 +158,7 @@ impl BuildStaticType for StaticType {
         ret: &Either<UserType, Self>,
         closed: bool,
         scope_params_size: usize,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Closure(ClosureType {
             params: params.clone(),
@@ -302,7 +302,7 @@ impl BuildStaticType for StaticType {
 
     fn build_range(
         type_sig: &ast::types::RangeType,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError> {
         Ok(Self::Range(RangeType {
             num: match type_sig.num {
@@ -325,7 +325,7 @@ impl BuildStaticType for StaticType {
     fn build_range_from(
         type_sig: NumberType,
         inclusive: bool,
-        scope: &Ref<Scope>,
+        _scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Range(RangeType {
             num: type_sig,

@@ -7,12 +7,12 @@ use crate::semantic::scope::static_types::ClosureType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
+    scope::{static_types::StaticType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Either, MutRc};
-use crate::vm::platform::Lib;
-use std::{cell::RefCell, rc::Rc};
+
+
 impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;

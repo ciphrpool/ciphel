@@ -2,7 +2,6 @@ use crate::{
     ast::{
         utils::{
             io::{PResult, Span},
-            lexem,
             strings::wst,
         },
         TryParse,

@@ -1,19 +1,16 @@
 use crate::semantic::MutRc;
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell},
     collections::HashMap,
-    io,
-    rc::Rc,
 };
 use ulid::Ulid;
 
 use self::branch::Label;
 
 use super::{
-    allocator::Memory,
     platform,
     scheduler::Thread,
-    vm::{self, Executable, Runtime, RuntimeError},
+    vm::{self, Executable, RuntimeError},
 };
 pub mod alloc;
 pub mod branch;

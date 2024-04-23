@@ -17,7 +17,7 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, string_parser::parse_string, wst},
+            strings::{parse_id, wst},
         },
         TryParse,
     },

@@ -12,7 +12,7 @@ use crate::{
         EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap};
 
 impl Resolve for Flow {
     type Output = ();
@@ -97,8 +97,8 @@ impl Resolve for MatchStat {
             },
             Either::User(value) => match value.as_ref() {
                 UserType::Struct(_) => return Err(SemanticError::InvalidPattern),
-                UserType::Enum(Enum { id, values }) => Some(values.clone()),
-                UserType::Union(Union { id, variants }) => {
+                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
+                UserType::Union(Union { id: _, variants }) => {
                     Some(variants.iter().map(|(v, _)| v).cloned().collect())
                 }
             },
@@ -108,7 +108,7 @@ impl Resolve for MatchStat {
             Some(else_branch) => {
                 for value in &self.patterns {
                     let vars = value.pattern.resolve(scope, &expr_type, &())?;
-                    for (index, var) in vars.iter().enumerate() {
+                    for (_index, var) in vars.iter().enumerate() {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }
@@ -124,11 +124,11 @@ impl Resolve for MatchStat {
                     for case in self.patterns.iter().map(|p| match &p.pattern {
                         Pattern::Primitive(_) => None,
                         Pattern::String(_) => None,
-                        Pattern::Enum { typename, value } => Some(value),
+                        Pattern::Enum { typename: _, value } => Some(value),
                         Pattern::Union {
-                            typename,
+                            typename: _,
                             variant,
-                            vars,
+                            vars: _,
                         } => Some(variant),
                     }) {
                         match case {
@@ -146,7 +146,7 @@ impl Resolve for MatchStat {
             None => {
                 for value in &self.patterns {
                     let vars = value.pattern.resolve(scope, &expr_type, &())?;
-                    for (index, var) in vars.iter().enumerate() {
+                    for (_index, var) in vars.iter().enumerate() {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }

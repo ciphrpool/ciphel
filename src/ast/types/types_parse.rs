@@ -122,7 +122,7 @@ impl TryParse for StrSliceType {
                 delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
                 wst(lexem::STR),
             ),
-            |(size, value)| StrSliceType {
+            |(size, _value)| StrSliceType {
                 size: size as usize,
             },
         )(input)

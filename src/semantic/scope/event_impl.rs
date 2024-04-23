@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
-use crate::semantic::{CompatibleWith, EType, Either, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EType, SemanticError, TypeOf};
 
-use super::{static_types::StaticType, user_type_impl::UserType, BuildEvent};
+use super::{BuildEvent};
 use crate::semantic::scope::scope_impl::Scope;
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,33 +1,27 @@
 use num_traits::ToBytes;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 use ulid::Ulid;
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::expressions::data::{Number, Primitive, VarID, Variable},
+    ast::expressions::data::{Number, Primitive},
     semantic::{
         scope::{
-            static_types::{ClosureType, NumberType, StaticType, StrSliceType},
+            static_types::{ClosureType, NumberType, StaticType},
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        AccessLevel, Either, MutRc, SizeOf, TypeOf,
+        Either, MutRc, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{
-            stack::{Offset, UReg},
-            MemoryAddress,
-        },
         casm::{
-            alloc::{Access, StackFrame},
+            alloc::Access,
             branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
-            locate::Locate,
             mem::Mem,
             operation::{Addition, OpPrimitive, Operation, OperationKind, Substraction},
             serialize::Serialized,
             Casm, CasmProgram,
         },
-        platform::{self, Lib},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -45,7 +39,7 @@ impl GenerateCode for ExprFlow {
             ExprFlow::Match(value) => value.gencode(scope, instructions),
             ExprFlow::Try(value) => value.gencode(scope, instructions),
             ExprFlow::Call(value) => value.gencode(scope, instructions),
-            ExprFlow::SizeOf(value, metadata) => {
+            ExprFlow::SizeOf(value, _metadata) => {
                 let value = value
                     .type_of(&scope.borrow())
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -65,7 +59,7 @@ impl GenerateCode for IfExpr {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
+        let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let else_label = Label::gen();
@@ -75,7 +69,7 @@ impl GenerateCode for IfExpr {
         let end_else_scope_label = Label::gen();
         let end_ifelse_label = Label::gen();
 
-        let if_label = instructions.push_label("If".into());
+        let _if_label = instructions.push_label("If".into());
 
         let _ = self.condition.gencode(scope, &instructions)?;
 
@@ -127,7 +121,7 @@ impl GenerateCode for MatchExpr {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
+        let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
@@ -143,15 +137,15 @@ impl GenerateCode for MatchExpr {
             },
             Either::User(ref value) => match value.as_ref() {
                 UserType::Struct(_) => return Err(CodeGenerationError::UnresolvedError),
-                UserType::Enum(Enum { id, values }) => Some(values.clone()),
-                UserType::Union(Union { id, variants }) => {
+                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
+                UserType::Union(Union { id: _, variants }) => {
                     Some(variants.iter().map(|(v, _)| v).cloned().collect())
                 }
             },
         };
 
         let end_match_label = Label::gen();
-        let match_label = instructions.push_label("Match".into());
+        let _match_label = instructions.push_label("Match".into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
         let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.patterns.len());
@@ -249,7 +243,7 @@ impl GenerateCode for MatchExpr {
 
             instructions.push(Casm::Switch(BranchTable::Table { table, else_label }))
         }
-        for (idx, (PatternExpr { pattern, expr }, label)) in
+        for (idx, (PatternExpr { pattern: _, expr }, label)) in
             self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
@@ -316,8 +310,8 @@ impl GenerateCode for MatchExpr {
 impl GenerateCode for TryExpr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -352,7 +346,7 @@ impl GenerateCode for FnCall {
                 StaticType::StaticFn(value) => value.scope_params_size,
                 _ => return Err(CodeGenerationError::UnresolvedError),
             };
-            let return_size = signature.size_of();
+            let _return_size = signature.size_of();
 
             match fn_sig.as_ref() {
                 StaticType::Closure(ClosureType { closed: false, .. })

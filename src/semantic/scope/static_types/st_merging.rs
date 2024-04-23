@@ -1,6 +1,6 @@
 use std::{cell::Ref, cmp::max};
 
-use nom::Err;
+
 
 use crate::{
     e_static,
@@ -156,7 +156,7 @@ impl MergeType for StringType {
         let Either::Static(other_type) = other_type else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        let StaticType::String(other_type) = other_type.as_ref() else {
+        let StaticType::String(_other_type) = other_type.as_ref() else {
             return Err(SemanticError::IncompatibleTypes);
         };
         Ok(e_static!(StaticType::String(StringType())))
@@ -206,7 +206,7 @@ impl MergeType for VecType {
 }
 
 impl MergeType for FnType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, _other: &Other, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {

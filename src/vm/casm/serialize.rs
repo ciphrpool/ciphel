@@ -1,10 +1,9 @@
-use super::CasmProgram;
+
 use crate::vm::{
-    allocator::Memory,
     scheduler::Thread,
-    vm::{Executable, Runtime, RuntimeError},
+    vm::{Executable, RuntimeError},
 };
-use std::cell::Cell;
+
 #[derive(Debug, Clone)]
 pub struct Serialized {
     pub data: Vec<u8>,

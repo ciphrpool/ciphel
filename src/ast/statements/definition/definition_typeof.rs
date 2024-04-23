@@ -4,7 +4,6 @@ use super::{EventCondition, EventDef};
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
     Resolve, SemanticError, TypeOf,
 };
 

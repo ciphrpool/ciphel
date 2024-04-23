@@ -5,10 +5,9 @@ use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
     vm::{
-        allocator::Memory,
         casm::CasmProgram,
         scheduler::Thread,
-        vm::{CodeGenerationError, Executable, GenerateCode, Runtime, RuntimeError},
+        vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
 

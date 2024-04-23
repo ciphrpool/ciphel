@@ -1,6 +1,5 @@
 use crate::ast::{
     expressions::{
-        data::{Address, Slice, Vector},
         Expression,
     },
     utils::strings::ID,

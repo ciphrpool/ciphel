@@ -1,6 +1,6 @@
-use crate::{ast::expressions::data, semantic::MutRc};
+use crate::{semantic::MutRc};
 
-use super::allocator::heap;
+
 
 #[derive(Debug, Clone)]
 pub struct StdIO {

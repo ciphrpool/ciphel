@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use nom::AsBytes;
-use num_traits::ToBytes;
 
-use crate::semantic::scope::scope_impl::Scope;
+
+
+
 use crate::{
     ast::{
         expressions::{
@@ -13,22 +13,12 @@ use crate::{
         utils::lexem,
     },
     semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType},
-        AccessLevel, EType, Either, Info, Metadata, SizeOf,
+        scope::{static_types::StaticType}, EType, Either, Info, Metadata, SizeOf,
     },
     vm::{
-        allocator::{
-            stack::{Offset, UReg},
-            MemoryAddress,
-        },
         casm::{
-            branch::{BranchIf, Goto, Label},
+            branch::{Label},
             mem::Mem,
-            operation::{
-                Addition, Cast, Equal, Less, NotEqual, OpPrimitive, Operation, OperationKind,
-                Substraction,
-            },
-            serialize::Serialized,
             Casm, CasmProgram,
         },
         platform::{
@@ -84,19 +74,19 @@ impl Printer for StaticType {
             StaticType::String(value) => value.build_printer(instructions),
             StaticType::StrSlice(value) => value.build_printer(instructions),
             StaticType::Vec(value) => value.build_printer(instructions),
-            StaticType::StaticFn(value) => {
+            StaticType::StaticFn(_value) => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
                     IOCasm::Print(PrintCasm::PrintAddr),
                 ))));
                 Ok(())
             }
-            StaticType::Closure(value) => {
+            StaticType::Closure(_value) => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
                     IOCasm::Print(PrintCasm::PrintAddr),
                 ))));
                 Ok(())
             }
-            StaticType::Chan(value) => todo!(),
+            StaticType::Chan(_value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(instructions),
             StaticType::Range(value) => value.build_printer(instructions),
             StaticType::Unit => {
@@ -117,13 +107,13 @@ impl Printer for StaticType {
                 ))));
                 Ok(())
             }
-            StaticType::Address(value) => {
+            StaticType::Address(_value) => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
                     IOCasm::Print(PrintCasm::PrintAddr),
                 ))));
                 Ok(())
             }
-            StaticType::Map(value) => todo!(),
+            StaticType::Map(_value) => todo!(),
         }
     }
 }
@@ -367,7 +357,7 @@ impl DeserializeFrom for StringType {
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let (length, rest) = extract_u64(bytes)?;
-        let (capacity, rest) = extract_u64(rest)?;
+        let (_capacity, rest) = extract_u64(rest)?;
         let rest = rest;
 
         let str_slice = std::str::from_utf8(&rest[0..length as usize])

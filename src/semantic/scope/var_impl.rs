@@ -1,18 +1,14 @@
 use std::{
-    cell::{Cell, Ref, RefCell},
-    rc::Rc,
+    cell::{Cell, Ref},
 };
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{CompatibleWith, EType, Either, SemanticError, TypeOf},
-    vm::allocator::stack::Offset,
+    semantic::{CompatibleWith, EType, SemanticError, TypeOf},
 };
 
 use super::{
-    static_types::StaticType,
     type_traits::{GetSubTypes, TypeChecking},
-    user_type_impl::UserType,
     BuildVar,
 };
 use crate::semantic::scope::scope_impl::Scope;

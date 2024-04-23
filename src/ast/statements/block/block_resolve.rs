@@ -1,15 +1,11 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use super::Block;
 
 use crate::resolve_metadata;
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::scope::user_type_impl::UserType;
+
 use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
-use crate::semantic::{Either, Resolve, SemanticError};
+use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Block {
     //type Output = MutRc;
@@ -68,9 +64,12 @@ mod tests {
     use crate::{
         ast::TryParse,
         e_static, p_num,
-        semantic::scope::{
-            scope_impl,
-            static_types::{NumberType, PrimitiveType, StaticType},
+        semantic::{
+            scope::{
+                scope_impl,
+                static_types::{NumberType, PrimitiveType, StaticType},
+            },
+            Either,
         },
     };
 

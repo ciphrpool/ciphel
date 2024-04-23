@@ -7,17 +7,17 @@ use crate::ast::expressions::data::{Data, Primitive};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{
-    ClosureType, FnType, NumberType, PrimitiveType, RangeType, StaticType,
+    NumberType, PrimitiveType, RangeType, StaticType,
 };
-use crate::semantic::scope::type_traits::GetSubTypes;
-use crate::semantic::scope::user_type_impl::UserType;
+
+
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
-use std::{cell::RefCell, rc::Rc};
+
 
 impl Resolve for UnaryOperation {
     type Output = ();

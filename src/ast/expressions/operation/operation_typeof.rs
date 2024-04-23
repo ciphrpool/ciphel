@@ -6,7 +6,6 @@ use crate::{
         scope::{
             static_types::{self, StaticType},
             type_traits::OperandMerging,
-            user_type_impl::UserType,
             BuildStaticType,
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,

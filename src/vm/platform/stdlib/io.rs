@@ -8,14 +8,14 @@ use crate::e_static;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
-use crate::vm::allocator::Memory;
+
 use crate::vm::casm::branch::Label;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
-use crate::vm::platform::LibCasm;
+
 use crate::vm::scheduler::Thread;
-use crate::vm::vm::{DeserializeFrom, Executable, Printer, Runtime, RuntimeError};
+use crate::vm::vm::{Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError},
@@ -25,7 +25,6 @@ use crate::{
     },
 };
 
-use super::StdCasm;
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
     Print(RefCell<Option<EType>>),
@@ -89,7 +88,7 @@ impl Resolve for IOFn {
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
@@ -106,7 +105,7 @@ impl Resolve for IOFn {
     }
 }
 impl TypeOf for IOFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -119,7 +118,7 @@ impl TypeOf for IOFn {
 impl GenerateCode for IOFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -304,6 +303,7 @@ mod tests {
     use crate::{
         ast::{statements::Statement, TryParse},
         semantic::scope::scope_impl::Scope,
+        vm::vm::Runtime,
     };
 
     use super::*;

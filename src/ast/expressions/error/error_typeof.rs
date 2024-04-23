@@ -4,10 +4,7 @@ use super::Error;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
-use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
-    Either, Resolve, SemanticError, TypeOf,
-};
+use crate::semantic::{scope::static_types::StaticType, Either, Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Error {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>

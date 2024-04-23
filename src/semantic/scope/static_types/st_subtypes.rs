@@ -1,5 +1,4 @@
 use crate::{
-    ast::expressions::data::StrSlice,
     e_static, e_user, p_num,
     semantic::{
         scope::{type_traits::GetSubTypes, user_type_impl::UserType},
@@ -36,7 +35,7 @@ impl GetSubTypes for StaticType {
     fn get_item(&self) -> Option<EType> {
         match self {
             StaticType::Primitive(_) => None,
-            StaticType::Slice(SliceType { size, item_type }) => Some(item_type.as_ref().clone()),
+            StaticType::Slice(SliceType { size: _, item_type }) => Some(item_type.as_ref().clone()),
             StaticType::Vec(value) => Some(value.0.as_ref().clone()),
             StaticType::StaticFn(_) => None,
             StaticType::Closure(_) => None,
@@ -125,7 +124,7 @@ impl GetSubTypes for StaticType {
     fn get_length(&self) -> Option<usize> {
         match self {
             StaticType::Primitive(_) => None,
-            StaticType::Slice(SliceType { size, item_type }) => Some(size.clone()),
+            StaticType::Slice(SliceType { size, item_type: _ }) => Some(size.clone()),
             StaticType::Vec(_) => None,
             StaticType::StaticFn(_) => None,
             StaticType::Closure(_) => None,

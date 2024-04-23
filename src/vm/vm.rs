@@ -1,8 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    rc::Rc,
-};
+
 
 use ulid::Ulid;
 
@@ -13,11 +9,9 @@ use super::{
     allocator::{
         heap::{Heap, HeapError},
         stack::StackError,
-        vtable::{VTable, VTableError},
-        Memory,
+        vtable::{VTableError},
     },
-    casm::{Casm, CasmProgram},
-    platform::stdlib::io::PrintCasm,
+    casm::{CasmProgram},
     scheduler::{Env, Thread},
     stdio::StdIO,
 };

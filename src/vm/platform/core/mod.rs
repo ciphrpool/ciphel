@@ -109,9 +109,9 @@ impl Executable for CoreCasm {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
         match self {
             CoreCasm::Alloc(value) => value.execute(thread),
-            CoreCasm::Thread(value) => todo!(),
-            CoreCasm::Chan(value) => todo!(),
-            CoreCasm::Cursor(value) => todo!(),
+            CoreCasm::Thread(_value) => todo!(),
+            CoreCasm::Chan(_value) => todo!(),
+            CoreCasm::Cursor(_value) => todo!(),
         }
     }
 }

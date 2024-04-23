@@ -1,10 +1,6 @@
 use super::{AssignValue, Assignation, Assignee};
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
-    CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
-};
-use std::{cell::RefCell, rc::Rc};
+use crate::semantic::{CompatibleWith, EType, MutRc, Resolve, SemanticError, TypeOf};
 
 impl Resolve for Assignation {
     type Output = ();
@@ -93,10 +89,13 @@ mod tests {
     use crate::{
         ast::TryParse,
         p_num,
-        semantic::scope::{
-            scope_impl::Scope,
-            static_types::{NumberType, PrimitiveType, StaticType},
-            var_impl::Var,
+        semantic::{
+            scope::{
+                scope_impl::Scope,
+                static_types::{NumberType, PrimitiveType, StaticType},
+                var_impl::Var,
+            },
+            Either,
         },
     };
 

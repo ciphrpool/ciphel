@@ -1,17 +1,16 @@
 use nom::{
     branch::alt,
     combinator::{map, opt, value},
-    sequence::{delimited, pair, preceded, tuple},
+    sequence::{pair, preceded},
 };
 
 use crate::{
     ast::{
-        expressions::data::ExprScope,
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{eater, parse_id, wst},
+            strings::{wst},
         },
         TryParse,
     },

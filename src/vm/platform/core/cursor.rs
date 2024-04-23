@@ -36,7 +36,7 @@ pub enum CursorCasm {
 }
 
 impl CursorFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(_suffixe: &Option<String>, id: &String) -> Option<Self> {
         match id.as_str() {
             lexem::LEFT => Some(CursorFn::Left),
             lexem::RIGHT => Some(CursorFn::Right),
@@ -56,9 +56,9 @@ impl Resolve for CursorFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _scope: &MutRc<Scope>,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             CursorFn::Left => todo!(),
@@ -73,7 +73,7 @@ impl Resolve for CursorFn {
     }
 }
 impl TypeOf for CursorFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -93,8 +93,8 @@ impl TypeOf for CursorFn {
 impl GenerateCode for CursorFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

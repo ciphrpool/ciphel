@@ -1,7 +1,7 @@
 use crate::{
     semantic::MutRc,
     vm::{
-        casm::{Casm, CasmProgram},
+        casm::{Casm},
         vm::RuntimeError,
     },
 };

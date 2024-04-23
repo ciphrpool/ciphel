@@ -1,32 +1,27 @@
 use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
+    cell::{Ref},
 };
 
 use nom::{
     branch::alt,
-    combinator::{map, opt, value},
-    sequence::delimited,
+    combinator::{map},
 };
 
 use self::return_stat::Return;
 use crate::semantic::scope::scope_impl::Scope;
 
 use super::{
-    expressions::Expression,
-    utils::{lexem, strings::wst},
     TryParse,
 };
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType},
+        scope::{static_types::StaticType},
         EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
         casm::{
             branch::{Call, Goto, Label},
-            serialize::Serialized,
             Casm, CasmProgram,
         },
         vm::CodeGenerationError,
@@ -34,8 +29,7 @@ use crate::{
 };
 use crate::{
     semantic::{
-        scope::{type_traits::TypeChecking, BuildStaticType},
-        CompatibleWith,
+        scope::{BuildStaticType},
     },
     vm::vm::GenerateCode,
 };

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+
 
 use crate::semantic::scope::scope_impl::Scope;
 use ulid::Ulid;
@@ -22,8 +22,7 @@ use crate::{
     },
     vm::{
         casm::{
-            alloc::StackFrame,
-            branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
+            branch::{BranchIf, BranchTable, BranchTableExprInfo, Goto, Label},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -146,15 +145,15 @@ impl GenerateCode for MatchStat {
             },
             Either::User(ref value) => match value.as_ref() {
                 UserType::Struct(_) => return Err(CodeGenerationError::UnresolvedError),
-                UserType::Enum(Enum { id, values }) => Some(values.clone()),
-                UserType::Union(Union { id, variants }) => {
+                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
+                UserType::Union(Union { id: _, variants }) => {
                     Some(variants.iter().map(|(v, _)| v).cloned().collect())
                 }
             },
         };
 
         let end_match_label = Label::gen();
-        let match_label = instructions.push_label("Match".into());
+        let _match_label = instructions.push_label("Match".into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
         let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.patterns.len());
@@ -252,7 +251,7 @@ impl GenerateCode for MatchStat {
 
             instructions.push(Casm::Switch(BranchTable::Table { table, else_label }))
         }
-        for (idx, (PatternStat { pattern, scope: s }, label)) in
+        for (idx, (PatternStat { pattern: _, scope: s }, label)) in
             self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
@@ -294,8 +293,8 @@ impl GenerateCode for MatchStat {
 impl GenerateCode for TryStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

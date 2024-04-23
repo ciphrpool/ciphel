@@ -1,4 +1,4 @@
-use nom_supreme::context;
+
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
@@ -6,17 +6,17 @@ use super::{
     VarID, Variable, Vector,
 };
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, RangeType};
+use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
+    scope::{static_types::StaticType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::{e_static, p_num, resolve_metadata};
-use std::{cell::RefCell, rc::Rc};
+
 
 impl Resolve for Data {
     type Output = ();
@@ -558,7 +558,7 @@ impl Resolve for Closure {
                 }
             }
             None => {
-                for (index, expr) in self.params.iter().enumerate() {
+                for (_index, expr) in self.params.iter().enumerate() {
                     let _ = expr.resolve(scope, &None, &())?;
                 }
             }

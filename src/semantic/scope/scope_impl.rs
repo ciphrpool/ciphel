@@ -1,7 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     rc::{Rc, Weak},
     slice::Iter,
 };
@@ -272,10 +272,10 @@ impl Scope {
         &self,
         id: &ID,
     ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let is_closure = self.state().is_closure;
+        let _is_closure = self.state().is_closure;
         match self {
             Scope::Inner {
-                data,
+                
                 parent,
                 general,
                 ..
@@ -305,7 +305,7 @@ impl Scope {
                 }
             }
             .ok_or(CodeGenerationError::UnresolvedError),
-            Scope::General { data, .. } => Err(CodeGenerationError::UnresolvedError),
+            Scope::General {  .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
     pub fn capture(&self, var: Rc<Var>) -> bool {
@@ -375,7 +375,7 @@ impl Scope {
                 data.state.get_mut().is_closure = state;
                 if state == ClosureState::CAPTURING {
                     let mut offset = 0;
-                    for (var, o) in &data.vars {
+                    for (var, _o) in &data.vars {
                         if var.state.get() == VarState::Parameter {
                             offset += var.type_sig.size_of();
                         }
@@ -433,8 +433,8 @@ impl Scope {
     pub fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         match self {
             Scope::Inner {
-                parent,
-                general,
+                parent: _,
+                general: _,
                 data,
             } => data.vars.iter(),
             Scope::General { data, .. } => data.vars.iter(),

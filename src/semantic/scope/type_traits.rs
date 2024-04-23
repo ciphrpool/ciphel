@@ -2,10 +2,10 @@ use std::cell::Ref;
 
 use crate::{
     ast::utils::strings::ID,
-    semantic::{EType, Either, SemanticError, TypeOf},
+    semantic::{EType, SemanticError, TypeOf},
 };
 
-use super::{static_types::StaticType, user_type_impl::UserType};
+
 use crate::semantic::scope::scope_impl::Scope;
 
 pub trait GetSubTypes {

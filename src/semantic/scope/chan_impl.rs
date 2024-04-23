@@ -3,10 +3,10 @@ use std::cell::Ref;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::utils::strings::ID,
-    semantic::{CompatibleWith, EType, Either, SemanticError, TypeOf},
+    semantic::{CompatibleWith, EType, SemanticError, TypeOf},
 };
 
-use super::{static_types::StaticType, user_type_impl::UserType, BuildChan};
+use super::{BuildChan};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chan {}

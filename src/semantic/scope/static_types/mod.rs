@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
 
-use super::user_type_impl::{Enum, UserType};
+use super::user_type_impl::{Enum};
 
 pub mod st_builder;
 pub mod st_compatible_with;

@@ -1,11 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::{
     ast::{expressions::data::PtrAccess, statements::assignation::AssignValue},
     semantic::{MutRc, SizeOf},
     vm::{
         casm::{
-            alloc::StackFrame,
             branch::{Call, Goto, Label},
             mem::Mem,
             Casm, CasmProgram,
@@ -99,7 +96,7 @@ impl GenerateCode for AssignValue {
 }
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::{cell::Cell, rc::Rc};
 
     use num_traits::Zero;
 

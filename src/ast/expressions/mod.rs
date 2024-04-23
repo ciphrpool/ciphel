@@ -1,6 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
+    cell::{Ref},
 };
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
@@ -16,11 +15,10 @@ use crate::{
         },
     },
     semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType},
-        EType, Either, Metadata, MutRc, Resolve, SemanticError, TypeOf,
+        EType, Metadata, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
-        casm::{Casm, CasmProgram},
+        casm::{CasmProgram},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -308,24 +306,24 @@ impl Atomic {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Atomic::Data(value) => value.metadata(),
-            Atomic::UnaryOperation(UnaryOperation::Minus { value, metadata }) => Some(metadata),
-            Atomic::UnaryOperation(UnaryOperation::Not { value, metadata }) => Some(metadata),
+            Atomic::UnaryOperation(UnaryOperation::Minus { value: _, metadata }) => Some(metadata),
+            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
             Atomic::Paren(value) => value.metadata(),
             Atomic::ExprFlow(value) => value.metadata(),
-            Atomic::Error(value) => todo!(),
+            Atomic::Error(_value) => todo!(),
         }
     }
 
     pub fn signature(&self) -> Option<EType> {
         match self {
             Atomic::Data(value) => value.signature(),
-            Atomic::UnaryOperation(UnaryOperation::Minus { value, metadata }) => {
+            Atomic::UnaryOperation(UnaryOperation::Minus { value: _, metadata }) => {
                 metadata.signature()
             }
-            Atomic::UnaryOperation(UnaryOperation::Not { value, metadata }) => metadata.signature(),
+            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => metadata.signature(),
             Atomic::Paren(value) => value.signature(),
             Atomic::ExprFlow(value) => value.signature(),
-            Atomic::Error(value) => todo!(),
+            Atomic::Error(_value) => todo!(),
         }
     }
 }

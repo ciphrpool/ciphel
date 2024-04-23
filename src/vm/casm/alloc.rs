@@ -1,20 +1,19 @@
 use num_traits::ToBytes;
 use ulid::Ulid;
 
-use super::CasmProgram;
+
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, StackSlice, UReg, STACK_SIZE},
-            Memory, MemoryAddress,
+            stack::{Offset, StackSlice, UReg, STACK_SIZE}, MemoryAddress,
         },
         casm::operation::OpPrimitive,
         scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
-use std::{cell::Cell, mem};
+
 #[derive(Debug, Clone)]
 pub enum Alloc {
     Heap { size: Option<usize> },

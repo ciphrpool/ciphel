@@ -371,7 +371,7 @@ impl OperandMerging for StaticType {
             },
 
             // SLICE
-            StaticType::StrSlice(StrSliceType { size: self_size }) => match other_type.as_ref() {
+            StaticType::StrSlice(StrSliceType { size: _self_size }) => match other_type.as_ref() {
                 StaticType::Slice(SliceType { size, item_type }) => {
                     let _ = Either::<UserType, StaticType>::Static(
                         StaticType::Primitive(PrimitiveType::Char).into(),

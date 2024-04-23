@@ -6,7 +6,7 @@ use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
+    scope::{static_types::StaticType},
     Either, MergeType, Resolve, SemanticError, TypeOf,
 };
 

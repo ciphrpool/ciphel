@@ -1,4 +1,4 @@
-use std::vec;
+
 
 use num_traits::ToBytes;
 use ulid::Ulid;
@@ -7,16 +7,16 @@ use crate::{
     semantic::{scope::static_types::NumberType, AccessLevel, SizeOf},
     vm::{
         allocator::{
-            stack::{Offset, UReg},
+            stack::{Offset},
             MemoryAddress,
         },
         casm::{
-            alloc::{Access, FLAG_YIELD, FLAG_YIELD_NONE},
-            branch::{BranchIf, BranchTable, BranchTableExprInfo, Goto, Label},
+            alloc::{Access},
+            branch::{BranchIf},
             locate::{Locate, LocateNextUTF8Char},
             mem::Mem,
             operation::{
-                Addition, Greater, GreaterEqual, Less, LessEqual, Mult, OpPrimitive, Operation,
+                Addition, Greater, Less, LessEqual, Mult, OpPrimitive, Operation,
                 OperationKind,
             },
             serialize::Serialized,

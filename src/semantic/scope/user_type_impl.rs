@@ -1,7 +1,5 @@
 use std::{
     cell::{Ref, RefCell},
-    collections::HashMap,
-    fmt::format,
     rc::Rc,
 };
 
@@ -25,7 +23,6 @@ use crate::{
         allocator::align,
         casm::{
             branch::{BranchTable, Goto, Label},
-            operation::OpPrimitive,
             Casm, CasmProgram,
         },
         platform::{

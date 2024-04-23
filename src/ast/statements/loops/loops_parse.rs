@@ -1,20 +1,18 @@
 use nom::{
     branch::alt,
     combinator::map,
-    sequence::{delimited, pair, preceded, tuple},
+    sequence::{pair, preceded, tuple},
 };
-use nom_supreme::ParserExt;
+
 
 use crate::ast::{
     expressions::{
-        data::{Address, Slice, Vector},
         Expression,
     },
     statements::{block::Block, declaration::PatternVar},
     utils::{
         io::{PResult, Span},
         lexem,
-        numbers::parse_number,
         strings::{parse_id, wst},
     },
     TryParse,

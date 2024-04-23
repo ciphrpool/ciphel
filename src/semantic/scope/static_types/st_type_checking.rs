@@ -1,6 +1,6 @@
 use crate::semantic::{
-    scope::{type_traits::TypeChecking, user_type_impl::UserType},
-    EType, Either,
+    scope::{type_traits::TypeChecking},
+    EType,
 };
 
 use super::{AddrType, NumberType, PrimitiveType, StaticType};

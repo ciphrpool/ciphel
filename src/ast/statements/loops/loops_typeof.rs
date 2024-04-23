@@ -1,8 +1,7 @@
 use std::cell::Ref;
 
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
-    EType, Either, Resolve, SemanticError, TypeOf,
+    EType, Resolve, SemanticError, TypeOf,
 };
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};

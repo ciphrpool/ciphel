@@ -2,19 +2,18 @@ use num_traits::ToBytes;
 use ulid::Ulid;
 
 use super::operation::OpPrimitive;
-use super::CasmProgram;
+
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, UReg, STACK_SIZE},
-            Memory, MemoryAddress,
+            stack::{Offset, UReg, STACK_SIZE}, MemoryAddress,
         },
         scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
-use std::{cell::Cell, os::raw::c_uint};
+
 
 #[derive(Debug, Clone)]
 pub enum Mem {
@@ -121,11 +120,11 @@ impl Executable for Mem {
             }
             Mem::SetReg(reg, opt_offset) => match opt_offset {
                 Some(offset) => {
-                    let old = thread.env.stack.set_reg(*reg, *offset);
+                    let _old = thread.env.stack.set_reg(*reg, *offset);
                 }
                 None => {
                     let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                    let old = thread.env.stack.set_reg(*reg, idx);
+                    let _old = thread.env.stack.set_reg(*reg, idx);
                 }
             },
             Mem::GetReg(reg) => {

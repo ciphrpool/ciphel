@@ -1,31 +1,26 @@
 use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::RefCell,
-    rc::Rc,
+    borrow::{Borrow},
 };
 
-use num_traits::{sign, ToBytes};
+use num_traits::{ToBytes};
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::{statements::block::block_gencode::inner_block_gencode, utils::strings::ID},
+    ast::{utils::strings::ID},
     semantic::{
         scope::{
-            static_types::{NumberType, RangeType, StaticType},
+            static_types::{NumberType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
-        },
-        AccessLevel, EType, Either, Metadata, MutRc, SizeOf,
+        }, EType, Either, Metadata, MutRc, SizeOf,
     },
     vm::{
         allocator::{
             align,
-            heap::HEAP_ADDRESS_SIZE,
-            stack::{Offset, UReg},
             MemoryAddress,
         },
         casm::{
-            alloc::{Access, Alloc, StackFrame},
+            alloc::{Access, Alloc},
             branch::{Goto, Label},
             locate::{Locate, LocateNextUTF8Char},
             mem::Mem,
@@ -33,7 +28,7 @@ use crate::{
             serialize::Serialized,
             Casm, CasmProgram,
         },
-        vm::{CodeGenerationError, GenerateCode, NextItem},
+        vm::{CodeGenerationError, GenerateCode},
     },
 };
 
@@ -584,7 +579,7 @@ impl Variable {
             Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
             Variable::FieldAccess(FieldAccess {
                 var: _,
-                field,
+                field: _,
                 metadata,
             }) => metadata.signature(),
             Variable::NumAccess(NumAccess {
@@ -604,7 +599,7 @@ impl Variable {
             Variable::Var(VarID { id: _, metadata }) => Some(metadata),
             Variable::FieldAccess(FieldAccess {
                 var: _,
-                field,
+                field: _,
                 metadata,
             }) => Some(metadata),
             Variable::NumAccess(NumAccess {
@@ -814,7 +809,7 @@ impl Variable {
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
-                metadata,
+                metadata: _,
             }) => {
                 let _ = var.locate(scope, instructions)?;
                 // Locate the field
@@ -942,7 +937,7 @@ impl Variable {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Variable::Var(VarID { id: _, metadata }) => Ok(()),
+            Variable::Var(VarID { id: _, metadata: _ }) => Ok(()),
             Variable::FieldAccess(FieldAccess {
                 var,
                 field,
@@ -972,7 +967,7 @@ impl Variable {
             Variable::NumAccess(NumAccess {
                 var,
                 index,
-                metadata,
+                metadata: _,
             }) => {
                 let _ = var.locate_from(from_type, scope, instructions)?;
                 let Some(from_type) = var.signature() else {
@@ -1061,7 +1056,7 @@ impl GenerateCode for Slice {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        let item_size = {
+        let _item_size = {
             let Some(item_type) = signature.get_item() else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
@@ -1083,7 +1078,7 @@ impl GenerateCode for Slice {
 impl GenerateCode for StrSlice {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let str_bytes = self.value.as_bytes().to_vec();
@@ -1196,7 +1191,7 @@ impl GenerateCode for Tuple {
             return Err(CodeGenerationError::UnresolvedError);
         };
         for (idx, element) in self.value.iter().enumerate() {
-            let item_size = {
+            let _item_size = {
                 let Some(item_type) =
                     // <EType as GetSubTypes>::get_nth(signature, &idx)
                     signature.get_nth(&idx)

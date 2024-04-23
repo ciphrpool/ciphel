@@ -1,12 +1,7 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    rc::Rc,
-};
+
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{scope::var_impl::Var, AccessLevel, MutRc},
 };
 
 use super::{block::Block, declaration::TypedVar};

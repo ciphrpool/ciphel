@@ -1,6 +1,5 @@
 use std::{
     cell::{Cell, RefCell},
-    default,
     rc::Rc,
 };
 
@@ -275,7 +274,7 @@ impl Stack {
     }
 
     pub fn clean(&self) -> Result<(), StackError> {
-        let top = self.top();
+        let _top = self.top();
 
         if self.registers.bottom.get() != self.registers.params_start.get()
             && self.registers.params_start.get()
@@ -425,7 +424,7 @@ impl Stack {
         self.push_with(&vec![0; size])
     }
     pub fn pop(&self, size: usize) -> Result<Vec<u8>, StackError> {
-        let mut top = self.top();
+        let top = self.top();
         if top < size {
             return Err(StackError::StackUnderflow);
         }

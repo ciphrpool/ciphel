@@ -291,7 +291,7 @@ impl CompatibleWith for static_types::ClosureType {
                 params: other_params,
                 ret: other_ret,
                 closed: other_closed,
-                scope_params_size: other_scope_params_size,
+                scope_params_size: _other_scope_params_size,
             }) = other_type.as_ref()
             {
                 if self.params.len() != other_params.len()
@@ -482,7 +482,7 @@ impl CompatibleWith for static_types::MapType {
                     static_types::KeyType::Address(value) => {
                         e_static!(StaticType::Address(value.clone()))
                     }
-                    static_types::KeyType::String(value) => {
+                    static_types::KeyType::String(_value) => {
                         e_static!(StaticType::String(static_types::StringType()))
                     }
                     static_types::KeyType::Enum(value) => {

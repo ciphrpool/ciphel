@@ -145,7 +145,7 @@ impl Resolve for MathFn {
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
@@ -232,7 +232,7 @@ impl Resolve for MathFn {
     }
 }
 impl TypeOf for MathFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -248,7 +248,7 @@ impl TypeOf for MathFn {
 impl GenerateCode for MathFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

@@ -1,13 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+
 
 use super::{Definition, EventDef, FnDef, TypeDef};
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::SizeOf;
-use crate::vm::allocator::stack::Offset;
+
 use crate::vm::allocator::MemoryAddress;
-use crate::vm::casm::alloc::{Access, Alloc};
+
 use crate::vm::casm::locate::Locate;
-use crate::vm::casm::serialize::Serialized;
+
 use crate::{
     semantic::MutRc,
     vm::{
@@ -37,8 +37,8 @@ impl GenerateCode for Definition {
 impl GenerateCode for TypeDef {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         Ok(())
     }
@@ -80,8 +80,8 @@ impl GenerateCode for FnDef {
 impl GenerateCode for EventDef {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
+        _scope: &MutRc<Scope>,
+        _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }

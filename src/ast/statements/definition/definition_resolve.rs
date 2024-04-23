@@ -1,5 +1,5 @@
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
-use crate::ast::types::Types;
+
 use crate::e_static;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::var_impl::VarState;
@@ -14,8 +14,8 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
-use crate::vm::platform::Lib;
-use std::{cell::RefCell, rc::Rc};
+
+
 impl Resolve for Definition {
     type Output = ();
     type Context = Option<EType>;
@@ -159,7 +159,7 @@ impl Resolve for FnDef {
                     .map(|p| (param.id.clone(), p))
             })
             .enumerate()
-            .map(|(index, (id, param))| {
+            .map(|(_index, (id, param))| {
                 let var = <Var as BuildVar>::build_var(&id, &param);
                 var.state.set(VarState::Parameter);
                 var.is_declared.set(true);

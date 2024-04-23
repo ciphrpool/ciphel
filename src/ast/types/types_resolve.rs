@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+
 
 use super::{
     AddrType, ChanType, ClosureType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
@@ -84,9 +84,9 @@ impl Resolve for StrSliceType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _scope: &MutRc<Scope>,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -102,9 +102,9 @@ impl Resolve for StringType {
     type Extra = ();
     fn resolve(
         &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
+        _scope: &MutRc<Scope>,
+        _context: &Self::Context,
+        _extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -280,7 +280,7 @@ impl Resolve for KeyType {
         match self {
             KeyType::Primitive(value) => value.resolve(scope, context, extra),
             KeyType::Address(value) => value.resolve(scope, context, extra),
-            KeyType::String(value) => Ok(()),
+            KeyType::String(_value) => Ok(()),
             KeyType::EnumID(value) => {
                 let borrowed_scope = scope.borrow();
                 let enum_type = borrowed_scope.find_type(value)?;

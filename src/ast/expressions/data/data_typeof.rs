@@ -5,18 +5,17 @@ use super::{
     NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
     Variable, Vector,
 };
-use crate::ast::types::{NumberType, PrimitiveType, StrSliceType, StringType};
+use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
 use crate::e_static;
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::scope::static_types::{self, StaticType};
+use crate::semantic::scope::static_types::{StaticType};
 
-use crate::semantic::scope::user_type_impl::UserType;
+
 
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{EType, MergeType, SizeOf};
 use crate::{
-    ast::types::SliceType,
     semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf},
 };
 
@@ -328,7 +327,7 @@ impl TypeOf for Address {
     }
 }
 impl TypeOf for PtrAccess {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -388,7 +387,7 @@ impl TypeOf for KeyData {
             KeyData::Address(value) => value.type_of(&scope),
             KeyData::Enum(value) => value.type_of(&scope),
             KeyData::Primitive(value) => value.type_of(&scope),
-            KeyData::StrSlice(value) => Ok(Either::Static(
+            KeyData::StrSlice(_value) => Ok(Either::Static(
                 StaticType::String(crate::semantic::scope::static_types::StringType()).into(),
             )),
         }

@@ -1,12 +1,12 @@
 use std::cell::Cell;
 
 use crate::{
-    ast::{types::Type, utils::strings::ID},
-    semantic::{EType, Metadata},
+    ast::{types::Type},
+    semantic::{Metadata},
 };
 
 use super::{
-    data::{ExprScope, Number},
+    data::{Number},
     Atomic, Expression,
 };
 pub mod operation_gencode;

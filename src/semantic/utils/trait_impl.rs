@@ -5,15 +5,13 @@ use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
         scope::{
-            static_types::{self, AddrType, StaticType},
+            static_types::{AddrType, StaticType},
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
-            user_type_impl::{self, UserType},
         },
         CompatibleWith, EType, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::Memory,
-        casm::{Casm, CasmProgram},
+        casm::{CasmProgram},
         vm::{CodeGenerationError, DeserializeFrom, NextItem, Printer, RuntimeError},
     },
 };
@@ -520,7 +518,7 @@ impl NextItem for EType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_index(instructions),
-            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
+            Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
 
@@ -531,14 +529,14 @@ impl NextItem for EType {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.build_item(instructions, end_label),
-            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
+            Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
 
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.next(instructions),
-            Either::User(value) => Err(CodeGenerationError::UnresolvedError),
+            Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
 }

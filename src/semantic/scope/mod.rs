@@ -1,14 +1,10 @@
 use std::{
-    cell::{Cell, Ref, RefCell},
-    collections::HashMap,
+    cell::{Ref},
     fmt::Debug,
-    rc::Rc,
-    slice::Iter,
 };
 
 use crate::{
     ast::{statements::definition, types, utils::strings::ID},
-    vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 
 use self::{
@@ -20,7 +16,7 @@ use self::{
 };
 use crate::semantic::scope::scope_impl::Scope;
 
-use super::{AccessLevel, EType, Either, MutRc, SemanticError};
+use super::{EType, SemanticError};
 pub mod chan_impl;
 pub mod event_impl;
 pub mod scope_impl;

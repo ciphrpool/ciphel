@@ -3,12 +3,9 @@ use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
-use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
-    Resolve, SemanticError, TypeOf,
-};
-use crate::semantic::{EType, Either, MutRc};
-use std::{cell::RefCell, rc::Rc};
+use crate::semantic::{scope::var_impl::Var, Resolve, SemanticError, TypeOf};
+use crate::semantic::{EType, MutRc};
+
 impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
@@ -40,7 +37,7 @@ impl Resolve for ForIterator {
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
-        context: &Self::Context,
+        _context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
@@ -154,10 +151,13 @@ mod tests {
     use crate::{
         ast::TryParse,
         p_num,
-        semantic::scope::{
-            scope_impl,
-            static_types::{NumberType, PrimitiveType, StaticType},
-            var_impl::Var,
+        semantic::{
+            scope::{
+                scope_impl,
+                static_types::{NumberType, PrimitiveType, StaticType},
+                var_impl::Var,
+            },
+            Either,
         },
     };
 

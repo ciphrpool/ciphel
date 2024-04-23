@@ -8,11 +8,9 @@ use crate::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             type_traits::GetSubTypes,
-            user_type_impl::UserType,
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
-    vm::platform::Lib,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
@@ -95,7 +93,7 @@ impl TypeOf for FnCall {
         Self: Sized + Resolve,
     {
         match &self.fn_var {
-            Variable::Var(VarID { id, .. }) => {
+            Variable::Var(VarID { id: _, .. }) => {
                 let borrow = self.platform.as_ref().borrow();
                 match borrow.as_ref() {
                     Some(api) => return api.type_of(scope),

@@ -1,13 +1,12 @@
-use core::borrow;
-use std::{cell::RefCell, rc::Rc};
+
+
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::statements::{
-        assignation::AssignValue,
         declaration::{DeclaredVar, PatternVar},
     },
-    semantic::{scope::var_impl::VarState, MutRc, SizeOf},
+    semantic::{MutRc, SizeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
@@ -103,7 +102,7 @@ impl GenerateCode for Declaration {
 
                 for id in &vars {
                     let borrow = scope.as_ref().borrow();
-                    for (v, o) in borrow.vars() {
+                    for (v, _o) in borrow.vars() {
                         if v.id == *id && !v.is_declared.get() {
                             v.is_declared.set(true);
                             break;

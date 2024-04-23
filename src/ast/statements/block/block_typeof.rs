@@ -6,7 +6,7 @@ use crate::ast::statements::Statement;
 use crate::e_static;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::scope::user_type_impl::UserType;
+
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{EType, MergeType};
 use crate::semantic::{Either, Resolve, SemanticError, TypeOf};

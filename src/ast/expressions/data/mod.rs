@@ -1,7 +1,5 @@
 use std::{
-    cell::{Cell, Ref, RefCell},
-    collections::HashMap,
-    rc::Rc,
+    cell::{Cell},
 };
 
 use crate::semantic::scope::scope_impl::Scope;
@@ -10,7 +8,6 @@ use crate::{
         self,
         statements::{
             declaration::TypedVar,
-            loops::{ForItem, ForIterator},
         },
         utils::strings::ID,
     },
@@ -18,10 +15,8 @@ use crate::{
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
-            var_impl::Var,
             ClosureState,
-        },
-        AccessLevel, EType, Either, Metadata, MutRc, SemanticError,
+        }, EType, Either, Metadata, MutRc, SemanticError,
     },
 };
 
@@ -238,37 +233,37 @@ impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Data::Primitive(_) => None,
-            Data::Slice(Slice { value, metadata }) => Some(metadata),
+            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
             Data::Vec(Vector {
-                value,
+                value: _,
                 metadata,
-                length,
-                capacity,
+                length: _,
+                capacity: _,
             }) => Some(metadata),
             Data::Closure(Closure { metadata, .. }) => Some(metadata),
-            Data::Tuple(Tuple { value, metadata }) => Some(metadata),
-            Data::Address(Address { value, metadata }) => Some(metadata),
-            Data::PtrAccess(PtrAccess { value, metadata }) => Some(metadata),
+            Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
+            Data::Address(Address { value: _, metadata }) => Some(metadata),
+            Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(v) => v.metadata(),
             Data::Unit => None,
-            Data::Map(Map { fields, metadata }) => Some(metadata),
+            Data::Map(Map { fields: _, metadata }) => Some(metadata),
             Data::Struct(Struct {
-                id,
-                fields,
+                id: _,
+                fields: _,
                 metadata,
             }) => Some(metadata),
             Data::Union(Union {
-                typename,
-                variant,
-                fields,
+                typename: _,
+                variant: _,
+                fields: _,
                 metadata,
             }) => Some(metadata),
             Data::Enum(Enum {
-                typename,
-                value,
+                typename: _,
+                value: _,
                 metadata,
             }) => Some(metadata),
-            Data::StrSlice(StrSlice { value, metadata }) => Some(metadata),
+            Data::StrSlice(StrSlice { value: _, metadata }) => Some(metadata),
         }
     }
 
@@ -296,37 +291,37 @@ impl Data {
                     StaticType::Primitive(PrimitiveType::Char).into(),
                 )),
             },
-            Data::Slice(Slice { value, metadata }) => metadata.signature(),
+            Data::Slice(Slice { value: _, metadata }) => metadata.signature(),
             Data::Vec(Vector {
-                value,
+                value: _,
                 metadata,
-                length,
-                capacity,
+                length: _,
+                capacity: _,
             }) => metadata.signature(),
             Data::Closure(Closure { metadata, .. }) => metadata.signature(),
-            Data::Tuple(Tuple { value, metadata }) => metadata.signature(),
-            Data::Address(Address { value, metadata }) => metadata.signature(),
-            Data::PtrAccess(PtrAccess { value, metadata }) => metadata.signature(),
+            Data::Tuple(Tuple { value: _, metadata }) => metadata.signature(),
+            Data::Address(Address { value: _, metadata }) => metadata.signature(),
+            Data::PtrAccess(PtrAccess { value: _, metadata }) => metadata.signature(),
             Data::Variable(v) => v.signature(),
             Data::Unit => Some(e_static!(StaticType::Unit)),
-            Data::Map(Map { fields, metadata }) => metadata.signature(),
+            Data::Map(Map { fields: _, metadata }) => metadata.signature(),
             Data::Struct(Struct {
-                id,
-                fields,
+                id: _,
+                fields: _,
                 metadata,
             }) => metadata.signature(),
             Data::Union(Union {
-                typename,
-                variant,
-                fields,
+                typename: _,
+                variant: _,
+                fields: _,
                 metadata,
             }) => metadata.signature(),
             Data::Enum(Enum {
-                typename,
-                value,
+                typename: _,
+                value: _,
                 metadata,
             }) => metadata.signature(),
-            Data::StrSlice(StrSlice { value, metadata }) => metadata.signature(),
+            Data::StrSlice(StrSlice { value: _, metadata }) => metadata.signature(),
         }
     }
 }

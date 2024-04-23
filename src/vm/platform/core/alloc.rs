@@ -4,32 +4,30 @@ use std::{
 };
 
 use crate::semantic::scope::scope_impl::Scope;
-use nom_supreme::parser_ext::Value;
+
 use num_traits::ToBytes;
 
 use crate::{
     ast::expressions::{
-        data::{Data, VarID, Variable},
-        Atomic, Expression,
+        Expression,
     },
     e_static, p_num,
     semantic::{
         scope::{
             static_types::{
-                self, AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
+                AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
             },
-            type_traits::{GetSubTypes, TypeChecking},
+            type_traits::{GetSubTypes},
         },
         AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{align, stack::Offset, MemoryAddress},
+        allocator::{align, stack::Offset},
         casm::{
-            alloc::{Access, Alloc, Free, Realloc},
-            branch::{BranchIf, Goto, Label},
+            alloc::{Access, Alloc, Free},
             mem::Mem,
             operation::{
-                Addition, Equal, Greater, Mult, OpPrimitive, Operation, OperationKind, Substraction,
+                OpPrimitive,
             },
             serialize::Serialized,
             Casm, CasmProgram,
@@ -40,7 +38,7 @@ use crate::{
     },
 };
 
-use super::thread::ThreadFn;
+
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AppendKind {
@@ -547,7 +545,7 @@ impl Resolve for AllocFn {
     }
 }
 impl TypeOf for AllocFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -575,7 +573,7 @@ impl TypeOf for AllocFn {
 impl GenerateCode for AllocFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

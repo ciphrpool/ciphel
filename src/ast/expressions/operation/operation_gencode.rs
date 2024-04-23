@@ -1,10 +1,8 @@
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::expressions::Atomic,
     semantic::{
         scope::{
             static_types::{NumberType, RangeType, StaticType},
-            type_traits::TypeChecking,
         },
         Either, MutRc, SizeOf, TypeOf,
     },
@@ -32,7 +30,7 @@ impl GenerateCode for super::UnaryOperation {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            super::UnaryOperation::Minus { value, metadata } => {
+            super::UnaryOperation::Minus { value, metadata: _ } => {
                 let Some(value_type) = value.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
@@ -46,7 +44,7 @@ impl GenerateCode for super::UnaryOperation {
                 }));
                 Ok(())
             }
-            super::UnaryOperation::Not { value, metadata } => {
+            super::UnaryOperation::Not { value, metadata: _ } => {
                 let _ = value.gencode(scope, instructions)?;
 
                 instructions.push(Casm::Operation(Operation {
@@ -69,7 +67,7 @@ impl GenerateCode for Range {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        let (num_type, incr_data) = match signature {
+        let (_num_type, incr_data) = match signature {
             Either::Static(value) => match value.as_ref() {
                 StaticType::Range(RangeType { num, .. }) => (
                     num.size_of(),
@@ -109,7 +107,7 @@ impl GenerateCode for super::Product {
             super::Product::Mult {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -132,7 +130,7 @@ impl GenerateCode for super::Product {
             super::Product::Div {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -155,7 +153,7 @@ impl GenerateCode for super::Product {
             super::Product::Mod {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -241,7 +239,7 @@ impl GenerateCode for super::Shift {
             super::Shift::Left {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -264,7 +262,7 @@ impl GenerateCode for super::Shift {
             super::Shift::Right {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -408,7 +406,7 @@ impl GenerateCode for super::Comparaison {
             super::Comparaison::Less {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -431,7 +429,7 @@ impl GenerateCode for super::Comparaison {
             super::Comparaison::LessEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -454,7 +452,7 @@ impl GenerateCode for super::Comparaison {
             super::Comparaison::Greater {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -477,7 +475,7 @@ impl GenerateCode for super::Comparaison {
             super::Comparaison::GreaterEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -511,7 +509,7 @@ impl GenerateCode for super::Equation {
             super::Equation::Equal {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -534,7 +532,7 @@ impl GenerateCode for super::Equation {
             super::Equation::NotEqual {
                 left,
                 right,
-                metadata,
+                metadata: _,
             } => {
                 let Some(left_type) = left.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);

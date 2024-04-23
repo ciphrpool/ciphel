@@ -1,14 +1,14 @@
 use super::operation::OpPrimitive;
-use super::CasmProgram;
+
 use crate::{
     semantic::{scope::static_types::st_deserialize::extract_u64, AccessLevel},
     vm::{
-        allocator::{stack::Offset, Memory},
+        allocator::{stack::Offset},
         scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
-use std::{cell::Cell, collections::HashMap};
+
 use ulid::Ulid;
 
 #[derive(Debug, Clone)]
@@ -169,7 +169,7 @@ impl Executable for BranchTable {
                             .read(heap_address as usize, 16)
                             .expect("Heap Read should have succeeded");
                         let (length, rest) = extract_u64(&data)?;
-                        let (capacity, rest) = extract_u64(rest)?;
+                        let (_capacity, _rest) = extract_u64(rest)?;
                         let data = thread
                             .runtime
                             .heap
@@ -178,7 +178,7 @@ impl Executable for BranchTable {
                         data
                     }
                 };
-                match (table.iter().find(|(d, l)| d == &data), else_label) {
+                match (table.iter().find(|(d, _l)| d == &data), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
                         let Some(idx) = thread.env.program.get(&else_label) else {
@@ -198,7 +198,7 @@ impl Executable for BranchTable {
             }
             BranchTable::Table { table, else_label } => {
                 let variant = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                match (table.iter().find(|(d, l)| d == &variant), else_label) {
+                match (table.iter().find(|(d, _l)| d == &variant), else_label) {
                     (None, None) => return Err(RuntimeError::IncorrectVariant),
                     (None, Some(else_label)) => {
                         let Some(idx) = thread.env.program.get(&else_label) else {

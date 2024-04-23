@@ -13,8 +13,8 @@ use crate::semantic::{
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::vm::platform::Lib;
-use std::collections::{HashMap, HashSet};
-use std::{cell::RefCell, rc::Rc};
+use std::collections::HashMap;
+
 impl Resolve for ExprFlow {
     type Output = ();
     type Context = Option<EType>;
@@ -34,7 +34,7 @@ impl Resolve for ExprFlow {
             ExprFlow::Try(value) => value.resolve(scope, context, extra),
             ExprFlow::Call(value) => value.resolve(scope, context, extra),
             ExprFlow::SizeOf(value, metadata) => {
-                value.resolve(scope, &(), extra);
+                let _ = value.resolve(scope, &(), extra);
                 resolve_metadata!(metadata, self, scope, context);
                 Ok(())
             }
@@ -211,7 +211,7 @@ impl Resolve for PatternExpr {
         Self: Sized,
     {
         let vars = self.pattern.resolve(scope, &extra, &())?;
-        for (index, var) in vars.iter().enumerate() {
+        for (_index, var) in vars.iter().enumerate() {
             var.state.set(VarState::Parameter);
             var.is_declared.set(true);
         }
@@ -245,8 +245,8 @@ impl Resolve for MatchExpr {
             },
             Either::User(value) => match value.as_ref() {
                 UserType::Struct(_) => return Err(SemanticError::InvalidPattern),
-                UserType::Enum(Enum { id, values }) => Some(values.clone()),
-                UserType::Union(Union { id, variants }) => {
+                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
+                UserType::Union(Union { id: _, variants }) => {
                     Some(variants.iter().map(|(v, _)| v).cloned().collect())
                 }
             },
@@ -267,11 +267,11 @@ impl Resolve for MatchExpr {
                     for case in self.patterns.iter().map(|p| match &p.pattern {
                         Pattern::Primitive(_) => None,
                         Pattern::String(_) => None,
-                        Pattern::Enum { typename, value } => Some(value),
+                        Pattern::Enum { typename: _, value } => Some(value),
                         Pattern::Union {
-                            typename,
+                            typename: _,
                             variant,
-                            vars,
+                            vars: _,
                         } => Some(variant),
                     }) {
                         match case {
@@ -312,7 +312,7 @@ impl Resolve for MatchExpr {
                 }
             }
             None => {
-                let Some(exhaustive_cases) = exhaustive_cases else {
+                let Some(_exhaustive_cases) = exhaustive_cases else {
                     return Err(SemanticError::InvalidPattern);
                 };
                 for pattern in &self.patterns {

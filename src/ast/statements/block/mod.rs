@@ -1,14 +1,10 @@
 use std::{
-    cell::{Cell, Ref, RefCell},
-    collections::HashMap,
-    rc::Rc,
+    cell::{Cell, RefCell},
 };
 
 use crate::{
-    ast::utils::strings::ID,
     semantic::{
-        scope::{var_impl::Var, ClosureState},
-        AccessLevel, Metadata, MutRc, SemanticError,
+        scope::{var_impl::Var, ClosureState}, Metadata, MutRc, SemanticError,
     },
 };
 

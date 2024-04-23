@@ -2,7 +2,7 @@ use std::cell::Ref;
 
 use crate::{
     ast::expressions::Expression,
-    semantic::{scope::static_types::FnType, EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
 };
 
 use self::{
@@ -12,10 +12,9 @@ use self::{
 use crate::semantic::scope::scope_impl::Scope;
 
 use super::{
-    allocator::Memory,
     casm::CasmProgram,
     scheduler::Thread,
-    vm::{CodeGenerationError, Executable, GenerateCode, Runtime, RuntimeError},
+    vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
 };
 
 pub mod core;

@@ -1,4 +1,3 @@
-use super::CasmProgram;
 use crate::{
     semantic::{
         scope::static_types::{
@@ -7,14 +6,13 @@ use crate::{
         EType, Either, SizeOf,
     },
     vm::{
-        allocator::{align, Memory, MemoryAddress},
+        allocator::{align, Memory},
         scheduler::Thread,
-        vm::{CodeGenerationError, Executable, Runtime, RuntimeError},
+        vm::{CodeGenerationError, Executable, RuntimeError},
     },
 };
 use nom::AsBytes;
-use num_traits::{FromBytes, ToBytes, Zero};
-use std::cell::Cell;
+use num_traits::{FromBytes, ToBytes};
 
 use super::math_operation::{
     comparaison_operator, math_operator, ComparaisonOperator, MathOperator,
@@ -166,7 +164,7 @@ impl OpPrimitive {
             .read(heap_address as usize, 16)
             .expect("Heap Read should have succeeded");
         let (length, rest) = extract_u64(&data)?;
-        let (capacity, rest) = extract_u64(rest)?;
+        let (_capacity, _rest) = extract_u64(rest)?;
         let data = memory
             .heap
             .read(heap_address as usize + 16, length as usize)
@@ -1072,6 +1070,8 @@ impl Executable for Cast {
 
 #[cfg(test)]
 mod tests {
+    use crate::vm::vm::Runtime;
+
     use super::*;
 
     fn init_float(num: f64, memory: &Memory) -> Result<(), RuntimeError> {

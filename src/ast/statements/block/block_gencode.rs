@@ -1,33 +1,23 @@
 use crate::semantic::scope::scope_impl::Scope;
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+
 
 use crate::{
-    ast::statements,
     semantic::{
         scope::{
-            var_impl::{Var, VarState},
-            ClosureState,
+            var_impl::{VarState},
         },
         MutRc, SizeOf,
     },
     vm::{
         allocator::{
-            stack::{Offset, UReg},
-            MemoryAddress,
+            stack::{Offset},
         },
         casm::{
-            alloc::{Access, Alloc, StackFrame},
-            branch::{BranchIf, Call, Goto, Label},
-            locate::Locate,
-            mem::Mem,
-            operation::{Equal, Operation, OperationKind},
-            serialize::Serialized,
+            alloc::{Alloc, StackFrame},
+            branch::{Call, Goto, Label},
             Casm, CasmProgram,
         },
-        vm::{CodeGenerationError, GenerateCode, RuntimeError},
+        vm::{CodeGenerationError, GenerateCode},
     },
 };
 
@@ -73,7 +63,7 @@ impl GenerateCode for Block {
         };
         let borrowed = borrowed_scope.as_ref().borrow();
 
-        let return_size = self.metadata.signature().map_or(0, |t| t.size_of());
+        let _return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
         // Parameter allocation if any
         let parameters = borrowed
