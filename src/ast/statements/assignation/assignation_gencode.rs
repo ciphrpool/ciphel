@@ -652,4 +652,30 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn valid_assignation_ptr_access_complex() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = vec[1,2,3,4];
+            *(((arr as &Any) as u64 + 16) as &u64) = 2;
+            return arr[0]; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
+    }
 }
