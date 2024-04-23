@@ -6,18 +6,13 @@ use super::{
 use crate::ast::expressions::data::{Data, Primitive};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{
-    NumberType, PrimitiveType, RangeType, StaticType,
-};
-
-
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
-
 
 impl Resolve for UnaryOperation {
     type Output = ();
@@ -462,6 +457,7 @@ impl Resolve for Cast {
     {
         let _ = self.left.resolve(scope, context, extra)?;
         let _ = self.right.resolve(scope, &(), extra)?;
+
         if let Some(l_metadata) = self.left.metadata() {
             let signature = l_metadata.signature();
             let new_context = self.right.type_of(&scope.borrow())?;
@@ -915,20 +911,6 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(U64), expr_type);
-
-        let expr = Cast::parse("'a' as string".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(e_static!(StaticType::String(StringType())), expr_type);
-
-        let expr = Cast::parse("['a'] as string".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(e_static!(StaticType::String(StringType())), expr_type);
     }
 
     #[test]

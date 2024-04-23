@@ -115,10 +115,11 @@ mod tests {
         assert_eq!(
             Assignation {
                 left: Assignee::PtrAccess(PtrAccess {
-                    value: Variable::Var(VarID {
+                    value: Atomic::Data(Data::Variable(Variable::Var(VarID {
                         id: "x".into(),
                         metadata: Metadata::default()
-                    }),
+                    })))
+                    .into(),
                     metadata: Metadata::default()
                 }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(

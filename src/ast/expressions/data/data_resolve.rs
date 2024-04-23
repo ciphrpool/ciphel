@@ -1,10 +1,9 @@
-
-
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
     MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
     VarID, Variable, Vector,
 };
+use crate::ast::expressions::Atomic;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
@@ -16,7 +15,6 @@ use crate::semantic::{
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::{e_static, p_num, resolve_metadata};
-
 
 impl Resolve for Data {
     type Output = ();
@@ -676,6 +674,13 @@ impl Resolve for Address {
     where
         Self: Sized,
     {
+        match self.value.as_ref() {
+            Atomic::Data(_) => {}
+            Atomic::UnaryOperation(_) => return Err(SemanticError::IncompatibleTypes),
+            Atomic::Paren(_) => {}
+            Atomic::ExprFlow(_) => return Err(SemanticError::IncompatibleTypes),
+            Atomic::Error(_) => {}
+        }
         let _ = self.value.resolve(scope, context, extra)?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())

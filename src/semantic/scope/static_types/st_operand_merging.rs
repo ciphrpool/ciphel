@@ -1,14 +1,14 @@
 use std::cell::Ref;
 
 use crate::{
-    e_static,
+    e_static, p_num,
     semantic::{
         scope::{type_traits::OperandMerging, user_type_impl::UserType},
         CompatibleWith, EType, Either, MergeType, SemanticError, TypeOf,
     },
 };
 
-use super::{PrimitiveType, SliceType, StaticType, StrSliceType, StringType, VecType};
+use super::{NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType, VecType};
 use crate::semantic::scope::scope_impl::Scope;
 
 impl OperandMerging for StaticType {
@@ -362,9 +362,15 @@ impl OperandMerging for StaticType {
                     Err(SemanticError::IncompatibleOperands)
                 }
                 StaticType::Primitive(to) => Ok(e_static!(Self::Primitive(to.clone()))),
-                StaticType::String(_) => Ok(e_static!(StaticType::String(StringType()))),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
+            StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {
+                match other_type.as_ref() {
+                    StaticType::Primitive(res) => Ok(e_static!(StaticType::Primitive(res.clone()))),
+                    StaticType::Address(a) => Ok(e_static!(StaticType::Address(a.clone()))),
+                    _ => Err(SemanticError::IncompatibleOperands),
+                }
+            }
             StaticType::Primitive(_) => match other_type.as_ref() {
                 StaticType::Primitive(res) => Ok(e_static!(StaticType::Primitive(res.clone()))),
                 _ => Err(SemanticError::IncompatibleOperands),
@@ -387,36 +393,25 @@ impl OperandMerging for StaticType {
                         .into(),
                     ))
                 }
-                Self::String(_) => Ok(e_static!(Self::String(StringType()))),
-                Self::Vec(other_subtype) => {
-                    let _ = Either::<UserType, StaticType>::Static(
-                        StaticType::Primitive(PrimitiveType::Char).into(),
-                    )
-                    .compatible_with(other_subtype.0.as_ref(), scope)?;
-                    Ok(Either::Static(
-                        StaticType::Vec(VecType(Box::new(Either::<UserType, StaticType>::Static(
-                            StaticType::Primitive(PrimitiveType::Char).into(),
-                        ))))
-                        .into(),
-                    ))
-                }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
 
             StaticType::String(_) => match other_type.as_ref() {
                 Self::String(_) => Ok(e_static!(Self::String(StringType()))),
-                Self::Vec(other_subtype) => {
-                    let _ = Either::<UserType, StaticType>::Static(
-                        StaticType::Primitive(PrimitiveType::Char).into(),
-                    )
-                    .compatible_with(other_subtype.0.as_ref(), scope)?;
-                    Ok(Either::Static(
-                        StaticType::Vec(VecType(Box::new(Either::<UserType, StaticType>::Static(
-                            StaticType::Primitive(PrimitiveType::Char).into(),
-                        ))))
-                        .into(),
-                    ))
-                }
+                StaticType::Address(addr) => Ok(e_static!(StaticType::Address(addr.clone()))),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+            StaticType::Vec(VecType(self_inner)) => match other_type.as_ref() {
+                StaticType::Address(addr) => Ok(e_static!(StaticType::Address(addr.clone()))),
+                StaticType::Vec(VecType(other_inner)) => Ok(e_static!(StaticType::Vec(VecType(
+                    self_inner.cast(other_inner.as_ref(), scope)?.into()
+                )))),
+                _ => Err(SemanticError::IncompatibleOperands),
+            },
+
+            StaticType::Address(_) => match other_type.as_ref() {
+                StaticType::Address(addr) => Ok(e_static!(StaticType::Address(addr.clone()))),
+                StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => Ok(p_num!(U64)),
                 _ => Err(SemanticError::IncompatibleOperands),
             },
             StaticType::Slice(SliceType { size, item_type }) => match other_type.as_ref() {
@@ -436,36 +431,8 @@ impl OperandMerging for StaticType {
                         .into(),
                     ))
                 }
-                StaticType::String(_) => {
-                    let _ = item_type.as_ref().cast(
-                        &e_static!(StaticType::Primitive(PrimitiveType::Char)),
-                        scope,
-                    )?;
-                    Ok(e_static!(StaticType::String(StringType())))
-                }
-                StaticType::StrSlice(StrSliceType { size: other_size }) => {
-                    let _ = Either::<UserType, StaticType>::Static(
-                        StaticType::Primitive(PrimitiveType::Char).into(),
-                    )
-                    .compatible_with(item_type.as_ref(), scope)?;
-                    if size != other_size {
-                        return Err(SemanticError::IncompatibleOperands);
-                    }
-
-                    Ok(Either::Static(
-                        StaticType::StrSlice(StrSliceType { size: *other_size }).into(),
-                    ))
-                }
-                StaticType::Vec(other_subtype) => {
-                    let casted = item_type.cast(other_subtype.0.as_ref(), scope)?;
-                    Ok(Either::Static(
-                        StaticType::Vec(VecType(Box::new(casted))).into(),
-                    ))
-                }
                 _ => Err(SemanticError::IncompatibleOperands),
             },
-
-            // VEC
             StaticType::Unit => match other_type.as_ref() {
                 StaticType::Unit => Ok(e_static!(StaticType::Unit)),
                 _ => Err(SemanticError::IncompatibleOperands),

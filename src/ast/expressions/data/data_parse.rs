@@ -1,11 +1,9 @@
-use std::{
-    cell::{Cell, RefCell},
-};
+use std::cell::{Cell, RefCell};
 
 use crate::{
     ast::{
         self,
-        expressions::Expression,
+        expressions::{Atomic, Expression},
         statements::{declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
@@ -398,11 +396,9 @@ impl TryParse for Address {
      * Addr := &DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ADDR), Variable::parse), |value| {
-            Address {
-                value,
-                metadata: Metadata::default(),
-            }
+        map(preceded(wst(lexem::ADDR), Atomic::parse), |value| Address {
+            value: value.into(),
+            metadata: Metadata::default(),
         })(input)
     }
 }
@@ -415,9 +411,9 @@ impl TryParse for PtrAccess {
      * Addr := -DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ACCESS), Variable::parse), |value| {
+        map(preceded(wst(lexem::ACCESS), Atomic::parse), |value| {
             PtrAccess {
-                value,
+                value: value.into(),
                 metadata: Metadata::default(),
             }
         })(input)
@@ -807,10 +803,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Address {
-                value: Variable::Var(VarID {
+                value: Atomic::Data(Data::Variable(Variable::Var(VarID {
                     id: "x".into(),
                     metadata: Metadata::default()
-                }),
+                })))
+                .into(),
                 metadata: Metadata::default()
             },
             value
@@ -824,10 +821,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             PtrAccess {
-                value: Variable::Var(VarID {
+                value: Atomic::Data(Data::Variable(Variable::Var(VarID {
                     id: "x".into(),
                     metadata: Metadata::default()
-                }),
+                })))
+                .into(),
                 metadata: Metadata::default()
             },
             value

@@ -2,7 +2,10 @@ use std::borrow::Borrow;
 
 use num_traits::ToBytes;
 
+use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::{scope, AccessLevel};
+use crate::vm::allocator::stack::Offset;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
@@ -997,6 +1000,51 @@ impl GenerateCode for Closure {
         Ok(())
     }
 }
+fn rec_addr_gencode(
+    atomic: &Atomic,
+    scope: &MutRc<Scope>,
+    instructions: &CasmProgram,
+) -> Result<(), CodeGenerationError> {
+    match atomic {
+        Atomic::Data(value) => match value {
+            Data::Variable(var) => {
+                let _ = var.locate(scope, instructions)?;
+            }
+
+            _ => {
+                let _ = atomic.gencode(scope, instructions)?;
+                let Some(value_type) = atomic.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Locate(Locate {
+                    address: MemoryAddress::Stack {
+                        offset: Offset::ST(-(value_type.size_of() as isize)),
+                        level: AccessLevel::Direct,
+                    },
+                }));
+            }
+        },
+        Atomic::UnaryOperation(_) => unreachable!(),
+        Atomic::Paren(expr) => match expr.as_ref() {
+            Expression::Atomic(a) => return rec_addr_gencode(a, scope, instructions),
+            _ => {
+                let _ = expr.gencode(scope, instructions)?;
+                let Some(value_type) = expr.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Locate(Locate {
+                    address: MemoryAddress::Stack {
+                        offset: Offset::ST(-(value_type.size_of() as isize)),
+                        level: AccessLevel::Direct,
+                    },
+                }));
+            }
+        },
+        Atomic::ExprFlow(_) => unreachable!(),
+        Atomic::Error(_) => todo!(),
+    }
+    Ok(())
+}
 
 impl GenerateCode for Address {
     fn gencode(
@@ -1004,7 +1052,8 @@ impl GenerateCode for Address {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        self.value.locate(scope, instructions)
+        let _ = rec_addr_gencode(&self.value, scope, instructions)?;
+        Ok(())
     }
 }
 
@@ -1917,5 +1966,57 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 5));
+    }
+
+    #[test]
+    fn valid_addr_complex() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = vec[1,2,3,4];
+            let len = *(arr as &u64);
+            return len; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 4));
+    }
+
+    #[test]
+    fn valid_ptr_access_complex() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let arr = vec[1,2,3,4];
+            let first = *(((arr as &Any) as u64 + 16) as &u64);
+            return first; 
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 1));
     }
 }

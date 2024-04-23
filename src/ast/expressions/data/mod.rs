@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-use super::Expression;
+use super::{Atomic, Expression};
 
 pub mod data_gencode;
 pub mod data_parse;
@@ -176,13 +176,13 @@ pub enum ClosureParam {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Address {
-    pub value: Variable,
+    pub value: Box<Atomic>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PtrAccess {
-    pub value: Variable,
+    pub value: Box<Atomic>,
     pub metadata: Metadata,
 }
 
