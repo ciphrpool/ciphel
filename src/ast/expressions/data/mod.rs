@@ -4,6 +4,7 @@ use std::{
     rc::Rc,
 };
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::{
         self,
@@ -18,7 +19,7 @@ use crate::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             var_impl::Var,
-            ClosureState, ScopeApi,
+            ClosureState,
         },
         AccessLevel, EType, Either, Metadata, MutRc, SemanticError,
     },
@@ -32,29 +33,29 @@ pub mod data_resolve;
 pub mod data_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Data<InnerScope: ScopeApi> {
+pub enum Data {
     Primitive(Primitive),
-    Slice(Slice<InnerScope>),
+    Slice(Slice),
     StrSlice(StrSlice),
-    Vec(Vector<InnerScope>),
-    Closure(Closure<InnerScope>),
-    Tuple(Tuple<InnerScope>),
-    Address(Address<InnerScope>),
-    PtrAccess(PtrAccess<InnerScope>),
-    Variable(Variable<InnerScope>),
+    Vec(Vector),
+    Closure(Closure),
+    Tuple(Tuple),
+    Address(Address),
+    PtrAccess(PtrAccess),
+    Variable(Variable),
     Unit,
-    Map(Map<InnerScope>),
-    Struct(Struct<InnerScope>),
-    Union(Union<InnerScope>),
+    Map(Map),
+    Struct(Struct),
+    Union(Union),
     Enum(Enum),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Variable<InnerScope: ScopeApi> {
+pub enum Variable {
     Var(VarID),
-    FieldAccess(FieldAccess<InnerScope>),
-    NumAccess(NumAccess<InnerScope>),
-    ListAccess(ListAccess<InnerScope>),
+    FieldAccess(FieldAccess),
+    NumAccess(NumAccess),
+    ListAccess(ListAccess),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,22 +65,22 @@ pub struct VarID {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ListAccess<InnerScope: ScopeApi> {
-    pub var: Box<Variable<InnerScope>>,
-    pub index: Box<Expression<InnerScope>>,
+pub struct ListAccess {
+    pub var: Box<Variable>,
+    pub index: Box<Expression>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FieldAccess<InnerScope: ScopeApi> {
-    pub var: Box<Variable<InnerScope>>,
-    pub field: Box<Variable<InnerScope>>,
+pub struct FieldAccess {
+    pub var: Box<Variable>,
+    pub field: Box<Variable>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct NumAccess<InnerScope: ScopeApi> {
-    pub var: Box<Variable<InnerScope>>,
+pub struct NumAccess {
+    pub var: Box<Variable>,
     pub index: usize,
     pub metadata: Metadata,
 }
@@ -108,8 +109,8 @@ pub enum Number {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Slice<InnerScope: ScopeApi> {
-    pub value: MultiData<InnerScope>,
+pub struct Slice {
+    pub value: MultiData,
     pub metadata: Metadata,
 }
 
@@ -120,37 +121,37 @@ pub struct StrSlice {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Vector<InnerScope: ScopeApi> {
-    pub value: MultiData<InnerScope>,
+pub struct Vector {
+    pub value: MultiData,
     pub metadata: Metadata,
     pub length: usize,
     pub capacity: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Tuple<InnerScope: ScopeApi> {
-    pub value: MultiData<InnerScope>,
+pub struct Tuple {
+    pub value: MultiData,
     pub metadata: Metadata,
 }
 
-pub type MultiData<InnerScope> = Vec<Expression<InnerScope>>;
+pub type MultiData = Vec<Expression>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Closure<InnerScope: ScopeApi> {
+pub struct Closure {
     params: Vec<ClosureParam>,
-    pub scope: ExprScope<InnerScope>,
+    pub scope: ExprScope,
     pub closed: bool,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExprScope<InnerScope: ScopeApi> {
-    Scope(ast::statements::scope::Scope<InnerScope>),
-    Expr(ast::statements::scope::Scope<InnerScope>),
+pub enum ExprScope {
+    Scope(ast::statements::block::Block),
+    Expr(ast::statements::block::Block),
 }
 
-impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
-    pub fn scope(&self) -> Result<MutRc<InnerScope>, SemanticError> {
+impl ExprScope {
+    pub fn scope(&self) -> Result<MutRc<Scope>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.scope(),
             ExprScope::Expr(scope) => scope.scope(),
@@ -165,8 +166,8 @@ impl<InnerScope: ScopeApi> ExprScope<InnerScope> {
 }
 //     pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
 //         match self {
-//             ExprScope::Scope(scope) => scope.env_vars(),
-//             ExprScope::Expr(scope) => scope.env_vars(),
+//             ExprScope::Scope(block) => block.env_vars(),
+//             ExprScope::Expr(block) => block.env_vars(),
 //         }
 //     }
 
@@ -186,29 +187,29 @@ pub enum ClosureParam {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Address<InnerScope: ScopeApi> {
-    pub value: Variable<InnerScope>,
+pub struct Address {
+    pub value: Variable,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PtrAccess<InnerScope: ScopeApi> {
-    pub value: Variable<InnerScope>,
+pub struct PtrAccess {
+    pub value: Variable,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Struct<InnerScope: ScopeApi> {
+pub struct Struct {
     pub id: ID,
-    pub fields: Vec<(String, Expression<InnerScope>)>,
+    pub fields: Vec<(String, Expression)>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Union<InnerScope: ScopeApi> {
+pub struct Union {
     pub typename: ID,
     pub variant: ID,
-    pub fields: Vec<(ID, Expression<InnerScope>)>,
+    pub fields: Vec<(ID, Expression)>,
     pub metadata: Metadata,
 }
 
@@ -220,20 +221,20 @@ pub struct Enum {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Map<InnerScope: ScopeApi> {
-    pub fields: Vec<(KeyData<InnerScope>, Expression<InnerScope>)>,
+pub struct Map {
+    pub fields: Vec<(KeyData, Expression)>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum KeyData<InnerScope: ScopeApi> {
+pub enum KeyData {
     Primitive(Primitive),
     StrSlice(StrSlice),
-    Address(Address<InnerScope>),
+    Address(Address),
     Enum(Enum),
 }
 
-impl<Scope: ScopeApi> Data<Scope> {
+impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Data::Primitive(_) => None,

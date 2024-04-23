@@ -1,25 +1,23 @@
 use core::borrow;
 use std::{cell::RefCell, rc::Rc};
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::statements::{
         assignation::AssignValue,
         declaration::{DeclaredVar, PatternVar},
     },
-    semantic::{
-        scope::{var_impl::VarState, ScopeApi},
-        MutRc, SizeOf,
-    },
+    semantic::{scope::var_impl::VarState, MutRc, SizeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
-        casm::{alloc::Alloc, locate::Locate, memcopy::MemCopy, Casm, CasmProgram},
+        casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
 
 use super::{Declaration, TypedVar};
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
+impl GenerateCode for Declaration {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -27,8 +25,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Declaration::Declared(TypedVar { id, .. }) => {
-                // When the variable is created in the general scope,
-                // the scope can't assign a stackpointer to the variable
+                // When the variable is created in the general block,
+                // the block can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
                 let borrow = scope.as_ref().borrow();
                 for (v, o) in borrow.vars() {
@@ -54,7 +52,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                     }
                 }
 
-                // let (address, level) = scope
+                // let (address, level) = block
                 //     .borrow()
                 //     .address_of(id)
                 //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -130,7 +128,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Declaration<Scope> {
                             level,
                         },
                     }));
-                    instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }))
+                    instructions.push(Casm::MemCopy(Mem::TakeToStack { size: var_size }))
                 }
                 Ok(())
             }
@@ -183,7 +181,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -205,12 +203,12 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let x = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let y = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
@@ -230,12 +228,12 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let x = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let y = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
@@ -295,12 +293,12 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let x = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let y = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
@@ -358,12 +356,12 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let x = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let x = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
         .expect("Deserialization should have succeeded");
-        let y = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let y = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[8..16],
         )
@@ -411,7 +409,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let value = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
@@ -458,7 +456,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let value = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )
@@ -507,7 +505,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let value = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let value = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data[0..8],
         )

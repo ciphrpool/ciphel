@@ -13,8 +13,9 @@ use super::{
     static_types::StaticType,
     type_traits::{GetSubTypes, TypeChecking},
     user_type_impl::UserType,
-    BuildVar, ScopeApi,
+    BuildVar,
 };
+use crate::semantic::scope::scope_impl::Scope;
 
 #[derive(Debug, Clone, PartialEq, Copy, Eq, PartialOrd, Ord)]
 pub enum VarState {
@@ -56,26 +57,25 @@ impl Ord for Var {
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Var {
+impl CompatibleWith for Var {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         self.type_sig.compatible_with(other, scope)
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Var {
+impl TypeOf for Var {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
         Self: Sized,
     {
         self.type_sig.type_of(&scope)
     }
 }
 
-impl<Scope: ScopeApi> BuildVar<Scope> for Var {
+impl BuildVar for Var {
     fn build_var(id: &ID, type_sig: &EType) -> Self {
         Self {
             id: id.clone(),

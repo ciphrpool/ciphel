@@ -5,26 +5,23 @@ use nom::{
 };
 use nom_supreme::ParserExt;
 
-use crate::{
-    ast::{
-        expressions::{
-            data::{PtrAccess, Variable},
-            Expression,
-        },
-        statements::scope::Scope,
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::wst,
-        },
-        TryParse,
+use crate::ast::{
+    expressions::{
+        data::{PtrAccess, Variable},
+        Expression,
     },
-    semantic::scope::ScopeApi,
+    statements::block::Block,
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::wst,
+    },
+    TryParse,
 };
 
 use super::{AssignValue, Assignation, Assignee};
 
-impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
+impl TryParse for Assignation {
     /*
      * @desc Parse assignation
      *
@@ -42,7 +39,7 @@ impl<Scope: ScopeApi> TryParse for Assignation<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
+impl TryParse for AssignValue {
     /*
      * @desc Parse assigned value
      *
@@ -52,7 +49,7 @@ impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         terminated(
             alt((
-                map(Scope::parse, |value| AssignValue::Scope(value)),
+                map(Block::parse, |value| AssignValue::Scope(value)),
                 map(Expression::parse, |value| {
                     AssignValue::Expr(Box::new(value))
                 }),
@@ -62,7 +59,7 @@ impl<InnerScope: ScopeApi> TryParse for AssignValue<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Assignee<InnerScope> {
+impl TryParse for Assignee {
     /*
      * @desc Parse assigne
      *
@@ -88,7 +85,7 @@ mod tests {
             data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
             Atomic,
         },
-        semantic::{scope::scope_impl::MockScope, Metadata},
+        semantic::Metadata,
         v_num,
     };
 
@@ -96,7 +93,7 @@ mod tests {
 
     #[test]
     fn valid_assignation() {
-        let res = Assignation::<MockScope>::parse("x = 10;".into());
+        let res = Assignation::parse("x = 10;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -112,7 +109,7 @@ mod tests {
             value
         );
 
-        let res = Assignation::<MockScope>::parse("*x = 10;".into());
+        let res = Assignation::parse("*x = 10;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -131,7 +128,7 @@ mod tests {
             value
         );
 
-        let res = Assignation::<MockScope>::parse("x.y = 10;".into());
+        let res = Assignation::parse("x.y = 10;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

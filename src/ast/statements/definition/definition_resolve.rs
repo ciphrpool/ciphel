@@ -1,6 +1,7 @@
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 use crate::ast::types::Types;
 use crate::e_static;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildUserType;
@@ -10,12 +11,12 @@ use crate::semantic::Either;
 use crate::semantic::MutRc;
 use crate::semantic::SizeOf;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
 use crate::vm::platform::Lib;
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
+impl Resolve for Definition {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -27,7 +28,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Definition::Type(value) => value.resolve(scope, &(), &()),
@@ -37,7 +37,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Definition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
+impl Resolve for TypeDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -49,7 +49,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = match self {
             TypeDef::Struct(value) => value.resolve(scope, context, extra),
@@ -70,7 +69,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypeDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
+impl Resolve for StructDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -82,7 +81,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         for (_, type_siq) in &self.fields {
             let _ = type_siq.resolve(scope, context, extra)?;
@@ -91,7 +89,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StructDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
+impl Resolve for UnionDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -103,7 +101,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         for (_, variant) in &self.variants {
             for (_, type_sig) in variant {
@@ -115,7 +112,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for UnionDef {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
+impl Resolve for EnumDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -127,13 +124,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for EnumDef {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
+impl Resolve for FnDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -145,7 +141,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         for value in &self.params {
             let _ = value.resolve(scope, context, extra)?;
@@ -165,7 +160,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             })
             .enumerate()
             .map(|(index, (id, param))| {
-                let var = <Var as BuildVar<Scope>>::build_var(&id, &param);
+                let var = <Var as BuildVar>::build_var(&id, &param);
                 var.state.set(VarState::Parameter);
                 var.is_declared.set(true);
                 var
@@ -187,17 +182,17 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnDef<Scope> {
             &scope.borrow(),
         )?;
         let fn_type_sig = e_static!(static_type);
-        let var = <Var as BuildVar<Scope>>::build_var(&self.id, &fn_type_sig);
+        let var = <Var as BuildVar>::build_var(&self.id, &fn_type_sig);
         var.is_declared.set(true);
         self.scope.set_caller(var.clone());
         let _ = scope.borrow_mut().register_var(var)?;
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
-        //let _ = return_type.compatible_with(&self.scope, &scope.borrow())?;
+        //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
+impl Resolve for EventDef {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -209,13 +204,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventDef<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         todo!()
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
+impl Resolve for EventCondition {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -227,7 +221,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for EventCondition {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         todo!()
     }
@@ -443,7 +436,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_unit() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main() -> Unit {
@@ -478,7 +471,7 @@ mod tests {
 
     #[test]
     fn valid_function_args_unit() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main(x:u64,text:string) -> Unit {
@@ -536,7 +529,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_returns() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main() -> u64 {
@@ -572,7 +565,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_captures() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main() -> Unit {
@@ -622,7 +615,7 @@ mod tests {
 
     #[test]
     fn valid_args_captures() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main(y:u64) -> Unit {
@@ -681,7 +674,7 @@ mod tests {
 
     #[test]
     fn valid_function_rec_no_args_returns() {
-        let function = FnDef::<scope_impl::Scope>::parse(
+        let function = FnDef::parse(
             r##"
 
         fn main() -> u64 {

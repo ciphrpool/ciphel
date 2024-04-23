@@ -1,21 +1,21 @@
 use std::cell::Ref;
 
 use super::Error;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     Either, Resolve, SemanticError, TypeOf,
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Error {
+impl TypeOf for Error {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         Ok(Either::Static(
-            <StaticType as BuildStaticType<Scope>>::build_error().into(),
+            <StaticType as BuildStaticType>::build_error().into(),
         ))
     }
 }

@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{Definition, EventDef, FnDef, TypeDef};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::SizeOf;
 use crate::vm::allocator::stack::Offset;
 use crate::vm::allocator::MemoryAddress;
@@ -8,18 +9,18 @@ use crate::vm::casm::alloc::{Access, Alloc};
 use crate::vm::casm::locate::Locate;
 use crate::vm::casm::serialize::Serialized;
 use crate::{
-    semantic::{scope::ScopeApi, MutRc},
+    semantic::MutRc,
     vm::{
         casm::{
             branch::{Goto, Label},
-            memcopy::MemCopy,
+            mem::Mem,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
 };
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Definition<Scope> {
+impl GenerateCode for Definition {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -33,7 +34,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Definition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for TypeDef {
+impl GenerateCode for TypeDef {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -43,7 +44,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for TypeDef {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
+impl GenerateCode for FnDef {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -59,7 +60,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
         let _ = self.scope.gencode(scope, instructions);
         instructions.push_label_id(end_closure, "end_closure".into());
 
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(closure_label)));
+        instructions.push(Casm::MemCopy(Mem::LabelOffset(closure_label)));
 
         let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
@@ -71,12 +72,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnDef<Scope> {
                 level,
             },
         }));
-        instructions.push(Casm::MemCopy(MemCopy::TakeToStack { size: var_size }));
+        instructions.push(Casm::MemCopy(Mem::TakeToStack { size: var_size }));
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for EventDef<Scope> {
+impl GenerateCode for EventDef {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -118,7 +119,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -150,7 +151,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -180,7 +181,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -231,7 +232,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -284,7 +285,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )

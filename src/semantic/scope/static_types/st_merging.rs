@@ -4,25 +4,23 @@ use nom::Err;
 
 use crate::{
     e_static,
-    semantic::{
-        scope::{user_type_impl::UserType, ScopeApi},
-        EType, Either, MergeType, SemanticError, TypeOf,
-    },
+    semantic::{scope::user_type_impl::UserType, EType, Either, MergeType, SemanticError, TypeOf},
 };
 
 use super::{
     AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
     StaticType, StrSliceType, StringType, TupleType, VecType,
 };
+use crate::semantic::scope::scope_impl::Scope;
 
-impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
+impl MergeType for StaticType {
     fn merge<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
     ) -> Result<Either<UserType, Self>, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         if let StaticType::Unit = self {
@@ -57,10 +55,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for StaticType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
+impl MergeType for PrimitiveType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -94,10 +92,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for PrimitiveType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
+impl MergeType for SliceType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -122,10 +120,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for SliceType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for RangeType {
+impl MergeType for RangeType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -149,10 +147,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for RangeType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for StringType {
+impl MergeType for StringType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -165,10 +163,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for StringType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for StrSliceType {
+impl MergeType for StrSliceType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         if let Either::Static(other_type) = other_type {
@@ -188,10 +186,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for StrSliceType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for VecType {
+impl MergeType for VecType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -207,13 +205,13 @@ impl<Scope: ScopeApi> MergeType<Scope> for VecType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for FnType {
+impl MergeType for FnType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleTypes)
-        // let other_type = other.type_of(&scope)?;
+        // let other_type = other.type_of(&block)?;
         // let Either::Static(other_type) = other_type else {
         //     return Err(SemanticError::IncompatibleTypes);
         // };
@@ -225,10 +223,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for FnType {
         // }
         // let mut merged_params = Vec::with_capacity(self.params.len());
         // for (self_inner, other_inner) in self.params.iter().zip(other_type.params.iter()) {
-        //     let merged = self_inner.merge(other_inner, scope)?;
+        //     let merged = self_inner.merge(other_inner, block)?;
         //     merged_params.push(merged);
         // }
-        // let merged_ret = self.ret.merge(other_type.ret.as_ref(), scope)?;
+        // let merged_ret = self.ret.merge(other_type.ret.as_ref(), block)?;
         // Ok(Either::Static(
         //     StaticType::StaticFn(FnType {
         //         params: merged_params,
@@ -239,10 +237,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for FnType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for ClosureType {
+impl MergeType for ClosureType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -277,10 +275,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for ClosureType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for ChanType {
+impl MergeType for ChanType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -296,10 +294,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for ChanType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
+impl MergeType for TupleType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -322,10 +320,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for TupleType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for AddrType {
+impl MergeType for AddrType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -341,10 +339,10 @@ impl<Scope: ScopeApi> MergeType<Scope> for AddrType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for MapType {
+impl MergeType for MapType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::Static(other_type) = other_type else {
@@ -370,11 +368,7 @@ impl<Scope: ScopeApi> MergeType<Scope> for MapType {
 }
 
 impl KeyType {
-    fn merge_key<Scope: ScopeApi>(
-        &self,
-        other: &KeyType,
-        scope: &Ref<Scope>,
-    ) -> Result<KeyType, SemanticError> {
+    fn merge_key(&self, other: &KeyType, scope: &Ref<Scope>) -> Result<KeyType, SemanticError> {
         match (self, other) {
             (KeyType::Primitive(value), KeyType::Primitive(other_value)) => {
                 match (value, other_value) {

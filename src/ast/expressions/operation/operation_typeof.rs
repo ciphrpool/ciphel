@@ -1,25 +1,28 @@
 use std::cell::Ref;
 
-use crate::{e_static, semantic::{
-    scope::{
-        static_types::{self, StaticType},
-        type_traits::OperandMerging,
-        user_type_impl::UserType,
-        BuildStaticType, ScopeApi,
+use crate::{
+    e_static,
+    semantic::{
+        scope::{
+            static_types::{self, StaticType},
+            type_traits::OperandMerging,
+            user_type_impl::UserType,
+            BuildStaticType,
+        },
+        EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
-    EType, Either, MergeType, Resolve, SemanticError, TypeOf,
-}};
+};
 
 use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
     LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
+use crate::semantic::scope::scope_impl::Scope;
 
-impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
+impl TypeOf for UnaryOperation {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             UnaryOperation::Minus { value, .. } => value.type_of(&scope),
@@ -28,11 +31,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for UnaryOperation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Range<Scope> {
+impl TypeOf for Range {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let type_sig = match self
             .lower
@@ -49,11 +51,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Range<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
+impl TypeOf for Product {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Product::Mult {
@@ -86,11 +87,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Product<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for Addition<Scope> {
+impl TypeOf for Addition {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
@@ -98,11 +98,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Addition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Substraction<Scope> {
+impl TypeOf for Substraction {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
@@ -110,11 +109,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Substraction<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
+impl TypeOf for Shift {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Shift::Left {
@@ -138,33 +136,30 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Shift<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseAnd<Scope> {
+impl TypeOf for BitwiseAnd {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
         left_type.merge_bitwise_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseXOR<Scope> {
+impl TypeOf for BitwiseXOR {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
         left_type.merge_bitwise_xor(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
+impl TypeOf for BitwiseOR {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
@@ -172,11 +167,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for BitwiseOR<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Cast<Scope> {
+impl TypeOf for Cast {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
@@ -184,11 +178,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Cast<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
+impl TypeOf for Comparaison {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Comparaison::Less {
@@ -231,11 +224,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Comparaison<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
+impl TypeOf for Equation {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Equation::Equal {
@@ -260,22 +252,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Equation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalAnd<Scope> {
+impl TypeOf for LogicalAnd {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;
         left_type.merge_logical_and(&right_type, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for LogicalOr<Scope> {
+impl TypeOf for LogicalOr {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let left_type = self.left.type_of(&scope)?;
         let right_type = self.right.type_of(&scope)?;

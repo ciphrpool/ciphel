@@ -3,7 +3,7 @@ use std::cell::Ref;
 use crate::{
     ast,
     semantic::{
-        scope::{user_type_impl::UserType, BuildStaticType, ScopeApi},
+        scope::{user_type_impl::UserType, BuildStaticType},
         EType, Either, SemanticError, TypeOf,
     },
 };
@@ -12,8 +12,9 @@ use super::{
     AddrType, ChanType, ClosureType, FnType, KeyType, MapType, NumberType, PrimitiveType,
     RangeType, SliceType, StaticType, TupleType, VecType,
 };
+use crate::semantic::scope::scope_impl::Scope;
 
-impl<Scope: ScopeApi> BuildStaticType<Scope> for StaticType {
+impl BuildStaticType for StaticType {
     fn build_primitive(
         type_sig: &ast::types::PrimitiveType,
         _scope: &Ref<Scope>,

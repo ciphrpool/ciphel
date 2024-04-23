@@ -19,7 +19,7 @@ use super::{
     static_types::{NumberType, PrimitiveType, StaticType},
     user_type_impl::UserType,
     var_impl::{Var, VarState},
-    ClosureState, ScopeApi, ScopeState,
+    ClosureState, ScopeState,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,18 +79,8 @@ impl Scope {
     }
 }
 
-impl ScopeApi for Scope {
-    // type UserType = UserType;
-
-    // type StaticType = StaticType;
-
-    // type Var = Var;
-
-    // type Chan = Chan;
-
-    // type Event = Event;
-
-    fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
+impl Scope {
+    pub fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
             Scope::Inner { general, data, .. } => {
@@ -119,7 +109,7 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError> {
+    pub fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 data.types.insert(id.clone(), reg.into());
@@ -132,11 +122,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
+    pub fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
+    pub fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 data.vars.push((reg.into(), Cell::default()));
@@ -150,11 +140,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
+    pub fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
         todo!()
     }
 
-    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
+    pub fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -202,7 +192,10 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
+    pub fn access_var(
+        &self,
+        id: &ID,
+    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
         let is_closure = self.state().is_closure;
         match self {
             Scope::Inner {
@@ -275,7 +268,7 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn access_var_in_parent(
+    pub fn access_var_in_parent(
         &self,
         id: &ID,
     ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
@@ -315,7 +308,7 @@ impl ScopeApi for Scope {
             Scope::General { data, .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    fn capture(&self, var: Rc<Var>) -> bool {
+    pub fn capture(&self, var: Rc<Var>) -> bool {
         match self {
             Scope::Inner { data, .. } => {
                 if data.state.get().is_closure != ClosureState::DEFAULT {
@@ -328,11 +321,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn find_chan(&self) -> Result<&Chan, SemanticError> {
+    pub fn find_chan(&self) -> Result<&Chan, SemanticError> {
         todo!()
     }
 
-    fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError> {
+    pub fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -365,18 +358,18 @@ impl ScopeApi for Scope {
                 .ok_or(SemanticError::UnknownType(id.clone())),
         }
     }
-    fn find_event(&self) -> Result<&Event, SemanticError> {
+    pub fn find_event(&self) -> Result<&Event, SemanticError> {
         todo!()
     }
 
-    fn state(&self) -> ScopeState {
+    pub fn state(&self) -> ScopeState {
         match self {
             Scope::Inner { data, .. } => data.state.get(),
             Scope::General { data, .. } => data.state.get(),
         }
     }
 
-    fn to_closure(&mut self, state: ClosureState) {
+    pub fn to_closure(&mut self, state: ClosureState) {
         match self {
             Scope::Inner { data, .. } => {
                 data.state.get_mut().is_closure = state;
@@ -402,21 +395,21 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn to_generator(&mut self) {
+    pub fn to_generator(&mut self) {
         match self {
             Scope::Inner { data, .. } => data.state.get_mut().is_generator = true,
             _ => {}
         }
     }
 
-    fn to_loop(&mut self) {
+    pub fn to_loop(&mut self) {
         match self {
             Scope::Inner { data, .. } => data.state.get_mut().is_loop = true,
             _ => {}
         }
     }
 
-    fn env_vars(&self) -> Vec<Rc<Var>> {
+    pub fn env_vars(&self) -> Vec<Rc<Var>> {
         match self {
             Scope::Inner { data, .. } => (&data.env_vars)
                 .as_ref()
@@ -437,7 +430,7 @@ impl ScopeApi for Scope {
     //     todo!()
     // }
 
-    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
+    pub fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         match self {
             Scope::Inner {
                 parent,
@@ -448,7 +441,11 @@ impl ScopeApi for Scope {
         }
     }
 
-    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError> {
+    pub fn update_var_offset(
+        &self,
+        id: &ID,
+        offset: Offset,
+    ) -> Result<Rc<Var>, CodeGenerationError> {
         match self {
             Scope::Inner { data, .. } => {
                 if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
@@ -468,14 +465,14 @@ impl ScopeApi for Scope {
             }
         }
     }
-    fn stack_top(&self) -> Option<usize> {
+    pub fn stack_top(&self) -> Option<usize> {
         match self {
             Scope::Inner { .. } => None,
             Scope::General { stack_top, .. } => Some(stack_top.get()),
         }
     }
 
-    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
+    pub fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
         match self {
             Scope::Inner { .. } => Err(CodeGenerationError::UnresolvedError),
             Scope::General { stack_top, .. } => {
@@ -483,102 +480,5 @@ impl ScopeApi for Scope {
                 Ok(())
             }
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MockScope {}
-
-impl ScopeApi for MockScope {
-    // type UserType = UserType;
-
-    // type StaticType = StaticType;
-
-    // type Var = Var;
-
-    // type Chan = Chan;
-
-    // type Event = Event;
-
-    fn spawn(_parent: &MutRc<Self>, _vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn register_type(&mut self, _id: &ID, _reg: UserType) -> Result<(), SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn register_var(&mut self, _reg: Var) -> Result<(), SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn find_chan(&self) -> Result<&Chan, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn find_type(&self, _id: &ID) -> Result<Rc<UserType>, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn find_event(&self) -> Result<&Event, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn state(&self) -> ScopeState {
-        unimplemented!("Mock function call")
-    }
-
-    fn to_closure(&mut self, state: ClosureState) {
-        unimplemented!("Mock function call")
-    }
-
-    fn to_generator(&mut self) {
-        unimplemented!("Mock function call")
-    }
-
-    fn to_loop(&mut self) {
-        unimplemented!("Mock function call")
-    }
-
-    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn env_vars(&self) -> Vec<Rc<Var>> {
-        unimplemented!("Mock function call")
-    }
-    fn capture(&self, var: Rc<Var>) -> bool {
-        unimplemented!("Mock function call")
-    }
-    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
-        unimplemented!("Mock function call")
-    }
-    fn stack_top(&self) -> Option<usize> {
-        unimplemented!("Mock function call")
-    }
-    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError> {
-        unimplemented!("Mock function call")
-    }
-    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
-        unimplemented!("Mock function call")
-    }
-
-    fn access_var_in_parent(
-        &self,
-        id: &ID,
-    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
-        unimplemented!("Mock function call")
     }
 }

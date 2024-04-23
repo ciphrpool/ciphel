@@ -3,10 +3,7 @@ use std::rc::Rc;
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
 
-use super::{
-    user_type_impl::{Enum, UserType},
-    ScopeApi,
-};
+use super::user_type_impl::{Enum, UserType};
 
 pub mod st_builder;
 pub mod st_compatible_with;
@@ -17,6 +14,7 @@ pub mod st_operand_merging;
 pub mod st_sizeof;
 pub mod st_subtypes;
 pub mod st_type_checking;
+use crate::semantic::scope::scope_impl::Scope;
 
 type SubType = Box<EType>;
 
@@ -122,10 +120,9 @@ pub enum KeyType {
     Enum(Enum),
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for StaticType {
+impl TypeOf for StaticType {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
         Self: Sized,
     {
         Ok(Either::Static(Rc::new(self.clone())))

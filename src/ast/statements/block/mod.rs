@@ -7,22 +7,23 @@ use std::{
 use crate::{
     ast::utils::strings::ID,
     semantic::{
-        scope::{var_impl::Var, ClosureState, ScopeApi},
+        scope::{var_impl::Var, ClosureState},
         AccessLevel, Metadata, MutRc, SemanticError,
     },
 };
 
 use super::Statement;
+use crate::semantic::scope::scope_impl::Scope;
 
-pub mod scope_gencode;
-pub mod scope_parse;
-pub mod scope_resolve;
-pub mod scope_typeof;
+pub mod block_gencode;
+pub mod block_parse;
+pub mod block_resolve;
+pub mod block_typeof;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Scope<Inner: ScopeApi> {
-    pub instructions: Vec<Statement<Inner>>,
-    pub inner_scope: RefCell<Option<MutRc<Inner>>>,
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub instructions: Vec<Statement>,
+    pub inner_scope: RefCell<Option<MutRc<Scope>>>,
     pub can_capture: Cell<ClosureState>,
     pub is_loop: Cell<bool>,
     pub is_generator: Cell<bool>,
@@ -30,8 +31,19 @@ pub struct Scope<Inner: ScopeApi> {
     pub metadata: Metadata,
 }
 
-impl<InnerScope: ScopeApi> Scope<InnerScope> {
-    pub fn scope(&self) -> Result<MutRc<InnerScope>, SemanticError> {
+impl PartialEq for Block {
+    fn eq(&self, other: &Self) -> bool {
+        self.instructions == other.instructions
+            && self.can_capture == other.can_capture
+            && self.is_loop == other.is_loop
+            && self.is_generator == other.is_generator
+            && self.caller == other.caller
+            && self.metadata == other.metadata
+    }
+}
+
+impl Block {
+    pub fn scope(&self) -> Result<MutRc<Scope>, SemanticError> {
         match self.inner_scope.borrow().as_ref() {
             Some(inner) => Ok(inner.clone()),
             None => Err(SemanticError::NotResolvedYet),

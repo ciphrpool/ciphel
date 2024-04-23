@@ -5,7 +5,8 @@ use crate::{
     semantic::{EType, Either, SemanticError, TypeOf},
 };
 
-use super::{static_types::StaticType, user_type_impl::UserType, ScopeApi};
+use super::{static_types::StaticType, user_type_impl::UserType};
+use crate::semantic::scope::scope_impl::Scope;
 
 pub trait GetSubTypes {
     fn get_nth(&self, _n: &usize) -> Option<EType> {
@@ -88,7 +89,7 @@ pub trait TypeChecking {
     }
 }
 
-pub trait OperandMerging<Scope: ScopeApi> {
+pub trait OperandMerging {
     fn can_substract(&self) -> Result<(), SemanticError> {
         Err(SemanticError::IncompatibleOperation)
     }
@@ -98,7 +99,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -114,7 +115,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -128,7 +129,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -142,7 +143,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -156,7 +157,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -170,7 +171,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -184,14 +185,14 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
 
     fn cast<Other>(&self, _other: &Other, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -205,7 +206,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -219,7 +220,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -233,7 +234,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }
@@ -247,7 +248,7 @@ pub trait OperandMerging<Scope: ScopeApi> {
         _scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         Err(SemanticError::IncompatibleOperands)
     }

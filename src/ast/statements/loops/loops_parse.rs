@@ -5,27 +5,24 @@ use nom::{
 };
 use nom_supreme::ParserExt;
 
-use crate::{
-    ast::{
-        expressions::{
-            data::{Address, Slice, Vector},
-            Expression,
-        },
-        statements::{declaration::PatternVar, scope::Scope},
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            numbers::parse_number,
-            strings::{parse_id, wst},
-        },
-        TryParse,
+use crate::ast::{
+    expressions::{
+        data::{Address, Slice, Vector},
+        Expression,
     },
-    semantic::scope::ScopeApi,
+    statements::{block::Block, declaration::PatternVar},
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        numbers::parse_number,
+        strings::{parse_id, wst},
+    },
+    TryParse,
 };
 
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
 
-impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
+impl TryParse for Loop {
     /*
      * @desc Parse loop
      *
@@ -37,7 +34,7 @@ impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(preceded(wst(lexem::LOOP), Scope::parse), |scope| {
+            map(preceded(wst(lexem::LOOP), Block::parse), |scope| {
                 Loop::Loop(Box::new(scope))
             }),
             map(ForLoop::parse, |value| Loop::For(value)),
@@ -46,7 +43,7 @@ impl<InnerScope: ScopeApi> TryParse for Loop<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for ForIterator<Scope> {
+impl TryParse for ForIterator {
     fn parse(input: Span) -> PResult<Self> {
         map(Expression::parse, |expr| ForIterator { expr })(input)
     }
@@ -61,7 +58,7 @@ impl TryParse for ForItem {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
+impl TryParse for ForLoop {
     /*
      * @desc Parse for loop
      *
@@ -75,7 +72,7 @@ impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
             tuple((
                 preceded(wst(lexem::FOR), ForItem::parse),
                 preceded(wst(lexem::IN), ForIterator::parse),
-                Scope::parse,
+                Block::parse,
             )),
             |(item, iterator, scope)| ForLoop {
                 item,
@@ -86,7 +83,7 @@ impl<InnerScope: ScopeApi> TryParse for ForLoop<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
+impl TryParse for WhileLoop {
     /*
      * @desc Parse while loop
      *
@@ -95,7 +92,7 @@ impl<InnerScope: ScopeApi> TryParse for WhileLoop<InnerScope> {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            pair(preceded(wst(lexem::WHILE), Expression::parse), Scope::parse),
+            pair(preceded(wst(lexem::WHILE), Expression::parse), Block::parse),
             |(condition, scope)| WhileLoop {
                 condition: Box::new(condition),
                 scope: Box::new(scope),
@@ -123,10 +120,7 @@ mod tests {
                 Statement,
             },
         },
-        semantic::{
-            scope::{scope_impl::MockScope, ClosureState},
-            Metadata,
-        },
+        semantic::{scope::ClosureState, Metadata},
         v_num,
     };
 
@@ -134,7 +128,7 @@ mod tests {
 
     #[test]
     fn valid_for() {
-        let res = ForLoop::<MockScope>::parse(
+        let res = ForLoop::parse(
             r#"
         for i in x {
             f(10);
@@ -153,7 +147,7 @@ mod tests {
                         metadata: Metadata::default()
                     }))))
                 },
-                scope: Box::new(Scope {
+                scope: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -182,7 +176,7 @@ mod tests {
 
     #[test]
     fn valid_while() {
-        let res = WhileLoop::<MockScope>::parse(
+        let res = WhileLoop::parse(
             r#"
         while true {
             f(10);
@@ -197,7 +191,7 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                scope: Box::new(Scope {
+                scope: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -226,7 +220,7 @@ mod tests {
 
     #[test]
     fn valid_loop() {
-        let res = Loop::<MockScope>::parse(
+        let res = Loop::parse(
             r#"
         loop {
             f(10);
@@ -237,7 +231,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Loop::Loop(Box::new(Scope {
+            Loop::Loop(Box::new(Block {
                 metadata: Metadata::default(),
                 instructions: vec![Statement::Flow(Flow::Call(CallStat {
                     call: FnCall {

@@ -1,30 +1,31 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::Scope;
+use super::Block;
 
 use crate::resolve_metadata;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::var_impl::{Var, VarState};
-use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError};
 use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
+use crate::semantic::{Either, Resolve, SemanticError};
 
-impl<OuterScope: ScopeApi> Resolve<OuterScope> for Scope<OuterScope> {
-    //type Output = MutRc<OuterScope>;
+impl Resolve for Block {
+    //type Output = MutRc;
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Var>;
     fn resolve(
         &self,
-        scope: &MutRc<OuterScope>,
+        scope: &MutRc<Scope>,
         context: &Self::Context,
         extra: &Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let mut inner_scope = OuterScope::spawn(scope, extra.clone())?;
+        let mut inner_scope = Scope::spawn(scope, extra.clone())?;
         {
             if self.is_loop.get() {
                 inner_scope.as_ref().borrow_mut().to_loop();
@@ -77,7 +78,7 @@ mod tests {
 
     #[test]
     fn valid_no_return_scope() {
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -107,7 +108,7 @@ mod tests {
 
     #[test]
     fn valid_basic_scope() {
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -131,7 +132,7 @@ mod tests {
 
     #[test]
     fn valid_if_scope() {
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -156,7 +157,7 @@ mod tests {
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), res);
 
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -184,7 +185,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop() {
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = [10,20];
@@ -208,7 +209,7 @@ mod tests {
 
     #[test]
     fn robustness_scope() {
-        let expr_scope = Scope::parse(
+        let expr_scope = Block::parse(
             r##"
         {
             let x = 10;

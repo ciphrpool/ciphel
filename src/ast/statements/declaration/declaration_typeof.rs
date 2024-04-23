@@ -1,56 +1,53 @@
 use std::cell::Ref;
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Either};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Declaration<Scope> {
+impl TypeOf for Declaration {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         Ok(Either::Static(
-            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            <StaticType as BuildStaticType>::build_unit().into(),
         ))
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for TypedVar {
+impl TypeOf for TypedVar {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         self.signature.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for DeclaredVar {
+impl TypeOf for DeclaredVar {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             DeclaredVar::Id(_) => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                <StaticType as BuildStaticType>::build_unit().into(),
             )),
             DeclaredVar::Typed(value) => value.type_of(&scope),
             DeclaredVar::Pattern(value) => value.type_of(&scope),
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for PatternVar {
+impl TypeOf for PatternVar {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         Ok(Either::Static(
-            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            <StaticType as BuildStaticType>::build_unit().into(),
         ))
     }
 }

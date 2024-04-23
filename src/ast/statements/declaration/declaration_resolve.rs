@@ -2,17 +2,18 @@ use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::ast::expressions::data::{Data, ExprScope};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::ast::statements::assignation::AssignValue;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::ClosureType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Either, MutRc};
 use crate::vm::platform::Lib;
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
+impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -24,14 +25,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
 
-                let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
+                let var = <Var as BuildVar>::build_var(&value.id, &var_type);
                 let _ = scope.borrow_mut().register_var(var)?;
                 Ok(())
             }
@@ -41,7 +41,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
             } => {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
-                let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
+                let var = <Var as BuildVar>::build_var(&value.id, &var_type);
 
                 if value.rec {
                     /* update params size */
@@ -69,7 +69,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                     };
-                    let var = <Var as BuildVar<Scope>>::build_var(&value.id, &var_type);
+                    let var = <Var as BuildVar>::build_var(&value.id, &var_type);
                     var.is_declared.set(true);
                     match right {
                         AssignValue::Expr(expr) => match expr.as_ref() {
@@ -108,7 +108,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Declaration<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
+impl Resolve for TypedVar {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -120,12 +120,11 @@ impl<Scope: ScopeApi> Resolve<Scope> for TypedVar {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         self.signature.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
+impl Resolve for DeclaredVar {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
@@ -137,7 +136,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             DeclaredVar::Id(id) => {
@@ -149,7 +147,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
                     return Err(SemanticError::CantInferType);
                 }
 
-                let var = <Var as BuildVar<Scope>>::build_var(id, var_type);
+                let var = <Var as BuildVar>::build_var(id, var_type);
                 vars.push(var);
                 Ok(vars)
             }
@@ -160,7 +158,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for DeclaredVar {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
+impl Resolve for PatternVar {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
@@ -172,7 +170,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             PatternVar::StructFields { typename, vars } => {
@@ -199,7 +196,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
                     }
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+                    scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }
@@ -219,7 +216,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternVar {
                     if field_type.is_any() || field_type.is_unit() {
                         return Err(SemanticError::CantInferType);
                     }
-                    scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+                    scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)
             }

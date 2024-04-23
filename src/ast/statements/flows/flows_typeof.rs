@@ -1,19 +1,19 @@
 use std::cell::Ref;
 
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     Either, MergeType, Resolve, SemanticError, TypeOf,
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
+impl TypeOf for Flow {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Flow::If(value) => value.type_of(&scope),
@@ -23,11 +23,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Flow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
+impl TypeOf for IfStat {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let is_generator = scope.state().is_generator;
 
@@ -54,17 +53,16 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IfStat<Scope> {
                 }
 
                 Ok(Either::Static(
-                    <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                    <StaticType as BuildStaticType>::build_unit().into(),
                 ))
             }
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
+impl TypeOf for MatchStat {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let is_generator = scope.state().is_generator;
 
@@ -102,18 +100,17 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchStat<Scope> {
                 }
 
                 Ok(Either::Static(
-                    <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                    <StaticType as BuildStaticType>::build_unit().into(),
                 ))
             }
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
+impl TypeOf for TryStat {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let is_generator = scope.state().is_generator;
         let main_type = self.try_branch.type_of(&scope)?;
@@ -131,21 +128,20 @@ impl<Scope: ScopeApi> TypeOf<Scope> for TryStat<Scope> {
                 }
 
                 Ok(Either::Static(
-                    <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                    <StaticType as BuildStaticType>::build_unit().into(),
                 ))
             }
         }
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for CallStat<Scope> {
+impl TypeOf for CallStat {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         Ok(Either::Static(
-            <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+            <StaticType as BuildStaticType>::build_unit().into(),
         ))
     }
 }

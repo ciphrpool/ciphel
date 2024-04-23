@@ -5,18 +5,20 @@ use super::{
     MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
     VarID, Variable, Vector,
 };
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, RangeType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::{e_static, p_num, resolve_metadata};
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
+
+impl Resolve for Data {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -28,7 +30,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Data::Primitive(value) => value.resolve(scope, context, extra),
@@ -49,15 +50,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Data<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> Variable<InnerScope> {
-    fn resolve_based(
-        &self,
-        scope: &MutRc<InnerScope>,
-        context: &EType,
-    ) -> Result<EType, SemanticError>
+impl Variable {
+    fn resolve_based(&self, scope: &MutRc<Scope>, context: &EType) -> Result<EType, SemanticError>
     where
         Self: Sized,
-        InnerScope: ScopeApi,
     {
         match self {
             Variable::Var(VarID {
@@ -132,7 +128,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
                 metadata,
             }) => {
                 let _ = var.resolve_based(scope, context)?;
-                let var_type = var.typeof_based::<InnerScope>(&context)?;
+                let var_type = var.typeof_based(&context)?;
 
                 if !<EType as TypeChecking>::is_dotnum_indexable(&var_type) {
                     Err(SemanticError::ExpectedIndexable)
@@ -162,7 +158,7 @@ impl<InnerScope: ScopeApi> Variable<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
+impl Resolve for Variable {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -174,7 +170,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Variable::Var(value) => value.resolve(scope, context, extra),
@@ -184,7 +179,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Variable<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for VarID {
+impl Resolve for VarID {
     type Output = ();
 
     type Context = Option<EType>;
@@ -203,7 +198,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VarID {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
+impl Resolve for FieldAccess {
     type Output = ();
 
     type Context = Option<EType>;
@@ -226,7 +221,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for FieldAccess<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
+impl Resolve for NumAccess {
     type Output = ();
 
     type Context = Option<EType>;
@@ -259,7 +254,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for NumAccess<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
+impl Resolve for ListAccess {
     type Output = ();
 
     type Context = Option<EType>;
@@ -292,7 +287,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ListAccess<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
+impl Resolve for Primitive {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -304,7 +299,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match context {
             Some(context_type) => {
@@ -389,7 +383,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Primitive {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
+impl Resolve for Slice {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -401,7 +395,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let (param_context, maybe_length) = match context {
             Some(context) => (
@@ -426,7 +419,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Slice<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StrSlice {
+impl Resolve for StrSlice {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -438,7 +431,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for StrSlice {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match context {
             Some(context_type) => {
@@ -451,7 +443,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StrSlice {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
+impl Resolve for Vector {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -463,7 +455,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let param_context = match context {
             Some(context) => <EType as GetSubTypes>::get_item(context),
@@ -489,7 +480,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Vector<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
+impl Resolve for Tuple {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -501,7 +492,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
         resolve_metadata!(self.metadata, self, scope, context);
@@ -509,7 +499,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Tuple<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
+impl Resolve for MultiData {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -521,7 +511,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let maybe_length = match context {
             Some(context) => <EType as GetSubTypes>::get_length(context),
@@ -545,7 +534,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MultiData<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
+impl Resolve for Closure {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -557,7 +546,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         // let Some(context) = context else {
         //     return Err(SemanticError::CantInferType);
@@ -597,7 +585,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
                     Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
                     None => Some(param),
                 };
-                let var = <Var as BuildVar<Scope>>::build_var(id, &param_type.unwrap());
+                let var = <Var as BuildVar>::build_var(id, &param_type.unwrap());
                 var.state.set(VarState::Parameter);
                 var.is_declared.set(true);
                 var
@@ -634,7 +622,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Closure<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
+impl Resolve for ExprScope {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Var>;
@@ -646,7 +634,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             ExprScope::Scope(value) => value.resolve(scope, context, extra),
@@ -654,7 +641,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprScope<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
+impl Resolve for ClosureParam {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -666,7 +653,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             ClosureParam::Full(var) => var.resolve(scope, &(), &()),
@@ -677,7 +663,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureParam {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
+impl Resolve for Address {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -689,14 +675,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for Address<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
+impl Resolve for PtrAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -708,7 +693,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.value.resolve(scope, context, extra)?;
 
@@ -759,7 +743,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PtrAccess<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
+impl Resolve for Struct {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -771,7 +755,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
         let user_type = borrowed_scope.find_type(&self.id)?;
@@ -806,7 +789,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Struct<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
+impl Resolve for Union {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -818,7 +801,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
         let user_type = borrowed_scope.find_type(&self.typename)?;
@@ -857,7 +839,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Union<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Enum {
+impl Resolve for Enum {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -869,7 +851,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let borrowed_scope = scope.borrow();
         let user_type = borrowed_scope.find_type(&self.typename)?;
@@ -878,12 +859,12 @@ impl<Scope: ScopeApi> Resolve<Scope> for Enum {
         };
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
-        // user_type.compatible_with(&(&self.typename, &self.value), scope)?;
+        // user_type.compatible_with(&(&self.typename, &self.value), block)?;
         // Ok(())
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
+impl Resolve for Map {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -895,7 +876,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let item_type = match context {
             Some(context) => <EType as GetSubTypes>::get_item(context),
@@ -926,7 +906,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Map<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
+impl Resolve for KeyData {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -938,7 +918,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for KeyData<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             KeyData::Address(value) => value.resolve(scope, context, extra),

@@ -1,39 +1,39 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::utils::strings::ID,
     semantic::{CompatibleWith, EType, Either, SemanticError, TypeOf},
 };
 
-use super::{static_types::StaticType, user_type_impl::UserType, BuildChan, ScopeApi};
+use super::{static_types::StaticType, user_type_impl::UserType, BuildChan};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chan {}
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Chan {
+impl CompatibleWith for Chan {
     fn compatible_with<Other>(
         &self,
         _other: &Other,
         _scope: &Ref<Scope>,
     ) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         todo!()
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Chan {
+impl TypeOf for Chan {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
         Self: Sized,
     {
         todo!()
     }
 }
 
-impl<Scope: ScopeApi> BuildChan<Scope> for Chan {
+impl BuildChan for Chan {
     fn build_chan(_id: &ID, _type_sig: &EType) -> Self {
         todo!()
     }

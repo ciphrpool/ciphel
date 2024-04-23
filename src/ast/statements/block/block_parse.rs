@@ -12,15 +12,12 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{
-        scope::{ClosureState, ScopeApi},
-        Metadata,
-    },
+    semantic::{scope::ClosureState, Metadata},
 };
 
-use super::Scope;
+use super::Block;
 
-impl<Inner: ScopeApi> TryParse for Scope<Inner> {
+impl TryParse for Block {
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(
@@ -28,7 +25,7 @@ impl<Inner: ScopeApi> TryParse for Scope<Inner> {
                 many0(Statement::parse),
                 wst(lexem::BRA_C),
             ),
-            |value| Scope {
+            |value| Block {
                 instructions: value,
                 inner_scope: RefCell::new(None),
                 can_capture: Cell::new(ClosureState::DEFAULT),

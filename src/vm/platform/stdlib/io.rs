@@ -5,6 +5,7 @@ use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
 use crate::vm::allocator::Memory;
@@ -17,7 +18,7 @@ use crate::vm::scheduler::Thread;
 use crate::vm::vm::{DeserializeFrom, Executable, Printer, Runtime, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, MutRc, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -81,10 +82,10 @@ impl IOFn {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IOFn {
+impl Resolve for IOFn {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -104,11 +105,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for IOFn {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IOFn {
+impl TypeOf for IOFn {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             IOFn::Print(_) => Ok(e_static!(StaticType::Unit)),
@@ -116,7 +116,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for IOFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for IOFn {
+impl GenerateCode for IOFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,

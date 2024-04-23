@@ -21,13 +21,13 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::Metadata,
     vm,
 };
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
+impl TryParse for ExprFlow {
     /*
      * @desc Parse expression statement
      *
@@ -51,7 +51,7 @@ impl<Scope: ScopeApi> TryParse for ExprFlow<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
+impl TryParse for IfExpr {
     /*
      * @desc Parse If expression
      *
@@ -63,9 +63,9 @@ impl<Scope: ScopeApi> TryParse for IfExpr<Scope> {
             pair(
                 pair(
                     delimited(wst(lexem::IF), Expression::parse, wst(lexem::THEN)),
-                    ExprScope::<Scope>::parse,
+                    ExprScope::parse,
                 ),
-                preceded(wst(lexem::ELSE), ExprScope::<Scope>::parse),
+                preceded(wst(lexem::ELSE), ExprScope::parse),
             ),
             |((condition, then_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
@@ -138,20 +138,20 @@ impl TryParse for Pattern {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for PatternExpr<Scope> {
+impl TryParse for PatternExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
                 preceded(wst(lexem::CASE), Pattern::parse),
                 wst(lexem::BIGARROW),
-                ExprScope::<Scope>::parse,
+                ExprScope::parse,
             ),
             |(pattern, expr)| PatternExpr { pattern, expr },
         )(input)
     }
 }
 
-impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
+impl TryParse for MatchExpr {
     /*
      * @desc Parse Match expression
      *
@@ -180,7 +180,7 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
                             wst(lexem::COMA),
                             preceded(
                                 wst(lexem::ELSE),
-                                preceded(wst(lexem::BIGARROW), ExprScope::<Scope>::parse),
+                                preceded(wst(lexem::BIGARROW), ExprScope::parse),
                             ),
                         )),
                     ),
@@ -197,7 +197,7 @@ impl<Scope: ScopeApi> TryParse for MatchExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
+impl TryParse for TryExpr {
     /*
      * @desc Parse try expression
      *
@@ -207,8 +207,8 @@ impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::TRY), ExprScope::<Scope>::parse),
-                preceded(wst(lexem::ELSE), ExprScope::<Scope>::parse),
+                preceded(wst(lexem::TRY), ExprScope::parse),
+                preceded(wst(lexem::ELSE), ExprScope::parse),
             ),
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
@@ -219,7 +219,7 @@ impl<Scope: ScopeApi> TryParse for TryExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for FnCall<Scope> {
+impl TryParse for FnCall {
     /*
      * @desc Parse fn call
      *
@@ -259,12 +259,9 @@ mod tests {
                 flows::PatternExpr,
                 Atomic, Expression,
             },
-            statements::{return_stat::Return, scope::Scope, Statement},
+            statements::{block::Block, return_stat::Return, Statement},
         },
-        semantic::{
-            scope::{scope_impl::MockScope, ClosureState},
-            Metadata,
-        },
+        semantic::{scope::ClosureState, Metadata},
         v_num,
     };
 
@@ -272,7 +269,7 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let res = IfExpr::<MockScope>::parse("if true then 10 else 20".into());
+        let res = IfExpr::parse("if true then 10 else 20".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -280,7 +277,7 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                then_branch: ExprScope::Expr(Scope {
+                then_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -296,7 +293,7 @@ mod tests {
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
-                else_branch: ExprScope::Expr(Scope {
+                else_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -320,7 +317,7 @@ mod tests {
 
     #[test]
     fn valid_match() {
-        let res = MatchExpr::<MockScope>::parse(
+        let res = MatchExpr::parse(
             r#"
         match x { 
             case 10 => true,
@@ -349,7 +346,7 @@ mod tests {
                         pattern: Pattern::Primitive(Primitive::Number(Cell::new(
                             Number::Unresolved(10)
                         ))),
-                        expr: ExprScope::Expr(Scope {
+                        expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr {
@@ -371,7 +368,7 @@ mod tests {
                             value: "Hello World".to_string(),
                             metadata: Metadata::default()
                         }),
-                        expr: ExprScope::Expr(Scope {
+                        expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr {
@@ -393,7 +390,7 @@ mod tests {
                             typename: "Geo".into(),
                             value: "Point".into()
                         },
-                        expr: ExprScope::Expr(Scope {
+                        expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr {
@@ -416,7 +413,7 @@ mod tests {
                             variant: "Point".into(),
                             vars: vec!["y".into()]
                         },
-                        expr: ExprScope::Expr(Scope {
+                        expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
                                 (Statement::Return(Return::Expr {
@@ -469,7 +466,7 @@ mod tests {
                     //     })
                     // }
                 ],
-                else_branch: Some(ExprScope::Expr(Scope {
+                else_branch: Some(ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -492,12 +489,12 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let res = TryExpr::<MockScope>::parse("try 10 else 20".into());
+        let res = TryExpr::parse("try 10 else 20".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             TryExpr {
-                try_branch: ExprScope::Expr(Scope {
+                try_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -513,7 +510,7 @@ mod tests {
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
-                else_branch: ExprScope::Expr(Scope {
+                else_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -537,7 +534,7 @@ mod tests {
 
     #[test]
     fn valid_fn_call() {
-        let res = FnCall::<MockScope>::parse("f(x,10)".into());
+        let res = FnCall::parse("f(x,10)".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -565,7 +562,7 @@ mod tests {
 
     #[test]
     fn valid_lib_call() {
-        let res = FnCall::<MockScope>::parse("core::f(x,10)".into());
+        let res = FnCall::parse("core::f(x,10)".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

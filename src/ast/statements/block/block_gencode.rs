@@ -1,3 +1,4 @@
+use crate::semantic::scope::scope_impl::Scope;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -8,7 +9,7 @@ use crate::{
     semantic::{
         scope::{
             var_impl::{Var, VarState},
-            ClosureState, ScopeApi,
+            ClosureState,
         },
         MutRc, SizeOf,
     },
@@ -21,7 +22,7 @@ use crate::{
             alloc::{Access, Alloc, StackFrame},
             branch::{BranchIf, Call, Goto, Label},
             locate::Locate,
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{Equal, Operation, OperationKind},
             serialize::Serialized,
             Casm, CasmProgram,
@@ -30,11 +31,11 @@ use crate::{
     },
 };
 
-use super::Scope;
+use super::Block;
 
-pub fn inner_scope_gencode<S: ScopeApi>(
-    scope: &MutRc<S>,
-    value: &Scope<S>,
+pub fn inner_block_gencode(
+    scope: &MutRc<Scope>,
+    block: &Block,
     param_size: Option<usize>,
     is_direct_loop: bool,
     instructions: &CasmProgram,
@@ -46,9 +47,9 @@ pub fn inner_scope_gencode<S: ScopeApi>(
         label: Some(end_scope_label),
     }));
 
-    instructions.push_label_id(scope_label, "scope".into());
+    instructions.push_label_id(scope_label, "block".into());
 
-    let _ = value.gencode(scope, &instructions)?;
+    let _ = block.gencode(scope, &instructions)?;
 
     instructions.push_label_id(end_scope_label, "end_scope".into());
     instructions.push(Casm::Call(Call::From {
@@ -60,10 +61,10 @@ pub fn inner_scope_gencode<S: ScopeApi>(
     Ok(())
 }
 
-impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
+impl GenerateCode for Block {
     fn gencode(
         &self,
-        _scope: &MutRc<OuterScope>,
+        _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let borrowed = self.inner_scope.borrow();
@@ -111,7 +112,7 @@ impl<OuterScope: ScopeApi> GenerateCode<OuterScope> for Scope<OuterScope> {
         //             let (_, offset, level) = borrowed.access_var(&var.id)?;
         //             let (_, offset_parent, level_parent) =
         //                 borrowed.access_var_in_parent(&var.id)?;
-        //             /* Assign the value of the caller to the caller reference inside the current scope */
+        //             /* Assign the value of the caller to the caller reference inside the current block */
         //             instructions.push(Casm::Access(Access::Static {
         //                 address: MemoryAddress::Stack {
         //                     offset: offset_parent,

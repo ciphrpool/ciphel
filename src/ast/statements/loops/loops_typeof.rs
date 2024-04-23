@@ -1,17 +1,17 @@
 use std::cell::Ref;
 
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     EType, Either, Resolve, SemanticError, TypeOf,
 };
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
+use crate::semantic::scope::scope_impl::Scope;
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Loop<Scope> {
+impl TypeOf for Loop {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Loop::For(value) => value.type_of(&scope),
@@ -20,29 +20,26 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Loop<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ForIterator<Scope> {
+impl TypeOf for ForIterator {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         self.expr.type_of(scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ForLoop<Scope> {
+impl TypeOf for ForLoop {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         self.scope.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for WhileLoop<Scope> {
+impl TypeOf for WhileLoop {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         self.scope.type_of(&scope)
     }

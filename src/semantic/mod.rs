@@ -6,8 +6,9 @@ use std::{
 };
 
 use crate::ast::utils::strings::ID;
+use crate::semantic::scope::scope_impl::Scope;
 
-use self::scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi};
+use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
 pub mod scope;
 pub mod utils;
@@ -140,7 +141,7 @@ pub enum AccessLevel {
     Backward(usize),
 }
 
-pub trait Resolve<Scope: ScopeApi> {
+pub trait Resolve {
     type Output;
     type Context: Default;
     type Extra: Default;
@@ -154,27 +155,26 @@ pub trait Resolve<Scope: ScopeApi> {
         Self: Sized;
 }
 
-pub trait CompatibleWith<Scope: ScopeApi> {
+pub trait CompatibleWith {
     fn compatible_with<Other>(
         &self,
         other: &Other,
         scope: &Ref<Scope>,
     ) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>;
+        Other: TypeOf;
 }
 
-pub trait TypeOf<Scope: ScopeApi> {
+pub trait TypeOf {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
         Self: Sized;
 }
 
-pub trait MergeType<Scope: ScopeApi> {
+pub trait MergeType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>;
+        Other: TypeOf;
 }
 
 pub trait SizeOf {

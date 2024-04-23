@@ -2,6 +2,7 @@ use num_traits::ToBytes;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use ulid::Ulid;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::expressions::data::{Number, Primitive, VarID, Variable},
     semantic::{
@@ -9,7 +10,6 @@ use crate::{
             static_types::{ClosureType, NumberType, StaticType, StrSliceType},
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-            ScopeApi,
         },
         AccessLevel, Either, MutRc, SizeOf, TypeOf,
     },
@@ -22,7 +22,7 @@ use crate::{
             alloc::{Access, StackFrame},
             branch::{BranchIf, BranchTable, BranchTableExprInfo, Call, Goto, Label},
             locate::Locate,
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{Addition, OpPrimitive, Operation, OperationKind, Substraction},
             serialize::Serialized,
             Casm, CasmProgram,
@@ -34,7 +34,7 @@ use crate::{
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for ExprFlow<Scope> {
+impl GenerateCode for ExprFlow {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -59,7 +59,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprFlow<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
+impl GenerateCode for IfExpr {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -121,7 +121,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for IfExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
+impl GenerateCode for MatchExpr {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -313,7 +313,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for TryExpr<Scope> {
+impl GenerateCode for TryExpr {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -323,7 +323,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for TryExpr<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
+impl GenerateCode for FnCall {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -365,7 +365,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                     let _ = self.fn_var.gencode(scope, instructions)?;
                     if let Some(8) = sig_params_size.checked_sub(params_size) {
                         // Load function address
-                        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                        instructions.push(Casm::MemCopy(Mem::Dup(8)));
                     }
                     // Call function
                     // Load param size
@@ -387,7 +387,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                         Some(16) => {
                             /* Rec and closed */
                             /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
                             // Load Env heap address
                             instructions.push(Casm::Serialize(Serialized {
                                 data: (16u64).to_le_bytes().to_vec(),
@@ -398,7 +398,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                                     right: OpPrimitive::Number(NumberType::U64),
                                 }),
                             }));
-                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
                             instructions.push(Casm::Serialize(Serialized {
                                 data: (16u64).to_le_bytes().to_vec(),
                             }));
@@ -423,7 +423,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for FnCall<Scope> {
                                     right: OpPrimitive::Number(NumberType::U64),
                                 }),
                             }));
-                            instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
                             instructions.push(Casm::Serialize(Serialized {
                                 data: (16u64).to_le_bytes().to_vec(),
                             }));
@@ -540,7 +540,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -557,7 +557,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -622,7 +622,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -639,7 +639,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -726,7 +726,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
 
@@ -759,7 +759,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
 
@@ -819,7 +819,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -899,7 +899,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -979,7 +979,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -1003,7 +1003,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -1027,7 +1027,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -1051,7 +1051,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -1075,7 +1075,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )

@@ -6,23 +6,20 @@ use nom::{
 };
 use nom_supreme::ParserExt;
 
-use crate::{
-    ast::{
-        statements::assignation::AssignValue,
-        types::Type,
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{parse_id, wst},
-        },
-        TryParse,
+use crate::ast::{
+    statements::assignation::AssignValue,
+    types::Type,
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::{parse_id, wst},
     },
-    semantic::scope::ScopeApi,
+    TryParse,
 };
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 
-impl<Scope: ScopeApi> TryParse for Declaration<Scope> {
+impl TryParse for Declaration {
     /*
      * @desc Parse Declaration
      *
@@ -149,7 +146,7 @@ mod tests {
             },
             types::{NumberType, PrimitiveType},
         },
-        semantic::{scope::scope_impl::MockScope, Metadata},
+        semantic::Metadata,
         v_num,
     };
 
@@ -157,7 +154,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_declared() {
-        let res = Declaration::<MockScope>::parse("let x:u64;".into());
+        let res = Declaration::parse("let x:u64;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -172,7 +169,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_assigned() {
-        let res = Declaration::<MockScope>::parse("let x:u64 = 10;".into());
+        let res = Declaration::parse("let x:u64 = 10;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -189,7 +186,7 @@ mod tests {
             value
         );
 
-        let res = Declaration::<MockScope>::parse("let x = 10;".into());
+        let res = Declaration::parse("let x = 10;".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -202,7 +199,7 @@ mod tests {
             value
         );
 
-        let res = Declaration::<MockScope>::parse("let (x,y) = (10,10);".into());
+        let res = Declaration::parse("let (x,y) = (10,10);".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

@@ -14,7 +14,7 @@ use crate::{
             alloc::{Access, FLAG_YIELD, FLAG_YIELD_NONE},
             branch::{BranchIf, BranchTable, BranchTableExprInfo, Goto, Label},
             locate::{Locate, LocateNextUTF8Char},
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{
                 Addition, Greater, GreaterEqual, Less, LessEqual, Mult, OpPrimitive, Operation,
                 OperationKind,
@@ -100,7 +100,7 @@ impl NextItem for SliceType {
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
-        instructions.push(Casm::MemCopy(MemCopy::Dup(16)));
+        instructions.push(Casm::MemCopy(Mem::Dup(16)));
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Greater(Greater {
@@ -112,7 +112,7 @@ impl NextItem for SliceType {
             else_label: end_label,
         }));
 
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::Runtime {
             size: Some(self.item_type.size_of()),
         }));
@@ -140,8 +140,8 @@ impl NextItem for SliceType {
 impl NextItem for StringType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : POINTER TO STRING */
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         /* STACK : POINTER | POINTER | POINTER */
         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
 
@@ -192,7 +192,7 @@ impl NextItem for StringType {
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
-        instructions.push(Casm::MemCopy(MemCopy::Dup(16)));
+        instructions.push(Casm::MemCopy(Mem::Dup(16)));
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Greater(Greater {
@@ -204,7 +204,7 @@ impl NextItem for StringType {
             else_label: end_label,
         }));
 
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
@@ -242,7 +242,7 @@ impl NextItem for StrSliceType {
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
-        instructions.push(Casm::MemCopy(MemCopy::Dup(16)));
+        instructions.push(Casm::MemCopy(Mem::Dup(16)));
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Greater(Greater {
@@ -254,7 +254,7 @@ impl NextItem for StrSliceType {
             else_label: end_label,
         }));
 
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
@@ -270,8 +270,8 @@ impl NextItem for StrSliceType {
 impl NextItem for VecType {
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : POINTER TO VEC */
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         /* STACK : POINTER | POINTER | POINTER */
         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
         /* STACK : POINTER | POINTER | LENGTH */
@@ -333,7 +333,7 @@ impl NextItem for VecType {
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError> {
         /* Dup loop index and end offset*/
-        instructions.push(Casm::MemCopy(MemCopy::Dup(16)));
+        instructions.push(Casm::MemCopy(Mem::Dup(16)));
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Greater(Greater {
@@ -345,7 +345,7 @@ impl NextItem for VecType {
             else_label: end_label,
         }));
 
-        instructions.push(Casm::MemCopy(MemCopy::Dup(8)));
+        instructions.push(Casm::MemCopy(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::Runtime {
             size: Some(self.0.size_of()),
         }));
@@ -393,7 +393,7 @@ impl NextItem for RangeType {
         /* STACK : (LOWER | UPPER | INCR ) (original) | INDEX */
 
         /* Dup loop index */
-        instructions.push(Casm::MemCopy(MemCopy::Dup(self.num.size_of())));
+        instructions.push(Casm::MemCopy(Mem::Dup(self.num.size_of())));
 
         /* STACK : LOWER | UPPER | INCR | INDEX | INDEX */
         /* Get upper bound value */
@@ -428,7 +428,7 @@ impl NextItem for RangeType {
         }));
 
         /* Only the loop index left in the stack */
-        instructions.push(Casm::MemCopy(MemCopy::Dup(self.num.size_of())));
+        instructions.push(Casm::MemCopy(Mem::Dup(self.num.size_of())));
         /* STACK : LOWER | UPPER | INCR | INDEX | INDEX*/
 
         Ok(())

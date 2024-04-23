@@ -1,10 +1,10 @@
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::expressions::Atomic,
     semantic::{
         scope::{
             static_types::{NumberType, RangeType, StaticType},
             type_traits::TypeChecking,
-            ScopeApi,
         },
         Either, MutRc, SizeOf, TypeOf,
     },
@@ -25,7 +25,7 @@ use crate::{
 
 use super::Range;
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
+impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -59,7 +59,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::UnaryOperation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Range<Scope> {
+impl GenerateCode for Range {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -99,7 +99,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Range<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
+impl GenerateCode for super::Product {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -179,7 +179,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Product<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Addition<Scope> {
+impl GenerateCode for super::Addition {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -205,7 +205,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Addition<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Substraction<Scope> {
+impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -231,7 +231,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Substraction<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Shift<Scope> {
+impl GenerateCode for super::Shift {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -288,7 +288,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Shift<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseAnd<Scope> {
+impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -314,7 +314,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseAnd<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseXOR<Scope> {
+impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -340,7 +340,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseXOR<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseOR<Scope> {
+impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -366,7 +366,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::BitwiseOR<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
+impl GenerateCode for super::Cast {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -398,7 +398,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Cast<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
+impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -501,7 +501,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Comparaison<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
+impl GenerateCode for super::Equation {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -558,7 +558,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::Equation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
+impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -575,7 +575,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalAnd<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for super::LogicalOr<Scope> {
+impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -606,16 +606,20 @@ mod tests {
                 Expression,
             },
             TryParse,
-        }, clear_stack, semantic::{
+        },
+        clear_stack,
+        semantic::{
             scope::{
                 scope_impl::Scope,
                 static_types::{PrimitiveType, StrSliceType, StringType},
             },
             Resolve,
-        }, v_num, vm::{
+        },
+        v_num,
+        vm::{
             allocator::Memory,
             vm::{DeserializeFrom, Runtime},
-        }
+        },
     };
 
     use super::*;
@@ -648,7 +652,7 @@ mod tests {
             let memory = &thread.memory();
             let data = clear_stack!(memory);
 
-            let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
                 &PrimitiveType::Number(NumberType::$size),
                 &data,
             )
@@ -687,7 +691,7 @@ mod tests {
             let memory = &thread.memory();
             let data = clear_stack!(memory);
 
-            let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
                 &PrimitiveType::Bool,
                 &data,
             )
@@ -1440,7 +1444,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
             &StrSliceType {
                 size: "Hello ".chars().count() * 4 + "world".chars().count() * 4,
             },

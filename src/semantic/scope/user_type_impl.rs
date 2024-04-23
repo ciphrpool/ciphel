@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
 };
 
+use crate::semantic::scope::scope_impl::Scope;
 use ulid::Ulid;
 
 use crate::{
@@ -44,7 +45,7 @@ use super::{
         StaticType,
     },
     type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
-    BuildUserType, ScopeApi,
+    BuildUserType,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,30 +73,28 @@ pub struct Union {
     pub variants: Vec<(ID, Struct)>,
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Rc<UserType> {
+impl TypeOf for Rc<UserType> {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: super::ScopeApi,
         Self: Sized,
     {
         Ok(Either::User(self.clone()))
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for UserType {
+impl TypeOf for UserType {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<Either<Self, StaticType>, SemanticError>
     where
-        Scope: super::ScopeApi,
         Self: Sized,
     {
         Ok(e_user!(self.clone()))
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for UserType {
+impl CompatibleWith for UserType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             UserType::Struct(value) => value.compatible_with(other, scope),
@@ -105,7 +104,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for UserType {
     }
 }
 
-impl<Scope: ScopeApi> BuildUserType<Scope> for UserType {
+impl BuildUserType for UserType {
     fn build_usertype(
         type_sig: &crate::ast::statements::definition::TypeDef,
         scope: &Ref<Scope>,
@@ -181,7 +180,7 @@ impl GetSubTypes for UserType {
 
 impl TypeChecking for UserType {}
 
-impl<Scope: ScopeApi> OperandMerging<Scope> for UserType {}
+impl OperandMerging for UserType {}
 
 impl IsEnum for UserType {
     fn is_enum(&self) -> bool {
@@ -193,10 +192,10 @@ impl IsEnum for UserType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for UserType {
+impl MergeType for UserType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::User(other_type) = other_type else {
@@ -269,10 +268,10 @@ impl SizeOf for Enum {
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Struct {
+impl CompatibleWith for Struct {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::User(other_type) = other_type else {
@@ -296,10 +295,10 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for Struct {
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Union {
+impl CompatibleWith for Union {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::User(other_type) = other_type else {
@@ -337,10 +336,10 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for Union {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> CompatibleWith<Scope> for Enum {
+impl CompatibleWith for Enum {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         let other_type = other.type_of(&scope)?;
         let Either::User(other_type) = other_type else {
@@ -362,10 +361,7 @@ impl<Scope: ScopeApi> CompatibleWith<Scope> for Enum {
 }
 
 impl Struct {
-    pub fn build<Scope: ScopeApi>(
-        from: &definition::StructDef,
-        scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
+    pub fn build(from: &definition::StructDef, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
         let mut fields = Vec::with_capacity(from.fields.len());
         for (id, field) in &from.fields {
             let field_type = field.type_of(&scope)?;
@@ -383,10 +379,7 @@ impl Struct {
 }
 
 impl Union {
-    pub fn build<Scope: ScopeApi>(
-        from: &definition::UnionDef,
-        scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
+    pub fn build(from: &definition::UnionDef, scope: &Ref<Scope>) -> Result<Self, SemanticError> {
         let mut variants = Vec::new();
         for (id, variant) in &from.variants {
             let mut fields = Vec::with_capacity(variant.len());
@@ -413,10 +406,7 @@ impl Union {
 }
 
 impl Enum {
-    pub fn build<Scope: ScopeApi>(
-        from: &definition::EnumDef,
-        _scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
+    pub fn build(from: &definition::EnumDef, _scope: &Ref<Scope>) -> Result<Self, SemanticError> {
         let mut values = Vec::new();
         for id in &from.values {
             values.push(id.clone());
@@ -431,22 +421,22 @@ impl Enum {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for UserType {
-    type Output = Data<Scope>;
+impl DeserializeFrom for UserType {
+    type Output = Data;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
             UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),
-            UserType::Enum(value) => Ok(Data::Enum(
-                <Enum as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
-            )),
+            UserType::Enum(value) => Ok(Data::Enum(<Enum as DeserializeFrom>::deserialize_from(
+                value, bytes,
+            )?)),
             UserType::Union(value) => Ok(Data::Union(value.deserialize_from(bytes)?)),
         }
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
-    type Output = data::Struct<Scope>;
+impl DeserializeFrom for Struct {
+    type Output = data::Struct;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let mut offset = 0;
@@ -458,7 +448,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Struct {
             if offset + aligned_size > bytes.len() {
                 return Err(RuntimeError::Deserialization);
             }
-            let data = <EType as DeserializeFrom<Scope>>::deserialize_from(
+            let data = <EType as DeserializeFrom>::deserialize_from(
                 &field_type,
                 &bytes[offset..offset + size],
             )?;
@@ -514,8 +504,8 @@ impl Printer for Struct {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
-    type Output = data::Union<Scope>;
+impl DeserializeFrom for Union {
+    type Output = data::Union;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let (idx, bytes) = extract_end_u64(bytes)?;
@@ -523,7 +513,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for Union {
             return Err(RuntimeError::Deserialization);
         };
 
-        let data: data::Struct<Scope> = struct_type.deserialize_from(bytes)?;
+        let data: data::Struct = struct_type.deserialize_from(bytes)?;
 
         Ok(data::Union {
             typename: self.id.clone(),
@@ -569,7 +559,7 @@ impl Printer for Union {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for Enum {
+impl DeserializeFrom for Enum {
     type Output = data::Enum;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {

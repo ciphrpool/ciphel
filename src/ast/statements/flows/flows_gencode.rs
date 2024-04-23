@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
+use crate::semantic::scope::scope_impl::Scope;
 use ulid::Ulid;
 
 use crate::{
@@ -9,14 +10,13 @@ use crate::{
             flows::Pattern,
             Expression,
         },
-        statements::scope::{scope_gencode::inner_scope_gencode, Scope},
+        statements::block::{block_gencode::inner_block_gencode, Block},
     },
     semantic::{
         scope::{
             static_types::StaticType,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-            ScopeApi,
         },
         Either, MutRc, SizeOf,
     },
@@ -32,7 +32,7 @@ use crate::{
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Flow<Scope> {
+impl GenerateCode for Flow {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -47,7 +47,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Flow<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for CallStat<Scope> {
+impl GenerateCode for CallStat {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -57,10 +57,10 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for CallStat<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> GenerateCode<InnerScope> for IfStat<InnerScope> {
+impl GenerateCode for IfStat {
     fn gencode(
         &self,
-        scope: &MutRc<InnerScope>,
+        scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let mut else_if_labels: Vec<Ulid> = Vec::default();
@@ -88,14 +88,14 @@ impl<InnerScope: ScopeApi> GenerateCode<InnerScope> for IfStat<InnerScope> {
                 }));
             }
         }
-        // let _ = self.then_branch.gencode(scope, &instructions)?;
-        let _ = inner_scope_gencode(scope, &self.then_branch, None, false, instructions)?;
+        // let _ = self.then_branch.gencode(block, &instructions)?;
+        let _ = inner_block_gencode(scope, &self.then_branch, None, false, instructions)?;
 
         for pair in self
             .else_if_branches
             .iter()
             .zip(&else_if_labels)
-            .collect::<Vec<(&(Expression<InnerScope>, Scope<InnerScope>), &Ulid)>>()
+            .collect::<Vec<(&(Expression, Block), &Ulid)>>()
             .windows(2)
         {
             let ((cond_1, scope_1), label_1) = &pair[0];
@@ -105,8 +105,8 @@ impl<InnerScope: ScopeApi> GenerateCode<InnerScope> for IfStat<InnerScope> {
             instructions.push(Casm::If(BranchIf {
                 else_label: **label_2,
             }));
-            // let _ = scope_1.gencode(scope, instructions)?;
-            let _ = inner_scope_gencode(scope, &scope_1, None, false, instructions)?;
+            // let _ = scope_1.gencode(block, instructions)?;
+            let _ = inner_block_gencode(scope, &scope_1, None, false, instructions)?;
         }
         if let Some((cond, s)) = &self.else_if_branches.last() {
             instructions.push_label_id(*else_if_labels.last().unwrap(), "else_if".into());
@@ -114,13 +114,13 @@ impl<InnerScope: ScopeApi> GenerateCode<InnerScope> for IfStat<InnerScope> {
             instructions.push(Casm::If(BranchIf {
                 else_label: else_label.unwrap_or(end_if_label),
             }));
-            // let _ = s.gencode(scope, instructions)?;
-            let _ = inner_scope_gencode(scope, &s, None, false, instructions)?;
+            // let _ = s.gencode(block, instructions)?;
+            let _ = inner_block_gencode(scope, &s, None, false, instructions)?;
         }
 
         if let Some(s) = &self.else_branch {
             instructions.push_label_id(else_label.unwrap(), "else".into());
-            let _ = inner_scope_gencode(scope, &s, None, false, instructions)?;
+            let _ = inner_block_gencode(scope, &s, None, false, instructions)?;
         }
 
         instructions.push_label_id(end_if_label, "end_if".into());
@@ -128,7 +128,7 @@ impl<InnerScope: ScopeApi> GenerateCode<InnerScope> for IfStat<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for MatchStat<Scope> {
+impl GenerateCode for MatchStat {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -269,7 +269,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchStat<Scope> {
                 })
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-            let _ = inner_scope_gencode(scope, &s, Some(param_size), false, instructions)?;
+            let _ = inner_block_gencode(scope, &s, Some(param_size), false, instructions)?;
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_match_label),
             }));
@@ -278,7 +278,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchStat<Scope> {
             Some(else_branch) => {
                 instructions.push_label_id(else_label.unwrap(), "else_case".into());
 
-                let _ = inner_scope_gencode(scope, &else_branch, None, false, instructions)?;
+                let _ = inner_block_gencode(scope, &else_branch, None, false, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_match_label),
                 }));
@@ -291,7 +291,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for MatchStat<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for TryStat<Scope> {
+impl GenerateCode for TryStat {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -336,7 +336,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -367,7 +367,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -398,7 +398,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -435,7 +435,7 @@ mod tests {
         .1;
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -469,7 +469,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -503,7 +503,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -540,7 +540,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -574,7 +574,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -616,7 +616,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -655,7 +655,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -693,7 +693,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -731,7 +731,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )

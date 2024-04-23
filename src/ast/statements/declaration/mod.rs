@@ -1,7 +1,4 @@
-use crate::{
-    ast::{types::Type, utils::strings::ID},
-    semantic::scope::ScopeApi,
-};
+use crate::ast::{types::Type, utils::strings::ID};
 
 use super::assignation::AssignValue;
 
@@ -11,11 +8,11 @@ pub mod declaration_resolve;
 pub mod declaration_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Declaration<InnerScope: ScopeApi> {
+pub enum Declaration {
     Declared(TypedVar),
     Assigned {
         left: DeclaredVar,
-        right: AssignValue<InnerScope>,
+        right: AssignValue,
     },
 }
 #[derive(Debug, Clone, PartialEq)]

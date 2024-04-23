@@ -1,8 +1,9 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::expressions::Expression,
-    semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
     vm::{
         allocator::Memory,
         casm::CasmProgram,
@@ -50,10 +51,10 @@ impl StdFn {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StdFn {
+impl Resolve for StdFn {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -68,11 +69,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for StdFn {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for StdFn {
+impl TypeOf for StdFn {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             StdFn::IO(value) => value.type_of(scope),
@@ -81,7 +81,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for StdFn {
         }
     }
 }
-impl<Scope: ScopeApi> GenerateCode<Scope> for StdFn {
+impl GenerateCode for StdFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,

@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use nom::AsBytes;
 use num_traits::ToBytes;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::{
         expressions::{
@@ -12,7 +13,7 @@ use crate::{
         utils::lexem,
     },
     semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+        scope::{static_types::StaticType, user_type_impl::UserType},
         AccessLevel, EType, Either, Info, Metadata, SizeOf,
     },
     vm::{
@@ -22,7 +23,7 @@ use crate::{
         },
         casm::{
             branch::{BranchIf, Goto, Label},
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{
                 Addition, Cast, Equal, Less, NotEqual, OpPrimitive, Operation, OperationKind,
                 Substraction,
@@ -45,18 +46,14 @@ use super::{
     NumberType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType, TupleType, VecType,
 };
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
-    type Output = Data<Scope>;
+impl DeserializeFrom for StaticType {
+    type Output = Data;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
-            StaticType::Primitive(value) => {
-                Ok(Data::Primitive(<PrimitiveType as DeserializeFrom<
-                    Scope,
-                >>::deserialize_from(
-                    value, bytes
-                )?))
-            }
+            StaticType::Primitive(value) => Ok(Data::Primitive(
+                <PrimitiveType as DeserializeFrom>::deserialize_from(value, bytes)?,
+            )),
             StaticType::Slice(value) => Ok(Data::Slice(value.deserialize_from(bytes)?)),
             StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
             StaticType::StaticFn(_value) => unimplemented!(),
@@ -68,16 +65,12 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StaticType {
             StaticType::Error => Err(RuntimeError::Deserialization),
             StaticType::Address(_value) => unimplemented!(),
             StaticType::Map(_value) => unimplemented!(),
-            StaticType::String(value) => {
-                Ok(Data::StrSlice(
-                    <StringType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
-                ))
-            }
-            StaticType::StrSlice(value) => {
-                Ok(Data::StrSlice(
-                    <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(value, bytes)?,
-                ))
-            }
+            StaticType::String(value) => Ok(Data::StrSlice(
+                <StringType as DeserializeFrom>::deserialize_from(value, bytes)?,
+            )),
+            StaticType::StrSlice(value) => Ok(Data::StrSlice(
+                <StrSliceType as DeserializeFrom>::deserialize_from(value, bytes)?,
+            )),
             StaticType::Range(_) => unimplemented!(),
         }
     }
@@ -135,7 +128,7 @@ impl Printer for StaticType {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for NumberType {
+impl DeserializeFrom for NumberType {
     type Output = Number;
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
@@ -239,13 +232,13 @@ impl Printer for NumberType {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for PrimitiveType {
+impl DeserializeFrom for PrimitiveType {
     type Output = Primitive;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {
             PrimitiveType::Number(number) => {
-                <NumberType as DeserializeFrom<Scope>>::deserialize_from(number, bytes)
+                <NumberType as DeserializeFrom>::deserialize_from(number, bytes)
                     .map(|n| Primitive::Number(n.into()))
             }
             PrimitiveType::Char => {
@@ -306,8 +299,8 @@ pub fn extract_end_u64(slice: &[u8]) -> Result<(u64, &[u8]), RuntimeError> {
     Ok((u64::from_le_bytes(arr), rest))
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
-    type Output = Vector<Scope>;
+impl DeserializeFrom for VecType {
+    type Output = Vector;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let (length, rest) = extract_u64(bytes)?;
@@ -315,14 +308,14 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
         let rest = rest;
 
         let size = self.0.size_of();
-        let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = rest
+        let array: Vec<Result<Option<Expression>, RuntimeError>> = rest
             .chunks(size)
             .enumerate()
             .map(|(idx, bytes)| {
                 if idx as u64 >= length {
                     Ok(None)
                 } else {
-                    <EType as DeserializeFrom<Scope>>::deserialize_from(&self.0, bytes)
+                    <EType as DeserializeFrom>::deserialize_from(&self.0, bytes)
                         .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
                 }
             })
@@ -349,9 +342,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for VecType {
 }
 impl Printer for VecType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer(
-            self.0.size_of(),
-        )));
+        instructions.push(Casm::MemCopy(Mem::CloneFromSmartPointer(self.0.size_of())));
 
         let continue_label = Label::gen();
         let end_label = Label::gen();
@@ -371,7 +362,7 @@ impl Printer for VecType {
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
+impl DeserializeFrom for StringType {
     type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
@@ -395,14 +386,14 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for StringType {
 }
 impl Printer for StringType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::MemCopy(MemCopy::CloneFromSmartPointer(1)));
+        instructions.push(Casm::MemCopy(Mem::CloneFromSmartPointer(1)));
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintString,
         )))));
         Ok(())
     }
 }
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for StrSliceType {
+impl DeserializeFrom for StrSliceType {
     type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
@@ -427,8 +418,8 @@ impl Printer for StrSliceType {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
-    type Output = Tuple<Scope>;
+impl DeserializeFrom for TupleType {
+    type Output = Tuple;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         let mut offset = 0;
@@ -438,7 +429,7 @@ impl<Scope: ScopeApi> DeserializeFrom<Scope> for TupleType {
             if offset + size > bytes.len() {
                 return Err(RuntimeError::Deserialization);
             }
-            let data = <EType as DeserializeFrom<Scope>>::deserialize_from(
+            let data = <EType as DeserializeFrom>::deserialize_from(
                 &element_type,
                 &bytes[offset..offset + size],
             )?;
@@ -482,18 +473,18 @@ impl Printer for TupleType {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for SliceType {
-    type Output = Slice<Scope>;
+impl DeserializeFrom for SliceType {
+    type Output = Slice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let array: Vec<Result<Option<Expression<Scope>>, RuntimeError>> = bytes
+        let array: Vec<Result<Option<Expression>, RuntimeError>> = bytes
             .chunks(self.item_type.size_of())
             .enumerate()
             .map(|(idx, bytes)| {
                 if idx >= self.size {
                     Ok(None)
                 } else {
-                    <EType as DeserializeFrom<Scope>>::deserialize_from(&self.item_type, bytes)
+                    <EType as DeserializeFrom>::deserialize_from(&self.item_type, bytes)
                         .map(|data| Some(Expression::Atomic(Atomic::Data(data))))
                 }
             })
@@ -536,8 +527,8 @@ impl Printer for SliceType {
     }
 }
 
-// impl<Scope: ScopeApi> DeserializeFrom<Scope> for RangeType {
-//     type Output = Range<Scope>;
+// impl DeserializeFrom for RangeType {
+//     type Output = Range;
 
 //     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
 //         if bytes.len() < self.size_of() {
@@ -545,14 +536,14 @@ impl Printer for SliceType {
 //         }
 //         let (bytes_lower, rest) = bytes.split_at(self.num.size_of());
 //         let lower =
-//             <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_lower)?;
+//             <NumberType as DeserializeFrom>::deserialize_from(&self.num, bytes_lower)?;
 
 //         let (bytes_upper, rest) = rest.split_at(self.num.size_of());
 //         let upper =
-//             <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_upper)?;
+//             <NumberType as DeserializeFrom>::deserialize_from(&self.num, bytes_upper)?;
 
 //         let (bytes_incr, rest) = rest.split_at(self.num.size_of());
-//         let incr = <NumberType as DeserializeFrom<Scope>>::deserialize_from(&self.num, bytes_incr)?;
+//         let incr = <NumberType as DeserializeFrom>::deserialize_from(&self.num, bytes_incr)?;
 //         Ok(Range {
 //             lower: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
 //                 Primitive::Number(lower.into()),

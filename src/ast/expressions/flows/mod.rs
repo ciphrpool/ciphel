@@ -7,7 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{scope::ScopeApi, EType, Metadata},
+    semantic::{EType, Metadata},
     vm::platform::Lib,
 };
 
@@ -17,27 +17,27 @@ use super::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExprFlow<InnerScope: ScopeApi> {
-    If(IfExpr<InnerScope>),
-    Match(MatchExpr<InnerScope>),
-    Try(TryExpr<InnerScope>),
-    Call(FnCall<InnerScope>),
+pub enum ExprFlow {
+    If(IfExpr),
+    Match(MatchExpr),
+    Try(TryExpr),
+    Call(FnCall),
     SizeOf(Type, Metadata),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfExpr<InnerScope: ScopeApi> {
-    condition: Box<Expression<InnerScope>>,
-    then_branch: ExprScope<InnerScope>,
-    else_branch: ExprScope<InnerScope>,
+pub struct IfExpr {
+    condition: Box<Expression>,
+    then_branch: ExprScope,
+    else_branch: ExprScope,
     metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchExpr<InnerScope: ScopeApi> {
-    expr: Box<Expression<InnerScope>>,
-    patterns: Vec<PatternExpr<InnerScope>>,
-    else_branch: Option<ExprScope<InnerScope>>,
+pub struct MatchExpr {
+    expr: Box<Expression>,
+    patterns: Vec<PatternExpr>,
+    else_branch: Option<ExprScope>,
     metadata: Metadata,
 }
 
@@ -62,28 +62,28 @@ pub enum Pattern {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PatternExpr<InnerScope: ScopeApi> {
+pub struct PatternExpr {
     pattern: Pattern,
-    expr: ExprScope<InnerScope>,
+    expr: ExprScope,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TryExpr<InnerScope: ScopeApi> {
-    try_branch: ExprScope<InnerScope>,
-    else_branch: ExprScope<InnerScope>,
+pub struct TryExpr {
+    try_branch: ExprScope,
+    else_branch: ExprScope,
     metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnCall<InnerScope: ScopeApi> {
+pub struct FnCall {
     pub lib: Option<ID>,
-    pub fn_var: Variable<InnerScope>,
-    pub params: Vec<Expression<InnerScope>>,
+    pub fn_var: Variable,
+    pub params: Vec<Expression>,
     pub metadata: Metadata,
     pub platform: Rc<RefCell<Option<Lib>>>,
 }
 
-impl<Scope: ScopeApi> ExprFlow<Scope> {
+impl ExprFlow {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),

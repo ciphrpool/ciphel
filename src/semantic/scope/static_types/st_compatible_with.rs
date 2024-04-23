@@ -1,13 +1,14 @@
 use std::cell::Ref;
 
-use crate::semantic::{scope::ScopeApi, CompatibleWith, Either, SemanticError, TypeOf};
+use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
 
 use super::StaticType;
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for StaticType {
+impl CompatibleWith for StaticType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             StaticType::Primitive(value) => value.compatible_with(other, scope),

@@ -1,11 +1,12 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{AccessLevel, Info};
 use crate::vm::allocator::stack::{Offset, UReg};
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::casm::alloc::Access;
 use crate::vm::casm::branch::Goto;
-use crate::vm::casm::memcopy::MemCopy;
+use crate::vm::casm::mem::Mem;
 use crate::{
     ast::{
         expressions::Expression,
@@ -18,7 +19,7 @@ use crate::{
     },
     resolve_metadata,
     semantic::{
-        scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType, ScopeApi},
+        scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType},
         CompatibleWith, EType, Either, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
@@ -34,21 +35,21 @@ use nom::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Return<InnerScope: ScopeApi> {
+pub enum Return {
     Unit,
     Expr {
-        expr: Box<Expression<InnerScope>>,
+        expr: Box<Expression>,
         metadata: Metadata,
     },
     Break,
     Continue,
     Yield {
-        expr: Box<Expression<InnerScope>>,
+        expr: Box<Expression>,
         metadata: Metadata,
     },
 }
 
-impl<Scope: ScopeApi> TryParse for Return<Scope> {
+impl TryParse for Return {
     /*
      * @desc Parse return statements
      *
@@ -92,7 +93,7 @@ impl<Scope: ScopeApi> TryParse for Return<Scope> {
         ))(input)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
+impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -104,7 +105,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Return::Unit => {
@@ -160,29 +160,28 @@ impl<Scope: ScopeApi> Resolve<Scope> for Return<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Return<Scope> {
+impl TypeOf for Return {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Return::Unit => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                <StaticType as BuildStaticType>::build_unit().into(),
             )),
             Return::Expr { expr, metadata } => expr.type_of(&scope),
             Return::Break => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                <StaticType as BuildStaticType>::build_unit().into(),
             )),
             Return::Continue => Ok(Either::Static(
-                <StaticType as BuildStaticType<Scope>>::build_unit().into(),
+                <StaticType as BuildStaticType>::build_unit().into(),
             )),
             Return::Yield { expr, metadata } => expr.type_of(&scope),
         }
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Return<Scope> {
+impl GenerateCode for Return {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -235,7 +234,7 @@ mod tests {
         e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::{self, MockScope},
+                scope_impl::{self},
                 static_types::{NumberType, PrimitiveType, StaticType},
             },
             Either,
@@ -246,7 +245,7 @@ mod tests {
 
     #[test]
     fn valid_return() {
-        let res = Return::<MockScope>::parse(
+        let res = Return::parse(
             r#"
             return ;
         "#
@@ -256,7 +255,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(Return::Unit, value);
 
-        let res = Return::<MockScope>::parse(
+        let res = Return::parse(
             r#"
             break ;
         "#
@@ -265,7 +264,7 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(Return::Break, value);
-        let res = Return::<MockScope>::parse(
+        let res = Return::parse(
             r#"
             continue ;
         "#
@@ -278,7 +277,7 @@ mod tests {
 
     #[test]
     fn valid_resolved_return() {
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             return ;
         "#
@@ -291,7 +290,7 @@ mod tests {
         let res = return_statement.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             return 10;
         "#
@@ -305,7 +304,7 @@ mod tests {
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), return_type);
 
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             break ;
         "#
@@ -315,7 +314,7 @@ mod tests {
         .1;
 
         let inner_scope = scope_impl::Scope::spawn(&scope, Vec::default())
-            .expect("Scope should be able to have child scope");
+            .expect("Scope should be able to have child block");
         inner_scope.as_ref().borrow_mut().to_loop();
 
         let res = return_statement.resolve(&inner_scope, &None, &());
@@ -324,7 +323,7 @@ mod tests {
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
 
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             continue ;
         "#
@@ -339,7 +338,7 @@ mod tests {
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
 
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             yield 10;
         "#
@@ -357,7 +356,7 @@ mod tests {
 
     #[test]
     fn robustness_return() {
-        let return_statement = Return::<scope_impl::Scope>::parse(
+        let return_statement = Return::parse(
             r#"
             return 10;
         "#

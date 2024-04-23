@@ -2,12 +2,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     ast::{expressions::data::PtrAccess, statements::assignation::AssignValue},
-    semantic::{scope::ScopeApi, MutRc, SizeOf},
+    semantic::{MutRc, SizeOf},
     vm::{
         casm::{
             alloc::StackFrame,
             branch::{Call, Goto, Label},
-            memcopy::MemCopy,
+            mem::Mem,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -15,8 +15,9 @@ use crate::{
 };
 
 use super::{Assignation, Assignee};
+use crate::semantic::scope::scope_impl::Scope;
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Assignation<Scope> {
+impl GenerateCode for Assignation {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -27,7 +28,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignation<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
+impl GenerateCode for Assignee {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -48,7 +49,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
 
                 let _ = variable.locate(scope, instructions)?;
 
-                instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
+                instructions.push(Casm::MemCopy(Mem::Take { size: var_size }))
             }
             Assignee::PtrAccess(PtrAccess { value, metadata }) => {
                 let var_size = {
@@ -61,14 +62,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Assignee<Scope> {
                     return Ok(());
                 }
                 let _ = value.gencode(scope, instructions)?;
-                instructions.push(Casm::MemCopy(MemCopy::Take { size: var_size }))
+                instructions.push(Casm::MemCopy(Mem::Take { size: var_size }))
             }
         }
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for AssignValue<Scope> {
+impl GenerateCode for AssignValue {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -145,7 +146,7 @@ mod tests {
         .1;
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -200,7 +201,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -262,7 +263,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for (r_id, res) in &result.fields {
@@ -322,7 +323,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Tuple<Scope> = TupleType(vec![p_num!(U64), p_num!(U64)])
+        let result: Tuple = TupleType(vec![p_num!(U64), p_num!(U64)])
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         let result: Vec<Option<u64>> = result
@@ -357,7 +358,7 @@ mod tests {
         .1;
         let data = compile_statement!(statement);
 
-        let result: Slice<Scope> = SliceType {
+        let result: Slice = SliceType {
             size: 4,
             item_type: Box::new(p_num!(U64)),
         }
@@ -430,7 +431,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
 
@@ -516,7 +517,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
 
@@ -624,7 +625,7 @@ mod tests {
         let memory = &thread.memory();
         let data = clear_stack!(memory);
 
-        let result: Struct<Scope> = user_type_point
+        let result: Struct = user_type_point
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for (r_id, res) in &result.fields {

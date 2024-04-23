@@ -12,23 +12,20 @@ use nom::{
 };
 use nom_supreme::ParserExt;
 
-use crate::{
-    ast::{
-        statements::{declaration::TypedVar, scope::Scope},
-        types::Type,
-        utils::{
-            io::{PResult, Span},
-            lexem,
-            strings::{parse_id, wst},
-        },
-        TryParse,
+use crate::ast::{
+    statements::{block::Block, declaration::TypedVar},
+    types::Type,
+    utils::{
+        io::{PResult, Span},
+        lexem,
+        strings::{parse_id, wst},
     },
-    semantic::scope::ScopeApi,
+    TryParse,
 };
 
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
-impl<Scope: ScopeApi> TryParse for Definition<Scope> {
+impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(TypeDef::parse, |value| Definition::Type(value)),
@@ -136,7 +133,7 @@ impl TryParse for EnumDef {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
+impl TryParse for FnDef {
     /*
      * @desc Parse function definition
      *
@@ -153,7 +150,7 @@ impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
                     wst(lexem::PAR_C),
                 ),
                 preceded(wst(lexem::ARROW), Type::parse),
-                Scope::parse,
+                Block::parse,
             )),
             |(id, params, ret, scope)| FnDef {
                 id,
@@ -165,7 +162,7 @@ impl<InnerScope: ScopeApi> TryParse for FnDef<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for EventDef<InnerScope> {
+impl TryParse for EventDef {
     /*
      * @desc Parse event definition
      *
@@ -178,7 +175,7 @@ impl<InnerScope: ScopeApi> TryParse for EventDef<InnerScope> {
             tuple((
                 preceded(wst(lexem::EVENT), parse_id),
                 EventCondition::parse,
-                Scope::parse,
+                Block::parse,
             )),
             |(id, condition, scope)| EventDef {
                 id,
@@ -212,10 +209,7 @@ mod tests {
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::{
-            scope::{scope_impl::MockScope, ClosureState},
-            Metadata,
-        },
+        semantic::{scope::ClosureState, Metadata},
         v_num,
     };
 
@@ -312,7 +306,7 @@ mod tests {
 
     #[test]
     fn valid_fn_def() {
-        let res = FnDef::<MockScope>::parse(
+        let res = FnDef::parse(
             r#"
         fn f(x:u64) -> u64 {
             return 10;
@@ -331,7 +325,7 @@ mod tests {
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
-                scope: Scope {
+                scope: Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
@@ -367,7 +361,7 @@ mod tests {
         //     EventDef {
         //         id: "Event".into(),
         //         condition: todo!(),
-        //         scope: Scope {
+        //         block: Scope {
         //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
         //                 fn_id: "f".into(),
         //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(I64, 10)))]

@@ -6,14 +6,14 @@ use std::{
 
 use num_traits::{sign, ToBytes};
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::{statements::scope::scope_gencode::inner_scope_gencode, utils::strings::ID},
+    ast::{statements::block::block_gencode::inner_block_gencode, utils::strings::ID},
     semantic::{
         scope::{
             static_types::{NumberType, RangeType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
-            ScopeApi,
         },
         AccessLevel, EType, Either, Metadata, MutRc, SizeOf,
     },
@@ -28,7 +28,7 @@ use crate::{
             alloc::{Access, Alloc, StackFrame},
             branch::{Goto, Label},
             locate::{Locate, LocateNextUTF8Char},
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             serialize::Serialized,
             Casm, CasmProgram,
@@ -42,7 +42,7 @@ use super::{
     Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
+impl GenerateCode for Data {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -67,7 +67,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Data<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Number {
+impl GenerateCode for Number {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
@@ -114,7 +114,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Number {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
+impl GenerateCode for Primitive {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
@@ -181,13 +181,13 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             Chan = Chan,
 //             Event = Event,
 //         >,
-//     > Variable<Scope>
+//     > Variable
 // {
 //     fn get_offset(
 //         &self,
 //
 //         address: usize,
-//         scope: &MutRc<Scope>,
+//         block: &MutRc<Scope>,
 //         instructions: &MutRc<CasmProgram>,
 //         signature: &EType,
 //     ) -> Result<
@@ -239,11 +239,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             Variable::FieldAccess(FieldAccess { var, field }) => {
 //                 let ((var_offset, var_size), var_type) =
 //                     var.as_ref()
-//                         .get_offset(offset, address, scope, instructions, signature)?;
+//                         .get_offset(offset, address, block, instructions, signature)?;
 //                 let ((field_offset, field_size), field_type) =
 //                     field
 //                         .as_ref()
-//                         .get_offset(offset, var_offset, scope, instructions, &var_type)?;
+//                         .get_offset(offset, var_offset, block, instructions, &var_type)?;
 
 //                 {
 //                     let mut borrowed = instructions.as_ref()
@@ -261,7 +261,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             Variable::NumAccess(NumAccess { var, index }) => {
 //                 let ((var_offset, var_size), var_type) =
 //                     var.as_ref()
-//                         .get_offset(offset, address, scope, instructions, signature)?;
+//                         .get_offset(offset, address, block, instructions, signature)?;
 //                 let Either::Static(tuple_type) = signature else {
 //                     return Err(CodeGenerationError::UnresolvedError);
 //                 };
@@ -301,7 +301,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             Variable::ListAccess(ListAccess { var, index }) => {
 //                 let ((var_offset, var_size), var_type) =
 //                     var.as_ref()
-//                         .get_offset(offset, address, scope, instructions, signature)?;
+//                         .get_offset(offset, address, block, instructions, signature)?;
 //                 let (item_size, item_type) = {
 //                     let Some(item_type) = <EType as GetSubTypes<
 //                         Scope,
@@ -315,7 +315,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                 };
 //                 match list_type.as_ref() {
 //                     StaticType::Slice(_) => {
-//                         let _ = index.gencode(scope, instructions, signature)?;
+//                         let _ = index.gencode(block, instructions, signature)?;
 //                         {
 //                             let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
@@ -340,7 +340,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //                                 size: var_size,
 //                             }));
 //                         }
-//                         let _ = index.gencode(scope, instructions, signature)?;
+//                         let _ = index.gencode(block, instructions, signature)?;
 //                         {
 //                             let mut borrowed = instructions.as_ref()
 // .try_borrow_mut()
@@ -367,19 +367,19 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             Chan = Chan,
 //             Event = Event,
 //         >,
-//     > GenerateCode<Scope> for Variable<Scope>
+//     > GenerateCode for Variable
 // {
 //
 //     fn gencode(
 //         &self,
-//         scope: &MutRc<Scope>,
+//         block: &MutRc<Scope>,
 //         instructions: &MutRc<CasmProgram>,
 //
 //
 //     ) -> Result<(), CodeGenerationError> {
 //         match self {
 //             Variable::Var(VarID(id)) => {
-//                 let var = scope
+//                 let var = block
 //                     .borrow()
 //                     .find_var(id)
 //                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
@@ -404,8 +404,8 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //             }
 //             Variable::FieldAccess(FieldAccess { var, field }) => {
 //                 // let ((var_offset, var_size), var_type) =
-//                 //     var.get_offset(offset, scope, instructions, signature)?;
-//                 // let _ = field.get_offset(offset, scope, instructions, &var_type)?;
+//                 //     var.get_offset(offset, block, instructions, signature)?;
+//                 // let _ = field.get_offset(offset, block, instructions, &var_type)?;
 //                 todo!()
 //             }
 //             Variable::NumAccess(_) => todo!(),
@@ -414,7 +414,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Primitive {
 //     }
 // }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
+impl GenerateCode for Variable {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -578,7 +578,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Variable<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Variable<Scope> {
+impl Variable {
     pub fn signature(&self) -> Option<EType> {
         match self {
             Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
@@ -1051,7 +1051,7 @@ impl<Scope: ScopeApi> Variable<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
+impl GenerateCode for Slice {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1080,7 +1080,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Slice<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
+impl GenerateCode for StrSlice {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1140,7 +1140,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for StrSlice {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
+impl GenerateCode for Vector {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1177,7 +1177,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
         // ( removing the data from the stack )
-        instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
+        instructions.push(Casm::MemCopy(Mem::TakeToHeap {
             //offset: vec_stack_address + 8,
             size: item_size * self.value.len() + 16,
         }));
@@ -1186,7 +1186,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Vector<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Tuple<Scope> {
+impl GenerateCode for Tuple {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1211,7 +1211,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Tuple<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for ExprScope<Scope> {
+impl GenerateCode for ExprScope {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1224,7 +1224,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ExprScope<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
+impl GenerateCode for Closure {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1240,7 +1240,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
         let _ = self.scope.gencode(scope, instructions);
         instructions.push_label_id(end_closure, "end_closure".into());
 
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(closure_label)));
+        instructions.push(Casm::MemCopy(Mem::LabelOffset(closure_label)));
 
         if self.closed {
             /* Load env and store in the heap */
@@ -1281,14 +1281,14 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Closure<Scope> {
             instructions.push(Casm::Alloc(Alloc::Heap {
                 size: Some(alloc_size),
             }));
-            instructions.push(Casm::MemCopy(MemCopy::TakeToHeap { size: alloc_size }));
+            instructions.push(Casm::MemCopy(Mem::TakeToHeap { size: alloc_size }));
         }
 
         Ok(())
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
+impl GenerateCode for Address {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1298,7 +1298,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Address<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
+impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1323,7 +1323,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for PtrAccess<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Struct<Scope> {
+impl GenerateCode for Struct {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1363,7 +1363,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Struct<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
+impl GenerateCode for Union {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -1433,7 +1433,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Union<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
+impl GenerateCode for Enum {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
@@ -1466,7 +1466,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Enum {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Map<Scope> {
+impl GenerateCode for Map {
     fn gencode(
         &self,
         _scope: &MutRc<Scope>,
@@ -1499,7 +1499,7 @@ mod tests {
                 static_types::{
                     PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
                 },
-                user_type_impl, ScopeApi,
+                user_type_impl,
             },
             Resolve, TypeOf,
         },
@@ -1513,7 +1513,7 @@ mod tests {
     #[macro_export]
     macro_rules! assert_number {
         ($expr:ident,$data:ident,$num_type:ident) => {
-            let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+            let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
                 &PrimitiveType::Number(NumberType::$num_type),
                 &$data,
             )
@@ -1532,7 +1532,7 @@ mod tests {
                 .expect("Parsing should have succeeded")
                 .1;
 
-            // Create a new scope.
+            // Create a new block.
             let scope = Scope::new();
             // Perform semantic check.
             expr.resolve(&scope, &None, &())
@@ -1566,7 +1566,7 @@ mod tests {
                 .expect("Parsing should have succeeded")
                 .1;
 
-            // Create a new scope.
+            // Create a new block.
             let scope = Scope::new();
             let _ = scope
                 .as_ref()
@@ -1678,22 +1678,18 @@ mod tests {
     #[test]
     fn valid_primitive() {
         let (expr, data) = compile_expression!(Primitive, "'a'");
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, expr);
         let (expr, data) = compile_expression!(Primitive, "true");
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Bool,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, expr);
 
         let (expr, data) = compile_expression!(Primitive, "420.69");
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1704,7 +1700,7 @@ mod tests {
     #[test]
     fn valid_tuple() {
         let (expr, data) = compile_expression!(Tuple, "(true,17)");
-        let result: Tuple<Scope> = TupleType(vec![
+        let result: Tuple = TupleType(vec![
             e_static!(StaticType::Primitive(PrimitiveType::Bool)),
             p_num!(I64),
         ])
@@ -1723,7 +1719,7 @@ mod tests {
             }
         }
         let (expr, data) = compile_expression!(Tuple, "(420i128,true,17,'a')");
-        let result: Tuple<Scope> = TupleType(vec![
+        let result: Tuple = TupleType(vec![
             p_num!(I128),
             e_static!(StaticType::Primitive(PrimitiveType::Bool)),
             p_num!(I64),
@@ -1766,7 +1762,7 @@ mod tests {
         "##,
             user_type
         );
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for ((e_id, expected), (r_id, res)) in expr.fields.into_iter().zip(result.fields) {
@@ -1806,7 +1802,7 @@ mod tests {
         "##,
             user_type
         );
-        let result: Struct<Scope> = user_type
+        let result: Struct = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for ((e_id, expected), (r_id, res)) in expr.fields.into_iter().zip(result.fields) {
@@ -1859,7 +1855,7 @@ mod tests {
         "##,
             user_type
         );
-        let result: Union<Scope> = user_type
+        let result: Union = user_type
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         if expr.variant != result.variant {
@@ -1901,7 +1897,7 @@ mod tests {
             user_type
         );
         let result: Enum =
-            <user_type_impl::Enum as DeserializeFrom<Scope>>::deserialize_from(&user_type, &data)
+            <user_type_impl::Enum as DeserializeFrom>::deserialize_from(&user_type, &data)
                 .expect("Deserialization should have succeeded");
         assert_eq!(expr, result)
     }
@@ -1909,7 +1905,7 @@ mod tests {
     #[test]
     fn valid_slice() {
         let (expr, data) = compile_expression!(Slice, "[1,2,3]");
-        let result: Slice<Scope> = SliceType {
+        let result: Slice = SliceType {
             size: 3,
             item_type: Box::new(p_num!(I64)),
         }
@@ -1939,7 +1935,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        // Create a new scope.
+        // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
         expr.resolve(&scope, &None, &())
@@ -1970,7 +1966,7 @@ mod tests {
             .read(heap_address as usize, 8 * 4 + 16)
             .expect("Heap Read should have succeeded");
 
-        let result: Vector<Scope> = VecType(Box::new(p_num!(I64)))
+        let result: Vector = VecType(Box::new(p_num!(I64)))
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
 
@@ -1994,7 +1990,7 @@ mod tests {
     fn valid_string() {
         let (expr, data) = compile_expression!(StrSlice, "\"Hello World\"");
 
-        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
             &&StrSliceType {
                 size: "Hello World".len(),
             },
@@ -2009,7 +2005,7 @@ mod tests {
     fn valid_string_complex() {
         let (expr, data) = compile_expression!(StrSlice, "\"你好世界\"");
 
-        let result: StrSlice = <StrSliceType as DeserializeFrom<Scope>>::deserialize_from(
+        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
             &StrSliceType {
                 size: "你好世界".len(),
             },
@@ -2037,7 +2033,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -2062,7 +2058,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -2087,11 +2083,9 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('l'));
     }
 
@@ -2112,11 +2106,9 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('l'));
     }
 
@@ -2137,7 +2129,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -2169,7 +2161,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -2215,7 +2207,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2244,7 +2236,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2273,7 +2265,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2304,7 +2296,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2335,7 +2327,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )

@@ -1,15 +1,12 @@
-use crate::{
-    ast::{
-        expressions::{
-            data::{Address, Slice, Vector},
-            Expression,
-        },
-        utils::strings::ID,
+use crate::ast::{
+    expressions::{
+        data::{Address, Slice, Vector},
+        Expression,
     },
-    semantic::scope::ScopeApi,
+    utils::strings::ID,
 };
 
-use super::{declaration::PatternVar, scope::Scope};
+use super::{block::Block, declaration::PatternVar};
 
 pub mod loops_gencode;
 pub mod loops_parse;
@@ -17,17 +14,17 @@ pub mod loops_resolve;
 pub mod loops_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Loop<InnerScope: ScopeApi> {
-    For(ForLoop<InnerScope>),
-    While(WhileLoop<InnerScope>),
-    Loop(Box<Scope<InnerScope>>),
+pub enum Loop {
+    For(ForLoop),
+    While(WhileLoop),
+    Loop(Box<Block>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ForLoop<InnerScope: ScopeApi> {
+pub struct ForLoop {
     item: ForItem,
-    iterator: ForIterator<InnerScope>,
-    scope: Box<Scope<InnerScope>>,
+    iterator: ForIterator,
+    scope: Box<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,12 +34,12 @@ pub enum ForItem {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ForIterator<InnerScope: ScopeApi> {
-    pub expr: Expression<InnerScope>,
+pub struct ForIterator {
+    pub expr: Expression,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct WhileLoop<InnerScope: ScopeApi> {
-    condition: Box<Expression<InnerScope>>,
-    scope: Box<Scope<InnerScope>>,
+pub struct WhileLoop {
+    condition: Box<Expression>,
+    scope: Box<Block>,
 }

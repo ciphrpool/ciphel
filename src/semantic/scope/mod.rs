@@ -18,6 +18,7 @@ use self::{
     user_type_impl::UserType,
     var_impl::Var,
 };
+use crate::semantic::scope::scope_impl::Scope;
 
 use super::{AccessLevel, EType, Either, MutRc, SemanticError};
 pub mod chan_impl;
@@ -28,7 +29,7 @@ pub mod type_traits;
 pub mod user_type_impl;
 pub mod var_impl;
 
-pub trait BuildStaticType<Scope: ScopeApi> {
+pub trait BuildStaticType {
     fn build_primitive(
         type_sig: &types::PrimitiveType,
         scope: &Ref<Scope>,
@@ -123,21 +124,21 @@ pub trait BuildStaticType<Scope: ScopeApi> {
     ) -> Result<StaticType, SemanticError>;
 }
 
-pub trait BuildUserType<Scope: ScopeApi> {
+pub trait BuildUserType {
     fn build_usertype(
         type_sig: &definition::TypeDef,
         scope: &Ref<Scope>,
     ) -> Result<UserType, SemanticError>;
 }
 
-pub trait BuildVar<Scope: ScopeApi> {
+pub trait BuildVar {
     fn build_var(id: &ID, type_sig: &EType) -> Var;
 }
-pub trait BuildChan<Scope: ScopeApi> {
+pub trait BuildChan {
     fn build_chan(id: &ID, type_sig: &EType) -> Chan;
 }
-pub trait BuildEvent<Scope: ScopeApi> {
-    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef<Scope>) -> Event;
+pub trait BuildEvent {
+    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef) -> Event;
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -162,40 +163,4 @@ impl Default for ScopeState {
             is_loop: false,
         }
     }
-}
-
-pub trait ScopeApi
-where
-    Self: Sized + Clone + Debug,
-{
-    fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError>;
-
-    fn register_type(&mut self, id: &ID, reg: UserType) -> Result<(), SemanticError>;
-    fn register_chan(&mut self, reg: &ID) -> Result<(), SemanticError>;
-    fn register_var(&mut self, reg: Var) -> Result<(), SemanticError>;
-    fn register_event(&mut self, reg: Event) -> Result<(), SemanticError>;
-
-    fn state(&self) -> ScopeState;
-    fn to_closure(&mut self, state: ClosureState);
-    fn capture(&self, var: Rc<Var>) -> bool;
-    fn to_generator(&mut self);
-    fn to_loop(&mut self);
-
-    fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError>;
-
-    fn access_var(&self, id: &ID) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError>;
-    fn access_var_in_parent(
-        &self,
-        id: &ID,
-    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError>;
-    fn update_var_offset(&self, id: &ID, offset: Offset) -> Result<Rc<Var>, CodeGenerationError>;
-    fn stack_top(&self) -> Option<usize>;
-    fn update_stack_top(&self, top: usize) -> Result<(), CodeGenerationError>;
-
-    fn env_vars(&self) -> Vec<Rc<Var>>;
-    fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)>;
-
-    fn find_chan(&self) -> Result<&Chan, SemanticError>;
-    fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError>;
-    fn find_event(&self) -> Result<&Event, SemanticError>;
 }

@@ -4,12 +4,10 @@ use super::{
     AddrType, ChanType, ClosureType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
     StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
-use crate::semantic::{
-    scope::{type_traits::IsEnum, ScopeApi},
-    MutRc, Resolve, SemanticError,
-};
+use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::{scope::type_traits::IsEnum, MutRc, Resolve, SemanticError};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Type {
+impl Resolve for Type {
     type Output = ();
     type Context = ();
 
@@ -44,7 +42,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Type {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
+impl Resolve for PrimitiveType {
     type Output = ();
     type Context = ();
 
@@ -61,7 +59,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for PrimitiveType {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
+impl Resolve for SliceType {
     type Output = ();
     type Context = ();
 
@@ -79,7 +77,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for SliceType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StrSliceType {
+impl Resolve for StrSliceType {
     type Output = ();
     type Context = ();
 
@@ -97,7 +95,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StrSliceType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for StringType {
+impl Resolve for StringType {
     type Output = ();
     type Context = ();
 
@@ -115,7 +113,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for StringType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for VecType {
+impl Resolve for VecType {
     type Output = ();
     type Context = ();
 
@@ -133,7 +131,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for VecType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ClosureType {
+impl Resolve for ClosureType {
     type Output = ();
     type Context = ();
 
@@ -154,7 +152,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ClosureType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Types {
+impl Resolve for Types {
     type Output = ();
     type Context = ();
 
@@ -175,7 +173,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Types {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
+impl Resolve for ChanType {
     type Output = ();
     type Context = ();
 
@@ -193,7 +191,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ChanType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
+impl Resolve for TupleType {
     type Output = ();
     type Context = ();
 
@@ -211,7 +209,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TupleType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
+impl Resolve for AddrType {
     type Output = ();
     type Context = ();
 
@@ -228,7 +226,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AddrType {
         self.0.resolve(scope, context, extra)
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for RangeType {
+impl Resolve for RangeType {
     type Output = ();
     type Context = ();
 
@@ -246,7 +244,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for RangeType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for MapType {
+impl Resolve for MapType {
     type Output = ();
     type Context = ();
 
@@ -265,7 +263,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MapType {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for KeyType {
+impl Resolve for KeyType {
     type Output = ();
     type Context = ();
 

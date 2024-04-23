@@ -1,20 +1,21 @@
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 use crate::ast::expressions::data::{VarID, Variable};
 use crate::resolve_metadata;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::user_type_impl::{Enum, Union};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
 use crate::vm::platform::Lib;
 use std::collections::{HashMap, HashSet};
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
+impl Resolve for ExprFlow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -26,7 +27,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             ExprFlow::If(value) => value.resolve(scope, context, extra),
@@ -41,7 +41,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for ExprFlow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IfExpr<Scope> {
+impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -53,7 +53,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.condition.resolve(scope, context, extra)?;
         // Check if condition is a boolean
@@ -71,7 +70,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfExpr<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
+impl Resolve for Pattern {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
@@ -83,7 +82,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Pattern::Primitive(value) => {
@@ -149,15 +147,15 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    let var = <Var as BuildVar<Scope>>::build_var(var_name, field_type);
+                    let var = <Var as BuildVar>::build_var(var_name, field_type);
                     var.state.set(VarState::Parameter);
                     scope_vars.push(var);
                 }
                 Ok(scope_vars)
             } // Pattern::Struct { typename, vars } => {
-              //     let borrowed_scope = scope.borrow();
+              //     let borrowed_scope = block.borrow();
               //     let user_type = borrowed_scope.find_type(typename)?;
-              //     let user_type = user_type.type_of(&scope.borrow())?;
+              //     let user_type = user_type.type_of(&block.borrow())?;
               //     let mut scope_vars = Vec::with_capacity(vars.len());
               //     let Some(fields) = <EType as GetSubTypes>::get_fields(&user_type) else {
               //         return Err(SemanticError::InvalidPattern);
@@ -175,7 +173,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
               //         }) else {
               //             return Err(SemanticError::InvalidPattern);
               //         };
-              //         scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+              //         scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
               //     }
               //     Ok(scope_vars)
               // }
@@ -192,14 +190,14 @@ impl<Scope: ScopeApi> Resolve<Scope> for Pattern {
               //     }
               //     for (index, (_, field_type)) in fields.iter().enumerate() {
               //         let var_name = &value[index];
-              //         scope_vars.push(<Var as BuildVar<Scope>>::build_var(var_name, field_type));
+              //         scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
               //     }
               //     Ok(scope_vars)
               // }
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
+impl Resolve for PatternExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
@@ -211,19 +209,18 @@ impl<Scope: ScopeApi> Resolve<Scope> for PatternExpr<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let vars = self.pattern.resolve(scope, &extra, &())?;
         for (index, var) in vars.iter().enumerate() {
             var.state.set(VarState::Parameter);
             var.is_declared.set(true);
         }
-        // create a scope and assign the pattern variable to it before resolving the expression
+        // create a block and assign the pattern variable to it before resolving the expression
         let _ = self.expr.resolve(scope, context, &vars)?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
+impl Resolve for MatchExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -235,7 +232,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
@@ -305,8 +301,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
                                     Err(err) => (
                                         Some(err),
                                         Either::Static(
-                                            <StaticType as BuildStaticType<Scope>>::build_unit()
-                                                .into(),
+                                            <StaticType as BuildStaticType>::build_unit().into(),
                                         ),
                                     ),
                                 }
@@ -330,7 +325,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchExpr<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
+impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -342,7 +337,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.try_branch.resolve(scope, context, &Vec::default())?;
         let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
@@ -353,7 +347,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryExpr<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
+impl Resolve for FnCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -365,7 +359,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for FnCall<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {

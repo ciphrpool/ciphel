@@ -6,7 +6,8 @@ use std::{
 
 use ulid::Ulid;
 
-use crate::semantic::{scope::ScopeApi, MutRc};
+use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::MutRc;
 
 use super::{
     allocator::{
@@ -78,7 +79,7 @@ impl Runtime {
     }
 }
 
-pub trait GenerateCode<Scope: ScopeApi> {
+pub trait GenerateCode {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -90,7 +91,7 @@ pub trait Executable {
     fn execute(&self, thread: &Thread) -> Result<(), RuntimeError>;
 }
 
-pub trait DeserializeFrom<Scope: ScopeApi> {
+pub trait DeserializeFrom {
     type Output;
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;
 }

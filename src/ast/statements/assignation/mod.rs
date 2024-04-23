@@ -1,29 +1,26 @@
-use crate::{
-    ast::expressions::{
-        data::{PtrAccess, Variable},
-        Expression,
-    },
-    semantic::scope::ScopeApi,
+use crate::ast::expressions::{
+    data::{PtrAccess, Variable},
+    Expression,
 };
 
-use super::scope::Scope;
+use super::block::Block;
 pub mod assignation_gencode;
 pub mod assignation_parse;
 pub mod assignation_resolve;
 pub mod assignation_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Assignation<InnerScope: ScopeApi> {
-    left: Assignee<InnerScope>,
-    right: AssignValue<InnerScope>,
+pub struct Assignation {
+    left: Assignee,
+    right: AssignValue,
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum AssignValue<InnerScope: ScopeApi> {
-    Scope(Scope<InnerScope>),
-    Expr(Box<Expression<InnerScope>>),
+pub enum AssignValue {
+    Scope(Block),
+    Expr(Box<Expression>),
 }
 #[derive(Debug, Clone, PartialEq)]
-pub enum Assignee<InnerScope: ScopeApi> {
-    Variable(Variable<InnerScope>),
-    PtrAccess(PtrAccess<InnerScope>),
+pub enum Assignee {
+    Variable(Variable),
+    PtrAccess(PtrAccess),
 }

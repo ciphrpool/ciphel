@@ -15,7 +15,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ScopeApi, Metadata},
+    semantic::Metadata,
 };
 
 use super::{
@@ -23,7 +23,7 @@ use super::{
     LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
 
-impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
+impl TryParse for UnaryOperation {
     /*
      * @desc Parse Unary opertion
      *
@@ -48,8 +48,8 @@ impl<InnerScope: ScopeApi> TryParse for UnaryOperation<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Range<InnerScope> {
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+impl TryParseOperation for Range {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = LogicalOr::parse(input)?;
         let (remainder, op) = opt(pair(wst(lexem::RANGE_SEP), opt(wst(lexem::EQUAL))))(remainder)?;
 
@@ -73,8 +73,8 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Range<InnerScope> {
     }
 }
 
-pub trait TryParseOperation<InnerScope: ScopeApi> {
-    fn parse(input: Span) -> PResult<Expression<InnerScope>>
+pub trait TryParseOperation {
+    fn parse(input: Span) -> PResult<Expression>
     where
         Self: Sized;
 }
@@ -85,14 +85,14 @@ enum HighOrdMathOPERATOR {
     Div,
     Mod,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope> {
+impl TryParseOperation for Product {
     /*
      * @desc Parse Multiplication, division, modulo operation
      *
      * @grammar
      * HighM := Atom (* | / | % ) Atom | Atom
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Cast::parse(input)?;
         let (remainder, op) = opt(alt((
             value(HighOrdMathOPERATOR::Mult, wst(lexem::MULT)),
@@ -101,7 +101,7 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Product<InnerScope>
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Product::<InnerScope>::parse(remainder)?;
+            let (remainder, right) = Product::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -136,14 +136,14 @@ enum LowOrdMathOPERATOR {
     Minus,
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Addition<InnerScope> {
+impl TryParseOperation for Addition {
     /*
      * @desc Parse addition operation
      *
      * @grammar
      * LowM := HighM + HighM | HighM
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Product::parse(input)?;
         let (remainder, op) = opt(alt((
             value(LowOrdMathOPERATOR::Add, wst(lexem::ADD)),
@@ -180,14 +180,14 @@ enum ShiftOPERATOR {
     Left,
     Right,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
+impl TryParseOperation for Shift {
     /*
      * @desc Parse bitwise shift operation
      *
      * @grammar
      * Shift := LowM (<<|>>) LowM | LowM
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Addition::parse(input)?;
         let (remainder, op) = opt(alt((
             value(ShiftOPERATOR::Left, wst(lexem::SHL)),
@@ -219,14 +219,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Shift<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerScope> {
+impl TryParseOperation for BitwiseAnd {
     /*
      * @desc Parse bitwise and operation
      *
      * @grammar
      * BAnd := Shift & Shift | Shift
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Shift::parse(input)?;
         let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
 
@@ -248,14 +248,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseAnd<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerScope> {
+impl TryParseOperation for BitwiseXOR {
     /*
      * @desc Parse bitwise xor operation
      *
      * @grammar
      * XOr := BAnd ^ BAnd | BAnd
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseAnd::parse(input)?;
         let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
 
@@ -277,14 +277,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseXOR<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScope> {
+impl TryParseOperation for BitwiseOR {
     /*
      * @desc Parse bitwise or operation
      *
      * @grammar
      * BOr := XOr \| XOr  | XOr
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseXOR::parse(input)?;
         let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
 
@@ -306,14 +306,14 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for BitwiseOR<InnerScop
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Cast<InnerScope> {
+impl TryParseOperation for Cast {
     /*
      * @desc Parse bitwise xor operation
      *
      * @grammar
      * Cast := Atom as Type | Atom
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Atomic::parse(input)?;
         let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
 
@@ -343,14 +343,14 @@ enum ComparaisonOPERATOR {
     Equal,
     NotEqual,
 }
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerScope> {
+impl TryParseOperation for Comparaison {
     /*
      * @desc Parse comparaison operation
      *
      * @grammar
      * CompOp := BOr (< |<= | >= | > | == | != | in ) BOr | BOr
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
+    fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseOR::parse(input)?;
         let (remainder, op) = opt(alt((
             value(ComparaisonOPERATOR::LessEqual, wst(lexem::ELE)),
@@ -410,19 +410,19 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for Comparaison<InnerSc
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerScope> {
+impl TryParseOperation for LogicalAnd {
     /*
      * @desc Parse logical and operation
      *
      * @grammar
      * AndOp := CompOp And CompOp | CompOp
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = Comparaison::<InnerScope>::parse(input)?;
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = Comparaison::parse(input)?;
         let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = LogicalAnd::<InnerScope>::parse(remainder)?;
+            let (remainder, right) = LogicalAnd::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -439,19 +439,19 @@ impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalAnd<InnerSco
     }
 }
 
-impl<InnerScope: ScopeApi> TryParseOperation<InnerScope> for LogicalOr<InnerScope> {
+impl TryParseOperation for LogicalOr {
     /*
      * @desc Parse logical or operation
      *
      * @grammar
      * Expr := AndOp Or AndOp | AndOp
      */
-    fn parse(input: Span) -> PResult<Expression<InnerScope>> {
-        let (remainder, left) = LogicalAnd::<InnerScope>::parse(input)?;
+    fn parse(input: Span) -> PResult<Expression> {
+        let (remainder, left) = LogicalAnd::parse(input)?;
         let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = LogicalOr::<InnerScope>::parse(remainder)?;
+            let (remainder, right) = LogicalOr::parse(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -474,7 +474,6 @@ mod tests {
 
     use crate::{
         ast::expressions::data::{Data, Number, Primitive},
-        semantic::scope::scope_impl::MockScope,
         v_num,
     };
 
@@ -482,7 +481,7 @@ mod tests {
 
     #[test]
     fn valid_unary() {
-        let res = UnaryOperation::<MockScope>::parse("-10".into());
+        let res = UnaryOperation::parse("-10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -495,7 +494,7 @@ mod tests {
             value
         );
 
-        let res = UnaryOperation::<MockScope>::parse("!true".into());
+        let res = UnaryOperation::parse("!true".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -511,7 +510,7 @@ mod tests {
 
     #[test]
     fn valid_binary_math() {
-        let res = Addition::<MockScope>::parse("10 + 10".into());
+        let res = Addition::parse("10 + 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -527,7 +526,7 @@ mod tests {
             value
         );
 
-        let res = Addition::<MockScope>::parse("10 - 10".into());
+        let res = Addition::parse("10 - 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -543,7 +542,7 @@ mod tests {
             value
         );
 
-        let res = Product::<MockScope>::parse("10 * 10".into());
+        let res = Product::parse("10 * 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -559,7 +558,7 @@ mod tests {
             value
         );
 
-        let res = Product::<MockScope>::parse("10 / 10".into());
+        let res = Product::parse("10 / 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -575,7 +574,7 @@ mod tests {
             value
         );
 
-        let res = Product::<MockScope>::parse("10 % 2".into());
+        let res = Product::parse("10 % 2".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -591,7 +590,7 @@ mod tests {
             value
         );
 
-        let res = Shift::<MockScope>::parse("10 << 2".into());
+        let res = Shift::parse("10 << 2".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -607,7 +606,7 @@ mod tests {
             value
         );
 
-        let res = Shift::<MockScope>::parse("10 >> 2".into());
+        let res = Shift::parse("10 >> 2".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -626,7 +625,7 @@ mod tests {
 
     #[test]
     fn valid_multiple_binary() {
-        let res = Addition::<MockScope>::parse("10 + 10 + 10".into());
+        let res = Addition::parse("10 + 10 + 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -648,7 +647,7 @@ mod tests {
             value
         );
 
-        let res = Product::<MockScope>::parse("10 * 10 * 10".into());
+        let res = Product::parse("10 * 10 * 10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -670,7 +669,7 @@ mod tests {
             value
         );
 
-        let res = LogicalAnd::<MockScope>::parse("true and true and true".into());
+        let res = LogicalAnd::parse("true and true and true".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -695,7 +694,7 @@ mod tests {
 
     #[test]
     fn valid_binary_logical() {
-        let res = LogicalAnd::<MockScope>::parse("true and true".into());
+        let res = LogicalAnd::parse("true and true".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -711,7 +710,7 @@ mod tests {
             value
         );
 
-        let res = LogicalOr::<MockScope>::parse("true or true".into());
+        let res = LogicalOr::parse("true or true".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -727,7 +726,7 @@ mod tests {
             value
         );
 
-        let res = BitwiseXOR::<MockScope>::parse("true ^ true".into());
+        let res = BitwiseXOR::parse("true ^ true".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -746,7 +745,7 @@ mod tests {
 
     #[test]
     fn valid_binary_comparaison() {
-        let res = Comparaison::<MockScope>::parse("10 < 5".into());
+        let res = Comparaison::parse("10 < 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -762,7 +761,7 @@ mod tests {
             value
         );
 
-        let res = Comparaison::<MockScope>::parse("10 <= 5".into());
+        let res = Comparaison::parse("10 <= 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -778,7 +777,7 @@ mod tests {
             value
         );
 
-        let res = Comparaison::<MockScope>::parse("10 > 5".into());
+        let res = Comparaison::parse("10 > 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -794,7 +793,7 @@ mod tests {
             value
         );
 
-        let res = Comparaison::<MockScope>::parse("10 >= 5".into());
+        let res = Comparaison::parse("10 >= 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -810,7 +809,7 @@ mod tests {
             value
         );
 
-        let res = Comparaison::<MockScope>::parse("10 == 5".into());
+        let res = Comparaison::parse("10 == 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -826,7 +825,7 @@ mod tests {
             value
         );
 
-        let res = Comparaison::<MockScope>::parse("10 != 5".into());
+        let res = Comparaison::parse("10 != 5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -845,7 +844,7 @@ mod tests {
 
     #[test]
     fn valid_range() {
-        let res = Range::<MockScope>::parse("1..10".into());
+        let res = Range::parse("1..10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -863,7 +862,7 @@ mod tests {
             value
         );
 
-        let res = Range::<MockScope>::parse("1..=10".into());
+        let res = Range::parse("1..=10".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -881,7 +880,7 @@ mod tests {
             value
         );
 
-        let res = Range::<MockScope>::parse("1u64..10u64".into());
+        let res = Range::parse("1u64..10u64".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

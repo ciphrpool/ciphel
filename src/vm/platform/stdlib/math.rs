@@ -6,6 +6,7 @@ use std::f64::NEG_INFINITY;
 
 use num_traits::ToBytes;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{Either, TypeOf};
 use crate::vm::casm::operation::OpPrimitive;
@@ -16,7 +17,7 @@ use crate::vm::scheduler::Thread;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, MutRc, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -137,10 +138,10 @@ impl MathFn {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MathFn {
+impl Resolve for MathFn {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -230,11 +231,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for MathFn {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MathFn {
+impl TypeOf for MathFn {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             MathFn::IsNaN | MathFn::IsInf => {
@@ -245,7 +245,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MathFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for MathFn {
+impl GenerateCode for MathFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -726,11 +726,9 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Bool,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Bool(true))
     }
 
@@ -745,11 +743,9 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Bool,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Bool(false))
     }
     #[test]
@@ -763,7 +759,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -781,7 +777,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -799,7 +795,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -817,7 +813,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -835,7 +831,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -853,7 +849,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -871,7 +867,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -889,7 +885,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -907,7 +903,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -925,7 +921,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -943,7 +939,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -961,7 +957,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -979,7 +975,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -997,7 +993,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1015,7 +1011,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1033,7 +1029,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1051,7 +1047,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1069,7 +1065,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1087,7 +1083,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1105,7 +1101,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1123,7 +1119,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1141,7 +1137,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1159,7 +1155,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1177,7 +1173,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1195,7 +1191,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1213,7 +1209,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1231,7 +1227,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1250,7 +1246,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1270,7 +1266,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::F64),
             &data,
         )
@@ -1290,11 +1286,9 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &&PrimitiveType::Bool,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&&PrimitiveType::Bool, &data)
+                .expect("Deserialization should have succeeded");
 
         assert_eq!(result, Primitive::Bool(true))
     }

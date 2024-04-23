@@ -1,14 +1,15 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Either, MutRc};
 use std::{cell::RefCell, rc::Rc};
-impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
+impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -20,7 +21,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Loop::For(value) => value.resolve(scope, context, extra),
@@ -33,7 +33,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Loop<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
+impl Resolve for ForIterator {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -45,7 +45,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = self.expr.type_of(&scope.borrow())?;
@@ -55,23 +54,23 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForIterator<Scope> {
         Ok(())
         // match self {
         //     ForIterator::Id(value) => {
-        //         let borrowed_scope = scope.borrow();
+        //         let borrowed_scope = block.borrow();
         //         let (var, _) = borrowed_scope.find_var(value)?;
         //         // check that the variable is iterable
-        //         let var_type = var.type_of(&scope.borrow())?;
+        //         let var_type = var.type_of(&block.borrow())?;
         //         if !<EType as TypeChecking>::is_iterable(&var_type) {
         //             return Err(SemanticError::ExpectedIterable);
         //         }
         //         Ok(())
         //     }
-        //     ForIterator::Vec(value) => value.resolve(scope, &None, &()),
-        //     ForIterator::Slice(value) => value.resolve(scope, &None, &()),
-        //     ForIterator::Receive { addr, .. } => addr.resolve(scope, &None, &()),
+        //     ForIterator::Vec(value) => value.resolve(block, &None, &()),
+        //     ForIterator::Slice(value) => value.resolve(block, &None, &()),
+        //     ForIterator::Receive { addr, .. } => addr.resolve(block, &None, &()),
         // }
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
+impl Resolve for ForItem {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
@@ -83,20 +82,19 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForItem {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             ForItem::Id(value) => {
                 let Some(item_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                Ok(vec![<Var as BuildVar<Scope>>::build_var(value, &item_type)])
+                Ok(vec![<Var as BuildVar>::build_var(value, &item_type)])
             }
             ForItem::Pattern(pattern) => pattern.resolve(scope, context, extra),
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
+impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -108,7 +106,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.iterator.resolve(scope, &(), &())?;
         let item_type = self.iterator.type_of(&scope.borrow())?;
@@ -119,13 +116,13 @@ impl<Scope: ScopeApi> Resolve<Scope> for ForLoop<Scope> {
             var.state.set(VarState::Parameter);
             var.is_declared.set(true);
         }
-        // attach the item to the scope
+        // attach the item to the block
         self.scope.to_loop();
         let _ = self.scope.resolve(scope, context, &item_vars)?;
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
+impl Resolve for WhileLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -137,7 +134,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for WhileLoop<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.condition.resolve(scope, &None, &())?;
         // check that the condition is a boolean
@@ -169,7 +165,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop() {
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for i in [1,2,3] {
             x = i;
@@ -192,7 +188,7 @@ mod tests {
         let res = expr_loop.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for (i,j) in [(1,1),(2,2),(3,3)] {
             x = j;
@@ -218,7 +214,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop_range() {
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for i in 0..10 {
             x = i;
@@ -244,7 +240,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop_range_u64() {
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for i in 0u64..10u64 {
             x = i;
@@ -270,7 +266,7 @@ mod tests {
 
     #[test]
     fn robustness_for_loop() {
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for i in y {
             x = i;
@@ -293,7 +289,7 @@ mod tests {
         let res = expr_loop.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr_loop = ForLoop::<scope_impl::Scope>::parse(
+        let expr_loop = ForLoop::parse(
             r##"
         for i in y {
             x = i;
@@ -329,7 +325,7 @@ mod tests {
 
     #[test]
     fn valid_while_loop() {
-        let expr_loop = WhileLoop::<scope_impl::Scope>::parse(
+        let expr_loop = WhileLoop::parse(
             r##"
         while x > 10 {
             x = x + 1;
@@ -355,7 +351,7 @@ mod tests {
 
     #[test]
     fn robustness_while() {
-        let expr_loop = WhileLoop::<scope_impl::Scope>::parse(
+        let expr_loop = WhileLoop::parse(
             r##"
         while x {
             x = x + 1;
@@ -381,7 +377,7 @@ mod tests {
 
     #[test]
     fn valid_loop() {
-        let expr_loop = Loop::<scope_impl::Scope>::parse(
+        let expr_loop = Loop::parse(
             r##"
         loop {
             x = x + 1;

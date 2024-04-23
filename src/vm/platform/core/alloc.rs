@@ -3,6 +3,7 @@ use std::{
     vec,
 };
 
+use crate::semantic::scope::scope_impl::Scope;
 use nom_supreme::parser_ext::Value;
 use num_traits::ToBytes;
 
@@ -18,7 +19,6 @@ use crate::{
                 self, AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
             },
             type_traits::{GetSubTypes, TypeChecking},
-            ScopeApi,
         },
         AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
     },
@@ -27,7 +27,7 @@ use crate::{
         casm::{
             alloc::{Access, Alloc, Free, Realloc},
             branch::{BranchIf, Goto, Label},
-            memcopy::MemCopy,
+            mem::Mem,
             operation::{
                 Addition, Equal, Greater, Mult, OpPrimitive, Operation, OperationKind, Substraction,
             },
@@ -174,10 +174,10 @@ impl AllocFn {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
+impl Resolve for AllocFn {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -546,11 +546,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for AllocFn {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for AllocFn {
+impl TypeOf for AllocFn {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             AllocFn::Append { .. } => Ok(e_static!(StaticType::Unit)),
@@ -573,7 +572,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for AllocFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for AllocFn {
+impl GenerateCode for AllocFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -648,7 +647,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for AllocFn {
                     data: size.get().to_le_bytes().to_vec(),
                 }));
             }
-            AllocFn::MemCopy => instructions.push(Casm::MemCopy(MemCopy::MemCopy)),
+            AllocFn::MemCopy => instructions.push(Casm::MemCopy(Mem::MemCopy)),
             AllocFn::Clear {
                 clear_kind,
                 item_size,
@@ -1346,7 +1345,7 @@ mod tests {
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World");
@@ -1437,7 +1436,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -1631,7 +1630,7 @@ mod tests {
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World");
@@ -1692,7 +1691,7 @@ mod tests {
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World");
@@ -1753,7 +1752,7 @@ mod tests {
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello Worl仗");
@@ -1815,7 +1814,7 @@ mod tests {
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World");
@@ -1856,7 +1855,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -1899,7 +1898,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -1942,7 +1941,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -1985,7 +1984,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2254,7 +2253,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2294,7 +2293,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2539,7 +2538,7 @@ mod tests {
             .read(heap_address, 5 + 16)
             .expect("length should be readable");
 
-        let result = <StringType as DeserializeFrom<Scope>>::deserialize_from(&StringType(), &data)
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
             .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "");
@@ -2594,7 +2593,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -2645,7 +2644,7 @@ mod tests {
         thread.run().expect("Execution should have succeeded");
         let memory = &thread.memory();
         let data = clear_stack!(memory);
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )

@@ -1,5 +1,6 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
@@ -7,7 +8,6 @@ use crate::{
             static_types::{self, AddrType, StaticType},
             type_traits::{GetSubTypes, OperandMerging, TypeChecking},
             user_type_impl::{self, UserType},
-            ScopeApi,
         },
         CompatibleWith, EType, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
@@ -18,20 +18,20 @@ use crate::{
     },
 };
 
-impl<T, Scope: ScopeApi> CompatibleWith<Scope> for Option<T>
+impl<T> CompatibleWith for Option<T>
 where
-    T: CompatibleWith<Scope>,
+    T: CompatibleWith,
 {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Some(value) => value.compatible_with(other, scope),
             None => {
                 Ok(())
 
-                // let other_type = other.type_of(&scope)?;
+                // let other_type = other.type_of(&block)?;
 
                 // if <EType as TypeChecking>::is_unit(&other_type) {
                 //     Ok(())
@@ -43,12 +43,12 @@ where
     }
 }
 
-impl<Scope: ScopeApi> CompatibleWith<Scope> for EType {
+impl CompatibleWith for EType {
     fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
     where
-        Other: TypeOf<Scope>,
-        Scope: ScopeApi,
-        Self: TypeOf<Scope>,
+        Other: TypeOf,
+
+        Self: TypeOf,
     {
         match self {
             Either::Static(static_type) => static_type.compatible_with(other, scope),
@@ -66,10 +66,9 @@ impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for EType {
+impl TypeOf for EType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
         Self: Sized,
     {
         match self {
@@ -79,10 +78,10 @@ impl<Scope: ScopeApi> TypeOf<Scope> for EType {
     }
 }
 
-impl<Scope: ScopeApi> MergeType<Scope> for EType {
+impl MergeType for EType {
     fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(static_type) => static_type.merge(other, scope),
@@ -260,10 +259,10 @@ impl GetSubTypes for EType {
     }
 }
 
-impl<User, Static, Scope: ScopeApi> OperandMerging<Scope> for Either<User, Static>
+impl<User, Static> OperandMerging for Either<User, Static>
 where
-    User: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
-    Static: CompatibleWith<Scope> + TypeOf<Scope> + OperandMerging<Scope>,
+    User: CompatibleWith + TypeOf + OperandMerging,
+    Static: CompatibleWith + TypeOf + OperandMerging,
 {
     fn can_substract(&self) -> Result<(), SemanticError> {
         match self {
@@ -278,7 +277,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_substraction(other, scope),
@@ -304,7 +303,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_product(other, scope),
@@ -324,7 +323,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_addition(other, scope),
@@ -340,7 +339,7 @@ where
     }
     fn merge_shift<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_shift(other, scope),
@@ -360,7 +359,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_bitwise_and(other, scope),
@@ -380,7 +379,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_bitwise_xor(other, scope),
@@ -400,7 +399,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_bitwise_or(other, scope),
@@ -409,7 +408,7 @@ where
     }
     fn cast<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.cast(other, scope),
@@ -428,7 +427,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_comparaison(other, scope),
@@ -448,7 +447,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_equation(other, scope),
@@ -468,7 +467,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_logical_and(other, scope),
@@ -488,7 +487,7 @@ where
         scope: &Ref<Scope>,
     ) -> Result<EType, SemanticError>
     where
-        Other: TypeOf<Scope>,
+        Other: TypeOf,
     {
         match self {
             Either::Static(value) => value.merge_logical_or(other, scope),
@@ -497,8 +496,8 @@ where
     }
 }
 
-impl<Scope: ScopeApi> DeserializeFrom<Scope> for EType {
-    type Output = Data<Scope>;
+impl DeserializeFrom for EType {
+    type Output = Data;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
         match self {

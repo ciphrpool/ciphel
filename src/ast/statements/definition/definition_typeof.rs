@@ -2,26 +2,25 @@ use std::cell::Ref;
 
 use super::{EventCondition, EventDef};
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     Resolve, SemanticError, TypeOf,
 };
 
-impl<Scope: ScopeApi> TypeOf<Scope> for EventDef<Scope> {
+impl TypeOf for EventDef {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         todo!()
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for EventCondition {
+impl TypeOf for EventCondition {
     fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         todo!()
     }

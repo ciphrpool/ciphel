@@ -8,12 +8,7 @@ use crate::{
     ast::{
         self,
         expressions::Expression,
-        statements::{
-            declaration::TypedVar,
-            loops::{ForItem, ForIterator},
-            return_stat::Return,
-            Statement,
-        },
+        statements::{declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
             io::{PResult, Span},
@@ -27,10 +22,7 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{
-        scope::{ClosureState, ScopeApi},
-        Metadata,
-    },
+    semantic::{scope::ClosureState, Metadata},
     vm::{allocator::align, platform},
 };
 use nom::{
@@ -48,7 +40,7 @@ use super::{
     MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
     VarID, Variable, Vector,
 };
-impl<Scope: ScopeApi> TryParse for Data<Scope> {
+impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(Primitive::parse, |value| Data::Primitive(value)),
@@ -70,7 +62,7 @@ impl<Scope: ScopeApi> TryParse for Data<Scope> {
 }
 
 impl VarID {
-    fn parse<InnerScope: ScopeApi>(input: Span) -> PResult<Variable<InnerScope>> {
+    fn parse(input: Span) -> PResult<Variable> {
         map(parse_id, |id| {
             Variable::Var(VarID {
                 id,
@@ -80,8 +72,8 @@ impl VarID {
     }
 }
 
-impl<InnerScope: ScopeApi> NumAccess<InnerScope> {
-    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+impl NumAccess {
+    fn parse(input: Span) -> PResult<Variable> {
         let (remainder, var) = VarID::parse(input)?;
         let (_, peeked_result) = opt(peek(preceded(
             wst(lexem::DOT),
@@ -115,8 +107,8 @@ impl<InnerScope: ScopeApi> NumAccess<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
-    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+impl ListAccess {
+    fn parse(input: Span) -> PResult<Variable> {
         let (remainder, var) = NumAccess::parse(input)?;
         let (remainder, index) = opt(delimited(
             wst(lexem::SQ_BRA_O),
@@ -139,8 +131,8 @@ impl<InnerScope: ScopeApi> ListAccess<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
-    fn parse(input: Span) -> PResult<Variable<InnerScope>> {
+impl FieldAccess {
+    fn parse(input: Span) -> PResult<Variable> {
         let (remainder, var) = ListAccess::parse(input)?;
         let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
 
@@ -179,7 +171,7 @@ impl<InnerScope: ScopeApi> FieldAccess<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Variable<InnerScope> {
+impl TryParse for Variable {
     /*
      * @desc Parse variable
      *
@@ -243,7 +235,7 @@ impl TryParse for Primitive {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Slice<Scope> {
+impl TryParse for Slice {
     /*
      * @desc Parse List
      *
@@ -280,7 +272,7 @@ impl TryParse for StrSlice {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Vector<Scope> {
+impl TryParse for Vector {
     /*
      * @desc Parse Vector
      *
@@ -308,7 +300,7 @@ impl<Scope: ScopeApi> TryParse for Vector<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
+impl TryParse for Tuple {
     fn parse(input: Span) -> PResult<Self> {
         map(
             delimited(
@@ -324,7 +316,7 @@ impl<Scope: ScopeApi> TryParse for Tuple<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
+impl TryParse for MultiData {
     /*
      * @desc Parse multiple data
      *
@@ -337,7 +329,7 @@ impl<Scope: ScopeApi> TryParse for MultiData<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Closure<Scope> {
+impl TryParse for Closure {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
@@ -361,14 +353,14 @@ impl<Scope: ScopeApi> TryParse for Closure<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for ExprScope<Scope> {
+impl TryParse for ExprScope {
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(ast::statements::scope::Scope::parse, |value| {
+            map(ast::statements::block::Block::parse, |value| {
                 ExprScope::Scope(value)
             }),
             map(Expression::parse, |value| {
-                ExprScope::Expr(ast::statements::scope::Scope {
+                ExprScope::Expr(ast::statements::block::Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(value),
@@ -400,7 +392,7 @@ impl TryParse for ClosureParam {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
+impl TryParse for Address {
     /*
      * @desc Parse pointer address
      *
@@ -417,7 +409,7 @@ impl<InnerScope: ScopeApi> TryParse for Address<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
+impl TryParse for PtrAccess {
     /*
      * @desc Parse pointer access
      *
@@ -434,7 +426,7 @@ impl<InnerScope: ScopeApi> TryParse for PtrAccess<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Struct<Scope> {
+impl TryParse for Struct {
     /*
      * @desc Parse an object
      *
@@ -465,7 +457,7 @@ impl<Scope: ScopeApi> TryParse for Struct<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Union<Scope> {
+impl TryParse for Union {
     /*
      * @desc Parse an union
      *
@@ -516,7 +508,7 @@ impl TryParse for Enum {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Map<Scope> {
+impl TryParse for Map {
     /*
      * @desc Parse map
      *
@@ -547,7 +539,7 @@ impl<Scope: ScopeApi> TryParse for Map<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for KeyData<Scope> {
+impl TryParse for KeyData {
     /*
      * @desc Parse hashable data for key
      *
@@ -571,9 +563,9 @@ mod tests {
     use crate::{
         ast::{
             expressions::{data::Number, operation::Range, Atomic},
-            statements::scope::Scope,
+            statements::block::Block,
         },
-        semantic::scope::{scope_impl::MockScope, ClosureState},
+        semantic::scope::ClosureState,
         v_num,
     };
 
@@ -619,7 +611,7 @@ mod tests {
 
     #[test]
     fn valid_slice() {
-        let res = Slice::<MockScope>::parse("[2,5,6]".into());
+        let res = Slice::parse("[2,5,6]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -657,7 +649,7 @@ mod tests {
 
     #[test]
     fn valid_vector() {
-        let res = Vector::<MockScope>::parse("vec[2,5,6]".into());
+        let res = Vector::parse("vec[2,5,6]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -683,7 +675,7 @@ mod tests {
 
     #[test]
     fn valid_closure() {
-        let res = Closure::<MockScope>::parse("(x,y) -> x".into());
+        let res = Closure::parse("(x,y) -> x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
 
@@ -694,7 +686,7 @@ mod tests {
                     ClosureParam::Minimal("y".into())
                 ],
                 closed: false,
-                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                scope: ExprScope::Expr(ast::statements::block::Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
@@ -719,7 +711,7 @@ mod tests {
 
     #[test]
     fn valid_closure_closed() {
-        let res = Closure::<MockScope>::parse("move (x,y) -> x".into());
+        let res = Closure::parse("move (x,y) -> x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
 
@@ -730,7 +722,7 @@ mod tests {
                     ClosureParam::Minimal("y".into())
                 ],
                 closed: true,
-                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                scope: ExprScope::Expr(ast::statements::block::Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
@@ -754,7 +746,7 @@ mod tests {
     }
     #[test]
     fn valid_closure_typed_args() {
-        let res = Closure::<MockScope>::parse("(x:u64) -> x".into());
+        let res = Closure::parse("(x:u64) -> x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
 
@@ -769,7 +761,7 @@ mod tests {
                 }),],
                 closed: false,
 
-                scope: ExprScope::Expr(ast::statements::scope::Scope {
+                scope: ExprScope::Expr(ast::statements::block::Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
@@ -793,7 +785,7 @@ mod tests {
     }
     #[test]
     fn valid_tuple() {
-        let res = Tuple::<MockScope>::parse("(2,'a')".into());
+        let res = Tuple::parse("(2,'a')".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -812,7 +804,7 @@ mod tests {
 
     #[test]
     fn valid_address() {
-        let res = Address::<MockScope>::parse("&x".into());
+        let res = Address::parse("&x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -829,7 +821,7 @@ mod tests {
 
     #[test]
     fn valid_access() {
-        let res = PtrAccess::<MockScope>::parse("*x".into());
+        let res = PtrAccess::parse("*x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -846,7 +838,7 @@ mod tests {
 
     #[test]
     fn valid_map() {
-        let res = Map::<MockScope>::parse(r#"map{"x":2,"y":6}"#.into());
+        let res = Map::parse(r#"map{"x":2,"y":6}"#.into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -879,7 +871,7 @@ mod tests {
 
     #[test]
     fn valid_struct() {
-        let res = Struct::<MockScope>::parse(r#"Point { x : 2, y : 8}"#.into());
+        let res = Struct::parse(r#"Point { x : 2, y : 8}"#.into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -907,7 +899,7 @@ mod tests {
 
     #[test]
     fn valid_union() {
-        let res = Union::<MockScope>::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
+        let res = Union::parse(r#"Geo::Point { x : 2, y : 8}"#.into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -951,7 +943,7 @@ mod tests {
 
     #[test]
     fn valid_variable() {
-        let res = Variable::<MockScope>::parse("x".into());
+        let res = Variable::parse("x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -962,7 +954,7 @@ mod tests {
             value
         );
 
-        let res = Variable::<MockScope>::parse("x[3]".into());
+        let res = Variable::parse("x[3]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -979,7 +971,7 @@ mod tests {
             value
         );
 
-        let res = Variable::<MockScope>::parse("x.y".into());
+        let res = Variable::parse("x.y".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -996,7 +988,7 @@ mod tests {
             }),
             value
         );
-        let res = Variable::<MockScope>::parse("x.y.z".into());
+        let res = Variable::parse("x.y.z".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -1020,7 +1012,7 @@ mod tests {
             }),
             value
         );
-        let res = Variable::<MockScope>::parse("x.y[3]".into());
+        let res = Variable::parse("x.y[3]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -1043,7 +1035,7 @@ mod tests {
             }),
             value
         );
-        let res = Variable::<MockScope>::parse("x[3].y".into());
+        let res = Variable::parse("x[3].y".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

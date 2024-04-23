@@ -5,6 +5,7 @@ use std::{
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::{
         expressions::operation::LogicalOr,
@@ -15,7 +16,7 @@ use crate::{
         },
     },
     semantic::{
-        scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+        scope::{static_types::StaticType, user_type_impl::UserType},
         EType, Either, Metadata, MutRc, Resolve, SemanticError, TypeOf,
     },
     vm::{
@@ -37,33 +38,33 @@ pub mod flows;
 pub mod operation;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression<InnerScope: ScopeApi> {
-    Product(operation::Product<InnerScope>),
-    Addition(operation::Addition<InnerScope>),
-    Substraction(operation::Substraction<InnerScope>),
-    Shift(operation::Shift<InnerScope>),
-    BitwiseAnd(operation::BitwiseAnd<InnerScope>),
-    BitwiseXOR(operation::BitwiseXOR<InnerScope>),
-    BitwiseOR(operation::BitwiseOR<InnerScope>),
-    Cast(operation::Cast<InnerScope>),
-    Comparaison(operation::Comparaison<InnerScope>),
-    Equation(operation::Equation<InnerScope>),
-    LogicalAnd(operation::LogicalAnd<InnerScope>),
-    LogicalOr(operation::LogicalOr<InnerScope>),
-    Range(operation::Range<InnerScope>),
-    Atomic(Atomic<InnerScope>),
+pub enum Expression {
+    Product(operation::Product),
+    Addition(operation::Addition),
+    Substraction(operation::Substraction),
+    Shift(operation::Shift),
+    BitwiseAnd(operation::BitwiseAnd),
+    BitwiseXOR(operation::BitwiseXOR),
+    BitwiseOR(operation::BitwiseOR),
+    Cast(operation::Cast),
+    Comparaison(operation::Comparaison),
+    Equation(operation::Equation),
+    LogicalAnd(operation::LogicalAnd),
+    LogicalOr(operation::LogicalOr),
+    Range(operation::Range),
+    Atomic(Atomic),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Atomic<InnerScope: ScopeApi> {
-    Data(data::Data<InnerScope>),
-    UnaryOperation(operation::UnaryOperation<InnerScope>),
-    Paren(Box<Expression<InnerScope>>),
-    ExprFlow(flows::ExprFlow<InnerScope>),
+pub enum Atomic {
+    Data(data::Data),
+    UnaryOperation(operation::UnaryOperation),
+    Paren(Box<Expression>),
+    ExprFlow(flows::ExprFlow),
     Error(error::Error),
 }
 
-impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
+impl TryParse for Atomic {
     /*
      * @desc Parse an atomic expression
      *
@@ -91,7 +92,7 @@ impl<Scope: ScopeApi> TryParse for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
+impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -103,7 +104,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Atomic::Data(value) => value.resolve(scope, context, extra),
@@ -115,11 +115,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
+impl TypeOf for Atomic {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Atomic::Data(value) => value.type_of(&scope),
@@ -131,7 +130,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for Expression<Scope> {
+impl TryParse for Expression {
     /*
      * @desc Parse an expression
      *
@@ -147,11 +146,11 @@ impl<Scope: ScopeApi> TryParse for Expression<Scope> {
      * HighM := Atom (* | / | % ) Atom | Atom
      */
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws::<_, Expression<Scope>>(Range::<Scope>::parse)(input)
+        eater::ws::<_, Expression>(Range::parse)(input)
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
+impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -163,7 +162,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Expression::Product(value) => value.resolve(scope, context, extra),
@@ -184,11 +182,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
+impl TypeOf for Expression {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Expression::Product(value) => value.type_of(&scope),
@@ -209,7 +206,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
+impl GenerateCode for Expression {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -233,7 +230,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Expression<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
+impl GenerateCode for Atomic {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -249,7 +246,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Atomic<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Expression<Scope> {
+impl Expression {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Expression::Product(Product::Div { metadata, .. }) => Some(metadata),
@@ -307,7 +304,7 @@ impl<Scope: ScopeApi> Expression<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Atomic<Scope> {
+impl Atomic {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Atomic::Data(value) => value.metadata(),

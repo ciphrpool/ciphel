@@ -19,7 +19,7 @@ pub mod alloc;
 pub mod branch;
 pub mod locate;
 mod math_operation;
-pub mod memcopy;
+pub mod mem;
 pub mod operation;
 pub mod serialize;
 
@@ -128,7 +128,7 @@ pub enum Casm {
     Alloc(alloc::Alloc),
     Realloc(alloc::Realloc),
     Free(alloc::Free),
-    MemCopy(memcopy::MemCopy),
+    MemCopy(mem::Mem),
     Operation(operation::Operation),
     Serialize(serialize::Serialized),
     Access(alloc::Access),

@@ -1,11 +1,12 @@
 use super::{AssignValue, Assignation, Assignee};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, ScopeApi},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
 };
 use std::{cell::RefCell, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
+impl Resolve for Assignation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -17,7 +18,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.left.resolve(scope, &(), &())?;
         let left_type = Some(self.left.type_of(&scope.borrow())?);
@@ -25,7 +25,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignation<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
+impl Resolve for AssignValue {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -37,7 +37,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             AssignValue::Scope(value) => {
@@ -67,7 +66,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for AssignValue<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
+impl Resolve for Assignee {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -79,7 +78,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Assignee<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Assignee::Variable(value) => value.resolve(scope, &None, extra),

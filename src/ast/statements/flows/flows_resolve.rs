@@ -1,4 +1,5 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::expressions::flows::Pattern,
     semantic::{
@@ -7,14 +8,13 @@ use crate::{
             type_traits::TypeChecking,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-            ScopeApi,
         },
         EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
 };
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
+impl Resolve for Flow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -26,7 +26,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         match self {
             Flow::If(value) => value.resolve(scope, context, extra),
@@ -36,7 +35,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for Flow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
+impl Resolve for IfStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -48,7 +47,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.condition.resolve(scope, &None, extra)?;
         // check that condition is a boolean
@@ -74,7 +72,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for IfStat<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
+impl Resolve for MatchStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -86,7 +84,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.expr.resolve(scope, &None, extra)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
@@ -115,7 +112,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }
-                    // create a scope and Scope::child_scope())variable to it before resolving the expression
+                    // create a block and Scope::child_scope())variable to it before resolving the expression
                     let _ = value.scope.resolve(scope, &context, &vars)?;
                 }
                 let _ = else_branch.resolve(scope, &context, &Vec::default())?;
@@ -153,7 +150,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }
-                    // create a scope and Scope::child_scope())variable to it before resolving the expression
+                    // create a block and Scope::child_scope())variable to it before resolving the expression
                     let _ = value.scope.resolve(scope, &context, &vars)?;
                 }
             }
@@ -162,7 +159,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for MatchStat<Scope> {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
+impl Resolve for TryStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
@@ -174,7 +171,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         let _ = self.try_branch.resolve(scope, &context, &Vec::default())?;
         if let Some(else_branch) = &self.else_branch {
@@ -183,7 +179,7 @@ impl<Scope: ScopeApi> Resolve<Scope> for TryStat<Scope> {
         Ok(())
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
+impl Resolve for CallStat {
     type Output = ();
     type Context = ();
     type Extra = ();
@@ -195,7 +191,6 @@ impl<Scope: ScopeApi> Resolve<Scope> for CallStat<Scope> {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
-        Scope: ScopeApi,
     {
         self.call.resolve(scope, &None, extra)
     }

@@ -1,20 +1,21 @@
 use num_traits::ToBytes;
 
-use crate::ast::statements::scope::scope_gencode::inner_scope_gencode;
+use crate::ast::statements::block::block_gencode::inner_block_gencode;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
 use crate::vm::casm::serialize::Serialized;
 use crate::vm::vm::NextItem;
 use crate::{
-    ast::statements::scope::Scope,
-    semantic::{scope::ScopeApi, MutRc},
+    ast::statements::block::Block,
+    semantic::MutRc,
     vm::{
         allocator::stack::UReg,
         casm::{
             alloc::StackFrame,
             branch::{Call, Goto, Label},
-            memcopy::MemCopy,
+            mem::Mem,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -24,7 +25,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use super::{ForLoop, Loop, WhileLoop};
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
+impl GenerateCode for Loop {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -37,26 +38,26 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for Loop<Scope> {
                 let start_label = Label::gen();
                 let end_label = Label::gen();
 
-                instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+                instructions.push(Casm::MemCopy(Mem::DumpRegisters));
                 instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
                 instructions.push_label_id(start_label, "start_loop".into());
-                instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
-                instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
-                let _ = inner_scope_gencode(scope, value, None, true, instructions)?;
+                instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
+                instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
+                let _ = inner_block_gencode(scope, value, None, true, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
                 }));
 
                 instructions.push_label_id(end_label, "end_loop".into());
                 instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-                instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
+                instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
                 Ok(())
             }
         }
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
+impl GenerateCode for ForLoop {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -70,7 +71,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         let next_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+        instructions.push(Casm::MemCopy(Mem::DumpRegisters));
         instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
 
         let _ = self.iterator.expr.gencode(scope, instructions)?;
@@ -81,11 +82,11 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
         instructions.push_label_id(start_label, "start_for".into());
 
         let _ = iterator_type.build_item(instructions, end_label)?;
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
+        instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
+        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
 
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(next_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R3, None)));
+        instructions.push(Casm::MemCopy(Mem::LabelOffset(next_label)));
+        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R3, None)));
 
         let Some(item_type) = iterator_type.get_item() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -93,7 +94,7 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
 
         let params_size = item_type.size_of();
 
-        let _ = inner_scope_gencode(scope, &self.scope, Some(params_size), true, instructions)?;
+        let _ = inner_block_gencode(scope, &self.scope, Some(params_size), true, instructions)?;
 
         instructions.push_label_id(next_label, "next_label".into());
         let _ = iterator_type.next(instructions)?;
@@ -103,12 +104,12 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for ForLoop<Scope> {
 
         instructions.push_label_id(end_label, "end_for".into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
+        instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
         Ok(())
     }
 }
 // 1..10:-1
-impl<Scope: ScopeApi> GenerateCode<Scope> for WhileLoop<Scope> {
+impl GenerateCode for WhileLoop {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -117,23 +118,23 @@ impl<Scope: ScopeApi> GenerateCode<Scope> for WhileLoop<Scope> {
         let start_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(MemCopy::DumpRegisters));
+        instructions.push(Casm::MemCopy(Mem::DumpRegisters));
         instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
         instructions.push_label_id(start_label, "start_while".into());
-        instructions.push(Casm::MemCopy(MemCopy::LabelOffset(end_label)));
-        instructions.push(Casm::MemCopy(MemCopy::SetReg(UReg::R4, None)));
+        instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
+        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
         let _ = self.condition.gencode(scope, instructions)?;
         instructions.push(Casm::If(BranchIf {
             else_label: end_label,
         }));
-        let _ = inner_scope_gencode(scope, &self.scope, None, true, instructions)?;
+        let _ = inner_block_gencode(scope, &self.scope, None, true, instructions)?;
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
 
         instructions.push_label_id(end_label, "end_while".into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::MemCopy(MemCopy::RecoverRegisters));
+        instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
         Ok(())
     }
 }
@@ -181,7 +182,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -208,7 +209,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -235,7 +236,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -262,7 +263,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -290,7 +291,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -317,11 +318,9 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('c'));
     }
 
@@ -344,11 +343,9 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('世'));
     }
 
@@ -371,7 +368,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
         )
@@ -398,11 +395,9 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
-            &PrimitiveType::Char,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
         assert_eq!(result, Primitive::Char('c'));
     }
 
@@ -427,7 +422,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -454,7 +449,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -483,7 +478,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -511,7 +506,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -541,7 +536,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -568,7 +563,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -598,7 +593,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )
@@ -630,7 +625,7 @@ mod tests {
 
         let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom<Scope>>::deserialize_from(
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
         )

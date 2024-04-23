@@ -2,16 +2,14 @@ use std::cell::Ref;
 
 use crate::{
     ast::expressions::Expression,
-    semantic::{
-        scope::{static_types::FnType, ScopeApi},
-        EType, MutRc, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{scope::static_types::FnType, EType, MutRc, Resolve, SemanticError, TypeOf},
 };
 
 use self::{
     core::{CoreCasm, CoreFn},
     stdlib::{StdCasm, StdFn},
 };
+use crate::semantic::scope::scope_impl::Scope;
 
 use super::{
     allocator::Memory,
@@ -48,10 +46,10 @@ impl Lib {
     }
 }
 
-impl<Scope: ScopeApi> Resolve<Scope> for Lib {
+impl Resolve for Lib {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -65,11 +63,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for Lib {
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for Lib {
+impl TypeOf for Lib {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             Lib::Core(value) => value.type_of(scope),
@@ -78,7 +75,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for Lib {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for Lib {
+impl GenerateCode for Lib {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
@@ -144,13 +141,13 @@ impl Executable for LibCasm {
 //     use crate::{
 //         ast::{expressions::Expression, utils::strings::ID},
 //         semantic::{
-//             scope::{
+//             block::{
 //                 static_types::{NumberType, PrimitiveType, StaticType},
 //                 type_traits::{GetSubTypes, TypeChecking},
 //                 user_type_impl::UserType,
-//                 BuildStaticType, ScopeApi,
+//                 BuildStaticType,
 //             },
-//             CompatibleWith, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+//             CompatibleWith, EType, Either, MutRc<Scope>, Resolve, SemanticError, TypeOf,
 //         },
 //     };
 
@@ -196,10 +193,10 @@ impl Executable for LibCasm {
 //             }
 //         }
 
-//         fn accept<Scope: ScopeApi>(
+//         fn accept(
 //             &self,
-//             args: &Vec<Expression<Scope>>,
-//             scope: &MutRc<Scope>,
+//             args: &Vec<Expression>,
+//             block: &MutRc<Scope>,
 //         ) -> Result<(), SemanticError> {
 //             match self {
 //                 PlatformApi::LEFT
@@ -214,13 +211,13 @@ impl Executable for LibCasm {
 //                     }
 //                     let arg = args.first().unwrap();
 //                     let _ = arg.resolve(
-//                         scope,
+//                         block,
 //                         &Some(Either::Static(
 //                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
 //                         )),
 //                         &(),
 //                     )?;
-//                     let arg_type = arg.type_of(&scope.borrow())?;
+//                     let arg_type = arg.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_u64(&arg_type) {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
@@ -232,25 +229,25 @@ impl Executable for LibCasm {
 //                     }
 //                     let cell = &args[0];
 //                     let _ = cell.resolve(
-//                         scope,
+//                         block,
 //                         &Some(Either::Static(
 //                             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into(),
 //                         )),
 //                         &(),
 //                     )?;
-//                     let cell_type = cell.type_of(&scope.borrow())?;
+//                     let cell_type = cell.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_u64(&cell_type) {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let data = &args[1];
 //                     let _ = data.resolve(
-//                         scope,
+//                         block,
 //                         &Some(Either::Static(
 //                             StaticType::Primitive(PrimitiveType::Char).into(),
 //                         )),
 //                         &(),
 //                     )?;
-//                     let data_type = data.type_of(&scope.borrow())?;
+//                     let data_type = data.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_char(&data_type) {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
@@ -261,16 +258,16 @@ impl Executable for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let vector = &args[0];
-//                     let _ = vector.resolve(scope, &None, &())?;
-//                     let vector_type = vector.type_of(&scope.borrow())?;
+//                     let _ = vector.resolve(block, &None, &())?;
+//                     let vector_type = vector.type_of(&block.borrow())?;
 //                     let element = &args[1];
-//                     let _ = element.resolve(scope, &None, &())?;
-//                     let element_type = element.type_of(&scope.borrow())?;
+//                     let _ = element.resolve(block, &None, &())?;
+//                     let element_type = element.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_vec(&vector_type) {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let item_type = <EType as GetSubTypes>::get_item(&vector_type).unwrap();
-//                     let _ = item_type.compatible_with(&element_type, &scope.borrow())?;
+//                     let _ = item_type.compatible_with(&element_type, &block.borrow())?;
 //                     Ok(())
 //                 }
 //                 PlatformApi::INSERT => {
@@ -278,16 +275,16 @@ impl Executable for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let map = &args[0];
-//                     let _ = map.resolve(scope, &None, &())?;
-//                     let map_type = map.type_of(&scope.borrow())?;
+//                     let _ = map.resolve(block, &None, &())?;
+//                     let map_type = map.type_of(&block.borrow())?;
 
 //                     let expr_key = &args[1];
-//                     let _ = expr_key.resolve(scope, &None, &())?;
-//                     let expr_key_type = expr_key.type_of(&scope.borrow())?;
+//                     let _ = expr_key.resolve(block, &None, &())?;
+//                     let expr_key_type = expr_key.type_of(&block.borrow())?;
 
 //                     let expr_value = &args[2];
-//                     let _ = expr_value.resolve(scope, &None, &())?;
-//                     let expr_value_type = expr_value.type_of(&scope.borrow())?;
+//                     let _ = expr_value.resolve(block, &None, &())?;
+//                     let expr_value_type = expr_value.type_of(&block.borrow())?;
 
 //                     if !<EType as TypeChecking>::is_map(&map_type) {
 //                         return Err(SemanticError::IncorrectArguments);
@@ -296,8 +293,8 @@ impl Executable for LibCasm {
 
 //                     let key_type = <EType as GetSubTypes>::get_key(&map_type).unwrap();
 
-//                     let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
-//                     let _ = value_type.compatible_with(&expr_value_type, &scope.borrow())?;
+//                     let _ = key_type.compatible_with(&expr_key_type, &block.borrow())?;
+//                     let _ = value_type.compatible_with(&expr_value_type, &block.borrow())?;
 //                     Ok(())
 //                 }
 //                 PlatformApi::DELETE => {
@@ -305,27 +302,27 @@ impl Executable for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let iterator = &args[0];
-//                     let _ = iterator.resolve(scope, &None, &())?;
-//                     let iterator_type = iterator.type_of(&scope.borrow())?;
+//                     let _ = iterator.resolve(block, &None, &())?;
+//                     let iterator_type = iterator.type_of(&block.borrow())?;
 
 //                     if <EType as TypeChecking>::is_map(&iterator_type) {
 //                         let key_type = <EType as GetSubTypes>::get_key(&iterator_type).unwrap();
 
 //                         let expr_key = &args[1];
-//                         let _ = expr_key.resolve(scope, &Some(key_type), &())?;
-//                         let expr_key_type = expr_key.type_of(&scope.borrow())?;
-//                         // let _ = key_type.compatible_with(&expr_key_type, &scope.borrow())?;
+//                         let _ = expr_key.resolve(block, &Some(key_type), &())?;
+//                         let expr_key_type = expr_key.type_of(&block.borrow())?;
+//                         // let _ = key_type.compatible_with(&expr_key_type, &block.borrow())?;
 //                     } else if <EType as TypeChecking>::is_vec(&iterator_type) {
 //                         let expr_key = &args[1];
 //                         let _ = expr_key.resolve(
-//                             scope,
+//                             block,
 //                             &Some(Either::Static(
 //                                 StaticType::Primitive(PrimitiveType::Number(NumberType::U64))
 //                                     .into(),
 //                             )),
 //                             &(),
 //                         )?;
-//                         let expr_key_type = expr_key.type_of(&scope.borrow())?;
+//                         let expr_key_type = expr_key.type_of(&block.borrow())?;
 
 //                         if !<EType as TypeChecking>::is_u64(&expr_key_type) {
 //                             return Err(SemanticError::IncorrectArguments);
@@ -341,8 +338,8 @@ impl Executable for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let arg = args.first().unwrap();
-//                     let _ = arg.resolve(scope, &None, &())?;
-//                     let arg_type = arg.type_of(&scope.borrow())?;
+//                     let _ = arg.resolve(block, &None, &())?;
+//                     let arg_type = arg.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_addr(&arg_type) {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
@@ -358,17 +355,17 @@ impl Executable for LibCasm {
 //             }
 //         }
 
-//         pub fn resolve<Scope: ScopeApi>(
+//         pub fn resolve(
 //             &self,
-//             args: &Vec<Expression<Scope>>,
-//             scope: &MutRc<Scope>,
+//             args: &Vec<Expression>,
+//             block: &MutRc<Scope>,
 //         ) -> Result<(), SemanticError> {
-//             let _ = self.accept(args, scope)?;
+//             let _ = self.accept(args, block)?;
 //             Ok(())
 //         }
 
-//         pub fn returns<Scope: ScopeApi>(self) -> EType {
-//             e_static!(<StaticType as BuildStaticType<Scope>>::build_unit())
+//         pub fn returns(self) -> EType {
+//             e_static!(<StaticType as BuildStaticType>::build_unit())
 //         }
 //     }
 // }

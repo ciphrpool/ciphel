@@ -1,5 +1,6 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::{
     ast::expressions::data::{VarID, Variable},
     p_num,
@@ -8,7 +9,6 @@ use crate::{
             static_types::{NumberType, PrimitiveType, StaticType},
             type_traits::GetSubTypes,
             user_type_impl::UserType,
-            ScopeApi,
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,
     },
@@ -17,11 +17,10 @@ use crate::{
 
 use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
-impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
+impl TypeOf for ExprFlow {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             ExprFlow::If(value) => value.type_of(&scope),
@@ -32,31 +31,28 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ExprFlow<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for IfExpr<Scope> {
+impl TypeOf for IfExpr {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let then_branch_type = self.then_branch.type_of(&scope)?;
         then_branch_type.merge(&self.else_branch, scope)
     }
 }
 
-impl<Scope: ScopeApi> TypeOf<Scope> for PatternExpr<Scope> {
+impl TypeOf for PatternExpr {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         self.expr.type_of(&scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
+impl TypeOf for MatchExpr {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let pattern_type = {
             if let Some(res) = self.patterns.first() {
@@ -84,21 +80,19 @@ impl<Scope: ScopeApi> TypeOf<Scope> for MatchExpr<Scope> {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for TryExpr<Scope> {
+impl TypeOf for TryExpr {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         let try_branch_type = self.try_branch.type_of(&scope)?;
         try_branch_type.merge(&self.else_branch, scope)
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for FnCall<Scope> {
+impl TypeOf for FnCall {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match &self.fn_var {
             Variable::Var(VarID { id, .. }) => {

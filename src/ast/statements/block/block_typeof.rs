@@ -1,27 +1,27 @@
 use std::cell::Ref;
 
-use super::Scope;
+use super::Block;
 use crate::ast::statements::return_stat::Return;
 use crate::ast::statements::Statement;
 use crate::e_static;
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{scope::ScopeApi, Either, Resolve, SemanticError, TypeOf};
 use crate::semantic::{EType, MergeType};
+use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
 
-impl<OuterScope: ScopeApi> TypeOf<OuterScope> for Scope<OuterScope> {
-    fn type_of(&self, _scope: &Ref<OuterScope>) -> Result<EType, SemanticError>
+impl TypeOf for Block {
+    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        OuterScope: ScopeApi,
-        Self: Sized + Resolve<OuterScope>,
+        Self: Sized + Resolve,
     {
         let binding = self.inner_scope.borrow();
         let Some(binding) = binding.as_ref() else {
             return Err(SemanticError::NotResolvedYet);
         };
         let inner_scope = binding.borrow();
-        let mut return_type = e_static!(<StaticType as BuildStaticType<OuterScope>>::build_unit());
+        let mut return_type = e_static!(<StaticType as BuildStaticType>::build_unit());
 
         for instruction in &self.instructions {
             match instruction {

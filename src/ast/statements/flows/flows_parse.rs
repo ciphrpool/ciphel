@@ -1,7 +1,4 @@
-use crate::{
-    ast::{expressions::flows::FnCall, statements::scope::Scope, TryParse},
-    semantic::scope::ScopeApi,
-};
+use crate::ast::{expressions::flows::FnCall, statements::block::Block, TryParse};
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -21,7 +18,7 @@ use crate::ast::{
 
 use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 
-impl<Scope: ScopeApi> TryParse for Flow<Scope> {
+impl TryParse for Flow {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(IfStat::parse, |value| Flow::If(value)),
@@ -32,7 +29,7 @@ impl<Scope: ScopeApi> TryParse for Flow<Scope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
+impl TryParse for IfStat {
     /*
      * @desc Parse If statement
      *
@@ -42,13 +39,13 @@ impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                pair(preceded(wst(lexem::IF), Expression::parse), Scope::parse),
+                pair(preceded(wst(lexem::IF), Expression::parse), Block::parse),
                 pair(
                     many0(pair(
                         preceded(pair(wst(lexem::ELSE), wst(lexem::IF)), Expression::parse),
-                        Scope::parse,
+                        Block::parse,
                     )),
-                    opt(preceded(wst(lexem::ELSE), Scope::parse)),
+                    opt(preceded(wst(lexem::ELSE), Block::parse)),
                 ),
             ),
             |((condition, then_branch), (else_if_branches, else_branch))| IfStat {
@@ -61,7 +58,7 @@ impl<InnerScope: ScopeApi> TryParse for IfStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
+impl TryParse for MatchStat {
     /*
      * @desc Parse match statements
      *
@@ -79,7 +76,7 @@ impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
                         many1(PatternStat::parse),
                         opt(preceded(
                             wst(lexem::ELSE),
-                            preceded(wst(lexem::BIGARROW), Scope::parse),
+                            preceded(wst(lexem::BIGARROW), Block::parse),
                         )),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
@@ -94,7 +91,7 @@ impl<InnerScope: ScopeApi> TryParse for MatchStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
+impl TryParse for PatternStat {
     /*
      * @desc Parse pattern statements
      *
@@ -106,7 +103,7 @@ impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
             separated_pair(
                 preceded(wst(lexem::CASE), Pattern::parse),
                 wst(lexem::BIGARROW),
-                Scope::parse,
+                Block::parse,
             ),
             |(pattern, scope)| PatternStat {
                 pattern,
@@ -116,7 +113,7 @@ impl<InnerScope: ScopeApi> TryParse for PatternStat<InnerScope> {
     }
 }
 
-impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
+impl TryParse for TryStat {
     /*
      * @desc Parse try statements
      *
@@ -126,8 +123,8 @@ impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::TRY), Scope::parse),
-                opt(preceded(wst(lexem::ELSE), Scope::parse)),
+                preceded(wst(lexem::TRY), Block::parse),
+                opt(preceded(wst(lexem::ELSE), Block::parse)),
             ),
             |(try_branch, else_branch)| TryStat {
                 try_branch: Box::new(try_branch),
@@ -137,7 +134,7 @@ impl<InnerScope: ScopeApi> TryParse for TryStat<InnerScope> {
     }
 }
 
-impl<Scope: ScopeApi> TryParse for CallStat<Scope> {
+impl TryParse for CallStat {
     /*
      * @desc Parse call statements
      *
@@ -165,15 +162,12 @@ mod tests {
                 Atomic, Expression,
             },
             statements::{
+                block::Block,
                 flows::{CallStat, Flow, IfStat, TryStat},
-                scope::Scope,
                 Statement,
             },
         },
-        semantic::{
-            scope::{scope_impl::MockScope, ClosureState},
-            Metadata,
-        },
+        semantic::{scope::ClosureState, Metadata},
         v_num,
     };
 
@@ -181,7 +175,7 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let res = IfStat::<MockScope>::parse(
+        let res = IfStat::parse(
             r#"
         if true {
             f(10);
@@ -198,7 +192,7 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                then_branch: Box::new(Scope {
+                then_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -221,7 +215,7 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 else_if_branches: Vec::default(),
-                else_branch: Some(Box::new(Scope {
+                else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -250,7 +244,7 @@ mod tests {
 
     #[test]
     fn valid_if_else_if() {
-        let res = IfStat::<MockScope>::parse(
+        let res = IfStat::parse(
             r#"
         if true {
             f(10);
@@ -270,7 +264,7 @@ mod tests {
                 condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
                     Primitive::Bool(true)
                 )))),
-                then_branch: Box::new(Scope {
+                then_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -294,7 +288,7 @@ mod tests {
                 }),
                 else_if_branches: vec![(
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Bool(true)))),
-                    Scope {
+                    Block {
                         metadata: Metadata::default(),
                         instructions: vec![Statement::Flow(Flow::Call(CallStat {
                             call: FnCall {
@@ -317,7 +311,7 @@ mod tests {
                         inner_scope: RefCell::new(None),
                     }
                 )],
-                else_branch: Some(Box::new(Scope {
+                else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -346,7 +340,7 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let res = TryStat::<MockScope>::parse(
+        let res = TryStat::parse(
             r#"
         try {
             f(10);
@@ -360,7 +354,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             TryStat {
-                try_branch: Box::new(Scope {
+                try_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {
@@ -382,7 +376,7 @@ mod tests {
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
-                else_branch: Some(Box::new(Scope {
+                else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
                         call: FnCall {

@@ -1,10 +1,11 @@
 use std::cell::Ref;
 
+use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::TypeOf;
 use crate::vm::platform::utils::lexem;
 use crate::{
     ast::expressions::Expression,
-    semantic::{scope::ScopeApi, EType, MutRc, Resolve, SemanticError},
+    semantic::{EType, MutRc, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -38,10 +39,10 @@ impl ThreadFn {
         }
     }
 }
-impl<Scope: ScopeApi> Resolve<Scope> for ThreadFn {
+impl Resolve for ThreadFn {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Expression<Scope>>;
+    type Extra = Vec<Expression>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -54,11 +55,10 @@ impl<Scope: ScopeApi> Resolve<Scope> for ThreadFn {
         }
     }
 }
-impl<Scope: ScopeApi> TypeOf<Scope> for ThreadFn {
+impl TypeOf for ThreadFn {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
-        Scope: ScopeApi,
-        Self: Sized + Resolve<Scope>,
+        Self: Sized + Resolve,
     {
         match self {
             ThreadFn::Spawn => todo!(),
@@ -67,7 +67,7 @@ impl<Scope: ScopeApi> TypeOf<Scope> for ThreadFn {
     }
 }
 
-impl<Scope: ScopeApi> GenerateCode<Scope> for ThreadFn {
+impl GenerateCode for ThreadFn {
     fn gencode(
         &self,
         scope: &MutRc<Scope>,
