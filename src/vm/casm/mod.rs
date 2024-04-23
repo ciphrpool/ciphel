@@ -1,5 +1,5 @@
 use crate::semantic::MutRc;
-use std::{cell::Cell, collections::HashMap, slice::Iter};
+use std::{cell::Cell, collections::HashMap, io, slice::Iter};
 use ulid::Ulid;
 
 use self::{branch::Label, data::Data};

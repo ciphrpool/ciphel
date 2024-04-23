@@ -2,10 +2,9 @@ use crate::ast::{expressions::flows::FnCall, statements::block::Block, TryParse}
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{many0, many1},
+    multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated},
 };
-
 
 use crate::ast::{
     expressions::{flows::Pattern, Expression},
@@ -101,12 +100,15 @@ impl TryParse for PatternStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
-                preceded(wst(lexem::CASE), Pattern::parse),
+                preceded(
+                    wst(lexem::CASE),
+                    separated_list1(wst(lexem::BAR), Pattern::parse),
+                ),
                 wst(lexem::BIGARROW),
                 Block::parse,
             ),
-            |(pattern, scope)| PatternStat {
-                pattern,
+            |(patterns, scope)| PatternStat {
+                patterns,
                 scope: Box::new(scope),
             },
         )(input)

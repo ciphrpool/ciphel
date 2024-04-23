@@ -35,7 +35,7 @@ pub struct MatchStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PatternStat {
-    pattern: Pattern,
+    patterns: Vec<Pattern>,
     scope: Box<Block>,
 }
 

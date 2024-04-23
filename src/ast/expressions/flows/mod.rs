@@ -63,7 +63,7 @@ pub enum Pattern {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PatternExpr {
-    pattern: Pattern,
+    patterns: Vec<Pattern>,
     expr: ExprScope,
 }
 

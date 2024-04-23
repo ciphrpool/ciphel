@@ -164,65 +164,67 @@ impl GenerateCode for MatchStat {
             _ => expr_type.size_of(),
         };
 
-        for PatternStat { pattern, .. } in &self.patterns {
+        for PatternStat { patterns, .. } in &self.patterns {
             let label: Ulid = Label::gen();
-            cases.push(label);
-            match pattern {
-                Pattern::Enum { value, .. } => {
-                    if let Some(idx) = exhaustive_cases
-                        .as_ref()
-                        .map(|e| {
-                            e.iter()
-                                .enumerate()
-                                .find_map(|(idx, id)| (id == value).then(|| idx))
-                        })
-                        .flatten()
-                    {
-                        dump_data.push((idx as u64).to_le_bytes().into());
-                    }
-                }
-                Pattern::Union { variant, .. } => {
-                    if let Some(idx) = exhaustive_cases
-                        .as_ref()
-                        .map(|e| {
-                            e.iter()
-                                .enumerate()
-                                .find_map(|(idx, id)| (id == variant).then(|| idx))
-                        })
-                        .flatten()
-                    {
-                        dump_data.push((idx as u64).to_le_bytes().into());
-                    }
-                }
-                Pattern::Primitive(value) => {
-                    let data = match value {
-                        Primitive::Number(data) => match data.get() {
-                            Number::U8(data) => data.to_le_bytes().into(),
-                            Number::U16(data) => data.to_le_bytes().into(),
-                            Number::U32(data) => data.to_le_bytes().into(),
-                            Number::U64(data) => data.to_le_bytes().into(),
-                            Number::U128(data) => data.to_le_bytes().into(),
-                            Number::I8(data) => data.to_le_bytes().into(),
-                            Number::I16(data) => data.to_le_bytes().into(),
-                            Number::I32(data) => data.to_le_bytes().into(),
-                            Number::I64(data) => data.to_le_bytes().into(),
-                            Number::I128(data) => data.to_le_bytes().into(),
-                            Number::F64(data) => data.to_le_bytes().into(),
-                            _ => return Err(CodeGenerationError::UnresolvedError),
-                        },
-                        Primitive::Bool(data) => [*data as u8].into(),
-                        Primitive::Char(data) => {
-                            let mut buffer = [0u8; 4];
-                            let _ = data.encode_utf8(&mut buffer);
-                            buffer.into()
+            for pattern in patterns {
+                cases.push(label);
+                match pattern {
+                    Pattern::Enum { value, .. } => {
+                        if let Some(idx) = exhaustive_cases
+                            .as_ref()
+                            .map(|e| {
+                                e.iter()
+                                    .enumerate()
+                                    .find_map(|(idx, id)| (id == value).then(|| idx))
+                            })
+                            .flatten()
+                        {
+                            dump_data.push((idx as u64).to_le_bytes().into());
                         }
-                    };
-                    dump_data.push(data);
-                }
-                Pattern::String(value) => {
-                    let data = value.value.as_bytes().into();
-                    // TODO : Maybe add size after data
-                    dump_data.push(data);
+                    }
+                    Pattern::Union { variant, .. } => {
+                        if let Some(idx) = exhaustive_cases
+                            .as_ref()
+                            .map(|e| {
+                                e.iter()
+                                    .enumerate()
+                                    .find_map(|(idx, id)| (id == variant).then(|| idx))
+                            })
+                            .flatten()
+                        {
+                            dump_data.push((idx as u64).to_le_bytes().into());
+                        }
+                    }
+                    Pattern::Primitive(value) => {
+                        let data = match value {
+                            Primitive::Number(data) => match data.get() {
+                                Number::U8(data) => data.to_le_bytes().into(),
+                                Number::U16(data) => data.to_le_bytes().into(),
+                                Number::U32(data) => data.to_le_bytes().into(),
+                                Number::U64(data) => data.to_le_bytes().into(),
+                                Number::U128(data) => data.to_le_bytes().into(),
+                                Number::I8(data) => data.to_le_bytes().into(),
+                                Number::I16(data) => data.to_le_bytes().into(),
+                                Number::I32(data) => data.to_le_bytes().into(),
+                                Number::I64(data) => data.to_le_bytes().into(),
+                                Number::I128(data) => data.to_le_bytes().into(),
+                                Number::F64(data) => data.to_le_bytes().into(),
+                                _ => return Err(CodeGenerationError::UnresolvedError),
+                            },
+                            Primitive::Bool(data) => [*data as u8].into(),
+                            Primitive::Char(data) => {
+                                let mut buffer = [0u8; 4];
+                                let _ = data.encode_utf8(&mut buffer);
+                                buffer.into()
+                            }
+                        };
+                        dump_data.push(data);
+                    }
+                    Pattern::String(value) => {
+                        let data = value.value.as_bytes().into();
+                        // TODO : Maybe add size after data
+                        dump_data.push(data);
+                    }
                 }
             }
         }
@@ -255,7 +257,7 @@ impl GenerateCode for MatchStat {
             idx,
             (
                 PatternStat {
-                    pattern: _,
+                    patterns: _,
                     scope: s,
                 },
                 label,
@@ -744,5 +746,44 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 69));
+    }
+
+    #[test]
+    fn valid_match_union_mult() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            union Sport {
+                Foot{x:i64},
+                Volley{x:i64},
+                Basket{}
+            }
+            let var = Sport::Volley{x:420};
+            let res = 0;
+            match var {
+                case Sport::Foot{x} | Sport::Volley{x} => {
+                    res = 420;
+                }
+                else => {
+                    res = 69;
+                }
+            }
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
     }
 }

@@ -142,11 +142,14 @@ impl TryParse for PatternExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
-                preceded(wst(lexem::CASE), Pattern::parse),
+                preceded(
+                    wst(lexem::CASE),
+                    separated_list1(wst(lexem::BAR), Pattern::parse),
+                ),
                 wst(lexem::BIGARROW),
                 ExprScope::parse,
             ),
-            |(pattern, expr)| PatternExpr { pattern, expr },
+            |(patterns, expr)| PatternExpr { patterns, expr },
         )(input)
     }
 }
@@ -343,9 +346,9 @@ mod tests {
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
-                        pattern: Pattern::Primitive(Primitive::Number(Cell::new(
+                        patterns: vec![Pattern::Primitive(Primitive::Number(Cell::new(
                             Number::Unresolved(10)
-                        ))),
+                        )))],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
@@ -364,10 +367,10 @@ mod tests {
                         })
                     },
                     PatternExpr {
-                        pattern: Pattern::String(StrSlice {
+                        patterns: vec![Pattern::String(StrSlice {
                             value: "Hello World".to_string(),
                             metadata: Metadata::default()
-                        }),
+                        })],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
@@ -386,10 +389,10 @@ mod tests {
                         })
                     },
                     PatternExpr {
-                        pattern: Pattern::Enum {
+                        patterns: vec![Pattern::Enum {
                             typename: "Geo".into(),
                             value: "Point".into()
-                        },
+                        }],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![
@@ -408,11 +411,11 @@ mod tests {
                         })
                     },
                     PatternExpr {
-                        pattern: Pattern::Union {
+                        patterns: vec![Pattern::Union {
                             typename: "Geo".into(),
                             variant: "Point".into(),
                             vars: vec!["y".into()]
-                        },
+                        }],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
                             instructions: vec![

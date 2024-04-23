@@ -210,13 +210,19 @@ impl Resolve for PatternExpr {
     where
         Self: Sized,
     {
-        let vars = self.pattern.resolve(scope, &extra, &())?;
-        for (_index, var) in vars.iter().enumerate() {
+        let previous_vars = self.patterns[0].resolve(scope, &extra, &())?;
+        for pattern in &self.patterns[1..] {
+            let vars = pattern.resolve(scope, &extra, &())?;
+            if previous_vars != vars {
+                return Err(SemanticError::IncorrectVariant);
+            }
+        }
+        for (_index, var) in previous_vars.iter().enumerate() {
             var.state.set(VarState::Parameter);
             var.is_declared.set(true);
         }
         // create a block and assign the pattern variable to it before resolving the expression
-        let _ = self.expr.resolve(scope, context, &vars)?;
+        let _ = self.expr.resolve(scope, context, &previous_vars)?;
         Ok(())
     }
 }
@@ -264,15 +270,17 @@ impl Resolve for MatchExpr {
                     for case in exhaustive_cases {
                         *map.entry(case).or_insert(0) += 1;
                     }
-                    for case in self.patterns.iter().map(|p| match &p.pattern {
-                        Pattern::Primitive(_) => None,
-                        Pattern::String(_) => None,
-                        Pattern::Enum { typename: _, value } => Some(value),
-                        Pattern::Union {
-                            typename: _,
-                            variant,
-                            vars: _,
-                        } => Some(variant),
+                    for case in self.patterns.iter().flat_map(|p| {
+                        p.patterns.iter().map(|pattern| match &pattern {
+                            Pattern::Primitive(_) => None,
+                            Pattern::String(_) => None,
+                            Pattern::Enum { typename: _, value } => Some(value),
+                            Pattern::Union {
+                                typename: _,
+                                variant,
+                                vars: _,
+                            } => Some(variant),
+                        })
                     }) {
                         match case {
                             Some(case) => {

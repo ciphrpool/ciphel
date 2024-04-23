@@ -162,65 +162,67 @@ impl GenerateCode for MatchExpr {
             _ => expr_type.size_of(),
         };
 
-        for PatternExpr { pattern, .. } in &self.patterns {
+        for PatternExpr { patterns, .. } in &self.patterns {
             let label: Ulid = Label::gen();
-            cases.push(label);
-            match pattern {
-                Pattern::Enum { value, .. } => {
-                    if let Some(idx) = exhaustive_cases
-                        .as_ref()
-                        .map(|e| {
-                            e.iter()
-                                .enumerate()
-                                .find_map(|(idx, id)| (id == value).then(|| idx))
-                        })
-                        .flatten()
-                    {
-                        dump_data.push((idx as u64).to_le_bytes().into());
-                    }
-                }
-                Pattern::Union { variant, .. } => {
-                    if let Some(idx) = exhaustive_cases
-                        .as_ref()
-                        .map(|e| {
-                            e.iter()
-                                .enumerate()
-                                .find_map(|(idx, id)| (id == variant).then(|| idx))
-                        })
-                        .flatten()
-                    {
-                        dump_data.push((idx as u64).to_le_bytes().into());
-                    }
-                }
-                Pattern::Primitive(value) => {
-                    let data = match value {
-                        Primitive::Number(data) => match data.get() {
-                            Number::U8(data) => data.to_le_bytes().into(),
-                            Number::U16(data) => data.to_le_bytes().into(),
-                            Number::U32(data) => data.to_le_bytes().into(),
-                            Number::U64(data) => data.to_le_bytes().into(),
-                            Number::U128(data) => data.to_le_bytes().into(),
-                            Number::I8(data) => data.to_le_bytes().into(),
-                            Number::I16(data) => data.to_le_bytes().into(),
-                            Number::I32(data) => data.to_le_bytes().into(),
-                            Number::I64(data) => data.to_le_bytes().into(),
-                            Number::I128(data) => data.to_le_bytes().into(),
-                            Number::F64(data) => data.to_le_bytes().into(),
-                            _ => return Err(CodeGenerationError::UnresolvedError),
-                        },
-                        Primitive::Bool(data) => [*data as u8].into(),
-                        Primitive::Char(data) => {
-                            let mut buffer = [0u8; 4];
-                            let _ = data.encode_utf8(&mut buffer);
-                            buffer.into()
+            for pattern in patterns {
+                cases.push(label);
+                match pattern {
+                    Pattern::Enum { value, .. } => {
+                        if let Some(idx) = exhaustive_cases
+                            .as_ref()
+                            .map(|e| {
+                                e.iter()
+                                    .enumerate()
+                                    .find_map(|(idx, id)| (id == value).then(|| idx))
+                            })
+                            .flatten()
+                        {
+                            dump_data.push((idx as u64).to_le_bytes().into());
                         }
-                    };
-                    dump_data.push(data);
-                }
-                Pattern::String(value) => {
-                    let data = value.value.as_bytes().into();
-                    // TODO : Maybe add size after data
-                    dump_data.push(data);
+                    }
+                    Pattern::Union { variant, .. } => {
+                        if let Some(idx) = exhaustive_cases
+                            .as_ref()
+                            .map(|e| {
+                                e.iter()
+                                    .enumerate()
+                                    .find_map(|(idx, id)| (id == variant).then(|| idx))
+                            })
+                            .flatten()
+                        {
+                            dump_data.push((idx as u64).to_le_bytes().into());
+                        }
+                    }
+                    Pattern::Primitive(value) => {
+                        let data = match value {
+                            Primitive::Number(data) => match data.get() {
+                                Number::U8(data) => data.to_le_bytes().into(),
+                                Number::U16(data) => data.to_le_bytes().into(),
+                                Number::U32(data) => data.to_le_bytes().into(),
+                                Number::U64(data) => data.to_le_bytes().into(),
+                                Number::U128(data) => data.to_le_bytes().into(),
+                                Number::I8(data) => data.to_le_bytes().into(),
+                                Number::I16(data) => data.to_le_bytes().into(),
+                                Number::I32(data) => data.to_le_bytes().into(),
+                                Number::I64(data) => data.to_le_bytes().into(),
+                                Number::I128(data) => data.to_le_bytes().into(),
+                                Number::F64(data) => data.to_le_bytes().into(),
+                                _ => return Err(CodeGenerationError::UnresolvedError),
+                            },
+                            Primitive::Bool(data) => [*data as u8].into(),
+                            Primitive::Char(data) => {
+                                let mut buffer = [0u8; 4];
+                                let _ = data.encode_utf8(&mut buffer);
+                                buffer.into()
+                            }
+                        };
+                        dump_data.push(data);
+                    }
+                    Pattern::String(value) => {
+                        let data = value.value.as_bytes().into();
+                        // TODO : Maybe add size after data
+                        dump_data.push(data);
+                    }
                 }
             }
         }
@@ -250,7 +252,7 @@ impl GenerateCode for MatchExpr {
             else_label: else_label,
         }));
 
-        for (idx, (PatternExpr { pattern: _, expr }, label)) in
+        for (idx, (PatternExpr { patterns: _, expr }, label)) in
             self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
@@ -909,6 +911,120 @@ mod tests {
     }
 
     #[test]
+    fn valid_match_enum() {
+        let user_type = user_type_impl::Enum {
+            id: "Geo".into(),
+            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+        };
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let geo = Geo::Point;
+                let z = 27;
+                return match geo {
+                    case Geo::Point => 420,
+                    case Geo::Axe => 69,
+                    case Geo::Other => 69,
+                };
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
+
+    #[test]
+    fn valid_match_enum_else() {
+        let user_type = user_type_impl::Enum {
+            id: "Geo".into(),
+            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+        };
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let geo = Geo::Other;
+                let z = 27;
+                return match geo {
+                    case Geo::Point => 420,
+                    case Geo::Axe => 420,
+                    else => 69,
+                };
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 69));
+    }
+
+    #[test]
     fn valid_match_union_else() {
         let user_type = user_type_impl::Union {
             id: "Geo".into(),
@@ -1082,5 +1198,190 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 69));
+    }
+
+    #[test]
+    fn valid_match_multiple_case_strslice() {
+        let statement = Statement::parse(
+            r##"
+            let x = match "CipherPool" {
+                case "Hello world" | "CipherPool" => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
+    #[test]
+    fn valid_match_multiple_case_num() {
+        let statement = Statement::parse(
+            r##"
+            let x = match 500 {
+                case 86 | 500 => 420,
+                else => 69
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
+
+    #[test]
+    fn valid_match_union_mult() {
+        let user_type = user_type_impl::Union {
+            id: "Geo".into(),
+            variants: {
+                let mut res = Vec::new();
+                res.push((
+                    "Point".into(),
+                    user_type_impl::Struct {
+                        id: "Point".into(),
+                        fields: vec![("x".into(), p_num!(I64))],
+                    },
+                ));
+                res.push((
+                    "Axe".into(),
+                    user_type_impl::Struct {
+                        id: "Axe".into(),
+                        fields: vec![("x".into(), p_num!(I64))],
+                    },
+                ));
+                res.push((
+                    "Other".into(),
+                    user_type_impl::Struct {
+                        id: "Axe".into(),
+                        fields: vec![("x".into(), p_num!(I64))],
+                    },
+                ));
+                res
+            },
+        };
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let geo = Geo::Point {
+                    x : 420,
+                };
+                let z = 27;
+                return match geo {
+                    case Geo::Axe {x} | Geo::Point {x} => x,
+                    else => z,
+                };
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Geo".into(), UserType::Union(user_type))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
+
+    #[test]
+    fn valid_match_enum_mult() {
+        let user_type = user_type_impl::Enum {
+            id: "Geo".into(),
+            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+        };
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let geo = Geo::Axe;
+                let z = 27;
+                return match geo {
+                    case Geo::Point | Geo::Axe => 420,
+                    else => 69,
+                };
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
     }
 }

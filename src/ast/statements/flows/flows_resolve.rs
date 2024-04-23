@@ -12,7 +12,7 @@ use crate::{
         EType, Either, MutRc, Resolve, SemanticError, TypeOf,
     },
 };
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 impl Resolve for Flow {
     type Output = ();
@@ -107,13 +107,20 @@ impl Resolve for MatchStat {
         match &self.else_branch {
             Some(else_branch) => {
                 for value in &self.patterns {
-                    let vars = value.pattern.resolve(scope, &expr_type, &())?;
-                    for (_index, var) in vars.iter().enumerate() {
+                    let previous_vars = value.patterns[0].resolve(scope, &expr_type, &())?;
+                    for pattern in &value.patterns[1..] {
+                        let vars = pattern.resolve(scope, &expr_type, &())?;
+                        if previous_vars != vars {
+                            return Err(SemanticError::IncorrectVariant);
+                        }
+                    }
+
+                    for (_index, var) in previous_vars.iter().enumerate() {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve(scope, &context, &vars)?;
+                    let _ = value.scope.resolve(scope, &context, &previous_vars)?;
                 }
                 let _ = else_branch.resolve(scope, &context, &Vec::default())?;
                 if let Some(exhaustive_cases) = exhaustive_cases {
@@ -121,15 +128,17 @@ impl Resolve for MatchStat {
                     for case in exhaustive_cases {
                         *map.entry(case).or_insert(0) += 1;
                     }
-                    for case in self.patterns.iter().map(|p| match &p.pattern {
-                        Pattern::Primitive(_) => None,
-                        Pattern::String(_) => None,
-                        Pattern::Enum { typename: _, value } => Some(value),
-                        Pattern::Union {
-                            typename: _,
-                            variant,
-                            vars: _,
-                        } => Some(variant),
+                    for case in self.patterns.iter().flat_map(|p| {
+                        p.patterns.iter().map(|pattern| match &pattern {
+                            Pattern::Primitive(_) => None,
+                            Pattern::String(_) => None,
+                            Pattern::Enum { typename: _, value } => Some(value),
+                            Pattern::Union {
+                                typename: _,
+                                variant,
+                                vars: _,
+                            } => Some(variant),
+                        })
                     }) {
                         match case {
                             Some(case) => {
@@ -145,13 +154,19 @@ impl Resolve for MatchStat {
             }
             None => {
                 for value in &self.patterns {
-                    let vars = value.pattern.resolve(scope, &expr_type, &())?;
-                    for (_index, var) in vars.iter().enumerate() {
+                    let previous_vars = value.patterns[0].resolve(scope, &expr_type, &())?;
+                    for pattern in &value.patterns[1..] {
+                        let vars = pattern.resolve(scope, &expr_type, &())?;
+                        if previous_vars != vars {
+                            return Err(SemanticError::IncorrectVariant);
+                        }
+                    }
+                    for (_index, var) in previous_vars.iter().enumerate() {
                         var.state.set(VarState::Parameter);
                         var.is_declared.set(true);
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve(scope, &context, &vars)?;
+                    let _ = value.scope.resolve(scope, &context, &previous_vars)?;
                 }
             }
         }
