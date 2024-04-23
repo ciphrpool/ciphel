@@ -67,7 +67,7 @@ impl SizeOf for StringType {
 }
 impl SizeOf for StrSliceType {
     fn size_of(&self) -> usize {
-        self.size
+        self.size + 8
     }
 }
 

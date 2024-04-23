@@ -221,9 +221,9 @@ impl GenerateCode for MatchStat {
                         dump_data.push(data);
                     }
                     Pattern::String(value) => {
-                        let data = value.value.as_bytes().into();
-                        // TODO : Maybe add size after data
-                        dump_data.push(data);
+                        let mut data: Vec<u8> = value.value.as_bytes().to_vec();
+                        data.extend_from_slice(&(data.len() as u64).to_le_bytes());
+                        dump_data.push(data.into());
                     }
                 }
             }

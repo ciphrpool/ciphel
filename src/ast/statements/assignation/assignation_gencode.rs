@@ -46,7 +46,7 @@ impl GenerateCode for Assignee {
 
                 let _ = variable.locate(scope, instructions)?;
 
-                instructions.push(Casm::MemCopy(Mem::Take { size: var_size }))
+                instructions.push(Casm::Mem(Mem::Take { size: var_size }))
             }
             Assignee::PtrAccess(PtrAccess { value, metadata }) => {
                 let var_size = {
@@ -59,7 +59,7 @@ impl GenerateCode for Assignee {
                     return Ok(());
                 }
                 let _ = value.gencode(scope, instructions)?;
-                instructions.push(Casm::MemCopy(Mem::Take { size: var_size }))
+                instructions.push(Casm::Mem(Mem::Take { size: var_size }))
             }
         }
         Ok(())

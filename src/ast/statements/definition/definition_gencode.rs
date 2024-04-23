@@ -1,5 +1,3 @@
-
-
 use super::{Definition, EventDef, FnDef, TypeDef};
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::SizeOf;
@@ -60,7 +58,7 @@ impl GenerateCode for FnDef {
         let _ = self.scope.gencode(scope, instructions);
         instructions.push_label_id(end_closure, "end_closure".into());
 
-        instructions.push(Casm::MemCopy(Mem::LabelOffset(closure_label)));
+        instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
 
         let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
@@ -72,7 +70,7 @@ impl GenerateCode for FnDef {
                 level,
             },
         }));
-        instructions.push(Casm::MemCopy(Mem::TakeToStack { size: var_size }));
+        instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }));
         Ok(())
     }
 }

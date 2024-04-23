@@ -111,9 +111,7 @@ pub enum AllocCasm {
     },
     Map,
     Chan,
-    StringFromSlice {
-        len: usize,
-    },
+    StringFromSlice,
     StringFromChar,
 }
 
@@ -618,7 +616,7 @@ impl GenerateCode for AllocFn {
                     ))))
                 } else {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
-                        AllocCasm::StringFromSlice { len: len.get() },
+                        AllocCasm::StringFromSlice,
                     ))))
                 }
             }
@@ -637,7 +635,7 @@ impl GenerateCode for AllocFn {
                     data: Box::new(size.get().to_le_bytes()),
                 }));
             }
-            AllocFn::MemCopy => instructions.push(Casm::MemCopy(Mem::MemCopy)),
+            AllocFn::MemCopy => instructions.push(Casm::Mem(Mem::MemCopy)),
             AllocFn::Clear {
                 clear_kind,
                 item_size,
@@ -760,7 +758,15 @@ impl Executable for AllocCasm {
                     .map_err(|err| err.into())?;
             }
             AllocCasm::AppendItem(item_size) | AllocCasm::AppendStrSlice(item_size) => {
-                let item_data = thread.env.stack.pop(*item_size).map_err(|e| e.into())?;
+                let item_size = match self {
+                    AllocCasm::AppendItem(_) => *item_size,
+                    AllocCasm::AppendStrSlice(_) => {
+                        let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        len as usize
+                    }
+                    _ => unreachable!(),
+                };
+                let item_data = thread.env.stack.pop(item_size).map_err(|e| e.into())?;
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
 
@@ -799,12 +805,12 @@ impl Executable for AllocCasm {
 
                 let len_offset = match self {
                     AllocCasm::AppendItem(_) => 1,
-                    AllocCasm::AppendStrSlice(_) => *item_size as u64,
+                    AllocCasm::AppendStrSlice(_) => item_size as u64,
                     _ => unreachable!(),
                 };
 
                 let size_factor = match self {
-                    AllocCasm::AppendItem(_) => *item_size,
+                    AllocCasm::AppendItem(_) => item_size,
                     AllocCasm::AppendStrSlice(_) => 1,
                     _ => unreachable!(),
                 };
@@ -852,7 +858,7 @@ impl Executable for AllocCasm {
                         new_vec_heap_address as usize
                             + 16
                             + (new_len as usize * size_factor as usize)
-                            - *item_size,
+                            - item_size,
                         &item_data,
                     )
                     .map_err(|e| e.into())?;
@@ -1092,8 +1098,8 @@ impl Executable for AllocCasm {
             }
             AllocCasm::Map => todo!(),
             AllocCasm::Chan => todo!(),
-            AllocCasm::StringFromSlice { len } => {
-                let len = *len as u64;
+            AllocCasm::StringFromSlice => {
+                let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 let cap = align(len as usize) as u64;
                 let alloc_size = cap + 16;
 

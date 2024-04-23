@@ -1,22 +1,15 @@
-use std::{
-    cell::{Cell},
-};
+use std::cell::Cell;
 
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::{
-        self,
-        statements::{
-            declaration::TypedVar,
-        },
-        utils::strings::ID,
-    },
+    ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
     semantic::{
         scope::{
             static_types::{NumberType, PrimitiveType, StaticType},
             ClosureState,
-        }, EType, Either, Metadata, MutRc, SemanticError,
+        },
+        EType, Either, Metadata, MutRc, SemanticError,
     },
 };
 
@@ -246,7 +239,10 @@ impl Data {
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
             Data::Variable(v) => v.metadata(),
             Data::Unit => None,
-            Data::Map(Map { fields: _, metadata }) => Some(metadata),
+            Data::Map(Map {
+                fields: _,
+                metadata,
+            }) => Some(metadata),
             Data::Struct(Struct {
                 id: _,
                 fields: _,
@@ -304,7 +300,10 @@ impl Data {
             Data::PtrAccess(PtrAccess { value: _, metadata }) => metadata.signature(),
             Data::Variable(v) => v.signature(),
             Data::Unit => Some(e_static!(StaticType::Unit)),
-            Data::Map(Map { fields: _, metadata }) => metadata.signature(),
+            Data::Map(Map {
+                fields: _,
+                metadata,
+            }) => metadata.signature(),
             Data::Struct(Struct {
                 id: _,
                 fields: _,

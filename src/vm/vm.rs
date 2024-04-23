@@ -1,5 +1,3 @@
-
-
 use ulid::Ulid;
 
 use crate::semantic::scope::scope_impl::Scope;
@@ -9,9 +7,9 @@ use super::{
     allocator::{
         heap::{Heap, HeapError},
         stack::StackError,
-        vtable::{VTableError},
+        vtable::VTableError,
     },
-    casm::{CasmProgram},
+    casm::CasmProgram,
     scheduler::{Env, Thread},
     stdio::StdIO,
 };
@@ -95,6 +93,8 @@ pub trait Printer {
 }
 
 pub trait NextItem {
+    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
 
     fn build_item(

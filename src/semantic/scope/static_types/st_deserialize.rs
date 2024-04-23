@@ -1,9 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-
-
-
-
 use crate::{
     ast::{
         expressions::{
@@ -12,15 +8,9 @@ use crate::{
         },
         utils::lexem,
     },
-    semantic::{
-        scope::{static_types::StaticType}, EType, Either, Info, Metadata, SizeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, Either, Info, Metadata, SizeOf},
     vm::{
-        casm::{
-            branch::{Label},
-            mem::Mem,
-            Casm, CasmProgram,
-        },
+        casm::{branch::Label, mem::Mem, Casm, CasmProgram},
         platform::{
             stdlib::{
                 io::{IOCasm, PrintCasm},
@@ -332,7 +322,7 @@ impl DeserializeFrom for VecType {
 }
 impl Printer for VecType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::MemCopy(Mem::CloneFromSmartPointer(self.0.size_of())));
+        instructions.push(Casm::Mem(Mem::CloneFromSmartPointer(self.0.size_of())));
 
         let continue_label = Label::gen();
         let end_label = Label::gen();
@@ -376,7 +366,7 @@ impl DeserializeFrom for StringType {
 }
 impl Printer for StringType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::MemCopy(Mem::CloneFromSmartPointer(1)));
+        instructions.push(Casm::Mem(Mem::CloneFromSmartPointer(1)));
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintString,
         )))));
@@ -387,7 +377,9 @@ impl DeserializeFrom for StrSliceType {
     type Output = StrSlice;
 
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let str_slice = std::str::from_utf8(&bytes).map_err(|_| RuntimeError::Deserialization)?;
+        let bytes_len = bytes.len();
+        let str_slice = std::str::from_utf8(&bytes[..bytes_len - 8])
+            .map_err(|_| RuntimeError::Deserialization)?;
 
         Ok(StrSlice {
             value: str_slice.to_string(),
@@ -403,7 +395,7 @@ impl DeserializeFrom for StrSliceType {
 impl Printer for StrSliceType {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::PrintStr(self.size),
+            PrintCasm::PrintString,
         )))));
         Ok(())
     }

@@ -11,7 +11,7 @@ use crate::{
         CompatibleWith, EType, Either, MergeType, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        casm::{CasmProgram},
+        casm::CasmProgram,
         vm::{CodeGenerationError, DeserializeFrom, NextItem, Printer, RuntimeError},
     },
 };
@@ -515,6 +515,12 @@ impl Printer for EType {
 }
 
 impl NextItem for EType {
+    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+        match self {
+            Either::Static(value) => value.init_address(instructions),
+            Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
     fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_index(instructions),

@@ -1,11 +1,6 @@
-
-
-
 use crate::semantic::scope::scope_impl::Scope;
 use crate::{
-    ast::statements::{
-        declaration::{DeclaredVar, PatternVar},
-    },
+    ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::{MutRc, SizeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
@@ -127,7 +122,7 @@ impl GenerateCode for Declaration {
                             level,
                         },
                     }));
-                    instructions.push(Casm::MemCopy(Mem::TakeToStack { size: var_size }))
+                    instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }))
                 }
                 Ok(())
             }

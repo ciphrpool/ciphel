@@ -164,247 +164,6 @@ impl GenerateCode for Primitive {
     }
 }
 
-// impl<
-//         Scope: ScopeApi<
-//             UserType = UserType,
-//             StaticType = StaticType,
-//             Var = Var,
-//             Chan = Chan,
-//             Event = Event,
-//         >,
-//     > Variable
-// {
-//     fn get_offset(
-//         &self,
-//
-//         address: usize,
-//         block: &MutRc<Scope>,
-//         instructions: &MutRc<CasmProgram>,
-//         signature: &EType,
-//     ) -> Result<
-//         (
-//             (usize, usize),
-//             EType,
-//         ),
-//         CodeGenerationError,
-//     > {
-//         match self {
-//             Variable::Var(VarID(id)) => {
-//                 let Either::User(struct_type) = signature else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let UserType::Struct(struct_type) = struct_type.as_ref() else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let mut offset = address;
-//                 let mut var_size = None;
-//                 let mut var_type = None;
-//                 for (field_id, field) in &struct_type.fields {
-//                     let field_size = field.size_of();
-//                     if field_id == id {
-//                         var_size = Some(field_size);
-//                         var_type = Some(field);
-//                         break;
-//                     }
-//                     offset += field_size;
-//                 }
-//                 let Some(var_size) = var_size else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let Some(var_type) = var_type else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-
-//                 {
-//                     let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                     instructions.push(Casm::Access(Access::Variable {
-//                         address: MemoryAddress::Stack { offset },
-//                         size: var_size,
-//                     }))
-//                 }
-
-//                 Ok(((offset, var_size), var_type.clone()))
-//             }
-//             Variable::FieldAccess(FieldAccess { var, field }) => {
-//                 let ((var_offset, var_size), var_type) =
-//                     var.as_ref()
-//                         .get_offset(offset, address, block, instructions, signature)?;
-//                 let ((field_offset, field_size), field_type) =
-//                     field
-//                         .as_ref()
-//                         .get_offset(offset, var_offset, block, instructions, &var_type)?;
-
-//                 {
-//                     let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                     instructions.push(Casm::Access(Access::Variable {
-//                         address: MemoryAddress::Stack {
-//                             offset: field_offset,
-//                         },
-//                         size: field_size,
-//                     }))
-//                 }
-//                 Ok(((field_offset, field_size), field_type))
-//             }
-//             Variable::NumAccess(NumAccess { var, index }) => {
-//                 let ((var_offset, var_size), var_type) =
-//                     var.as_ref()
-//                         .get_offset(offset, address, block, instructions, signature)?;
-//                 let Either::Static(tuple_type) = signature else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let StaticType::Tuple(TupleType(tuple_type)) = tuple_type.as_ref() else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let mut offset = var_offset;
-//                 let mut var_size = None;
-//                 let mut var_type = None;
-//                 for (idx, field) in tuple_type.iter().enumerate() {
-//                     let field_size = field.size_of();
-//                     if idx == *index {
-//                         var_size = Some(field_size);
-//                         var_type = Some(field);
-//                         break;
-//                     }
-//                     offset += field_size;
-//                 }
-//                 let Some(var_size) = var_size else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let Some(var_type) = var_type else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-
-//                 {
-//                     let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                     instructions.push(Casm::Access(Access::Variable {
-//                         address: MemoryAddress::Stack { offset },
-//                         size: var_size,
-//                     }))
-//                 }
-//                 Ok(((offset, var_size), var_type.clone()))
-//             }
-//             Variable::ListAccess(ListAccess { var, index }) => {
-//                 let ((var_offset, var_size), var_type) =
-//                     var.as_ref()
-//                         .get_offset(offset, address, block, instructions, signature)?;
-//                 let (item_size, item_type) = {
-//                     let Some(item_type) = <EType as GetSubTypes<
-//                         Scope,
-//                     >>::get_item(&var_type) else {
-//                         return Err(CodeGenerationError::UnresolvedError);
-//                     };
-//                     (item_type.size_of(), item_type)
-//                 };
-//                 let Either::Static(list_type) = var_type else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 match list_type.as_ref() {
-//                     StaticType::Slice(_) => {
-//                         let _ = index.gencode(block, instructions, signature)?;
-//                         {
-//                             let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                             instructions.push(Casm::Access(Access::List {
-//                                 address: MemoryAddress::Stack {
-//                                     offset: var_offset + 8,
-//                                 },
-//                                 size: item_size,
-//                             }));
-//                         }
-//                     }
-//                     StaticType::Vec(_) => {
-//                         {
-//                             let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                             instructions.push(Casm::Access(Access::Variable {
-//                                 address: MemoryAddress::Stack {
-//                                     offset: var_offset + 16, /* LENGTH + CAPACITY */
-//                                 },
-//                                 size: var_size,
-//                             }));
-//                         }
-//                         let _ = index.gencode(block, instructions, signature)?;
-//                         {
-//                             let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                             instructions.push(Casm::Access(Access::List {
-//                                 address: MemoryAddress::Heap,
-//                                 size: item_size,
-//                             }));
-//                         }
-//                     }
-//                     _ => {}
-//                 }
-//                 Ok(((var_offset, var_size), var_type.clone()))
-//             }
-//         }
-//     }
-// }
-
-// impl<
-//         Scope: ScopeApi<
-//             UserType = UserType,
-//             StaticType = StaticType,
-//             Var = Var,
-//             Chan = Chan,
-//             Event = Event,
-//         >,
-//     > GenerateCode for Variable
-// {
-//
-//     fn gencode(
-//         &self,
-//         block: &MutRc<Scope>,
-//         instructions: &MutRc<CasmProgram>,
-//
-//
-//     ) -> Result<(), CodeGenerationError> {
-//         match self {
-//             Variable::Var(VarID(id)) => {
-//                 let var = block
-//                     .borrow()
-//                     .find_var(id)
-//                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
-
-//                 let Some(address) = &var.as_ref().address else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 let var_type = &var.as_ref().type_sig;
-//                 let var_size = var_type.size_of();
-
-//                 let mut borrowed = instructions.as_ref()
-// .try_borrow_mut()
-// .map_err(|_| CodeGenerationError::Default)?;
-//                 instructions.push(Casm::Access(Access::Variable {
-//                     address: MemoryAddress::Stack {
-//                         offset: address.as_ref().get(),
-//                     },
-//                     size: var_size,
-//                 }));
-
-//                 Ok(())
-//             }
-//             Variable::FieldAccess(FieldAccess { var, field }) => {
-//                 // let ((var_offset, var_size), var_type) =
-//                 //     var.get_offset(offset, block, instructions, signature)?;
-//                 // let _ = field.get_offset(offset, block, instructions, &var_type)?;
-//                 todo!()
-//             }
-//             Variable::NumAccess(_) => todo!(),
-//             Variable::ListAccess(_) => todo!(),
-//         }
-//     }
-// }
-
 impl GenerateCode for Variable {
     fn gencode(
         &self,
@@ -531,7 +290,11 @@ impl GenerateCode for Variable {
                     .ok_or(CodeGenerationError::UnresolvedError)?
                 {
                     Either::Static(value) => match value.as_ref() {
-                        StaticType::String(_) | StaticType::StrSlice(_) => {
+                        StaticType::String(_) => {
+                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
+                            return Ok(());
+                        }
+                        StaticType::StrSlice(_) => {
                             instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
                             return Ok(());
                         }
@@ -1077,8 +840,12 @@ impl GenerateCode for StrSlice {
         _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let str_bytes = self.value.as_bytes().into();
+        let str_bytes: Box<[u8]> = self.value.as_bytes().into();
+        let size = (&str_bytes).len() as u64;
         instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: size.to_le_bytes().into(),
+        }));
         Ok(())
     }
 }
@@ -1120,7 +887,7 @@ impl GenerateCode for Vector {
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
         // ( removing the data from the stack )
-        instructions.push(Casm::MemCopy(Mem::TakeToHeap {
+        instructions.push(Casm::Mem(Mem::TakeToHeap {
             //offset: vec_stack_address + 8,
             size: item_size * self.value.len() + 16,
         }));
@@ -1183,7 +950,7 @@ impl GenerateCode for Closure {
         let _ = self.scope.gencode(scope, instructions);
         instructions.push_label_id(end_closure, "end_closure".into());
 
-        instructions.push(Casm::MemCopy(Mem::LabelOffset(closure_label)));
+        instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
 
         if self.closed {
             /* Load env and store in the heap */
@@ -1224,7 +991,7 @@ impl GenerateCode for Closure {
             instructions.push(Casm::Alloc(Alloc::Heap {
                 size: Some(alloc_size),
             }));
-            instructions.push(Casm::MemCopy(Mem::TakeToHeap { size: alloc_size }));
+            instructions.push(Casm::Mem(Mem::TakeToHeap { size: alloc_size }));
         }
 
         Ok(())

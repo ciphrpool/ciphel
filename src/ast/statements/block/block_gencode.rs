@@ -1,17 +1,9 @@
 use crate::semantic::scope::scope_impl::Scope;
 
-
 use crate::{
-    semantic::{
-        scope::{
-            var_impl::{VarState},
-        },
-        MutRc, SizeOf,
-    },
+    semantic::{scope::var_impl::VarState, MutRc, SizeOf},
     vm::{
-        allocator::{
-            stack::{Offset},
-        },
+        allocator::stack::Offset,
         casm::{
             alloc::{Alloc, StackFrame},
             branch::{Call, Goto, Label},
@@ -113,7 +105,7 @@ impl GenerateCode for Block {
         //             instructions.push(Casm::Locate(Locate {
         //                 address: MemoryAddress::Stack { offset, level },
         //             }));
-        //             instructions.push(Casm::MemCopy(MemCopy::Take { size: 8 }));
+        //             instructions.push(Casm::Mem(MemCopy::Take { size: 8 }));
         //             break;
         //         }
         //     }

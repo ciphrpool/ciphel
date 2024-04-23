@@ -56,7 +56,6 @@ pub enum PrintCasm {
     PrintAddr,
     PrintChar,
     PrintBool,
-    PrintStr(usize),
     PrintString,
     PrintList {
         length: Option<usize>,
@@ -209,13 +208,8 @@ impl Executable for PrintCasm {
                 let n = OpPrimitive::get_bool(&thread.memory())?;
                 thread.runtime.stdio.stdout.push(&format!("{}", n));
             }
-            PrintCasm::PrintStr(size) => {
-                let n = OpPrimitive::get_str_slice(*size, &thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
-            }
             PrintCasm::PrintString => {
-                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let n = OpPrimitive::get_str_slice(size as usize, &thread.memory())?;
+                let n = OpPrimitive::get_str_slice(&thread.memory())?;
                 thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
             }
             PrintCasm::StdOutBufOpen => {

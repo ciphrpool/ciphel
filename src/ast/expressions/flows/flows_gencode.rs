@@ -219,9 +219,9 @@ impl GenerateCode for MatchExpr {
                         dump_data.push(data);
                     }
                     Pattern::String(value) => {
-                        let data = value.value.as_bytes().into();
-                        // TODO : Maybe add size after data
-                        dump_data.push(data);
+                        let mut data: Vec<u8> = value.value.as_bytes().to_vec();
+                        data.extend_from_slice(&(data.len() as u64).to_le_bytes());
+                        dump_data.push(data.into());
                     }
                 }
             }
@@ -368,7 +368,7 @@ impl GenerateCode for FnCall {
                     let _ = self.fn_var.gencode(scope, instructions)?;
                     if let Some(8) = sig_params_size.checked_sub(params_size) {
                         // Load function address
-                        instructions.push(Casm::MemCopy(Mem::Dup(8)));
+                        instructions.push(Casm::Mem(Mem::Dup(8)));
                     }
                     // Call function
                     // Load param size
@@ -390,7 +390,7 @@ impl GenerateCode for FnCall {
                         Some(16) => {
                             /* Rec and closed */
                             /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
                             // Load Env heap address
                             instructions.push(Casm::Data(Data::Serialized {
                                 data: (16u64).to_le_bytes().into(),
@@ -401,7 +401,7 @@ impl GenerateCode for FnCall {
                                     right: OpPrimitive::Number(NumberType::U64),
                                 }),
                             }));
-                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
                             instructions.push(Casm::Data(Data::Serialized {
                                 data: (16u64).to_le_bytes().into(),
                             }));
@@ -426,7 +426,7 @@ impl GenerateCode for FnCall {
                                     right: OpPrimitive::Number(NumberType::U64),
                                 }),
                             }));
-                            instructions.push(Casm::MemCopy(Mem::Dup(8)));
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
                             instructions.push(Casm::Data(Data::Serialized {
                                 data: (16u64).to_le_bytes().into(),
                             }));
@@ -444,7 +444,7 @@ impl GenerateCode for FnCall {
                     // Call function
 
                     // Load param size
-                    // instructions.push(Casm::MemCopy(MemCopy::GetReg(UReg::R3))); // env size
+                    // instructions.push(Casm::Mem(MemCopy::GetReg(UReg::R3))); // env size
                     instructions.push(Casm::Data(Data::Serialized {
                         data: (sig_params_size).to_le_bytes().into(),
                     }));

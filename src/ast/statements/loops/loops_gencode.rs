@@ -1,5 +1,3 @@
-
-
 use crate::ast::statements::block::block_gencode::inner_block_gencode;
 use crate::semantic::scope::scope_impl::Scope;
 use crate::semantic::scope::type_traits::GetSubTypes;
@@ -21,7 +19,6 @@ use crate::{
     },
 };
 
-
 use super::{ForLoop, Loop, WhileLoop};
 
 impl GenerateCode for Loop {
@@ -37,11 +34,11 @@ impl GenerateCode for Loop {
                 let start_label = Label::gen();
                 let end_label = Label::gen();
 
-                instructions.push(Casm::MemCopy(Mem::DumpRegisters));
+                instructions.push(Casm::Mem(Mem::DumpRegisters));
                 instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
                 instructions.push_label_id(start_label, "start_loop".into());
-                instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
-                instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
+                instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
+                instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
                 let _ = inner_block_gencode(scope, value, None, true, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
@@ -49,7 +46,7 @@ impl GenerateCode for Loop {
 
                 instructions.push_label_id(end_label, "end_loop".into());
                 instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-                instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
+                instructions.push(Casm::Mem(Mem::RecoverRegisters));
                 Ok(())
             }
         }
@@ -70,22 +67,23 @@ impl GenerateCode for ForLoop {
         let next_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(Mem::DumpRegisters));
+        instructions.push(Casm::Mem(Mem::DumpRegisters));
         instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
 
         let _ = self.iterator.expr.gencode(scope, instructions)?;
 
         /* init itertor index */
+        let _ = iterator_type.init_address(instructions)?;
         let _ = iterator_type.init_index(instructions)?;
 
         instructions.push_label_id(start_label, "start_for".into());
 
         let _ = iterator_type.build_item(instructions, end_label)?;
-        instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
-        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
+        instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
+        instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
 
-        instructions.push(Casm::MemCopy(Mem::LabelOffset(next_label)));
-        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R3, None)));
+        instructions.push(Casm::Mem(Mem::LabelOffset(next_label)));
+        instructions.push(Casm::Mem(Mem::SetReg(UReg::R3, None)));
 
         let Some(item_type) = iterator_type.get_item() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -103,7 +101,7 @@ impl GenerateCode for ForLoop {
 
         instructions.push_label_id(end_label, "end_for".into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
+        instructions.push(Casm::Mem(Mem::RecoverRegisters));
         Ok(())
     }
 }
@@ -117,11 +115,11 @@ impl GenerateCode for WhileLoop {
         let start_label = Label::gen();
         let end_label = Label::gen();
 
-        instructions.push(Casm::MemCopy(Mem::DumpRegisters));
+        instructions.push(Casm::Mem(Mem::DumpRegisters));
         instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
         instructions.push_label_id(start_label, "start_while".into());
-        instructions.push(Casm::MemCopy(Mem::LabelOffset(end_label)));
-        instructions.push(Casm::MemCopy(Mem::SetReg(UReg::R4, None)));
+        instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
+        instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
         let _ = self.condition.gencode(scope, instructions)?;
         instructions.push(Casm::If(BranchIf {
             else_label: end_label,
@@ -133,7 +131,7 @@ impl GenerateCode for WhileLoop {
 
         instructions.push_label_id(end_label, "end_while".into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::MemCopy(Mem::RecoverRegisters));
+        instructions.push(Casm::Mem(Mem::RecoverRegisters));
         Ok(())
     }
 }
@@ -631,4 +629,140 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 87));
     }
+
+    #[test]
+    fn valid_for_addr_str_slice() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let arr = "abc";
+                let res = 'a';
+                for i in &arr {
+                    res = i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('c'));
+    }
+
+    #[test]
+    fn valid_for_addr_string() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let arr = string("abc");
+                let res = 'a';
+                for i in &arr {
+                    res = i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('c'));
+    }
+
+    #[test]
+    fn valid_for_addr_vec() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let arr = vec[1,2,3,4];
+                let res = 0;
+                for i in &arr {
+                    res = res + i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 10));
+    }
+
+    #[test]
+    fn valid_for_addr_slice() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let arr = [1,2,3,4];
+                let res = 0;
+                for i in &arr {
+                    res = res + i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 10));
+    }
+
+    // #[test]
+    // fn valid_for_double_addr_slice() {
+    //     let statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr = &[1,2,3,4];
+    //             let res = 0;
+    //             for i in &arr {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
 }
