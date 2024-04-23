@@ -18,10 +18,10 @@ use crate::{
         casm::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
+            data,
             locate::{Locate, LocateNextUTF8Char},
             mem::Mem,
             operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
-            serialize::Serialized,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -65,42 +65,42 @@ impl GenerateCode for Number {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
-            super::Number::U8(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::U8(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::U16(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::U16(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::U32(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::U32(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::U64(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::U64(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::U128(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::U128(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::I8(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::I8(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::I16(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::I16(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::I32(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::I32(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::I64(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::I64(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::I128(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::I128(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
-            super::Number::F64(data) => Serialized {
-                data: data.to_le_bytes().to_vec(),
+            super::Number::F64(data) => data::Data::Serialized {
+                data: data.to_le_bytes().into(),
             },
             super::Number::Unresolved(_) => return Err(CodeGenerationError::UnresolvedError),
         };
-        instructions.push(Casm::Serialize(casm));
+        instructions.push(Casm::Data(casm));
         Ok(())
     }
 }
@@ -113,53 +113,53 @@ impl GenerateCode for Primitive {
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             Primitive::Number(data) => match data.get() {
-                super::Number::U8(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::U8(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::U16(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::U16(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::U32(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::U32(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::U64(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::U64(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::U128(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::U128(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::I8(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::I8(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::I16(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::I16(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::I32(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::I32(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::I64(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::I64(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::I128(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::I128(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
-                super::Number::F64(data) => Serialized {
-                    data: data.to_le_bytes().to_vec(),
+                super::Number::F64(data) => data::Data::Serialized {
+                    data: data.to_le_bytes().into(),
                 },
                 super::Number::Unresolved(_) => return Err(CodeGenerationError::UnresolvedError),
             },
-            Primitive::Bool(data) => Serialized {
-                data: [*data as u8].to_vec(),
+            Primitive::Bool(data) => data::Data::Serialized {
+                data: [*data as u8].into(),
             },
             Primitive::Char(data) => {
                 let mut buffer = [0u8; 4];
                 let _ = data.encode_utf8(&mut buffer);
-                Serialized {
-                    data: buffer.to_vec(),
+                data::Data::Serialized {
+                    data: buffer.into(),
                 }
             }
         };
-        instructions.push(Casm::Serialize(casm));
+        instructions.push(Casm::Data(casm));
         Ok(())
     }
 }
@@ -445,8 +445,8 @@ impl GenerateCode for Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -477,8 +477,8 @@ impl GenerateCode for Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -507,8 +507,8 @@ impl GenerateCode for Variable {
                         Either::Static(signature) => match signature.as_ref() {
                             StaticType::String(_) | StaticType::Vec(_) => {
                                 instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Serialize(Serialized {
-                                    data: (16u64).to_le_bytes().to_vec(),
+                                instructions.push(Casm::Data(data::Data::Serialized {
+                                    data: (16u64).to_le_bytes().into(),
                                 }));
                                 instructions.push(Casm::Operation(Operation {
                                     kind: OperationKind::Addition(Addition {
@@ -543,8 +543,8 @@ impl GenerateCode for Variable {
                 let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Serialize(Serialized {
-                    data: (size as u64).to_le_bytes().to_vec(),
+                instructions.push(Casm::Data(data::Data::Serialized {
+                    data: (size as u64).to_le_bytes().into(),
                 }));
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
@@ -662,8 +662,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -691,8 +691,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -719,8 +719,8 @@ impl Variable {
                         Either::Static(signature) => match signature.as_ref() {
                             StaticType::String(_) | StaticType::Vec(_) => {
                                 instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Serialize(Serialized {
-                                    data: (16u64).to_le_bytes().to_vec(),
+                                instructions.push(Casm::Data(data::Data::Serialized {
+                                    data: (16u64).to_le_bytes().into(),
                                 }));
                                 instructions.push(Casm::Operation(Operation {
                                     kind: OperationKind::Addition(Addition {
@@ -754,8 +754,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
 
-                instructions.push(Casm::Serialize(Serialized {
-                    data: (size as u64).to_le_bytes().to_vec(),
+                instructions.push(Casm::Data(data::Data::Serialized {
+                    data: (size as u64).to_le_bytes().into(),
                 }));
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
@@ -816,8 +816,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -842,8 +842,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -866,8 +866,8 @@ impl Variable {
                         Either::Static(signature) => match signature.as_ref() {
                             StaticType::String(_) | StaticType::Vec(_) => {
                                 instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Serialize(Serialized {
-                                    data: (16u64).to_le_bytes().to_vec(),
+                                instructions.push(Casm::Data(data::Data::Serialized {
+                                    data: (16u64).to_le_bytes().into(),
                                 }));
                                 instructions.push(Casm::Operation(Operation {
                                     kind: OperationKind::Addition(Addition {
@@ -902,8 +902,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (item_size as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (item_size as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Mult(Mult {
@@ -947,8 +947,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -973,8 +973,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (offset as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (offset as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Addition(Addition {
@@ -997,8 +997,8 @@ impl Variable {
                         Either::Static(signature) => match signature.as_ref() {
                             StaticType::String(_) | StaticType::Vec(_) => {
                                 instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Serialize(Serialized {
-                                    data: (16u64).to_le_bytes().to_vec(),
+                                instructions.push(Casm::Data(data::Data::Serialized {
+                                    data: (16u64).to_le_bytes().into(),
                                 }));
                                 instructions.push(Casm::Operation(Operation {
                                     kind: OperationKind::Addition(Addition {
@@ -1018,8 +1018,8 @@ impl Variable {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 {
-                    instructions.push(Casm::Serialize(Serialized {
-                        data: (item_size as u64).to_le_bytes().to_vec(),
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: (item_size as u64).to_le_bytes().into(),
                     }));
                     instructions.push(Casm::Operation(Operation {
                         kind: OperationKind::Mult(Mult {
@@ -1061,7 +1061,7 @@ impl GenerateCode for Slice {
         // // Push the size of the slice
         // let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
         // offset += bytes.len();
-        // instructions.push(Casm::Serialize(Serialized { data: bytes }));
+        // instructions.push(Casm::Data(Data::Serialized { data: bytes }));
 
         for element in &self.value {
             let _ = element.gencode(scope, instructions)?;
@@ -1077,57 +1077,9 @@ impl GenerateCode for StrSlice {
         _scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let str_bytes = self.value.as_bytes().to_vec();
-        instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
+        let str_bytes = self.value.as_bytes().into();
+        instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
         Ok(())
-        // let mut borrowed = instructions
-        //     .as_ref()
-        //     .try_borrow_mut()
-        //     .map_err(|_| CodeGenerationError::Default)?;
-
-        // // Alloc and push heap address on stack
-        // instructions.push(Casm::Alloc(Alloc::Heap {
-        //     size: align(self.value.len()) + 16,
-        // }));
-
-        // let len_bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
-        // let cap_bytes = (align(self.value.len()) as u64)
-        //     .to_le_bytes()
-        //     .as_slice()
-        //     .to_vec();
-
-        // // Push Length on stack
-        // instructions.push(Casm::Serialize(Serialized { data: len_bytes }));
-        // // Push Capacity on stack
-        // instructions.push(Casm::Serialize(Serialized { data: cap_bytes }));
-        // let str_bytes = self.value.clone().into_bytes();
-        // let bytes_len = str_bytes.len();
-        // instructions.push(Casm::Serialize(Serialized { data: str_bytes }));
-
-        // drop(borrowed);
-        // // Copy data on stack to heap at address
-        // let mut borrowed = instructions
-        //     .as_ref()
-        //     .try_borrow_mut()
-        //     .map_err(|_| CodeGenerationError::Default)?;
-        // // Copy heap address on top of the stack
-        // instructions.push(Casm::Access(Access::Static {
-        //     address: MemoryAddress::Stack {
-        //         offset: Offset::ST(-((bytes_len + 16 + 8) as isize)),
-        //         level: AccessLevel::Direct,
-        //     },
-        //     size: 8,
-        // }));
-
-        // // Take the address on the top of the stack
-        // // and copy the data on the stack in the heap at given address and given offset
-        // // ( removing the data from the stack )
-        // instructions.push(Casm::MemCopy(MemCopy::TakeToHeap {
-        //     //offset: vec_stack_address + 8,
-        //     size: self.value.len() + 16,
-        // }));
-
-        // Ok(())
     }
 }
 
@@ -1147,13 +1099,13 @@ impl GenerateCode for Vector {
             item_type.size_of()
         };
 
-        let len_bytes = (self.length as u64).to_le_bytes().as_slice().to_vec();
-        let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().to_vec();
+        let len_bytes = (self.length as u64).to_le_bytes().as_slice().into();
+        let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().into();
 
         // Push Length on stack
-        instructions.push(Casm::Serialize(Serialized { data: len_bytes }));
+        instructions.push(Casm::Data(data::Data::Serialized { data: len_bytes }));
         // Push Capacity on stack
-        instructions.push(Casm::Serialize(Serialized { data: cap_bytes }));
+        instructions.push(Casm::Data(data::Data::Serialized { data: cap_bytes }));
 
         for element in &self.value {
             let _ = element.gencode(scope, instructions)?;
@@ -1252,8 +1204,8 @@ impl GenerateCode for Closure {
             }
 
             // Load Env Size
-            instructions.push(Casm::Serialize(Serialized {
-                data: env_size.to_le_bytes().to_vec(),
+            instructions.push(Casm::Data(data::Data::Serialized {
+                data: env_size.to_le_bytes().into(),
             }));
             let outer_scope = scope.as_ref().borrow();
             // Load Env variables
@@ -1345,8 +1297,8 @@ impl GenerateCode for Struct {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                instructions.push(Casm::Serialize(Serialized {
-                    data: vec![0; padding],
+                instructions.push(Casm::Data(data::Data::Serialized {
+                    data: vec![0; padding].into(),
                 }));
             }
         }
@@ -1399,8 +1351,8 @@ impl GenerateCode for Union {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                instructions.push(Casm::Serialize(Serialized {
-                    data: vec![0; padding],
+                instructions.push(Casm::Data(data::Data::Serialized {
+                    data: vec![0; padding].into(),
                 }));
             }
             total_size += align(field_size);
@@ -1410,14 +1362,14 @@ impl GenerateCode for Union {
             // Add padding
             let padding = union_size - total_size;
             if padding > 0 {
-                instructions.push(Casm::Serialize(Serialized {
-                    data: vec![0; padding],
+                instructions.push(Casm::Data(data::Data::Serialized {
+                    data: vec![0; padding].into(),
                 }));
             }
         }
 
-        instructions.push(Casm::Serialize(Serialized {
-            data: (idx as u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (idx as u64).to_le_bytes().into(),
         }));
 
         Ok(())
@@ -1450,8 +1402,8 @@ impl GenerateCode for Enum {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        instructions.push(Casm::Serialize(Serialized {
-            data: (index as u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (index as u64).to_le_bytes().into(),
         }));
         Ok(())
     }

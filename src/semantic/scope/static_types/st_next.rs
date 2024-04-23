@@ -1,25 +1,19 @@
-
-
 use num_traits::ToBytes;
 use ulid::Ulid;
 
 use crate::{
     semantic::{scope::static_types::NumberType, AccessLevel, SizeOf},
     vm::{
-        allocator::{
-            stack::{Offset},
-            MemoryAddress,
-        },
+        allocator::{stack::Offset, MemoryAddress},
         casm::{
-            alloc::{Access},
-            branch::{BranchIf},
+            alloc::Access,
+            branch::BranchIf,
+            data::Data,
             locate::{Locate, LocateNextUTF8Char},
             mem::Mem,
             operation::{
-                Addition, Greater, Less, LessEqual, Mult, OpPrimitive, Operation,
-                OperationKind,
+                Addition, Greater, Less, LessEqual, Mult, OpPrimitive, Operation, OperationKind,
             },
-            serialize::Serialized,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, NextItem},
@@ -122,8 +116,8 @@ impl NextItem for SliceType {
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX (8) */
-        instructions.push(Casm::Serialize(Serialized {
-            data: self.item_type.size_of().to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: self.item_type.size_of().to_le_bytes().into(),
         }));
 
         instructions.push(Casm::Operation(Operation {
@@ -152,8 +146,8 @@ impl NextItem for StringType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
-        instructions.push(Casm::Serialize(Serialized {
-            data: (16u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: (16u64).to_le_bytes().into(),
         }));
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -173,8 +167,8 @@ impl NextItem for StringType {
 
         /* STACK : POINTER | UPPER | POINTER */
 
-        instructions.push(Casm::Serialize(Serialized {
-            data: (16u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: (16u64).to_le_bytes().into(),
         }));
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -276,8 +270,8 @@ impl NextItem for VecType {
         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
         /* STACK : POINTER | POINTER | LENGTH */
 
-        instructions.push(Casm::Serialize(Serialized {
-            data: self.0.size_of().to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: self.0.size_of().to_le_bytes().into(),
         }));
 
         /* STACK : POINTER | POINTER | LENGTH | ITEM_SIZE */
@@ -294,8 +288,8 @@ impl NextItem for VecType {
                 right: OpPrimitive::Number(NumberType::U64),
             }),
         }));
-        instructions.push(Casm::Serialize(Serialized {
-            data: (16u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: (16u64).to_le_bytes().into(),
         }));
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -313,8 +307,8 @@ impl NextItem for VecType {
             size: 8,
         }));
         /* STACK : POINTER | UPPER | POINTER */
-        instructions.push(Casm::Serialize(Serialized {
-            data: (16u64).to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: (16u64).to_le_bytes().into(),
         }));
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -355,8 +349,8 @@ impl NextItem for VecType {
 
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX (8) */
-        instructions.push(Casm::Serialize(Serialized {
-            data: self.0.size_of().to_le_bytes().to_vec(),
+        instructions.push(Casm::Data(Data::Serialized {
+            data: self.0.size_of().to_le_bytes().into(),
         }));
 
         instructions.push(Casm::Operation(Operation {

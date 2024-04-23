@@ -1,12 +1,9 @@
-
-
 use nom::{
     branch::alt,
     combinator::{map, opt},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
-
 
 use crate::ast::{
     statements::{block::Block, declaration::TypedVar},
@@ -340,31 +337,31 @@ mod tests {
         );
     }
 
-    #[test]
-    fn valid_event_def() {
-        unimplemented!("Events condition are not implemented ");
-        // let res = EventDef::parse(
-        //     r#"
-        // event Event( TODO ) {
-        //     f(10);
-        // }
-        // "#
-        //     .into(),
-        // );
-        // assert!(res.is_ok(), "{:?}", res);
-        // let value = res.unwrap().1;
-        // assert_eq!(
-        //     EventDef {
-        //         id: "Event".into(),
-        //         condition: todo!(),
-        //         block: Scope {
-        //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
-        //                 fn_id: "f".into(),
-        //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(I64, 10)))]
-        //             }))]
-        //         }
-        //     },
-        //     value
-        // );
-    }
+    // #[test]
+    // fn valid_event_def() {
+    //     unimplemented!("Events condition are not implemented ");
+    //     // let res = EventDef::parse(
+    //     //     r#"
+    //     // event Event( TODO ) {
+    //     //     f(10);
+    //     // }
+    //     // "#
+    //     //     .into(),
+    //     // );
+    //     // assert!(res.is_ok(), "{:?}", res);
+    //     // let value = res.unwrap().1;
+    //     // assert_eq!(
+    //     //     EventDef {
+    //     //         id: "Event".into(),
+    //     //         condition: todo!(),
+    //     //         block: Scope {
+    //     //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
+    //     //                 fn_id: "f".into(),
+    //     //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(I64, 10)))]
+    //     //             }))]
+    //     //         }
+    //     //     },
+    //     //     value
+    //     // );
+    // }
 }

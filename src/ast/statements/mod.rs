@@ -124,7 +124,7 @@ impl GenerateCode for Statement {
                 //     .as_ref()
                 //     .try_borrow_mut()
                 //     .map_err(|_| CodeGenerationError::Default)?;
-                // instructions.push(Casm::Serialize(Serialized {
+                // instructions.push(Casm::Data(Data::Serialized {
                 //     data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
                 // }));
                 // borrowed.extend(scope_casm.main);

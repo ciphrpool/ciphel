@@ -9,15 +9,11 @@ use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
 use crate::e_static;
 use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::scope::static_types::{StaticType};
-
-
+use crate::semantic::scope::static_types::StaticType;
 
 use crate::semantic::scope::BuildStaticType;
+use crate::semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf};
 use crate::semantic::{EType, MergeType, SizeOf};
-use crate::{
-    semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf},
-};
 
 impl TypeOf for Data {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>

@@ -1,6 +1,4 @@
-
-
-use crate::semantic::scope::scope_impl::Scope;
+use crate::{semantic::scope::scope_impl::Scope, vm::casm::data::Data};
 use ulid::Ulid;
 
 use crate::{
@@ -22,7 +20,7 @@ use crate::{
     },
     vm::{
         casm::{
-            branch::{BranchIf, BranchTable, BranchTableExprInfo, Goto, Label},
+            branch::{BranchIf, BranchTable, Goto, Label},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -156,8 +154,15 @@ impl GenerateCode for MatchStat {
         let _match_label = instructions.push_label("Match".into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
-        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.patterns.len());
-        let mut switch: Vec<(Vec<u8>, Ulid)> = Vec::with_capacity(self.patterns.len());
+        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.patterns.len());
+
+        let switch_size = match &expr_type {
+            Either::User(value) => match value.as_ref() {
+                UserType::Enum(_) | UserType::Union(_) => 8,
+                _ => expr_type.size_of(),
+            },
+            _ => expr_type.size_of(),
+        };
 
         for PatternStat { pattern, .. } in &self.patterns {
             let label: Ulid = Label::gen();
@@ -173,7 +178,7 @@ impl GenerateCode for MatchStat {
                         })
                         .flatten()
                     {
-                        table.push((idx as u64, label));
+                        dump_data.push((idx as u64).to_le_bytes().into());
                     }
                 }
                 Pattern::Union { variant, .. } => {
@@ -186,73 +191,76 @@ impl GenerateCode for MatchStat {
                         })
                         .flatten()
                     {
-                        table.push((idx as u64, label));
+                        dump_data.push((idx as u64).to_le_bytes().into());
                     }
                 }
                 Pattern::Primitive(value) => {
                     let data = match value {
                         Primitive::Number(data) => match data.get() {
-                            Number::U8(data) => data.to_le_bytes().to_vec(),
-                            Number::U16(data) => data.to_le_bytes().to_vec(),
-                            Number::U32(data) => data.to_le_bytes().to_vec(),
-                            Number::U64(data) => data.to_le_bytes().to_vec(),
-                            Number::U128(data) => data.to_le_bytes().to_vec(),
-                            Number::I8(data) => data.to_le_bytes().to_vec(),
-                            Number::I16(data) => data.to_le_bytes().to_vec(),
-                            Number::I32(data) => data.to_le_bytes().to_vec(),
-                            Number::I64(data) => data.to_le_bytes().to_vec(),
-                            Number::I128(data) => data.to_le_bytes().to_vec(),
-                            Number::F64(data) => data.to_le_bytes().to_vec(),
+                            Number::U8(data) => data.to_le_bytes().into(),
+                            Number::U16(data) => data.to_le_bytes().into(),
+                            Number::U32(data) => data.to_le_bytes().into(),
+                            Number::U64(data) => data.to_le_bytes().into(),
+                            Number::U128(data) => data.to_le_bytes().into(),
+                            Number::I8(data) => data.to_le_bytes().into(),
+                            Number::I16(data) => data.to_le_bytes().into(),
+                            Number::I32(data) => data.to_le_bytes().into(),
+                            Number::I64(data) => data.to_le_bytes().into(),
+                            Number::I128(data) => data.to_le_bytes().into(),
+                            Number::F64(data) => data.to_le_bytes().into(),
                             _ => return Err(CodeGenerationError::UnresolvedError),
                         },
-                        Primitive::Bool(data) => [*data as u8].to_vec(),
+                        Primitive::Bool(data) => [*data as u8].into(),
                         Primitive::Char(data) => {
                             let mut buffer = [0u8; 4];
                             let _ = data.encode_utf8(&mut buffer);
-                            buffer.to_vec()
+                            buffer.into()
                         }
                     };
-                    switch.push((data, label));
+                    dump_data.push(data);
                 }
                 Pattern::String(value) => {
-                    let data: Vec<u8> = value.value.as_bytes().to_vec();
-                    switch.push((data, label));
+                    let data = value.value.as_bytes().into();
+                    // TODO : Maybe add size after data
+                    dump_data.push(data);
                 }
             }
         }
+
         let else_label = match &self.else_branch {
             Some(_) => Some(Label::gen()),
             None => None,
         };
+
+        let dump_data_label = instructions.push_data(Data::Dump {
+            data: dump_data.into(),
+        });
+        let table_data_label = instructions.push_data(Data::Table {
+            data: cases.clone().into(),
+        });
+
         // gencode of matched expression
         let _ = self.expr.gencode(scope, instructions)?;
 
-        if table.len() == 0 {
-            // Switch with branch if statements
-
-            let info = match &expr_type {
-                Either::Static(ref value) => match value.as_ref() {
-                    StaticType::Primitive(value) => BranchTableExprInfo::Primitive(value.size_of()),
-                    StaticType::StrSlice(value) => BranchTableExprInfo::Primitive(value.size_of()),
-                    StaticType::String(_) => BranchTableExprInfo::String,
-                    _ => return Err(CodeGenerationError::UnresolvedError),
+        instructions.push(Casm::Switch(BranchTable::Swith {
+            size: Some(switch_size),
+            data_label: Some(dump_data_label),
+            else_label: else_label,
+        }));
+        instructions.push(Casm::Switch(BranchTable::Table {
+            table_label: Some(table_data_label),
+            else_label: else_label,
+        }));
+        for (
+            idx,
+            (
+                PatternStat {
+                    pattern: _,
+                    scope: s,
                 },
-                Either::User(_) => return Err(CodeGenerationError::UnresolvedError),
-            };
-
-            instructions.push(Casm::Switch(BranchTable::Swith {
-                info,
-                table: switch,
-                else_label,
-            }))
-        } else {
-            // Switch with branch table statement
-            // extrart variant from matched expression
-
-            instructions.push(Casm::Switch(BranchTable::Table { table, else_label }))
-        }
-        for (idx, (PatternStat { pattern: _, scope: s }, label)) in
-            self.patterns.iter().zip(cases).enumerate()
+                label,
+            ),
+        ) in self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
             let param_size = s

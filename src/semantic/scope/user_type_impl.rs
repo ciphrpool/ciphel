@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::{semantic::scope::scope_impl::Scope, vm::casm};
 use ulid::Ulid;
 
 use crate::{
@@ -528,19 +528,33 @@ impl DeserializeFrom for Union {
 
 impl Printer for Union {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.variants.len());
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
+        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
+
         let end_label = Label::gen();
 
         for (idx, _) in self.variants.iter().enumerate() {
             let label: Ulid = Label::gen();
-            table.push((idx as u64, label));
+            dump_data.push((idx as u64).to_le_bytes().into());
             cases.push(label);
         }
-        instructions.push(Casm::Switch(BranchTable::Table {
-            table,
+
+        let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+            data: dump_data.into(),
+        });
+        let table_data_label = instructions.push_data(casm::data::Data::Table {
+            data: cases.clone().into(),
+        });
+        instructions.push(Casm::Switch(BranchTable::Swith {
+            size: Some(8),
+            data_label: Some(dump_data_label),
             else_label: None,
         }));
+        instructions.push(Casm::Switch(BranchTable::Table {
+            table_label: Some(table_data_label),
+            else_label: None,
+        }));
+
         for ((name, value), label) in self.variants.iter().zip(cases) {
             instructions.push_label_id(label, format!("print_{}", name).into());
             instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
@@ -580,19 +594,32 @@ impl DeserializeFrom for Enum {
 
 impl Printer for Enum {
     fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut table: Vec<(u64, Ulid)> = Vec::with_capacity(self.values.len());
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
+        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
         let end_label = Label::gen();
 
         for (idx, _) in self.values.iter().enumerate() {
             let label: Ulid = Label::gen();
-            table.push((idx as u64, label));
+            dump_data.push((idx as u64).to_le_bytes().into());
             cases.push(label);
         }
-        instructions.push(Casm::Switch(BranchTable::Table {
-            table,
+
+        let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+            data: dump_data.into(),
+        });
+        let table_data_label = instructions.push_data(casm::data::Data::Table {
+            data: cases.clone().into(),
+        });
+        instructions.push(Casm::Switch(BranchTable::Swith {
+            size: Some(8),
+            data_label: Some(dump_data_label),
             else_label: None,
         }));
+        instructions.push(Casm::Switch(BranchTable::Table {
+            table_label: Some(table_data_label),
+            else_label: None,
+        }));
+
         for (name, label) in self.values.iter().zip(cases) {
             instructions.push_label_id(label, format!("print_{}", name).into());
             instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
@@ -602,6 +629,7 @@ impl Printer for Enum {
                 label: Some(end_label),
             }));
         }
+
         instructions.push_label_id(end_label, "end_print_enum".into());
         Ok(())
     }

@@ -6,13 +6,13 @@ use crate::{
     },
     vm::{
         casm::{
+            data::Data,
             operation::{
                 Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Division, Equal, Greater,
                 GreaterEqual, Less, LessEqual, LogicalAnd, LogicalOr, Minus, Mod, Mult, Not,
                 NotEqual, OpPrimitive, Operation, OperationKind, ShiftLeft, ShiftRight,
                 Substraction,
             },
-            serialize::Serialized,
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -70,17 +70,17 @@ impl GenerateCode for Range {
                 StaticType::Range(RangeType { num, .. }) => (
                     num.size_of(),
                     match num {
-                        NumberType::U8 => (1u8).to_le_bytes().to_vec(),
-                        NumberType::U16 => (1u16).to_le_bytes().to_vec(),
-                        NumberType::U32 => (1u32).to_le_bytes().to_vec(),
-                        NumberType::U64 => (1u64).to_le_bytes().to_vec(),
-                        NumberType::U128 => (1u128).to_le_bytes().to_vec(),
-                        NumberType::I8 => (1i8).to_le_bytes().to_vec(),
-                        NumberType::I16 => (1i16).to_le_bytes().to_vec(),
-                        NumberType::I32 => (1i32).to_le_bytes().to_vec(),
-                        NumberType::I64 => (1i64).to_le_bytes().to_vec(),
-                        NumberType::I128 => (1i128).to_le_bytes().to_vec(),
-                        NumberType::F64 => (1f64).to_le_bytes().to_vec(),
+                        NumberType::U8 => (1u8).to_le_bytes().into(),
+                        NumberType::U16 => (1u16).to_le_bytes().into(),
+                        NumberType::U32 => (1u32).to_le_bytes().into(),
+                        NumberType::U64 => (1u64).to_le_bytes().into(),
+                        NumberType::U128 => (1u128).to_le_bytes().into(),
+                        NumberType::I8 => (1i8).to_le_bytes().into(),
+                        NumberType::I16 => (1i16).to_le_bytes().into(),
+                        NumberType::I32 => (1i32).to_le_bytes().into(),
+                        NumberType::I64 => (1i64).to_le_bytes().into(),
+                        NumberType::I128 => (1i128).to_le_bytes().into(),
+                        NumberType::F64 => (1f64).to_le_bytes().into(),
                     },
                 ),
                 _ => return Err(CodeGenerationError::UnresolvedError),
@@ -90,7 +90,7 @@ impl GenerateCode for Range {
 
         let _ = self.lower.gencode(scope, instructions)?;
         let _ = self.upper.gencode(scope, instructions)?;
-        instructions.push(Casm::Serialize(Serialized { data: incr_data }));
+        instructions.push(Casm::Data(Data::Serialized { data: incr_data }));
         Ok(())
     }
 }

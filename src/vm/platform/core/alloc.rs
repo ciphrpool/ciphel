@@ -8,16 +8,12 @@ use crate::semantic::scope::scope_impl::Scope;
 use num_traits::ToBytes;
 
 use crate::{
-    ast::expressions::{
-        Expression,
-    },
+    ast::expressions::Expression,
     e_static, p_num,
     semantic::{
         scope::{
-            static_types::{
-                AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
-            },
-            type_traits::{GetSubTypes},
+            static_types::{AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType},
+            type_traits::GetSubTypes,
         },
         AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
     },
@@ -25,11 +21,9 @@ use crate::{
         allocator::{align, stack::Offset},
         casm::{
             alloc::{Access, Alloc, Free},
+            data::Data,
             mem::Mem,
-            operation::{
-                OpPrimitive,
-            },
-            serialize::Serialized,
+            operation::OpPrimitive,
             Casm, CasmProgram,
         },
         platform::{utils::lexem, LibCasm},
@@ -37,8 +31,6 @@ use crate::{
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
-
-
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AppendKind {
@@ -641,8 +633,8 @@ impl GenerateCode for AllocFn {
             ))),
             AllocFn::SizeOf { size } => {
                 instructions.push(Casm::Pop(size.get()));
-                instructions.push(Casm::Serialize(Serialized {
-                    data: size.get().to_le_bytes().to_vec(),
+                instructions.push(Casm::Data(Data::Serialized {
+                    data: Box::new(size.get().to_le_bytes()),
                 }));
             }
             AllocFn::MemCopy => instructions.push(Casm::MemCopy(Mem::MemCopy)),

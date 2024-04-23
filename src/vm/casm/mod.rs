@@ -1,11 +1,8 @@
 use crate::semantic::MutRc;
-use std::{
-    cell::{Cell},
-    collections::HashMap,
-};
+use std::{cell::Cell, collections::HashMap, slice::Iter};
 use ulid::Ulid;
 
-use self::branch::Label;
+use self::{branch::Label, data::Data};
 
 use super::{
     platform,
@@ -14,11 +11,11 @@ use super::{
 };
 pub mod alloc;
 pub mod branch;
+pub mod data;
 pub mod locate;
 mod math_operation;
 pub mod mem;
 pub mod operation;
-pub mod serialize;
 
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
@@ -68,9 +65,34 @@ impl CasmProgram {
         id
     }
 
+    pub fn push_data(&self, data: Data) -> Ulid {
+        let id = Ulid::new();
+        let mut borrowed_labels = self.labels.as_ref().borrow_mut();
+        let mut borrowed_main = self.main.as_ref().borrow_mut();
+        borrowed_labels.insert(id, borrowed_main.len());
+        borrowed_main.push(Casm::Data(data));
+        id
+    }
+
     pub fn get(&self, label: &Ulid) -> Option<usize> {
         let borrowed_labels = self.labels.as_ref().borrow();
         borrowed_labels.get(label).cloned()
+    }
+
+    pub fn data_at_offset(&self, offset: usize) -> Result<Vec<Box<[u8]>>, RuntimeError> {
+        let borrowed_main = self.main.as_ref().borrow();
+        match borrowed_main.get(offset) {
+            Some(Casm::Data(data::Data::Dump { data })) => Ok(data.to_vec()),
+            _ => Err(RuntimeError::CodeSegmentation),
+        }
+    }
+
+    pub fn table_at_offset(&self, offset: usize) -> Result<Vec<Ulid>, RuntimeError> {
+        let borrowed_main = self.main.as_ref().borrow();
+        match borrowed_main.get(offset) {
+            Some(Casm::Data(data::Data::Table { data })) => Ok(data.to_vec()),
+            _ => Err(RuntimeError::CodeSegmentation),
+        }
     }
 
     pub fn extend<I>(&self, iter: I)
@@ -127,7 +149,7 @@ pub enum Casm {
     Free(alloc::Free),
     MemCopy(mem::Mem),
     Operation(operation::Operation),
-    Serialize(serialize::Serialized),
+    Data(data::Data),
     Access(alloc::Access),
     Locate(locate::Locate),
     If(branch::BranchIf),
@@ -145,7 +167,7 @@ impl Executable for Casm {
         match self {
             Casm::Operation(value) => value.execute(thread),
             Casm::StackFrame(value) => value.execute(thread),
-            Casm::Serialize(value) => value.execute(thread),
+            Casm::Data(value) => value.execute(thread),
             Casm::Access(value) => value.execute(thread),
             Casm::If(value) => value.execute(thread),
             Casm::Assign(value) => value.execute(thread),
