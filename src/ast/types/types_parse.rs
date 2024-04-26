@@ -17,8 +17,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, RangeType,
-    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, MapType, NumberType, PrimitiveType, RangeType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -290,32 +290,15 @@ impl TryParse for MapType {
                 wst(lexem::UMAP),
                 delimited(
                     wst(lexem::LESSER),
-                    separated_pair(KeyType::parse, wst(lexem::COMA), Type::parse),
+                    separated_pair(Type::parse, wst(lexem::COMA), Type::parse),
                     wst(lexem::GREATER),
                 ),
             ),
             |(keys, values)| MapType {
-                keys_type: keys,
+                keys_type: Box::new(keys),
                 values_type: Box::new(values),
             },
         )(input)
-    }
-}
-
-impl TryParse for KeyType {
-    /*
-     * @desc Parse Key Type
-     *
-     * @grammar
-     * Key := Primitive | Address | Slice
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PrimitiveType::parse, |value| KeyType::Primitive(value)),
-            map(StringType::parse, |value| KeyType::String(value)),
-            map(AddrType::parse, |value| KeyType::Address(value)),
-            map(parse_id, |value| KeyType::EnumID(value)),
-        ))(input)
     }
 }
 
@@ -470,7 +453,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             MapType {
-                keys_type: KeyType::String(StringType()),
+                keys_type: Box::new(Type::String(StringType())),
                 values_type: Box::new(Type::Primitive(PrimitiveType::Bool))
             },
             value

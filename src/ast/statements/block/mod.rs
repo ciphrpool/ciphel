@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::Statement;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 pub mod block_gencode;
 pub mod block_parse;

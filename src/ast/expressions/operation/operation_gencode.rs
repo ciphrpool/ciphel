@@ -1,4 +1,4 @@
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
@@ -606,7 +606,7 @@ mod tests {
         clear_stack, eval_and_compare, eval_and_compare_bool,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{PrimitiveType, StrSliceType, StringType},
             },
             Resolve,

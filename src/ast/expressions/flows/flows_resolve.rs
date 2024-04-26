@@ -1,7 +1,9 @@
-use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
-use crate::ast::expressions::data::{VarID, Variable};
+use super::{ExprFlow, FCall, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use crate::ast::expressions::data::{Data, StrSlice, VarID, Variable};
+use crate::ast::expressions::flows::FormatItem;
+use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::user_type_impl::{Enum, Union};
 use crate::semantic::scope::var_impl::VarState;
@@ -11,7 +13,8 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MutRc};
+use crate::semantic::{EType, Info, Metadata, MutRc};
+use crate::vm::platform::stdlib::StdFn;
 use crate::vm::platform::Lib;
 use std::collections::HashMap;
 
@@ -38,6 +41,7 @@ impl Resolve for ExprFlow {
                 resolve_metadata!(metadata, self, scope, context);
                 Ok(())
             }
+            ExprFlow::FCall(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -408,6 +412,32 @@ impl Resolve for FnCall {
     }
 }
 
+impl Resolve for FCall {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        _extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for item in &self.value {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    let _ = expr.resolve(scope, &None, &())?;
+                }
+            }
+        }
+        resolve_metadata!(self.metadata, self, scope, context);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -417,10 +447,10 @@ mod tests {
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
-            scope_impl::Scope,
+            scope::Scope,
             static_types::{
-                AddrType, FnType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-                StaticType, StringType, VecType,
+                AddrType, FnType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+                StringType, VecType,
             },
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,

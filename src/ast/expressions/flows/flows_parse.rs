@@ -10,22 +10,28 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{ExprScope, Primitive, StrSlice, Variable},
-            Expression,
+            data::{ExprScope, Primitive, StrSlice, VarID, Variable},
+            Atomic, Expression,
         },
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst},
+            strings::{
+                parse_id,
+                string_parser::{parse_fstring, parse_string},
+                wst,
+            },
         },
         TryParse,
     },
     semantic::Metadata,
-    vm,
+    vm::{self, platform},
 };
 
-use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use super::{
+    ExprFlow, FCall, FnCall, FormatItem, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr,
+};
 
 impl TryParse for ExprFlow {
     /*
@@ -46,6 +52,7 @@ impl TryParse for ExprFlow {
                 ),
                 |value| ExprFlow::SizeOf(value, Metadata::default()),
             ),
+            map(FCall::parse, |value| ExprFlow::FCall(value)),
             map(FnCall::parse, |value| ExprFlow::Call(value)),
         ))(input)
     }
@@ -248,6 +255,44 @@ impl TryParse for FnCall {
                 platform: Rc::default(),
             },
         )(input)
+    }
+}
+
+impl TryParse for FCall {
+    /*
+     * @desc Parse fn call
+     *
+     * @grammar
+     * FnCall := f"string{Expression}"
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(pair(wst("f"), parse_fstring::<Expression>), |(_, items)| {
+            FCall {
+                value: items
+                    .into_iter()
+                    .map(|item| match item {
+                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+                            FormatItem::Str(string)
+                        }
+                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+                            FormatItem::Expr(Expression::Atomic(Atomic::ExprFlow(ExprFlow::Call(
+                                FnCall {
+                                    lib: Some(platform::utils::lexem::STD.into()),
+                                    fn_var: Variable::Var(VarID {
+                                        id: platform::utils::lexem::TOSTR.into(),
+                                        metadata: Metadata::default(),
+                                    }),
+                                    params: vec![expr],
+                                    metadata: Metadata::default(),
+                                    platform: Rc::default(),
+                                },
+                            ))))
+                        }
+                    })
+                    .collect(),
+                metadata: Metadata::default(),
+            }
+        })(input)
     }
 }
 

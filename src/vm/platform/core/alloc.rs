@@ -3,7 +3,7 @@ use std::{
     vec,
 };
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::{scope::Scope, static_types::SliceType, type_traits::TypeChecking};
 
 use num_traits::ToBytes;
 
@@ -41,6 +41,14 @@ pub enum AppendKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ExtendKind {
+    VecFromSlice(usize),
+    VecFromVec,
+    StringFromSlice(usize),
+    StringFromVec,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum DeleteKind {
     Vec,
 }
@@ -57,6 +65,10 @@ pub enum AllocFn {
     Append {
         item_size: Cell<usize>,
         append_kind: Cell<AppendKind>,
+    },
+    Extend {
+        item_size: Cell<usize>,
+        extend_kind: Cell<ExtendKind>,
     },
     Insert,
     Delete {
@@ -96,6 +108,19 @@ pub enum AllocCasm {
     AppendItem(usize),
     AppendStrSlice(usize),
     AppendString,
+
+    ExtendItemFromSlice {
+        size: usize,
+        len: usize,
+    },
+    ExtendItemFromVec {
+        size: usize,
+    },
+    ExtendStringFromSlice {
+        len: usize,
+    },
+    ExtendStringFromVec,
+
     Insert,
     DeleteVec(usize),
 
@@ -130,6 +155,10 @@ impl AllocFn {
             lexem::APPEND => Some(AllocFn::Append {
                 item_size: Cell::new(0),
                 append_kind: Cell::new(AppendKind::Vec),
+            }),
+            lexem::EXTEND => Some(AllocFn::Extend {
+                item_size: Cell::new(0),
+                extend_kind: Cell::new(ExtendKind::VecFromVec),
             }),
             lexem::INSERT => Some(AllocFn::Insert),
             lexem::DELETE => Some(AllocFn::Delete {
@@ -226,6 +255,86 @@ impl Resolve for AllocFn {
                             }
                             item_size.set(item_type.size_of());
                             Ok(())
+                        }
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+            }
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => {
+                if extra.len() != 2 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let vector = &extra[0];
+                let items = &extra[1];
+
+                let _ = vector.resolve(scope, &None, &())?;
+                let mut vector_type = vector.type_of(&scope.borrow())?;
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Vec(_) => {
+                            let _ = items.resolve(scope, &None, &())?;
+                            let items_type = items.type_of(&scope.borrow())?;
+
+                            match items_type {
+                                Either::Static(value) => match value.as_ref() {
+                                    StaticType::Slice(SliceType {
+                                        size: len,
+                                        item_type,
+                                    }) => {
+                                        extend_kind.set(ExtendKind::VecFromSlice(*len));
+
+                                        item_size.set(item_type.size_of());
+                                        Ok(())
+                                    }
+                                    StaticType::Vec(VecType(item_type)) => {
+                                        extend_kind.set(ExtendKind::VecFromVec);
+                                        item_size.set(item_type.size_of());
+                                        Ok(())
+                                    }
+                                    _ => return Err(SemanticError::IncorrectArguments),
+                                },
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            }
+                        }
+                        StaticType::String(_) => {
+                            let _ = items.resolve(scope, &None, &())?;
+                            let items_type = items.type_of(&scope.borrow())?;
+
+                            match items_type {
+                                Either::Static(value) => match value.as_ref() {
+                                    StaticType::Slice(SliceType {
+                                        size: len,
+                                        item_type,
+                                    }) => {
+                                        if !item_type.is_string() {
+                                            return Err(SemanticError::IncorrectArguments);
+                                        }
+                                        extend_kind.set(ExtendKind::StringFromSlice(*len));
+                                        Ok(())
+                                    }
+                                    StaticType::Vec(VecType(item_type)) => {
+                                        if !item_type.is_string() {
+                                            return Err(SemanticError::IncorrectArguments);
+                                        }
+                                        extend_kind.set(ExtendKind::StringFromVec);
+                                        Ok(())
+                                    }
+                                    _ => return Err(SemanticError::IncorrectArguments),
+                                },
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            }
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -556,6 +665,10 @@ impl TypeOf for AllocFn {
             AllocFn::SizeOf { .. } => Ok(p_num!(U64)),
             AllocFn::MemCopy => Ok(e_static!(StaticType::Unit)),
             AllocFn::Clear { .. } => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => Ok(e_static!(StaticType::Unit)),
         }
     }
 }
@@ -584,6 +697,30 @@ impl GenerateCode for AllocFn {
                     super::CoreCasm::Alloc(AllocCasm::AppendString),
                 ))),
             },
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => match extend_kind.get() {
+                ExtendKind::VecFromSlice(len) => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromSlice {
+                        len,
+                        size: item_size.get(),
+                    }),
+                ))),
+                ExtendKind::VecFromVec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec {
+                        size: item_size.get(),
+                    }),
+                ))),
+                ExtendKind::StringFromSlice(len) => {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::ExtendStringFromSlice { len },
+                    ))))
+                }
+                ExtendKind::StringFromVec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendStringFromVec),
+                ))),
+            },
             AllocFn::Insert => todo!(),
             AllocFn::Delete {
                 delete_kind,
@@ -609,7 +746,7 @@ impl GenerateCode for AllocFn {
             )))),
             AllocFn::Map => todo!(),
             AllocFn::Chan => todo!(),
-            AllocFn::String { from_char, len } => {
+            AllocFn::String { from_char, .. } => {
                 if from_char.get() {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::StringFromChar,
@@ -1267,6 +1404,483 @@ impl Executable for AllocCasm {
                     .map_err(|e| e.into())?;
             }
             AllocCasm::ClearMap(_) => todo!(),
+            AllocCasm::ExtendItemFromSlice { size, len } => {
+                let item_size = *size;
+                let slice_len = *len;
+                let slice_data = thread
+                    .env
+                    .stack
+                    .pop(item_size * slice_len)
+                    .map_err(|e| e.into())?;
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = item_size;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendItemFromVec { size } => {
+                let item_size = *size;
+
+                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(other_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let slice_len = u64::from_le_bytes(*previous_len_bytes);
+                let slice_data = thread
+                    .runtime
+                    .heap
+                    .read(
+                        other_heap_address as usize + 16,
+                        slice_len as usize * item_size,
+                    )
+                    .map_err(|e| e.into())?;
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = item_size;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendStringFromSlice { len } => {
+                let mut slice_data = Vec::new();
+                for _ in 0..*len {
+                    let string_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                    let string_len_bytes = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize, 8)
+                        .map_err(|e| e.into())?;
+                    let string_len_bytes =
+                        TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_len = u64::from_le_bytes(*string_len_bytes);
+                    let string_data = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize + 16, string_len as usize)
+                        .map_err(|e| e.into())?;
+                    slice_data.push(string_data);
+                }
+                let slice_data = slice_data.into_iter().rev().flatten().collect::<Vec<u8>>();
+                let slice_len = slice_data.len();
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = 1;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendStringFromVec => {
+                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(other_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let other_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let mut slice_data = Vec::new();
+                for i in 0..other_len as usize {
+                    let string_heap_address = thread
+                        .runtime
+                        .heap
+                        .read(other_heap_address as usize + 16 + 8 * i, 8)
+                        .map_err(|e| e.into())?;
+                    let string_heap_address =
+                        TryInto::<&[u8; 8]>::try_into(string_heap_address.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_heap_address = u64::from_le_bytes(*string_heap_address);
+
+                    let string_len_bytes = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize, 8)
+                        .map_err(|e| e.into())?;
+                    let string_len_bytes =
+                        TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_len = u64::from_le_bytes(*string_len_bytes);
+                    let string_data = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize + 16, string_len as usize)
+                        .map_err(|e| e.into())?;
+                    slice_data.extend(string_data);
+                }
+                let slice_len = slice_data.len();
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = 1;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
         }
 
         thread.env.program.incr();
@@ -1282,8 +1896,8 @@ mod tests {
             statements::Statement,
             TryParse,
         },
-        clear_stack,
-        semantic::scope::scope_impl::Scope,
+        clear_stack, compile_statement_for_string,
+        semantic::scope::scope::Scope,
         v_num,
         vm::vm::{DeserializeFrom, Runtime},
     };
@@ -1300,51 +1914,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1585,51 +2158,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1646,51 +2178,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1707,51 +2198,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello Worl仗");
+        assert_eq!(result, "Hello Worl仗");
     }
 
     #[test]
@@ -1769,51 +2219,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -2212,7 +2621,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_sizeof_type() {
+    fn valid_size_of_type() {
         let statement = Statement::parse(
             r##"
             let res = {
@@ -2220,7 +2629,7 @@ mod tests {
                     x : u64,
                     y : u64,
                 }
-                return sizeof(Point);
+                return size_of(Point);
             };
         "##
             .into(),
@@ -2258,10 +2667,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_sizeof_expr() {
+    fn valid_size_of_expr() {
         let statement = Statement::parse(
             r##"
-            let res = sizeof(420u64);
+            let res = size_of(420u64);
         "##
             .into(),
         )
@@ -2550,13 +2959,13 @@ mod tests {
                     y: i64
                 }
 
-                let point_any : &Any = alloc(sizeof(Point)) as &Any;
+                let point_any : &Any = alloc(size_of(Point)) as &Any;
 
                 let copy = Point {
                     x : 420,
                     y : 69,
                 };
-                memcpy(point_any,&copy,sizeof(Point));
+                memcpy(point_any,&copy,size_of(Point));
                 
                 let point = *point_any as Point;
                 
@@ -2607,7 +3016,7 @@ mod tests {
                     y: i64
                 }
 
-                let point : &Point = alloc(sizeof(Point)) as &Point;
+                let point : &Point = alloc(size_of(Point)) as &Point;
 
                 point.x = 420;
                 
@@ -2646,5 +3055,219 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 420));
+    }
+
+    #[test]
+    fn valid_extend_vec_from_slice() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let slice = [5,6,7,8];
+                let vector:Vec<i64> = vec(8);
+                extend(&vector,slice);
+                return vector[8];
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 5));
+    }
+
+    #[test]
+    fn valid_extend_vec_from_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = vec[5,6,7,8];
+                let vector:Vec<i64> = vec(8);
+                extend(&vector,vec1);
+                return vector[8];
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 5));
+    }
+
+    #[test]
+    fn valid_extend_string_from_slice() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = [string("lo"),string(" Wor"),string("ld")];
+                let hello = string("Hel");
+                extend(&hello,vec1);
+                return hello;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data = memory
+            .heap
+            .read(heap_address, length + 16)
+            .expect("length should be readable");
+
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello World");
+    }
+
+    #[test]
+    fn valid_extend_string_from_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = vec[string("lo"),string(" Wor"),string("ld")];
+                let hello = string("Hel");
+                extend(&hello,vec1);
+                return hello;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data = memory
+            .heap
+            .read(heap_address, length + 16)
+            .expect("length should be readable");
+
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello World");
     }
 }

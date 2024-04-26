@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{Assignation, Assignee};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl GenerateCode for Assignation {
     fn gencode(
@@ -112,7 +112,7 @@ mod tests {
         clear_stack, compile_statement, e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{NumberType, PrimitiveType, SliceType, StaticType, TupleType},
                 user_type_impl::{self, UserType},
             },

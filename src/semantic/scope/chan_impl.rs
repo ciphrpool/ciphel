@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::utils::strings::ID,
     semantic::{CompatibleWith, EType, SemanticError, TypeOf},

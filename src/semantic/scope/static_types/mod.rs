@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
 
-use super::user_type_impl::{Enum};
+use super::user_type_impl::Enum;
 
 pub mod st_builder;
 pub mod st_compatible_with;
@@ -14,7 +14,7 @@ pub mod st_operand_merging;
 pub mod st_sizeof;
 pub mod st_subtypes;
 pub mod st_type_checking;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 type SubType = Box<EType>;
 
@@ -108,16 +108,8 @@ pub struct AddrType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapType {
-    pub keys_type: KeyType,
+    pub keys_type: SubType,
     pub values_type: SubType,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyType {
-    Primitive(PrimitiveType),
-    Address(AddrType),
-    String(StringType),
-    Enum(Enum),
 }
 
 impl TypeOf for StaticType {

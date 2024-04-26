@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use num_traits::ToBytes;
 
 use crate::ast::expressions::{Atomic, Expression};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope, AccessLevel};
 use crate::vm::allocator::stack::Offset;
 use crate::{
@@ -1255,7 +1255,7 @@ mod tests {
         compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{
                     PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
                 },

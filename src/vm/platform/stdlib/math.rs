@@ -6,7 +6,7 @@ use std::f64::NEG_INFINITY;
 
 use num_traits::ToBytes;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{Either, TypeOf};
 use crate::vm::casm::operation::OpPrimitive;
@@ -708,7 +708,7 @@ mod tests {
             TryParse,
         },
         clear_stack, compile_statement,
-        semantic::scope::scope_impl::Scope,
+        semantic::scope::scope::Scope,
         v_num,
         vm::vm::{DeserializeFrom, Runtime},
     };

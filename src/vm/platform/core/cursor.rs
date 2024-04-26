@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::TypeOf;
 use crate::vm::platform::utils::lexem;
 use crate::{

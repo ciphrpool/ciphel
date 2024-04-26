@@ -5,7 +5,7 @@ use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
 
@@ -296,7 +296,7 @@ mod tests {
 
     use crate::{
         ast::{statements::Statement, TryParse},
-        semantic::scope::scope_impl::Scope,
+        semantic::scope::scope::Scope,
         vm::vm::Runtime,
     };
 

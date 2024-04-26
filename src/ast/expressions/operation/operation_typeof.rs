@@ -16,7 +16,7 @@ use super::{
     Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
     LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl TypeOf for UnaryOperation {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>

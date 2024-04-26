@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{Info};
 
 
@@ -234,7 +234,7 @@ mod tests {
         e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::{self},
+                scope::{self},
                 static_types::{NumberType, PrimitiveType, StaticType},
             },
             Either,
@@ -285,7 +285,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
 
         let res = return_statement.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
@@ -313,7 +313,7 @@ mod tests {
         .unwrap()
         .1;
 
-        let inner_scope = scope_impl::Scope::spawn(&scope, Vec::default())
+        let inner_scope = scope::Scope::spawn(&scope, Vec::default())
             .expect("Scope should be able to have child block");
         inner_scope.as_ref().borrow_mut().to_loop();
 
@@ -364,7 +364,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = return_statement.resolve(
             &scope,
             &Some(Either::Static(

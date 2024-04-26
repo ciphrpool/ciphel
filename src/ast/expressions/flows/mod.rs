@@ -8,7 +8,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     ast::{types::Type, utils::strings::ID},
     semantic::{EType, Metadata},
-    vm::platform::Lib,
+    vm::platform::{stdlib::strings::StringsFn, Lib},
 };
 
 use super::{
@@ -22,6 +22,7 @@ pub enum ExprFlow {
     Match(MatchExpr),
     Try(TryExpr),
     Call(FnCall),
+    FCall(FCall),
     SizeOf(Type, Metadata),
 }
 
@@ -83,6 +84,18 @@ pub struct FnCall {
     pub platform: Rc<RefCell<Option<Lib>>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FormatItem {
+    Str(String),
+    Expr(Expression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FCall {
+    pub value: Vec<FormatItem>,
+    pub metadata: Metadata,
+}
+
 impl ExprFlow {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
@@ -91,6 +104,7 @@ impl ExprFlow {
             ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Call(FnCall { metadata, .. }) => Some(metadata),
             ExprFlow::SizeOf(_, metadata) => Some(metadata),
+            ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
         }
     }
     pub fn signature(&self) -> Option<EType> {
@@ -99,6 +113,7 @@ impl ExprFlow {
             ExprFlow::Match(MatchExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Try(TryExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Call(FnCall { metadata, .. }) => metadata.signature(),
+            ExprFlow::FCall(FCall { metadata, .. }) => metadata.signature(),
             ExprFlow::SizeOf(_, metadata) => metadata.signature(),
         }
     }

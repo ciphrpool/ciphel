@@ -1,4 +1,4 @@
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use crate::{
     semantic::{scope::var_impl::VarState, MutRc, SizeOf},

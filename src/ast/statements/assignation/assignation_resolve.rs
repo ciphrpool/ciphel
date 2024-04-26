@@ -1,5 +1,5 @@
 use super::{AssignValue, Assignation, Assignee};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{CompatibleWith, EType, MutRc, Resolve, SemanticError, TypeOf};
 
 impl Resolve for Assignation {
@@ -91,7 +91,7 @@ mod tests {
         p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
                 var_impl::Var,
             },

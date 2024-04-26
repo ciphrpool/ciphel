@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{expressions::data::Data, utils::strings::ID},
     semantic::{
@@ -173,6 +173,12 @@ impl TypeChecking for EType {
     fn is_map(&self) -> bool {
         match self {
             Either::Static(static_type) => static_type.is_map(),
+            Either::User(_user_type) => false,
+        }
+    }
+    fn is_string(&self) -> bool {
+        match self {
+            Either::Static(static_type) => static_type.is_string(),
             Either::User(_user_type) => false,
         }
     }

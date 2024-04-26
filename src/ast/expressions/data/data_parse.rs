@@ -32,9 +32,9 @@ use nom::{
 use nom_supreme::error::ErrorTree;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
-    VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, MultiData,
+    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
+    Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -520,7 +520,7 @@ impl TryParse for Map {
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
-                        separated_pair(KeyData::parse, wst(lexem::COLON), Expression::parse),
+                        separated_pair(Expression::parse, wst(lexem::COLON), Expression::parse),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
@@ -530,23 +530,6 @@ impl TryParse for Map {
                 metadata: Metadata::default(),
             },
         )(input)
-    }
-}
-
-impl TryParse for KeyData {
-    /*
-     * @desc Parse hashable data for key
-     *
-     * @grammar
-     * KeyData := Number | Bool | Char | String | Addr | EnumData | StaticString
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(Address::parse, |value| KeyData::Address(value)),
-            map(Enum::parse, |value| KeyData::Enum(value)),
-            map(Primitive::parse, |value| KeyData::Primitive(value)),
-            map(StrSlice::parse, |value| KeyData::StrSlice(value)),
-        ))(input)
     }
 }
 
@@ -841,19 +824,19 @@ mod tests {
             Map {
                 fields: vec![
                     (
-                        KeyData::StrSlice(StrSlice {
+                        Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".into(),
                             metadata: Metadata::default(),
-                        }),
+                        }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(2).into()
                         ))))
                     ),
                     (
-                        KeyData::StrSlice(StrSlice {
+                        Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".into(),
                             metadata: Metadata::default(),
-                        }),
+                        }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(6).into()
                         ))))

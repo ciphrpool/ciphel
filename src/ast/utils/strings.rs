@@ -54,7 +54,7 @@ pub mod eater {
         )(input)
     }
 
-    fn ml_comment(input: Span) -> PResult<()> {
+    pub fn ml_comment(input: Span) -> PResult<()> {
         value(
             (),
             many0(alt((
@@ -115,11 +115,14 @@ pub fn wst<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PResult<(
  * Character := '.*'
  */
 pub mod string_parser {
+    use crate::ast::utils::io::{PResult, Span};
+    use crate::ast::utils::lexem;
+    use crate::ast::TryParse;
     use nom::bytes::complete::take;
-    use nom::character::complete::multispace1;
+    use nom::character::complete::{multispace0, multispace1};
     use nom::combinator::{map_opt, map_res, verify};
     use nom::multi::fold_many0;
-    use nom::sequence::preceded;
+    use nom::sequence::{preceded, terminated};
     use nom::{
         branch::alt,
         bytes::complete::{is_not, take_while_m_n},
@@ -127,8 +130,9 @@ pub mod string_parser {
         sequence::delimited,
         Parser,
     };
+    use nom_supreme::tag::complete::tag;
 
-    use crate::ast::utils::io::{PResult, Span};
+    use super::eater::ml_comment;
     fn unicode(input: Span) -> PResult<char> {
         let parse_hex = take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit());
         let parse_delimited_hex = preceded(
@@ -205,6 +209,91 @@ pub mod string_parser {
         )(input)
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum FormattedStringFragment<'input, E: TryParse + Clone> {
+        Literal(Span<'input>),
+        EscapedChar(char),
+        EscapedWS,
+        Expr(E),
+        BraO,
+        BraC,
+    }
+    fn parse_formatted_literal(input: Span) -> PResult<Span> {
+        let not_quote_slash = is_not("\"\\{}");
+        verify(not_quote_slash, |s: &Span| !s.is_empty()).parse(input)
+    }
+
+    fn formatted_fragment<'input, E: TryParse + Clone>(
+        input: Span<'input>,
+    ) -> PResult<FormattedStringFragment<'input, E>> {
+        alt((
+            map(tag("{{"), |_| FormattedStringFragment::BraO),
+            map(tag("}}"), |_| FormattedStringFragment::BraC),
+            map(
+                delimited(
+                    terminated(
+                        tag(lexem::BRA_O),
+                        delimited(multispace0, ml_comment, multispace0),
+                    ),
+                    E::parse,
+                    preceded(
+                        delimited(multispace0, ml_comment, multispace0),
+                        tag(lexem::BRA_C),
+                    ),
+                ),
+                FormattedStringFragment::Expr,
+            ),
+            map(parse_formatted_literal, FormattedStringFragment::Literal),
+            map(escaped_char, FormattedStringFragment::EscapedChar),
+            value(FormattedStringFragment::EscapedWS, escaped_whitespace),
+        ))
+        .parse(input)
+    }
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum FItem<E: TryParse + Clone> {
+        Str(String),
+        Expr(E),
+    }
+    pub fn parse_fstring<E: TryParse + Clone>(input: Span) -> PResult<Vec<FItem<E>>> {
+        let build_string = fold_many0(formatted_fragment::<E>, Vec::new, |mut items, frag| {
+            match frag {
+                FormattedStringFragment::Literal(s) => match items.last_mut() {
+                    Some(FItem::Str(string)) => string.push_str(s.to_string().as_str()),
+                    Some(FItem::Expr(_)) => items.push(FItem::Str(s.to_string())),
+                    None => items.push(FItem::Str(s.to_string())),
+                },
+                FormattedStringFragment::EscapedChar(c) => match items.last_mut() {
+                    Some(FItem::Str(string)) => string.push(c),
+                    Some(FItem::Expr(_)) => items.push(FItem::Str(c.to_string())),
+                    None => items.push(FItem::Str(c.to_string())),
+                },
+                FormattedStringFragment::EscapedWS => {}
+                FormattedStringFragment::Expr(e) => match items.last_mut() {
+                    Some(FItem::Str(_)) => items.push(FItem::Expr(e)),
+                    Some(FItem::Expr(_)) => items.push(FItem::Expr(e)),
+                    None => items.push(FItem::Str('{'.to_string())),
+                },
+                FormattedStringFragment::BraO => match items.last_mut() {
+                    Some(FItem::Str(string)) => string.push('{'),
+                    Some(FItem::Expr(_)) => items.push(FItem::Str('{'.to_string())),
+                    None => items.push(FItem::Str('{'.to_string())),
+                },
+                FormattedStringFragment::BraC => match items.last_mut() {
+                    Some(FItem::Str(string)) => string.push('}'),
+                    Some(FItem::Expr(_)) => items.push(FItem::Str('}'.to_string())),
+                    None => items.push(FItem::Str('}'.to_string())),
+                },
+            }
+            items
+        });
+
+        delimited(
+            nom::character::complete::char('"'),
+            build_string,
+            nom::character::complete::char('"'),
+        )(input)
+    }
+
     pub fn parse_char(input: Span) -> PResult<char> {
         delimited(
             nom::character::complete::char('\''),
@@ -219,6 +308,12 @@ pub mod string_parser {
 
 #[cfg(test)]
 mod tests {
+    use tests::string_parser::FItem;
+
+    use crate::ast::expressions::Expression;
+
+    use self::string_parser::parse_fstring;
+
     use super::{string_parser::parse_string, *};
 
     #[test]
@@ -291,5 +386,37 @@ mod tests {
 
         let res = parse_string(r#"Hello, World"#.into());
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_formatted_string() {
+        let res = parse_fstring::<Expression>(r#""Hello,{2} World""#.into())
+            .expect("Parsing should have succeeded")
+            .1;
+        assert_eq!(res.len(), 3);
+        let res = parse_fstring::<Expression>(r#""Hello,{ x  } World""#.into())
+            .expect("Parsing should have succeeded")
+            .1;
+        assert_eq!(res.len(), 3);
+        let res = parse_fstring::<Expression>(r#""Hello,{{2}} World""#.into())
+            .expect("Parsing should have succeeded")
+            .1;
+        assert_eq!(res, vec![FItem::Str("Hello,{2} World".into())]);
+
+        let res = parse_fstring::<Expression>(r#""Hello,{{  World""#.into())
+            .expect("Parsing should have succeeded")
+            .1;
+        assert_eq!(res, vec![FItem::Str("Hello,{  World".into())]);
+
+
+        let res = parse_fstring::<Expression>(r#""Hello, }}  World""#.into())
+            .expect("Parsing should have succeeded")
+            .1;
+        assert_eq!(res, vec![FItem::Str("Hello, }  World".into())]);
+
+        let _ = parse_fstring::<Expression>(r#""Hello,{ World""#.into())
+            .expect_err("Parsing should have succeeded");
+        let _ = parse_fstring::<Expression>(r#""Hello,} World""#.into())
+            .expect_err("Parsing should have succeeded");
     }
 }

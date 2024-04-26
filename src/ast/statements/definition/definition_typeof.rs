@@ -2,7 +2,7 @@ use std::cell::Ref;
 
 use super::{EventCondition, EventDef};
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };

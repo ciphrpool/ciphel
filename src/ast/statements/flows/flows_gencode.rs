@@ -1,4 +1,4 @@
-use crate::{semantic::scope::scope_impl::Scope, vm::casm::data::Data};
+use crate::{semantic::scope::scope::Scope, vm::casm::data::Data};
 use ulid::Ulid;
 
 use crate::{
@@ -321,7 +321,7 @@ mod tests {
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
     use crate::vm::vm::{DeserializeFrom, Runtime};
-    use crate::{ast::statements::Statement, semantic::scope::scope_impl::Scope};
+    use crate::{ast::statements::Statement, semantic::scope::scope::Scope};
     use crate::{clear_stack, compile_statement, v_num};
 
     #[test]

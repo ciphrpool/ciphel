@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
@@ -210,16 +210,8 @@ pub struct Enum {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map {
-    pub fields: Vec<(KeyData, Expression)>,
+    pub fields: Vec<(Expression, Expression)>,
     pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyData {
-    Primitive(Primitive),
-    StrSlice(StrSlice),
-    Address(Address),
-    Enum(Enum),
 }
 
 impl Data {

@@ -1,5 +1,5 @@
 use super::Error;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{MutRc, Resolve, SemanticError};
 
 
@@ -22,7 +22,7 @@ impl Resolve for Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::TryParse, semantic::scope::scope_impl::Scope};
+    use crate::{ast::TryParse, semantic::scope::scope::Scope};
 
     use super::*;
 

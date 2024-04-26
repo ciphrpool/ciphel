@@ -1,4 +1,4 @@
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::{MutRc, SizeOf},
@@ -145,7 +145,7 @@ mod tests {
         clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
                 user_type_impl::{self, UserType},
             },

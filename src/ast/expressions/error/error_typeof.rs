@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use super::Error;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;
 use crate::semantic::{scope::static_types::StaticType, Either, Resolve, SemanticError, TypeOf};

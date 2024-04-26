@@ -1,6 +1,8 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::e_static;
+use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::static_types::StringType;
 use crate::{
     ast::expressions::data::{VarID, Variable},
     p_num,
@@ -13,7 +15,7 @@ use crate::{
     },
 };
 
-use super::{ExprFlow, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
+use super::{ExprFlow, FCall, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl TypeOf for ExprFlow {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
@@ -25,6 +27,7 @@ impl TypeOf for ExprFlow {
             ExprFlow::Match(value) => value.type_of(&scope),
             ExprFlow::Try(value) => value.type_of(&scope),
             ExprFlow::Call(value) => value.type_of(&scope),
+            ExprFlow::FCall(value) => value.type_of(&scope),
             ExprFlow::SizeOf(..) => Ok(p_num!(U64)),
         }
     }
@@ -109,5 +112,14 @@ impl TypeOf for FnCall {
         };
 
         Ok(return_type)
+    }
+}
+
+impl TypeOf for FCall {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        Ok(e_static!(StaticType::String(StringType())))
     }
 }

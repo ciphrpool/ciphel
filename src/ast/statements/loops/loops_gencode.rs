@@ -1,5 +1,5 @@
 use crate::ast::statements::block::block_gencode::inner_block_gencode;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
@@ -150,7 +150,7 @@ mod tests {
         },
         clear_stack,
         semantic::scope::{
-            scope_impl::Scope,
+            scope::Scope,
             static_types::{NumberType, PrimitiveType},
         },
         vm::vm::{DeserializeFrom, Runtime},

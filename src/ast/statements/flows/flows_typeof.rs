@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::EType;

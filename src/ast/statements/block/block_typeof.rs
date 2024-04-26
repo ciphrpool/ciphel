@@ -4,7 +4,7 @@ use super::Block;
 use crate::ast::statements::return_stat::Return;
 use crate::ast::statements::Statement;
 use crate::e_static;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
 
 use crate::semantic::scope::BuildStaticType;

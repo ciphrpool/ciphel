@@ -9,10 +9,10 @@ use crate::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, NumberType, PrimitiveType,
-    RangeType, SliceType, StaticType, TupleType, VecType,
+    AddrType, ChanType, ClosureType, FnType, MapType, NumberType, PrimitiveType, RangeType,
+    SliceType, StaticType, TupleType, VecType,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl BuildStaticType for StaticType {
     fn build_primitive(
@@ -212,63 +212,10 @@ impl BuildStaticType for StaticType {
         type_sig: &ast::types::MapType,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let key_type = {
-            match &type_sig.keys_type {
-                ast::types::KeyType::Primitive(value) => KeyType::Primitive(match value {
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::U8) => {
-                        PrimitiveType::Number(NumberType::U8)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::U16) => {
-                        PrimitiveType::Number(NumberType::U16)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::U32) => {
-                        PrimitiveType::Number(NumberType::U32)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::U64) => {
-                        PrimitiveType::Number(NumberType::U64)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::U128) => {
-                        PrimitiveType::Number(NumberType::U128)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::I8) => {
-                        PrimitiveType::Number(NumberType::I8)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::I16) => {
-                        PrimitiveType::Number(NumberType::I16)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::I32) => {
-                        PrimitiveType::Number(NumberType::I32)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::I64) => {
-                        PrimitiveType::Number(NumberType::I64)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::I128) => {
-                        PrimitiveType::Number(NumberType::I128)
-                    }
-                    ast::types::PrimitiveType::Number(ast::types::NumberType::F64) => {
-                        PrimitiveType::Number(NumberType::F64)
-                    }
-                    ast::types::PrimitiveType::Char => PrimitiveType::Char,
-                    ast::types::PrimitiveType::Bool => PrimitiveType::Bool,
-                }),
-                ast::types::KeyType::Address(value) => {
-                    let subtype = value.0.type_of(&scope)?;
-                    KeyType::Address(AddrType(Box::new(subtype)))
-                }
-                ast::types::KeyType::String(_) => KeyType::String(super::StringType()),
-                ast::types::KeyType::EnumID(value) => {
-                    let binding = scope.find_type(&value)?;
-                    let UserType::Enum(enum_type) = binding.as_ref() else {
-                        return Err(SemanticError::IncompatibleTypes);
-                    };
-                    KeyType::Enum(enum_type.clone())
-                }
-            }
-        };
-
-        let subtype = type_sig.type_of(&scope)?;
+        let key_type = type_sig.keys_type.type_of(&scope)?;
+        let subtype = type_sig.values_type.type_of(&scope)?;
         Ok(Self::Map(MapType {
-            keys_type: key_type,
+            keys_type: Box::new(key_type),
             values_type: Box::new(subtype),
         }))
     }
@@ -278,25 +225,9 @@ impl BuildStaticType for StaticType {
         value: &Either<UserType, Self>,
         scope: &Ref<Scope>,
     ) -> Result<Self, SemanticError> {
-        let key_type = {
-            match key {
-                Either::Static(value) => match value.as_ref() {
-                    StaticType::Primitive(value) => KeyType::Primitive(value.clone()),
-                    StaticType::String(_) => KeyType::String(super::StringType()),
-                    StaticType::Address(value) => KeyType::Address(value.clone()),
-                    _ => return Err(SemanticError::IncompatibleTypes),
-                },
-                Either::User(value) => match value.as_ref() {
-                    UserType::Enum(value) => KeyType::Enum(value.clone()),
-                    _ => return Err(SemanticError::IncompatibleTypes),
-                },
-            }
-        };
-
-        let subtype = value.type_of(&scope)?;
         Ok(Self::Map(MapType {
-            keys_type: key_type,
-            values_type: Box::new(subtype),
+            keys_type: Box::new(key.clone()),
+            values_type: Box::new(value.clone()),
         }))
     }
 
