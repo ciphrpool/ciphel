@@ -7,8 +7,7 @@ use crate::{
 };
 
 use super::{
-    AddrType, KeyType, NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
-    TupleType,
+    AddrType, NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType, TupleType,
 };
 
 impl GetSubTypes for StaticType {
@@ -56,12 +55,7 @@ impl GetSubTypes for StaticType {
 
     fn get_key(&self) -> Option<EType> {
         match self {
-            StaticType::Map(value) => match &value.keys_type {
-                KeyType::Primitive(value) => Some(e_static!(StaticType::Primitive(value.clone()))),
-                KeyType::Address(value) => Some(e_static!(StaticType::Address(value.clone()))),
-                KeyType::String(_) => Some(e_static!(StaticType::String(StringType()))),
-                KeyType::Enum(value) => Some(e_user!(UserType::Enum(value.clone()))),
-            },
+            StaticType::Map(value) => Some(value.keys_type.as_ref().clone()),
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_key(value),
             StaticType::Slice(_) => Some(p_num!(U64)),
             StaticType::Vec(_) => Some(p_num!(U64)),

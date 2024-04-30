@@ -4,7 +4,7 @@ use super::{
     AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
     StringType, TupleType, Type, VecType,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{self, StaticType};
 use crate::{e_static, e_user};
 
@@ -160,7 +160,7 @@ impl CompatibleWith for static_types::StringType {
         if let Either::Static(other_type) = other_type {
             match other_type.as_ref() {
                 StaticType::String(_) => Ok(()),
-                StaticType::StrSlice(_) => Ok(()),
+                // StaticType::StrSlice(_) => Ok(()),
                 _ => Err(SemanticError::IncompatibleTypes),
             }
         } else {
@@ -179,7 +179,7 @@ impl CompatibleWith for static_types::StrSliceType {
             if let StaticType::StrSlice(static_types::StrSliceType { size: other_size }) =
                 other_type.as_ref()
             {
-                return (other_size == &self.size)
+                return (other_size >= &self.size)
                     .then_some(())
                     .ok_or(SemanticError::IncompatibleTypes);
             } else {
@@ -475,22 +475,7 @@ impl CompatibleWith for static_types::MapType {
                 values_type: other_value,
             }) = other_type.as_ref()
             {
-                let other_key = match other_key {
-                    static_types::KeyType::Primitive(value) => {
-                        e_static!(StaticType::Primitive(value.clone()))
-                    }
-                    static_types::KeyType::Address(value) => {
-                        e_static!(StaticType::Address(value.clone()))
-                    }
-                    static_types::KeyType::String(_value) => {
-                        e_static!(StaticType::String(static_types::StringType()))
-                    }
-                    static_types::KeyType::Enum(value) => {
-                        e_user!(UserType::Enum(value.clone()))
-                    }
-                };
-
-                let _ = self.keys_type.compatible_with(&other_key, scope)?;
+                let _ = self.keys_type.compatible_with(other_key.as_ref(), scope)?;
 
                 let subtype = self.values_type.type_of(&scope)?;
                 let other_subtype = other_value.type_of(&scope)?;
@@ -500,19 +485,6 @@ impl CompatibleWith for static_types::MapType {
             }
         } else {
             return Err(SemanticError::IncompatibleTypes);
-        }
-    }
-}
-impl CompatibleWith for static_types::KeyType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        match self {
-            static_types::KeyType::Primitive(value) => value.compatible_with(other, scope),
-            static_types::KeyType::Address(value) => value.compatible_with(other, scope),
-            static_types::KeyType::String(value) => value.compatible_with(other, scope),
-            static_types::KeyType::Enum(value) => value.compatible_with(other, scope),
         }
     }
 }

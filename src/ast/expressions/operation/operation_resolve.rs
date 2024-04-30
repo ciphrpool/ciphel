@@ -8,7 +8,7 @@ use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
@@ -691,7 +691,7 @@ mod tests {
         },
         e_static, p_num,
         semantic::scope::{
-            scope_impl::Scope,
+            scope::Scope,
             static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
             var_impl::{Var, VarState},
         },

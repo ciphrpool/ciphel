@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{Assignation, Assignee};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl GenerateCode for Assignation {
     fn gencode(
@@ -45,8 +45,13 @@ impl GenerateCode for Assignee {
                 }
 
                 let _ = variable.locate(scope, instructions)?;
+                let is_utf8 = variable.is_utf8();
 
-                instructions.push(Casm::Mem(Mem::Take { size: var_size }))
+                if is_utf8 {
+                    instructions.push(Casm::Mem(Mem::TakeUTF8Char))
+                } else {
+                    instructions.push(Casm::Mem(Mem::Take { size: var_size }))
+                }
             }
             Assignee::PtrAccess(PtrAccess { value, metadata }) => {
                 let var_size = {
@@ -112,7 +117,7 @@ mod tests {
         clear_stack, compile_statement, e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{NumberType, PrimitiveType, SliceType, StaticType, TupleType},
                 user_type_impl::{self, UserType},
             },

@@ -17,8 +17,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, ClosureType, KeyType, MapType, NumberType, PrimitiveType, RangeType,
-    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, MapType, NumberType, PrimitiveType, RangeType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -32,6 +32,7 @@ impl TryParse for Type {
         alt((
             map(PrimitiveType::parse, |value| Type::Primitive(value)),
             map(SliceType::parse, |value| Type::Slice(value)),
+            map(StrSliceType::parse, |value| Type::StrSlice(value)),
             map(StringType::parse, |value| Type::String(value)),
             value(Type::Unit, wst(lexem::UUNIT)),
             value(Type::Any, wst(lexem::ANY)),
@@ -119,10 +120,10 @@ impl TryParse for StrSliceType {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                delimited(wst(lexem::SQ_BRA_O), parse_number, wst(lexem::SQ_BRA_C)),
                 wst(lexem::STR),
+                delimited(wst(lexem::LE), parse_number, wst(lexem::GE)),
             ),
-            |(size, _value)| StrSliceType {
+            |(_, size)| StrSliceType {
                 size: size as usize,
             },
         )(input)
@@ -290,32 +291,15 @@ impl TryParse for MapType {
                 wst(lexem::UMAP),
                 delimited(
                     wst(lexem::LESSER),
-                    separated_pair(KeyType::parse, wst(lexem::COMA), Type::parse),
+                    separated_pair(Type::parse, wst(lexem::COMA), Type::parse),
                     wst(lexem::GREATER),
                 ),
             ),
             |(keys, values)| MapType {
-                keys_type: keys,
+                keys_type: Box::new(keys),
                 values_type: Box::new(values),
             },
         )(input)
-    }
-}
-
-impl TryParse for KeyType {
-    /*
-     * @desc Parse Key Type
-     *
-     * @grammar
-     * Key := Primitive | Address | Slice
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PrimitiveType::parse, |value| KeyType::Primitive(value)),
-            map(StringType::parse, |value| KeyType::String(value)),
-            map(AddrType::parse, |value| KeyType::Address(value)),
-            map(parse_id, |value| KeyType::EnumID(value)),
-        ))(input)
     }
 }
 
@@ -349,7 +333,7 @@ mod tests {
 
     #[test]
     fn valid_string() {
-        let res = StringType::parse("string".into());
+        let res = StringType::parse("String".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(StringType(), value);
@@ -465,12 +449,12 @@ mod tests {
 
     #[test]
     fn valid_map_type() {
-        let res = MapType::parse("Map<string,bool>".into());
+        let res = MapType::parse("Map<String,bool>".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             MapType {
-                keys_type: KeyType::String(StringType()),
+                keys_type: Box::new(Type::String(StringType())),
                 values_type: Box::new(Type::Primitive(PrimitiveType::Bool))
             },
             value

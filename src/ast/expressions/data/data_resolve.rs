@@ -1,11 +1,11 @@
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    MultiData, NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
-    VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, MultiData,
+    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
+    Variable, Vector,
 };
 use crate::ast::expressions::Atomic;
-use crate::semantic::scope::scope_impl::Scope;
-use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType};
+use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, StrSliceType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
@@ -431,9 +431,19 @@ impl Resolve for StrSlice {
         Self: Sized,
     {
         match context {
-            Some(context_type) => {
-                let _ = context_type.compatible_with(self, &scope.borrow())?;
-            }
+            Some(context_type) => match context_type {
+                Either::Static(value) => match value.as_ref() {
+                    StaticType::StrSlice(StrSliceType { size }) => {
+                        if *size < self.value.len() {
+                            return Err(SemanticError::IncompatibleTypes);
+                        } else if *size >= self.value.len() {
+                            self.padding.set(*size - self.value.len());
+                        }
+                    }
+                    _ => return Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+            },
             None => {}
         }
         resolve_metadata!(self.metadata, self, scope, context);
@@ -911,27 +921,6 @@ impl Resolve for Map {
         Ok(())
     }
 }
-impl Resolve for KeyData {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            KeyData::Address(value) => value.resolve(scope, context, extra),
-            KeyData::Enum(value) => value.resolve(scope, context, extra),
-            KeyData::Primitive(value) => value.resolve(scope, context, extra),
-            KeyData::StrSlice(value) => value.resolve(scope, context, extra),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -944,10 +933,10 @@ mod tests {
         ast::{statements, TryParse},
         p_num,
         semantic::scope::{
-            scope_impl::Scope,
+            scope::Scope,
             static_types::{
-                AddrType, ChanType, KeyType, MapType, NumberType, PrimitiveType, SliceType,
-                StaticType, StrSliceType, StringType, TupleType, VecType,
+                AddrType, ChanType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+                StrSliceType, StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},
             var_impl::Var,
@@ -1176,7 +1165,7 @@ mod tests {
                 id: "x".into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
-                        keys_type: KeyType::String(StringType()),
+                        keys_type: Box::new(e_static!(StaticType::String(StringType()))),
                         values_type: Box::new(p_num!(I64)),
                     })
                     .into(),
@@ -1321,7 +1310,9 @@ mod tests {
 
     #[test]
     fn valid_map() {
-        let map = Map::parse(r##"map{"x":2,"y":6}"##.into()).unwrap().1;
+        let map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = map.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
@@ -1330,7 +1321,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::Map(MapType {
-                    keys_type: KeyType::String(StringType()),
+                    keys_type: Box::new(e_static!(StaticType::String(StringType()))),
                     values_type: Box::new(p_num!(I64)),
                 })
                 .into(),
@@ -1349,7 +1340,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::Map(MapType {
-                    keys_type: KeyType::String(StringType()),
+                    keys_type: Box::new(e_static!(StaticType::String(StringType()))),
                     values_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
@@ -1364,7 +1355,7 @@ mod tests {
             &scope,
             &Some(Either::Static(
                 StaticType::Map(MapType {
-                    keys_type: KeyType::Primitive(PrimitiveType::Number(NumberType::I64)),
+                    keys_type: Box::new(p_num!(I64)),
                     values_type: Box::new(p_num!(I64)),
                 })
                 .into(),

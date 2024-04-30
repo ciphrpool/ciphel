@@ -1,14 +1,13 @@
 use std::cell::Ref;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, KeyData, ListAccess, Map,
-    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess,
+    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
 use crate::e_static;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
 
 use crate::semantic::scope::BuildStaticType;
@@ -225,7 +224,7 @@ impl TypeOf for StrSlice {
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.len(),
+                size: self.value.len() + self.padding.get(),
             },
             scope,
         )
@@ -372,20 +371,5 @@ impl TypeOf for Map {
         let value_type = value.type_of(&scope)?;
 
         StaticType::build_map_from(&key_type, &value_type, scope).map(|value| e_static!(value))
-    }
-}
-impl TypeOf for KeyData {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match self {
-            KeyData::Address(value) => value.type_of(&scope),
-            KeyData::Enum(value) => value.type_of(&scope),
-            KeyData::Primitive(value) => value.type_of(&scope),
-            KeyData::StrSlice(_value) => Ok(Either::Static(
-                StaticType::String(crate::semantic::scope::static_types::StringType()).into(),
-            )),
-        }
     }
 }

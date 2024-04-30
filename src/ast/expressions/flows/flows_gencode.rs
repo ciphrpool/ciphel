@@ -2,7 +2,11 @@ use num_traits::ToBytes;
 
 use ulid::Ulid;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
+use crate::vm::casm::data;
+use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
+use crate::vm::platform::stdlib::StdCasm;
+use crate::vm::platform::LibCasm;
 use crate::{
     ast::expressions::data::{Number, Primitive},
     semantic::{
@@ -26,7 +30,7 @@ use crate::{
     },
 };
 
-use super::{ExprFlow, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use super::{ExprFlow, FCall, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
 impl GenerateCode for ExprFlow {
     fn gencode(
@@ -49,6 +53,7 @@ impl GenerateCode for ExprFlow {
                 }));
                 Ok(())
             }
+            ExprFlow::FCall(value) => value.gencode(scope, instructions),
         }
     }
 }
@@ -325,7 +330,36 @@ impl GenerateCode for TryExpr {
         todo!()
     }
 }
-
+impl GenerateCode for FCall {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        for item in &self.value {
+            match item {
+                super::FormatItem::Str(string) => {
+                    let str_bytes: Box<[u8]> = string.as_bytes().into();
+                    let size = (&str_bytes).len() as u64;
+                    instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
+                    instructions.push(Casm::Data(data::Data::Serialized {
+                        data: size.to_le_bytes().into(),
+                    }));
+                    instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
+                        StringsCasm::ToStr(ToStrCasm::ToStrStrSlice),
+                    ))));
+                }
+                super::FormatItem::Expr(expr) => {
+                    let _ = expr.gencode(scope, instructions)?;
+                }
+            }
+        }
+        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
+            StringsCasm::Join(JoinCasm::NoSepFromSlice(Some(self.value.len()))),
+        ))));
+        Ok(())
+    }
+}
 impl GenerateCode for FnCall {
     fn gencode(
         &self,
@@ -477,7 +511,7 @@ mod tests {
         clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
                 user_type_impl::{self, UserType},
             },

@@ -37,7 +37,7 @@ pub const I128: &str = "i128";
 
 pub const FLOAT: &str = "f64";
 pub const CHAR: &str = "char";
-pub const STRING: &str = "string";
+pub const STRING: &str = "String";
 pub const STR: &str = "str";
 pub const BOOL: &str = "bool";
 pub const UNIT: &str = "unit";

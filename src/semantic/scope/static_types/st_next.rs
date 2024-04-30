@@ -12,8 +12,8 @@ use crate::{
             locate::{Locate, LocateNextUTF8Char},
             mem::Mem,
             operation::{
-                Addition, Greater, Less, LessEqual, Mult, OpPrimitive, Operation, OperationKind,
-                Substraction,
+                Addition, Equal, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
+                OperationKind, Substraction,
             },
             Casm, CasmProgram,
         },
@@ -279,6 +279,16 @@ impl NextItem for StringType {
 
         instructions.push(Casm::Mem(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
+        instructions.push(Casm::Mem(Mem::Dup(4)));
+        instructions.push(Casm::Data(Data::Serialized {
+            data: [0; 4].into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::NotEqual(NotEqual { left: 4, right: 4 }),
+        }));
+        instructions.push(Casm::If(BranchIf {
+            else_label: end_label,
+        }));
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }
@@ -343,6 +353,16 @@ impl NextItem for StrSliceType {
 
         instructions.push(Casm::Mem(Mem::Dup(8)));
         instructions.push(Casm::Access(Access::RuntimeCharUTF8));
+        instructions.push(Casm::Mem(Mem::Dup(4)));
+        instructions.push(Casm::Data(Data::Serialized {
+            data: [0; 4].into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::NotEqual(NotEqual { left: 4, right: 4 }),
+        }));
+        instructions.push(Casm::If(BranchIf {
+            else_label: end_label,
+        }));
         /* STACK : UPPER | INDEX (8) | CHAR (4) */
         Ok(())
     }

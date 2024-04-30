@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType, VecType};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl OperandMerging for StaticType {
     fn can_substract(&self) -> Result<(), SemanticError> {

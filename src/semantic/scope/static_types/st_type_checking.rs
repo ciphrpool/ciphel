@@ -1,7 +1,4 @@
-use crate::semantic::{
-    scope::{type_traits::TypeChecking},
-    EType,
-};
+use crate::semantic::{scope::type_traits::TypeChecking, EType};
 
 use super::{AddrType, NumberType, PrimitiveType, StaticType};
 
@@ -19,7 +16,7 @@ impl TypeChecking for StaticType {
             StaticType::Any => false,
             StaticType::Error => false,
             StaticType::Address(AddrType(value)) => <EType as TypeChecking>::is_iterable(value),
-            StaticType::Map(_) => true,
+            StaticType::Map(_) => false,
             StaticType::String(_) => true,
             StaticType::StrSlice(_) => true,
             StaticType::Range(_) => true,
@@ -133,6 +130,13 @@ impl TypeChecking for StaticType {
     fn is_map(&self) -> bool {
         match self {
             StaticType::Map(_) => true,
+            _ => false,
+        }
+    }
+
+    fn is_string(&self) -> bool {
+        match self {
+            StaticType::String(_) => true,
             _ => false,
         }
     }

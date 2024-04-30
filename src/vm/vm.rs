@@ -1,6 +1,6 @@
 use ulid::Ulid;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::MutRc;
 
 use super::{

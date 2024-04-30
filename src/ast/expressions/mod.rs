@@ -4,7 +4,7 @@ use std::{
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{
         expressions::operation::LogicalOr,

@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{semantic::scope::scope_impl::Scope, vm::casm};
+use crate::{semantic::scope::scope::Scope, vm::casm};
 use ulid::Ulid;
 
 use crate::{

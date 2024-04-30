@@ -1,5 +1,5 @@
 use super::{ForItem, ForIterator, ForLoop, Loop, WhileLoop};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
@@ -153,7 +153,7 @@ mod tests {
         p_num,
         semantic::{
             scope::{
-                scope_impl,
+                scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
                 var_impl::Var,
             },
@@ -175,7 +175,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -198,7 +198,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -224,7 +224,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -250,7 +250,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -276,7 +276,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -299,7 +299,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -335,7 +335,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -361,7 +361,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {
@@ -387,7 +387,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_var(Var {

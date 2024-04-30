@@ -1,17 +1,15 @@
 use std::{cell::Ref, cmp::max};
 
-
-
 use crate::{
     e_static,
     semantic::{scope::user_type_impl::UserType, EType, Either, MergeType, SemanticError, TypeOf},
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
+    AddrType, ChanType, ClosureType, FnType, MapType, PrimitiveType, RangeType, SliceType,
     StaticType, StrSliceType, StringType, TupleType, VecType,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl MergeType for StaticType {
     fn merge<Other>(
@@ -352,48 +350,17 @@ impl MergeType for MapType {
             return Err(SemanticError::IncompatibleTypes);
         };
 
-        let merged_key = self.keys_type.merge_key(&other_type.keys_type, scope)?;
+        let merged_key = self.keys_type.merge(other_type.keys_type.as_ref(), scope)?;
 
         let merged_value = self
             .values_type
             .merge(other_type.values_type.as_ref(), scope)?;
         Ok(Either::Static(
             StaticType::Map(MapType {
-                keys_type: merged_key,
+                keys_type: Box::new(merged_key),
                 values_type: Box::new(merged_value),
             })
             .into(),
         ))
-    }
-}
-
-impl KeyType {
-    fn merge_key(&self, other: &KeyType, scope: &Ref<Scope>) -> Result<KeyType, SemanticError> {
-        match (self, other) {
-            (KeyType::Primitive(value), KeyType::Primitive(other_value)) => {
-                match (value, other_value) {
-                    (PrimitiveType::Number(left), PrimitiveType::Number(right)) => (left == right)
-                        .then_some(KeyType::Primitive(PrimitiveType::Number(*left)))
-                        .ok_or(SemanticError::IncompatibleTypes),
-                    (PrimitiveType::Char, PrimitiveType::Char) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Char))
-                    }
-                    (PrimitiveType::Bool, PrimitiveType::Bool) => {
-                        Ok(KeyType::Primitive(PrimitiveType::Bool))
-                    }
-                    _ => Err(SemanticError::IncompatibleTypes),
-                }
-            }
-            (KeyType::Address(value), KeyType::Address(other_value)) => {
-                let merged = value.0.merge(other_value.0.as_ref(), scope)?;
-                Ok(KeyType::Address(AddrType(Box::new(merged))))
-            }
-            (KeyType::String(_), KeyType::String(_)) => Ok(KeyType::String(StringType())),
-            (KeyType::Enum(value), KeyType::Enum(other_value)) => {
-                let merged = value.merge(other_value)?;
-                Ok(KeyType::Enum(merged))
-            }
-            _ => Err(SemanticError::IncompatibleTypes),
-        }
     }
 }

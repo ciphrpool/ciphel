@@ -3,7 +3,16 @@ use std::{
     vec,
 };
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::{
+    semantic::scope::{
+        scope::Scope,
+        static_types::{MapType, SliceType, TupleType},
+        type_traits::TypeChecking,
+    },
+    vm::platform::core::alloc::map_impl::{
+        bucket_idx, bucket_layout, hash_of, map_layout, top_hash,
+    },
+};
 
 use num_traits::ToBytes;
 
@@ -32,6 +41,8 @@ use crate::{
     },
 };
 
+use self::map_impl::{over_load_factor, MapLayout, MAP_BUCKET_SIZE};
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum AppendKind {
     Vec,
@@ -41,8 +52,17 @@ pub enum AppendKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+pub enum ExtendKind {
+    VecFromSlice(usize),
+    VecFromVec,
+    StringFromSlice(usize),
+    StringFromVec,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum DeleteKind {
     Vec,
+    Map(DerefHashing),
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -58,13 +78,31 @@ pub enum AllocFn {
         item_size: Cell<usize>,
         append_kind: Cell<AppendKind>,
     },
-    Insert,
-    Delete {
+    Extend {
         item_size: Cell<usize>,
+        extend_kind: Cell<ExtendKind>,
+    },
+    Insert {
+        key_size: Cell<usize>,
+        value_size: Cell<usize>,
+        ref_access: Cell<DerefHashing>,
+    },
+    Get {
+        key_size: Cell<usize>,
+        value_size: Cell<usize>,
+        ref_access: Cell<DerefHashing>,
+        metadata: Metadata,
+    },
+    Delete {
+        key_size: Cell<usize>,
+        value_size: Cell<usize>,
         delete_kind: Cell<DeleteKind>,
+        metadata: Metadata,
     },
     Len,
-    Cap,
+    Cap {
+        for_map: Cell<bool>,
+    },
     Free,
     Alloc,
     Vec {
@@ -72,7 +110,12 @@ pub enum AllocFn {
         item_size: Cell<usize>,
         metadata: Metadata,
     },
-    Map,
+    Map {
+        with_capacity: Cell<bool>,
+        value_size: Cell<usize>,
+        key_size: Cell<usize>,
+        metadata: Metadata,
+    },
     Chan,
     String {
         len: Cell<usize>,
@@ -89,6 +132,12 @@ pub enum AllocFn {
         clear_kind: Cell<ClearKind>,
     },
 }
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum DerefHashing {
+    Vec(usize),
+    String,
+    Default,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocCasm {
@@ -96,8 +145,35 @@ pub enum AllocCasm {
     AppendItem(usize),
     AppendStrSlice(usize),
     AppendString,
-    Insert,
+
+    ExtendItemFromSlice {
+        size: usize,
+        len: usize,
+    },
+    ExtendItemFromVec {
+        size: usize,
+    },
+    ExtendStringFromSlice {
+        len: usize,
+    },
+    ExtendStringFromVec,
+
+    Insert {
+        ref_access: DerefHashing,
+        key_size: usize,
+        value_size: usize,
+    },
+    Get {
+        ref_access: DerefHashing,
+        key_size: usize,
+        value_size: usize,
+    },
     DeleteVec(usize),
+    DeleteMapKey {
+        ref_access: DerefHashing,
+        key_size: usize,
+        value_size: usize,
+    },
 
     ClearVec(usize),
     ClearString(usize),
@@ -105,11 +181,21 @@ pub enum AllocCasm {
 
     Len,
     Cap,
+    CapMap,
     Vec {
         item_size: usize,
-        with_capacity: bool,
     },
-    Map,
+    VecWithCapacity {
+        item_size: usize,
+    },
+    Map {
+        key_size: usize,
+        value_size: usize,
+    },
+    MapWithCapacity {
+        key_size: usize,
+        value_size: usize,
+    },
     Chan,
     StringFromSlice,
     StringFromChar,
@@ -131,20 +217,43 @@ impl AllocFn {
                 item_size: Cell::new(0),
                 append_kind: Cell::new(AppendKind::Vec),
             }),
-            lexem::INSERT => Some(AllocFn::Insert),
-            lexem::DELETE => Some(AllocFn::Delete {
+            lexem::EXTEND => Some(AllocFn::Extend {
                 item_size: Cell::new(0),
+                extend_kind: Cell::new(ExtendKind::VecFromVec),
+            }),
+            lexem::INSERT => Some(AllocFn::Insert {
+                key_size: Cell::new(0),
+                value_size: Cell::new(0),
+                ref_access: Cell::new(DerefHashing::Default),
+            }),
+            lexem::GET => Some(AllocFn::Get {
+                key_size: Cell::new(0),
+                value_size: Cell::new(0),
+                metadata: Metadata::default(),
+                ref_access: Cell::new(DerefHashing::Default),
+            }),
+            lexem::DELETE => Some(AllocFn::Delete {
+                key_size: Cell::new(0),
+                value_size: Cell::new(0),
                 delete_kind: Cell::new(DeleteKind::Vec),
+                metadata: Metadata::default(),
             }),
             lexem::LEN => Some(AllocFn::Len),
-            lexem::CAP => Some(AllocFn::Cap),
+            lexem::CAP => Some(AllocFn::Cap {
+                for_map: Cell::new(false),
+            }),
             lexem::FREE => Some(AllocFn::Free),
             lexem::VEC => Some(AllocFn::Vec {
                 with_capacity: Cell::new(false),
                 item_size: Cell::new(0),
                 metadata: Metadata::default(),
             }),
-            lexem::MAP => Some(AllocFn::Map),
+            lexem::MAP => Some(AllocFn::Map {
+                with_capacity: Cell::new(false),
+                key_size: Cell::new(0),
+                value_size: Cell::new(0),
+                metadata: Metadata::default(),
+            }),
             lexem::CHAN => Some(AllocFn::Chan),
             lexem::STRING => Some(AllocFn::String {
                 len: Cell::new(0),
@@ -232,10 +341,202 @@ impl Resolve for AllocFn {
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
             }
-            AllocFn::Insert => todo!(),
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => {
+                if extra.len() != 2 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let vector = &extra[0];
+                let items = &extra[1];
+
+                let _ = vector.resolve(scope, &None, &())?;
+                let mut vector_type = vector.type_of(&scope.borrow())?;
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+                match &vector_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Vec(_) => {
+                            let _ = items.resolve(scope, &None, &())?;
+                            let items_type = items.type_of(&scope.borrow())?;
+
+                            match items_type {
+                                Either::Static(value) => match value.as_ref() {
+                                    StaticType::Slice(SliceType {
+                                        size: len,
+                                        item_type,
+                                    }) => {
+                                        extend_kind.set(ExtendKind::VecFromSlice(*len));
+
+                                        item_size.set(item_type.size_of());
+                                        Ok(())
+                                    }
+                                    StaticType::Vec(VecType(item_type)) => {
+                                        extend_kind.set(ExtendKind::VecFromVec);
+                                        item_size.set(item_type.size_of());
+                                        Ok(())
+                                    }
+                                    _ => return Err(SemanticError::IncorrectArguments),
+                                },
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            }
+                        }
+                        StaticType::String(_) => {
+                            let _ = items.resolve(scope, &None, &())?;
+                            let items_type = items.type_of(&scope.borrow())?;
+
+                            match items_type {
+                                Either::Static(value) => match value.as_ref() {
+                                    StaticType::Slice(SliceType {
+                                        size: len,
+                                        item_type,
+                                    }) => {
+                                        if !item_type.is_string() {
+                                            return Err(SemanticError::IncorrectArguments);
+                                        }
+                                        extend_kind.set(ExtendKind::StringFromSlice(*len));
+                                        Ok(())
+                                    }
+                                    StaticType::Vec(VecType(item_type)) => {
+                                        if !item_type.is_string() {
+                                            return Err(SemanticError::IncorrectArguments);
+                                        }
+                                        extend_kind.set(ExtendKind::StringFromVec);
+                                        Ok(())
+                                    }
+                                    _ => return Err(SemanticError::IncorrectArguments),
+                                },
+                                _ => return Err(SemanticError::IncorrectArguments),
+                            }
+                        }
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+            }
+            AllocFn::Insert {
+                key_size,
+                value_size,
+                ref_access,
+            } => {
+                if extra.len() != 3 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let map = &extra[0];
+                let key = &extra[1];
+                let item = &extra[2];
+
+                let _ = map.resolve(scope, &None, &())?;
+                let mut map_type = map.type_of(&scope.borrow())?;
+                match &map_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+
+                match &map_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Map(MapType {
+                            keys_type,
+                            values_type,
+                        }) => {
+                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            let _ =
+                                item.resolve(scope, &Some(values_type.as_ref().clone()), &())?;
+
+                            match keys_type.as_ref() {
+                                Either::Static(tmp) => match tmp.as_ref() {
+                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::Vec(VecType(item_subtype)) => {
+                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                    }
+                                    _ => {}
+                                },
+                                Either::User(_) => {}
+                            }
+                            value_size.set(values_type.size_of());
+                            key_size.set(keys_type.size_of());
+                            Ok(())
+                        }
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+            }
+            AllocFn::Get {
+                key_size,
+                value_size,
+                ref_access,
+                metadata,
+            } => {
+                if extra.len() != 2 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+
+                let map = &extra[0];
+                let key = &extra[1];
+
+                let _ = map.resolve(scope, &None, &())?;
+                let mut map_type = map.type_of(&scope.borrow())?;
+                match &map_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+
+                match &map_type {
+                    Either::Static(value) => match value.as_ref() {
+                        StaticType::Map(MapType {
+                            keys_type,
+                            values_type,
+                        }) => {
+                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            value_size.set(values_type.size_of());
+                            key_size.set(keys_type.size_of());
+
+                            match keys_type.as_ref() {
+                                Either::Static(tmp) => match tmp.as_ref() {
+                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::Vec(VecType(item_subtype)) => {
+                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                    }
+                                    _ => {}
+                                },
+                                Either::User(_) => {}
+                            }
+                            let mut borrowed_metadata = metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(values_type.as_ref().clone()),
+                            };
+                            Ok(())
+                        }
+                        _ => return Err(SemanticError::IncorrectArguments),
+                    },
+                    _ => return Err(SemanticError::IncorrectArguments),
+                }
+            }
             AllocFn::Delete {
                 delete_kind,
-                item_size,
+                key_size,
+                metadata,
+                value_size,
             } => {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
@@ -273,11 +574,51 @@ impl Resolve for AllocFn {
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
-                            item_size.set(item_type.size_of());
+                            value_size.set(item_type.size_of());
+                            let mut borrowed_metadata = metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(item_type),
+                            };
                             Ok(())
                         }
-                        StaticType::Map(_) => {
-                            todo!();
+                        StaticType::Map(MapType {
+                            keys_type,
+                            values_type,
+                        }) => {
+                            match keys_type.as_ref() {
+                                Either::Static(tmp) => match tmp.as_ref() {
+                                    StaticType::String(_) => {
+                                        delete_kind.set(DeleteKind::Map(DerefHashing::String))
+                                    }
+                                    StaticType::Vec(VecType(item_subtype)) => delete_kind.set(
+                                        DeleteKind::Map(DerefHashing::Vec(item_subtype.size_of())),
+                                    ),
+                                    _ => {
+                                        delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                    }
+                                },
+                                Either::User(_) => {
+                                    delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                }
+                            }
+
+                            let _ = index.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            value_size.set(values_type.size_of());
+                            key_size.set(keys_type.size_of());
+                            let mut borrowed_metadata = metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(values_type.as_ref().clone()),
+                            };
                             Ok(())
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -308,11 +649,13 @@ impl Resolve for AllocFn {
                 item_size,
                 metadata,
             } => {
-                if extra.len() > 2 || extra.len() < 1 {
+                if extra.len() > 2 || extra.len() == 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 if extra.len() == 2 {
                     with_capacity.set(true);
+                } else {
+                    with_capacity.set(false);
                 }
                 for param in extra {
                     let _ = param.resolve(scope, &Some(p_num!(U64)), &())?;
@@ -341,7 +684,53 @@ impl Resolve for AllocFn {
                 };
                 Ok(())
             }
-            AllocFn::Map => todo!(),
+            AllocFn::Map {
+                with_capacity,
+                value_size,
+                key_size,
+                metadata,
+            } => {
+                if extra.len() > 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                if extra.len() == 1 {
+                    with_capacity.set(true);
+                } else {
+                    with_capacity.set(false);
+                }
+                for param in extra {
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &())?;
+                }
+                if context.is_none() {
+                    return Err(SemanticError::CantInferType);
+                }
+                match &context {
+                    Some(value) => match value {
+                        Either::Static(value) => match value.as_ref() {
+                            StaticType::Map(MapType {
+                                keys_type,
+                                values_type,
+                            }) => {
+                                value_size.set(values_type.size_of());
+                                key_size.set(keys_type.size_of());
+                            }
+                            _ => return Err(SemanticError::IncompatibleTypes),
+                        },
+                        Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+                    },
+                    None => unreachable!(),
+                }
+                let mut borrowed_metadata = metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: context.clone(),
+                    signature: context.clone(),
+                };
+                Ok(())
+            }
             AllocFn::Chan => todo!(),
             AllocFn::String { len, from_char } => {
                 if extra.len() != 1 {
@@ -406,7 +795,7 @@ impl Resolve for AllocFn {
                 }
                 Ok(())
             }
-            AllocFn::Cap => {
+            AllocFn::Cap { for_map } => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
@@ -414,11 +803,14 @@ impl Resolve for AllocFn {
 
                 let _ = address.resolve(scope, &None, &())?;
                 let address_type = address.type_of(&scope.borrow())?;
+                for_map.set(false);
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
-                        StaticType::Map(_) => {}
+                        StaticType::Map(_) => {
+                            for_map.set(true);
+                        }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
@@ -541,21 +933,44 @@ impl TypeOf for AllocFn {
     {
         match self {
             AllocFn::Append { .. } => Ok(e_static!(StaticType::Unit)),
-            AllocFn::Insert => todo!(),
-            AllocFn::Delete { .. } => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Insert { .. } => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Get { metadata, .. } => metadata
+                .signature()
+                .ok_or(SemanticError::NotResolvedYet)
+                .map(|value| {
+                    e_static!(StaticType::Tuple(TupleType(vec![
+                        value,
+                        e_static!(StaticType::Error)
+                    ])))
+                }),
+            AllocFn::Delete { metadata, .. } => metadata
+                .signature()
+                .ok_or(SemanticError::NotResolvedYet)
+                .map(|value| {
+                    e_static!(StaticType::Tuple(TupleType(vec![
+                        value,
+                        e_static!(StaticType::Error)
+                    ])))
+                }),
             AllocFn::Free => Ok(e_static!(StaticType::Unit)),
             AllocFn::Vec { metadata, .. } => {
                 metadata.signature().ok_or(SemanticError::NotResolvedYet)
             }
-            AllocFn::Map => todo!(),
+            AllocFn::Map { metadata, .. } => {
+                metadata.signature().ok_or(SemanticError::NotResolvedYet)
+            }
             AllocFn::Chan => todo!(),
             AllocFn::String { .. } => Ok(e_static!(StaticType::String(StringType()))),
             AllocFn::Alloc => Ok(e_static!(StaticType::Any)),
             AllocFn::Len => Ok(p_num!(U64)),
-            AllocFn::Cap => Ok(p_num!(U64)),
+            AllocFn::Cap { .. } => Ok(p_num!(U64)),
             AllocFn::SizeOf { .. } => Ok(p_num!(U64)),
             AllocFn::MemCopy => Ok(e_static!(StaticType::Unit)),
             AllocFn::Clear { .. } => Ok(e_static!(StaticType::Unit)),
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => Ok(e_static!(StaticType::Unit)),
         }
     }
 }
@@ -584,13 +999,68 @@ impl GenerateCode for AllocFn {
                     super::CoreCasm::Alloc(AllocCasm::AppendString),
                 ))),
             },
-            AllocFn::Insert => todo!(),
+            AllocFn::Extend {
+                item_size,
+                extend_kind,
+            } => match extend_kind.get() {
+                ExtendKind::VecFromSlice(len) => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromSlice {
+                        len,
+                        size: item_size.get(),
+                    }),
+                ))),
+                ExtendKind::VecFromVec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec {
+                        size: item_size.get(),
+                    }),
+                ))),
+                ExtendKind::StringFromSlice(len) => {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::ExtendStringFromSlice { len },
+                    ))))
+                }
+                ExtendKind::StringFromVec => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::ExtendStringFromVec),
+                ))),
+            },
+            AllocFn::Insert {
+                key_size,
+                value_size,
+                ref_access,
+            } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                AllocCasm::Insert {
+                    key_size: key_size.get(),
+                    value_size: value_size.get(),
+                    ref_access: ref_access.get(),
+                },
+            )))),
+            AllocFn::Get {
+                key_size,
+                value_size,
+                ref_access,
+                ..
+            } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                AllocCasm::Get {
+                    key_size: key_size.get(),
+                    value_size: value_size.get(),
+                    ref_access: ref_access.get(),
+                },
+            )))),
             AllocFn::Delete {
                 delete_kind,
-                item_size,
+                value_size,
+                key_size,
+                ..
             } => match delete_kind.get() {
                 DeleteKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(value_size.get())),
+                ))),
+                DeleteKind::Map(ref_access) => instructions.push(Casm::Platform(LibCasm::Core(
+                    super::CoreCasm::Alloc(AllocCasm::DeleteMapKey {
+                        key_size: key_size.get(),
+                        value_size: value_size.get(),
+                        ref_access,
+                    }),
                 ))),
             },
             AllocFn::Free => {
@@ -601,15 +1071,45 @@ impl GenerateCode for AllocFn {
                 with_capacity,
                 item_size,
                 ..
-            } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
-                AllocCasm::Vec {
-                    item_size: item_size.get(),
-                    with_capacity: with_capacity.get(),
-                },
-            )))),
-            AllocFn::Map => todo!(),
+            } => {
+                if with_capacity.get() {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::VecWithCapacity {
+                            item_size: item_size.get(),
+                        },
+                    ))))
+                } else {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::Vec {
+                            item_size: item_size.get(),
+                        },
+                    ))))
+                }
+            }
+            AllocFn::Map {
+                with_capacity,
+                value_size,
+                key_size,
+                ..
+            } => {
+                if with_capacity.get() {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::MapWithCapacity {
+                            key_size: key_size.get(),
+                            value_size: value_size.get(),
+                        },
+                    ))))
+                } else {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::Map {
+                            key_size: key_size.get(),
+                            value_size: value_size.get(),
+                        },
+                    ))))
+                }
+            }
             AllocFn::Chan => todo!(),
-            AllocFn::String { from_char, len } => {
+            AllocFn::String { from_char, .. } => {
                 if from_char.get() {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::StringFromChar,
@@ -626,9 +1126,17 @@ impl GenerateCode for AllocFn {
             AllocFn::Len => instructions.push(Casm::Platform(LibCasm::Core(
                 super::CoreCasm::Alloc(AllocCasm::Len),
             ))),
-            AllocFn::Cap => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Cap),
-            ))),
+            AllocFn::Cap { for_map } => {
+                if for_map.get() {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::CapMap,
+                    ))))
+                } else {
+                    instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
+                        AllocCasm::Cap,
+                    ))))
+                }
+            }
             AllocFn::SizeOf { size } => {
                 instructions.push(Casm::Pop(size.get()));
                 instructions.push(Casm::Data(Data::Serialized {
@@ -652,6 +1160,704 @@ impl GenerateCode for AllocFn {
             },
         }
         Ok(())
+    }
+}
+
+mod map_impl {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    use num_traits::ToBytes;
+    use rand::Rng;
+
+    use crate::vm::{
+        allocator::heap::{HeapError, HEAP_SIZE},
+        scheduler::Thread,
+        vm::RuntimeError,
+    };
+
+    use super::DerefHashing;
+
+    pub const MAP_BUCKET_SIZE: usize = 8;
+    pub const MAP_LAYOUT_SIZE: usize = 21;
+    enum TopHashValue {
+        RestIsEmpty = 0,
+        EmptyCell = 1,
+        MIN = 2,
+    }
+
+    /*
+        MAP ALLOCATION LAYOUT:
+            len : u64,
+            log_cap : u8, // (called B in go) log_2 of number of buckets
+            hash_seed : u32,
+            ptr_buckets : u64,
+
+        total size : 8 + 1 + 4 + 8 = 21, align to :
+    */
+    #[derive(Debug)]
+    pub struct MapLayout {
+        pub ptr_map_layout: u64,
+        pub bucket_size: usize,
+        pub key_size: usize,
+        pub value_size: usize,
+        pub len: u64,
+        pub log_cap: u8, // (called B in go) log_2 of number of buckets
+        pub hash_seed: u32,
+        pub ptr_buckets: u64,
+    }
+    #[derive(Debug)]
+    pub struct BucketLayout {
+        pub ptr_top_hash: u64,
+        pub keys_top_hash: [u8; MAP_BUCKET_SIZE],
+        pub ptr_keys: u64,
+        pub key_size: usize,
+        pub ptr_values: u64,
+        pub value_size: usize,
+    }
+
+    impl BucketLayout {
+        pub fn assign(
+            &self,
+            top_hash: u8,
+            key: &[u8],
+            ref_access: DerefHashing,
+            thread: &Thread,
+        ) -> Result<Option<(u64, u64, u64, bool)>, RuntimeError> {
+            let mut indexes = None;
+            let mut first_empty_cell = None;
+            for (idx, self_top_hash) in self.keys_top_hash.iter().enumerate() {
+                if *self_top_hash == TopHashValue::EmptyCell as u8 {
+                    if first_empty_cell.is_none() {
+                        first_empty_cell = Some(idx);
+                    }
+                    continue;
+                }
+                if *self_top_hash == top_hash {
+                    // Read key
+                    let found_key = thread
+                        .runtime
+                        .heap
+                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
+                        .map_err(|e| e.into())?;
+                    match ref_access {
+                        DerefHashing::Vec(item_size) => {
+                            // found_key is a pointer to a vec
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                indexes = Some((
+                                    self.ptr_top_hash + idx as u64,
+                                    self.ptr_keys + (idx * self.key_size) as u64,
+                                    self.ptr_values + (idx * self.value_size) as u64,
+                                    false,
+                                ))
+                            }
+                        }
+                        DerefHashing::String => {
+                            // found_key is a pointer to a string
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                indexes = Some((
+                                    self.ptr_top_hash + idx as u64,
+                                    self.ptr_keys + (idx * self.key_size) as u64,
+                                    self.ptr_values + (idx * self.value_size) as u64,
+                                    false,
+                                ))
+                            }
+                        }
+                        DerefHashing::Default => {
+                            if found_key.as_slice() == key {
+                                indexes = Some((
+                                    self.ptr_top_hash + idx as u64,
+                                    self.ptr_keys + (idx * self.key_size) as u64,
+                                    self.ptr_values + (idx * self.value_size) as u64,
+                                    false,
+                                ))
+                            }
+                        }
+                    }
+                }
+                if *self_top_hash == TopHashValue::RestIsEmpty as u8 {
+                    if first_empty_cell.is_none() {
+                        first_empty_cell = Some(idx);
+                    }
+                    break;
+                }
+            }
+            if indexes.is_none() {
+                if let Some(idx) = first_empty_cell {
+                    return Ok(Some((
+                        self.ptr_top_hash + idx as u64,
+                        self.ptr_keys + (idx * self.key_size) as u64,
+                        self.ptr_values + (idx * self.value_size) as u64,
+                        true,
+                    )));
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                return Ok(indexes);
+            }
+        }
+        pub fn get(
+            &self,
+            top_hash: u8,
+            key: &[u8],
+            ref_access: DerefHashing,
+            thread: &Thread,
+        ) -> Result<Option<u64>, RuntimeError> {
+            for (idx, self_top_hash) in self.keys_top_hash.iter().enumerate() {
+                if *self_top_hash == TopHashValue::EmptyCell as u8 {
+                    continue;
+                }
+                if *self_top_hash == top_hash {
+                    // Read key
+                    let found_key = thread
+                        .runtime
+                        .heap
+                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
+                        .map_err(|e| e.into())?;
+                    match ref_access {
+                        DerefHashing::Vec(item_size) => {
+                            // found_key is a pointer to a vec
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
+                            }
+                        }
+                        DerefHashing::String => {
+                            // found_key is a pointer to a string
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
+                            }
+                        }
+                        DerefHashing::Default => {
+                            if found_key.as_slice() == key {
+                                return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
+                            }
+                        }
+                    }
+                }
+                if *self_top_hash == TopHashValue::RestIsEmpty as u8 {
+                    break;
+                }
+            }
+            return Ok(None);
+        }
+        pub fn delete(
+            &self,
+            top_hash: u8,
+            key: &[u8],
+            ref_access: DerefHashing,
+            thread: &Thread,
+        ) -> Result<Option<u64>, RuntimeError> {
+            let mut found_idx = None;
+            for (idx, self_top_hash) in self.keys_top_hash.iter().enumerate() {
+                if *self_top_hash == TopHashValue::EmptyCell as u8 {
+                    continue;
+                }
+                if *self_top_hash == top_hash {
+                    // Read key
+                    let found_key = thread
+                        .runtime
+                        .heap
+                        .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
+                        .map_err(|e| e.into())?;
+                    match ref_access {
+                        DerefHashing::Vec(item_size) => {
+                            // found_key is a pointer to a vec
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize * item_size)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                found_idx = Some(idx);
+                            }
+                        }
+                        DerefHashing::String => {
+                            // found_key is a pointer to a string
+                            let vec_heap_address_bytes =
+                                TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
+                                    .map_err(|_| RuntimeError::Deserialization)?;
+                            let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+                            let len_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes);
+
+                            let items_bytes = thread
+                                .runtime
+                                .heap
+                                .read(vec_heap_address as usize + 16, len as usize)
+                                .map_err(|e| e.into())?;
+                            if items_bytes.as_slice() == key {
+                                return Ok(Some(self.ptr_values + (idx * self.value_size) as u64));
+                            }
+                        }
+                        DerefHashing::Default => {
+                            if found_key.as_slice() == key {
+                                found_idx = Some(idx);
+                            }
+                        }
+                    }
+                }
+                if *self_top_hash == TopHashValue::RestIsEmpty as u8 {
+                    break;
+                }
+            }
+            // Update Cell
+            if let Some(idx) = found_idx {
+                if idx < MAP_BUCKET_SIZE - 1 {
+                    // Get next cell
+                    let next_top_hash = self.keys_top_hash[idx + 1];
+                    if next_top_hash == TopHashValue::RestIsEmpty as u8 {
+                        // Write RestIsEmpty
+                        thread
+                            .runtime
+                            .heap
+                            .write(
+                                self.ptr_top_hash as usize + idx,
+                                &vec![TopHashValue::RestIsEmpty as u8],
+                            )
+                            .map_err(|e| e.into())?;
+                    } else {
+                        // Write EmptyCell
+                        thread
+                            .runtime
+                            .heap
+                            .write(
+                                self.ptr_top_hash as usize + idx,
+                                &vec![TopHashValue::EmptyCell as u8],
+                            )
+                            .map_err(|e| e.into())?;
+                    }
+                } else {
+                    // Write RestIsEmpty
+                    thread
+                        .runtime
+                        .heap
+                        .write(
+                            self.ptr_top_hash as usize + idx,
+                            &vec![TopHashValue::RestIsEmpty as u8],
+                        )
+                        .map_err(|e| e.into())?;
+                }
+                Ok(Some(self.ptr_values + (idx * self.value_size) as u64))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+
+    impl MapLayout {
+        fn len_offset() -> usize {
+            0
+        }
+
+        fn log_cap_offset() -> usize {
+            8
+        }
+
+        fn hash_seed_offset() -> usize {
+            8 + 1
+        }
+
+        pub fn ptr_buckets_offset() -> usize {
+            8 + 1 + 4
+        }
+
+        pub fn new(key_size: usize, value_size: usize, log_cap: u8) -> Self {
+            Self {
+                ptr_map_layout: 0,
+                bucket_size: MAP_BUCKET_SIZE
+                    + MAP_BUCKET_SIZE * key_size
+                    + MAP_BUCKET_SIZE * value_size,
+                key_size,
+                value_size,
+                len: 0,
+                log_cap,
+                hash_seed: gen_seed(),
+                ptr_buckets: 0,
+            }
+        }
+
+        pub fn init_in_mem(&self, thread: &Thread) -> Result<usize, RuntimeError> {
+            // alloc map layout
+            let map_ptr = thread
+                .runtime
+                .heap
+                .alloc(MAP_LAYOUT_SIZE)
+                .map_err(|e| e.into())?
+                + 8;
+
+            let mut data = [0; MAP_LAYOUT_SIZE];
+            // write len
+            data[0..8].copy_from_slice(&self.len.to_le_bytes());
+            // write log_cap
+            data[8] = self.log_cap;
+            // write seed
+            data[9..13].copy_from_slice(&self.hash_seed.to_le_bytes());
+
+            // alloc buckets
+            let buckets_ptr = thread
+                .runtime
+                .heap
+                .alloc((1 << self.log_cap) * self.bucket_size)
+                .map_err(|e| e.into())?
+                + 8;
+            // clean buckets
+            let _ = thread
+                .runtime
+                .heap
+                .write(
+                    buckets_ptr,
+                    &vec![0u8; (1 << self.log_cap) * self.bucket_size],
+                )
+                .map_err(|e| e.into())?;
+
+            let buckets_ptr = buckets_ptr as u64;
+
+            // write buckets_ptr
+            data[13..].copy_from_slice(&buckets_ptr.to_le_bytes());
+
+            // write map layout in mem
+            let _ = thread
+                .runtime
+                .heap
+                .write(map_ptr, &data.to_vec())
+                .map_err(|e| e.into())?;
+
+            Ok(map_ptr)
+        }
+
+        fn update_log_cap(&self, new_log_cap: u8, thread: &Thread) -> Result<(), RuntimeError> {
+            let _ = thread
+                .runtime
+                .heap
+                .write(
+                    self.ptr_map_layout as usize + MapLayout::log_cap_offset(),
+                    &vec![new_log_cap],
+                )
+                .map_err(|e| e.into())?;
+            Ok(())
+        }
+
+        fn update_buckets_ptr(&self, bucket_ptr: u64, thread: &Thread) -> Result<(), RuntimeError> {
+            let _ = thread
+                .runtime
+                .heap
+                .write(
+                    self.ptr_map_layout as usize + MapLayout::ptr_buckets_offset(),
+                    &bucket_ptr.to_le_bytes().to_vec(),
+                )
+                .map_err(|e| e.into())?;
+            Ok(())
+        }
+
+        pub fn resize(&self, thread: &Thread) -> Result<(), RuntimeError> {
+            let mut new_log_cap = self.log_cap + 1;
+
+            let previous_ptr_bucket = self.ptr_buckets;
+            // get all buckets
+            let bytes_buckets = thread
+                .runtime
+                .heap
+                .read(
+                    self.ptr_buckets as usize,
+                    (1 << self.log_cap) * self.bucket_size,
+                )
+                .map_err(|e| e.into())?;
+            let mut resizing_is_over = false;
+            let mut new_bytes_buckets = Vec::new();
+            'again: while !resizing_is_over {
+                let alloc_size = (1 << new_log_cap) * self.bucket_size;
+                if alloc_size > HEAP_SIZE {
+                    return Err(RuntimeError::HeapError(HeapError::AllocationError));
+                }
+                new_bytes_buckets = vec![0u8; (1 << new_log_cap) * self.bucket_size];
+
+                for bucket in bytes_buckets.chunks_exact(self.bucket_size) {
+                    let key_value_pair = bucket
+                        [MAP_BUCKET_SIZE..MAP_BUCKET_SIZE + MAP_BUCKET_SIZE * self.key_size]
+                        .chunks_exact(self.key_size)
+                        .zip(
+                            bucket[MAP_BUCKET_SIZE + MAP_BUCKET_SIZE * self.key_size
+                                ..MAP_BUCKET_SIZE
+                                    + MAP_BUCKET_SIZE * self.key_size
+                                    + MAP_BUCKET_SIZE * self.value_size]
+                                .chunks_exact(self.value_size),
+                        )
+                        .enumerate();
+                    for (idx_key_value, (key, value)) in key_value_pair {
+                        if bucket[idx_key_value] <= TopHashValue::MIN as u8 {
+                            // Skip empty cell
+                            continue;
+                        }
+                        // Compute hash
+                        let hash = hash_of(key, self.hash_seed);
+                        let new_bucket_idx = bucket_idx(hash, new_log_cap) as usize;
+                        // index of key_top_hash in new bucket
+                        let ptr_new_bucket = new_bucket_idx * self.bucket_size;
+                        let mut idx_in_new_bucket = None;
+                        for idx_top_hash in 0..MAP_BUCKET_SIZE {
+                            if new_bytes_buckets[ptr_new_bucket + idx_top_hash]
+                                <= TopHashValue::MIN as u8
+                            {
+                                idx_in_new_bucket = Some(idx_top_hash);
+                                break;
+                            }
+                        }
+                        if idx_in_new_bucket.is_none() {
+                            new_log_cap += 1;
+                            continue 'again;
+                        }
+                        let idx_in_new_bucket = idx_in_new_bucket.unwrap();
+                        // Update top_hash, key and value in the found idx
+                        // update top_hash
+                        new_bytes_buckets[ptr_new_bucket + idx_in_new_bucket] = top_hash(hash);
+                        // update key
+                        new_bytes_buckets[ptr_new_bucket
+                            + MAP_BUCKET_SIZE
+                            + idx_in_new_bucket * self.key_size
+                            ..ptr_new_bucket
+                                + MAP_BUCKET_SIZE
+                                + idx_in_new_bucket * self.key_size
+                                + self.key_size]
+                            .copy_from_slice(key);
+
+                        // update value
+                        new_bytes_buckets[ptr_new_bucket
+                            + MAP_BUCKET_SIZE
+                            + MAP_BUCKET_SIZE * self.key_size
+                            + idx_in_new_bucket * self.value_size
+                            ..ptr_new_bucket
+                                + MAP_BUCKET_SIZE
+                                + MAP_BUCKET_SIZE * self.key_size
+                                + idx_in_new_bucket * self.value_size
+                                + self.value_size]
+                            .copy_from_slice(value);
+                    }
+                }
+                resizing_is_over = true;
+            }
+
+            // Update log_cap in memory: log_cap += 1
+            let _ = self.update_log_cap(new_log_cap, thread)?;
+
+            // free previous_buckets
+            let _ = thread
+                .runtime
+                .heap
+                .free((previous_ptr_bucket - 8) as usize)
+                .map_err(|e| e.into())?;
+
+            // alloc new buckets
+            let new_buckets_ptr = thread
+            .runtime
+            .heap
+            .alloc(new_bytes_buckets.len()).map_err(|e| e.into())? + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+            // copy new buckets in memory
+            let _ = thread
+                .runtime
+                .heap
+                .write(new_buckets_ptr, &new_bytes_buckets)
+                .map_err(|e| e.into())?;
+
+            // update buckets ptr
+            let _ = self.update_buckets_ptr(new_buckets_ptr as u64, thread)?;
+
+            Ok(())
+        }
+    }
+
+    pub fn over_load_factor(size: u64, log_cap: u8) -> bool {
+        size > MAP_BUCKET_SIZE as u64 && size > ((3 * (1 << log_cap) * MAP_BUCKET_SIZE as u64) / 4)
+    }
+
+    pub fn bucket_layout(
+        address: u64,
+        key_size: usize,
+        value_size: usize,
+        thread: &Thread,
+    ) -> Result<BucketLayout, RuntimeError> {
+        let data = thread
+            .runtime
+            .heap
+            .read(address as usize, MAP_BUCKET_SIZE)
+            .map_err(|e| e.into())?;
+        if data.len() != MAP_BUCKET_SIZE {
+            return Err(RuntimeError::CodeSegmentation);
+        }
+        let keys_top_hash: [u8; MAP_BUCKET_SIZE] =
+            data.try_into().map_err(|_| RuntimeError::Deserialization)?;
+        Ok(BucketLayout {
+            ptr_top_hash: address,
+            keys_top_hash,
+            ptr_keys: address + MAP_BUCKET_SIZE as u64,
+            key_size,
+            ptr_values: address + MAP_BUCKET_SIZE as u64 + MAP_BUCKET_SIZE as u64 * key_size as u64,
+            value_size,
+        })
+    }
+
+    pub fn map_layout(
+        address: u64,
+        key_size: usize,
+        value_size: usize,
+        thread: &Thread,
+    ) -> Result<MapLayout, RuntimeError> {
+        let data = thread
+            .runtime
+            .heap
+            .read(address as usize, 21)
+            .map_err(|e| e.into())?;
+        if data.len() != 21 {
+            return Err(RuntimeError::CodeSegmentation);
+        }
+        let len = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| RuntimeError::Deserialization)?,
+        );
+        let log_cap = u8::from_le_bytes(
+            data[8..9]
+                .try_into()
+                .map_err(|_| RuntimeError::Deserialization)?,
+        );
+        let hash_seed = u32::from_le_bytes(
+            data[9..13]
+                .try_into()
+                .map_err(|_| RuntimeError::Deserialization)?,
+        );
+        let ptr_buckets = u64::from_le_bytes(
+            data[13..21]
+                .try_into()
+                .map_err(|_| RuntimeError::Deserialization)?,
+        );
+        Ok(MapLayout {
+            ptr_map_layout: address,
+            bucket_size: MAP_BUCKET_SIZE + 8 * key_size + 8 * value_size,
+            key_size,
+            value_size,
+            len,
+            log_cap,
+            hash_seed,
+            ptr_buckets,
+        })
+    }
+
+    pub fn top_hash(hash: u64) -> u8 {
+        let mut top = (hash >> 48) as u8;
+        if top < TopHashValue::MIN as u8 {
+            top += TopHashValue::MIN as u8;
+        }
+        return top;
+    }
+
+    pub fn bucket_idx(hash: u64, log_cap: u8) -> u64 {
+        hash & ((1 << log_cap) - 1)
+    }
+
+    pub fn hash_of(bytes: &[u8], seed: u32) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        seed.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn gen_seed() -> u32 {
+        let mut rng = rand::thread_rng();
+        let seed: u32 = rng.gen();
+        seed
     }
 }
 
@@ -981,7 +2187,369 @@ impl Executable for AllocCasm {
                     )
                     .map_err(|err| err.into())?;
             }
-            AllocCasm::Insert => todo!(),
+            AllocCasm::Insert {
+                key_size,
+                value_size,
+                ref_access,
+            } => {
+                let value_data = thread.env.stack.pop(*value_size).map_err(|e| e.into())?;
+                let (key_data_ref_if_exist, key_data) = match ref_access {
+                    DerefHashing::Vec(item_size) => {
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
+                            .map_err(|e| e.into())?;
+                        (Some(vec_heap_address.to_le_bytes()), items_bytes)
+                    }
+                    DerefHashing::String => {
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize + 16, len as usize)
+                            .map_err(|e| e.into())?;
+                        (Some(str_heap_address.to_le_bytes()), items_bytes)
+                    }
+                    DerefHashing::Default => {
+                        (None, thread.env.stack.pop(*key_size).map_err(|e| e.into())?)
+                    }
+                };
+
+                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let map_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(map_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
+                let mut insertion_successful = false;
+
+                while !insertion_successful {
+                    let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+
+                    let hash = hash_of(&key_data, map_layout.hash_seed);
+                    let top_hash = top_hash(hash);
+                    let bucket_idx = bucket_idx(hash, map_layout.log_cap) as u64;
+
+                    // get address of the bucket
+                    let bucket_address =
+                        map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
+
+                    let bucket_layout =
+                        bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+
+                    // dbg!((bucket_idx, &bucket_layout));
+
+                    let opt_ptr_key_value =
+                        bucket_layout.assign(top_hash, &key_data, *ref_access, thread)?;
+                    match opt_ptr_key_value {
+                        Some((ptr_tophash, ptr_key, ptr_value, is_new_value)) => {
+                            // trigger resizing if overload
+                            if is_new_value {
+                                if over_load_factor(map_layout.len + 1, map_layout.log_cap) {
+                                    let _ = map_layout.resize(thread)?;
+                                    // resizing invalidates everything so perform the whole operation again
+                                    continue;
+                                }
+                            }
+                            // insert in found place
+                            let _ = thread
+                                .runtime
+                                .heap
+                                .write(ptr_tophash as usize, &vec![top_hash])
+                                .map_err(|e| e.into())?;
+                            match key_data_ref_if_exist {
+                                Some(real_key_data) => {
+                                    let _ = thread
+                                        .runtime
+                                        .heap
+                                        .write(ptr_key as usize, &real_key_data.to_vec())
+                                        .map_err(|e| e.into())?;
+                                }
+                                None => {
+                                    let _ = thread
+                                        .runtime
+                                        .heap
+                                        .write(ptr_key as usize, &key_data)
+                                        .map_err(|e| e.into())?;
+                                }
+                            }
+                            let _ = thread
+                                .runtime
+                                .heap
+                                .write(ptr_value as usize, &value_data)
+                                .map_err(|e| e.into())?;
+                            if is_new_value {
+                                // update len
+                                let _ = thread
+                                    .runtime
+                                    .heap
+                                    .write(
+                                        map_heap_address as usize,
+                                        &(map_layout.len + 1).to_le_bytes().to_vec(),
+                                    )
+                                    .map_err(|e| e.into())?;
+                            }
+                            insertion_successful = true;
+                        }
+                        None => {
+                            // resize and retry
+                            let _ = map_layout.resize(thread)?;
+                        }
+                    }
+                }
+            }
+
+            AllocCasm::Get {
+                key_size,
+                value_size,
+                ref_access,
+            } => {
+                let key_data = match ref_access {
+                    DerefHashing::Vec(item_size) => {
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
+                            .map_err(|e| e.into())?;
+                        items_bytes
+                    }
+                    DerefHashing::String => {
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize + 16, len as usize)
+                            .map_err(|e| e.into())?;
+                        items_bytes
+                    }
+                    DerefHashing::Default => {
+                        thread.env.stack.pop(*key_size).map_err(|e| e.into())?
+                    }
+                };
+
+                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let map_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(map_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
+                let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+
+                let hash = hash_of(&key_data, map_layout.hash_seed);
+                let top_hash = top_hash(hash);
+                let bucket_idx = bucket_idx(hash, map_layout.log_cap) as u64;
+
+                // get address of the bucket
+                let bucket_address =
+                    map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
+
+                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+
+                // dbg!(&map_layout);
+                // dbg!((bucket_idx, &bucket_layout));
+
+                let opt_ptr_value = bucket_layout.get(top_hash, &key_data, *ref_access, thread)?;
+                match opt_ptr_value {
+                    Some(ptr_value) => {
+                        let value_data = thread
+                            .runtime
+                            .heap
+                            .read(ptr_value as usize, *value_size)
+                            .map_err(|e| e.into())?;
+
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&value_data)
+                            .map_err(|e| e.into())?;
+                        // push NO_ERROR
+                        // TODO : NO_ERROR value
+                        let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    }
+                    None => {
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&vec![0u8; *value_size])
+                            .map_err(|e| e.into())?;
+                        // push ERROR
+                        // TODO : ERROR value
+                        let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    }
+                }
+            }
+            AllocCasm::DeleteMapKey {
+                key_size,
+                value_size,
+                ref_access,
+            } => {
+                let key_data = match ref_access {
+                    DerefHashing::Vec(item_size) => {
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
+                            .map_err(|e| e.into())?;
+                        items_bytes
+                    }
+                    DerefHashing::String => {
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let len_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = thread
+                            .runtime
+                            .heap
+                            .read(str_heap_address as usize + 16, len as usize)
+                            .map_err(|e| e.into())?;
+                        items_bytes
+                    }
+                    DerefHashing::Default => {
+                        thread.env.stack.pop(*key_size).map_err(|e| e.into())?
+                    }
+                };
+
+                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let map_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(map_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let map_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
+                let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+
+                let hash = hash_of(&key_data, map_layout.hash_seed);
+                let top_hash = top_hash(hash);
+                let bucket_idx = bucket_idx(hash, map_layout.log_cap) as u64;
+
+                // get address of the bucket
+                let bucket_address =
+                    map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
+
+                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+
+                // dbg!(&map_layout);
+                // dbg!((bucket_idx, &bucket_layout));
+
+                let opt_ptr_value =
+                    bucket_layout.delete(top_hash, &key_data, *ref_access, thread)?;
+                match opt_ptr_value {
+                    Some(ptr_value) => {
+                        // update len
+                        let _ = thread
+                            .runtime
+                            .heap
+                            .write(
+                                map_heap_address as usize,
+                                &(map_layout.len - 1).to_le_bytes().to_vec(),
+                            )
+                            .map_err(|e| e.into())?;
+                        // read in found place
+                        let value_data = thread
+                            .runtime
+                            .heap
+                            .read(ptr_value as usize, *value_size)
+                            .map_err(|e| e.into())?;
+
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&value_data)
+                            .map_err(|e| e.into())?;
+                        // push NO_ERROR
+                        // TODO : NO_ERROR value
+                        let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    }
+                    None => {
+                        let _ = thread
+                            .env
+                            .stack
+                            .push_with(&vec![0u8; *value_size])
+                            .map_err(|e| e.into())?;
+                        // push ERROR
+                        // TODO : ERROR value
+                        let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    }
+                }
+            }
             AllocCasm::DeleteVec(item_size) => {
                 let index = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
@@ -1011,53 +2579,87 @@ impl Executable for AllocCasm {
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
                 let item_size = *item_size as u64;
-                // let data_to_move_size = previous_len * item_size - (index + 1) * item_size;
 
-                if index < previous_len - 1
-                /* index not last item */
-                {
-                    /* move below */
-                    let data = thread
+                if index < previous_len {
+                    // Read deleted item
+                    let deleted_item_data = thread
                         .runtime
                         .heap
                         .read(
-                            vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
-                            (previous_len * item_size - (index + 1) * item_size) as usize,
+                            vec_heap_address as usize + 16 + ((index) * item_size) as usize,
+                            item_size as usize,
                         )
                         .map_err(|e| e.into())?;
+                    if index < previous_len - 1
+                    /* index not last item */
+                    {
+                        /* move below */
+                        let data = thread
+                            .runtime
+                            .heap
+                            .read(
+                                vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
+                                (previous_len * item_size - (index + 1) * item_size) as usize,
+                            )
+                            .map_err(|e| e.into())?;
+                        let _ = thread
+                            .runtime
+                            .heap
+                            .write(
+                                vec_heap_address as usize + 16 + (index * item_size) as usize,
+                                &data,
+                            )
+                            .map_err(|e| e.into())?;
+                    }
+                    /* clear last item */
                     let _ = thread
                         .runtime
                         .heap
                         .write(
-                            vec_heap_address as usize + 16 + (index * item_size) as usize,
-                            &data,
+                            vec_heap_address as usize
+                                + 16
+                                + ((previous_len - 1) * item_size) as usize,
+                            &vec![0; item_size as usize],
                         )
                         .map_err(|e| e.into())?;
-                }
-                /* clear last item */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(
-                        vec_heap_address as usize + 16 + ((previous_len - 1) * item_size) as usize,
-                        &vec![0; item_size as usize],
-                    )
-                    .map_err(|e| e.into())?;
 
-                let len_bytes = (previous_len - 1).to_le_bytes().as_slice().to_vec();
-                /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(vec_heap_address as usize, &len_bytes)
-                    .map_err(|e| e.into())?;
+                    let len_bytes = (previous_len - 1).to_le_bytes().as_slice().to_vec();
+                    /* Write len */
+                    let _ = thread
+                        .runtime
+                        .heap
+                        .write(vec_heap_address as usize, &len_bytes)
+                        .map_err(|e| e.into())?;
+
+                    // Push deleted item and error
+                    let _ = thread
+                        .env
+                        .stack
+                        .push_with(&deleted_item_data)
+                        .map_err(|e| e.into())?;
+                    // Push no error
+                    // TODO : NO_ERROR value
+                    let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                } else {
+                    // Push zeroes and error
+                    let _ = thread
+                        .env
+                        .stack
+                        .push_with(&vec![0; item_size as usize])
+                        .map_err(|e| e.into())?;
+                    // Push no error
+                    // TODO : ERROR value
+                    let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                }
             }
-            AllocCasm::Vec {
-                item_size,
-                with_capacity,
-            } => {
+            AllocCasm::Vec { item_size } | AllocCasm::VecWithCapacity { item_size } => {
                 /* */
-                let (len, cap) = if *with_capacity {
+                let with_capacity = match &self {
+                    AllocCasm::Vec { .. } => false,
+                    AllocCasm::VecWithCapacity { .. } => true,
+                    _ => unreachable!(),
+                };
+                let (len, cap) = if with_capacity {
                     let cap = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                     let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
                     (len, cap)
@@ -1096,7 +2698,46 @@ impl Executable for AllocCasm {
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
-            AllocCasm::Map => todo!(),
+            AllocCasm::Map {
+                key_size,
+                value_size,
+            }
+            | AllocCasm::MapWithCapacity {
+                key_size,
+                value_size,
+            } => {
+                /* */
+                let with_capacity = match &self {
+                    AllocCasm::Map { .. } => false,
+                    AllocCasm::MapWithCapacity { .. } => true,
+                    _ => unreachable!(),
+                };
+                let mut log_cap: u8 = 0;
+                if with_capacity {
+                    let cap = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    // to reduce cap size and therefore number of created bucket -> the map will try to fill up buckets in priority rather than reallocating
+                    if cap <= MAP_BUCKET_SIZE as u64 {
+                        log_cap = 0;
+                    } else {
+                        log_cap = ((cap as f64 / MAP_BUCKET_SIZE as f64).log2().ceil() as u64)
+                            .try_into()
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    }
+                    // while over_load_factor(cap, log_cap) {
+                    //     log_cap += 1;
+                    // }
+                } else {
+                    log_cap = 0;
+                }
+
+                let map = MapLayout::new(*key_size, *value_size, log_cap);
+                let map_ptr = map.init_in_mem(thread)?;
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&(map_ptr as u64).to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
             AllocCasm::Chan => todo!(),
             AllocCasm::StringFromSlice => {
                 let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
@@ -1219,6 +2860,27 @@ impl Executable for AllocCasm {
                     .push_with(&cap.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
+            AllocCasm::CapMap => {
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let log_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 1)
+                    .map_err(|e| e.into())?;
+                let log_cap = log_cap_bytes[0];
+
+                let cap = if log_cap == 1 {
+                    MAP_BUCKET_SIZE
+                } else {
+                    (1u64 << log_cap) as usize * MAP_BUCKET_SIZE
+                };
+                let _ = thread
+                    .env
+                    .stack
+                    .push_with(&(cap as u64).to_le_bytes())
+                    .map_err(|e| e.into())?;
+            }
             AllocCasm::ClearVec(item_size) | AllocCasm::ClearString(item_size) => {
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
 
@@ -1267,6 +2929,483 @@ impl Executable for AllocCasm {
                     .map_err(|e| e.into())?;
             }
             AllocCasm::ClearMap(_) => todo!(),
+            AllocCasm::ExtendItemFromSlice { size, len } => {
+                let item_size = *size;
+                let slice_len = *len;
+                let slice_data = thread
+                    .env
+                    .stack
+                    .pop(item_size * slice_len)
+                    .map_err(|e| e.into())?;
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = item_size;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendItemFromVec { size } => {
+                let item_size = *size;
+
+                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(other_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let slice_len = u64::from_le_bytes(*previous_len_bytes);
+                let slice_data = thread
+                    .runtime
+                    .heap
+                    .read(
+                        other_heap_address as usize + 16,
+                        slice_len as usize * item_size,
+                    )
+                    .map_err(|e| e.into())?;
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = item_size;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendStringFromSlice { len } => {
+                let mut slice_data = Vec::new();
+                for _ in 0..*len {
+                    let string_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                    let string_len_bytes = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize, 8)
+                        .map_err(|e| e.into())?;
+                    let string_len_bytes =
+                        TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_len = u64::from_le_bytes(*string_len_bytes);
+                    let string_data = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize + 16, string_len as usize)
+                        .map_err(|e| e.into())?;
+                    slice_data.push(string_data);
+                }
+                let slice_data = slice_data.into_iter().rev().flatten().collect::<Vec<u8>>();
+                let slice_len = slice_data.len();
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = 1;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
+            AllocCasm::ExtendStringFromVec => {
+                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(other_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let other_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let mut slice_data = Vec::new();
+                for i in 0..other_len as usize {
+                    let string_heap_address = thread
+                        .runtime
+                        .heap
+                        .read(other_heap_address as usize + 16 + 8 * i, 8)
+                        .map_err(|e| e.into())?;
+                    let string_heap_address =
+                        TryInto::<&[u8; 8]>::try_into(string_heap_address.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_heap_address = u64::from_le_bytes(*string_heap_address);
+
+                    let string_len_bytes = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize, 8)
+                        .map_err(|e| e.into())?;
+                    let string_len_bytes =
+                        TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                    let string_len = u64::from_le_bytes(*string_len_bytes);
+                    let string_data = thread
+                        .runtime
+                        .heap
+                        .read(string_heap_address as usize + 16, string_len as usize)
+                        .map_err(|e| e.into())?;
+                    slice_data.extend(string_data);
+                }
+                let slice_len = slice_data.len();
+
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+
+                let vec_heap_address_bytes = thread
+                    .env
+                    .stack
+                    .read(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+                let vec_heap_address_bytes =
+                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
+
+                let previous_len_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize, 8)
+                    .map_err(|e| e.into())?;
+                let previous_len_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_len = u64::from_le_bytes(*previous_len_bytes);
+
+                let previous_cap_bytes = thread
+                    .runtime
+                    .heap
+                    .read(vec_heap_address as usize + 8, 8)
+                    .map_err(|e| e.into())?;
+                let previous_cap_bytes =
+                    TryInto::<&[u8; 8]>::try_into(previous_cap_bytes.as_slice())
+                        .map_err(|_| RuntimeError::Deserialization)?;
+                let previous_cap = u64::from_le_bytes(*previous_cap_bytes);
+
+                let len_offset = slice_len as u64;
+                let size_factor = 1;
+                let (new_vec_heap_address, new_len, new_cap) = if previous_len + len_offset
+                    >= previous_cap
+                {
+                    /* Reallocation */
+                    let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
+                    let address = thread
+                        .runtime
+                        .heap
+                        .realloc(vec_heap_address as usize - 8, size)
+                        .map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+                    (
+                        address as u64,
+                        previous_len + len_offset,
+                        align(((previous_len + len_offset) * 2) as usize) as u64,
+                    )
+                } else {
+                    (vec_heap_address, previous_len + len_offset, previous_cap)
+                };
+                let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
+                let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
+                /* Write len */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize, &len_bytes)
+                    .map_err(|e| e.into())?;
+                /* Write capacity */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(new_vec_heap_address as usize + 8, &cap_bytes)
+                    .map_err(|e| e.into())?;
+
+                /* Write new items */
+                let _ = thread
+                    .runtime
+                    .heap
+                    .write(
+                        new_vec_heap_address as usize
+                            + 16
+                            + (previous_len as usize * size_factor as usize),
+                        &slice_data,
+                    )
+                    .map_err(|e| e.into())?;
+
+                /* Update vector pointer */
+                let _ = thread
+                    .env
+                    .stack
+                    .write(
+                        Offset::SB(vec_stack_address as usize),
+                        AccessLevel::Direct,
+                        &new_vec_heap_address.to_le_bytes(),
+                    )
+                    .map_err(|err| err.into())?;
+            }
         }
 
         thread.env.program.incr();
@@ -1278,12 +3417,15 @@ impl Executable for AllocCasm {
 mod tests {
     use crate::{
         ast::{
-            expressions::data::{Number, Primitive},
+            expressions::{
+                data::{Data, Number, Primitive},
+                Atomic,
+            },
             statements::Statement,
             TryParse,
         },
-        clear_stack,
-        semantic::scope::scope_impl::Scope,
+        clear_stack, compile_statement, compile_statement_for_string,
+        semantic::scope::scope::Scope,
         v_num,
         vm::vm::{DeserializeFrom, Runtime},
     };
@@ -1300,51 +3442,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1585,51 +3686,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1646,51 +3706,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -1707,51 +3726,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello Worl仗");
+        assert_eq!(result, "Hello Worl仗");
     }
 
     #[test]
@@ -1769,51 +3747,10 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let result = compile_statement_for_string!(statement);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data_length = memory
-            .heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
-
-        let data = memory
-            .heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded");
-
-        assert_eq!(result.value, "Hello World");
+        assert_eq!(result, "Hello World");
     }
 
     #[test]
@@ -2085,7 +4022,7 @@ mod tests {
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
-                delete(&x,7);
+                let (old,err) = delete(&x,7);
                 return x;
             };
         "##
@@ -2151,7 +4088,7 @@ mod tests {
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
-                delete(&x,2);
+                let (old,err) = delete(&x,2);
                 return x;
             };
         "##
@@ -2212,7 +4149,28 @@ mod tests {
     }
 
     #[test]
-    fn valid_sizeof_type() {
+    fn robustness_delete_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
+                let (old,err) = delete(&x,15);
+                return err;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = data.first().unwrap();
+
+        assert_eq!(*result, 1u8, "Result does not match the expected value");
+    }
+
+    #[test]
+    fn valid_size_of_type() {
         let statement = Statement::parse(
             r##"
             let res = {
@@ -2220,7 +4178,7 @@ mod tests {
                     x : u64,
                     y : u64,
                 }
-                return sizeof(Point);
+                return size_of(Point);
             };
         "##
             .into(),
@@ -2258,10 +4216,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_sizeof_expr() {
+    fn valid_size_of_expr() {
         let statement = Statement::parse(
             r##"
-            let res = sizeof(420u64);
+            let res = size_of(420u64);
         "##
             .into(),
         )
@@ -2550,13 +4508,13 @@ mod tests {
                     y: i64
                 }
 
-                let point_any : &Any = alloc(sizeof(Point)) as &Any;
+                let point_any : &Any = alloc(size_of(Point)) as &Any;
 
                 let copy = Point {
                     x : 420,
                     y : 69,
                 };
-                memcpy(point_any,&copy,sizeof(Point));
+                memcpy(point_any,&copy,size_of(Point));
                 
                 let point = *point_any as Point;
                 
@@ -2607,7 +4565,7 @@ mod tests {
                     y: i64
                 }
 
-                let point : &Point = alloc(sizeof(Point)) as &Point;
+                let point : &Point = alloc(size_of(Point)) as &Point;
 
                 point.x = 420;
                 
@@ -2646,5 +4604,729 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 420));
+    }
+
+    #[test]
+    fn valid_extend_vec_from_slice() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let slice = [5,6,7,8];
+                let vector:Vec<i64> = vec(8);
+                extend(&vector,slice);
+                return vector[8];
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 5));
+    }
+
+    #[test]
+    fn valid_extend_vec_from_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = vec[5,6,7,8];
+                let vector:Vec<i64> = vec(8);
+                extend(&vector,vec1);
+                return vector[8];
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 5));
+    }
+
+    #[test]
+    fn valid_extend_string_from_slice() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = [string("lo"),string(" Wor"),string("ld")];
+                let hello = string("Hel");
+                extend(&hello,vec1);
+                return hello;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data = memory
+            .heap
+            .read(heap_address, length + 16)
+            .expect("length should be readable");
+
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello World");
+    }
+
+    #[test]
+    fn valid_extend_string_from_vec() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let vec1 = vec[string("lo"),string(" Wor"),string("ld")];
+                let hello = string("Hel");
+                extend(&hello,vec1);
+                return hello;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data = memory
+            .heap
+            .read(heap_address, length + 16)
+            .expect("length should be readable");
+
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello World");
+    }
+
+    #[test]
+    fn valid_map_init_no_cap() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                return true;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+    }
+
+    #[test]
+    fn valid_map_init_with_cap() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(8);
+                return true;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+    }
+
+    #[test]
+    fn valid_map_len_empty() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(8);
+                return len(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 0),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_len() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                insert(&hmap,101,5);
+                insert(&hmap,102,6);
+                insert(&hmap,103,7);
+                insert(&hmap,104,8);
+                insert(&hmap,105,9);
+                insert(&hmap,106,10);
+                insert(&hmap,107,11);
+                insert(&hmap,108,12);
+                return len(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 8),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_len_with_upsert() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                insert(&hmap,101,5);
+                insert(&hmap,102,6);
+                insert(&hmap,103,7);
+                insert(&hmap,103,8);
+                insert(&hmap,105,9);
+                insert(&hmap,103,10);
+                insert(&hmap,107,11);
+                insert(&hmap,103,12);
+                return len(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 5),
+            "Result does not match the expected value"
+        );
+    }
+    #[test]
+    fn valid_map_cap() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(8);
+                return cap(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 8),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_cap_over_min() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(60);
+                return cap(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 64),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_access() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                insert(&hmap,420,69);
+                let (value,err) = get(&hmap,420);
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 69),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn robustness_map_access() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                let (value,err) = get(&hmap,420);
+                return err;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = data.first().unwrap();
+
+        assert_eq!(*result, 1u8, "Result does not match the expected value");
+    }
+
+    #[test]
+    fn valid_map_insert_resize() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                insert(&hmap,101,5);
+                insert(&hmap,102,6);
+                insert(&hmap,103,7);
+                insert(&hmap,104,8);
+                insert(&hmap,105,9);
+                insert(&hmap,106,10);
+                insert(&hmap,107,11);
+                insert(&hmap,108,12);
+                insert(&hmap,109,13);
+                insert(&hmap,110,14);
+                let (value,err) = get(&hmap,103);
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(
+            result,
+            v_num!(U64, 7),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_upsert_resize() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                insert(&hmap,101,5);
+                insert(&hmap,102,6);
+                insert(&hmap,103,7);
+                insert(&hmap,104,8);
+                insert(&hmap,105,9);
+                insert(&hmap,106,10);
+                insert(&hmap,107,11);
+                insert(&hmap,108,12);
+                insert(&hmap,109,13);
+                insert(&hmap,110,14);
+                insert(&hmap,103,420);
+                let (value,err) = get(&hmap,103);
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 420),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_insert() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                insert(&hmap,420,69);
+                return len(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 1),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_delete() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                insert(&hmap,420,69);
+                insert(&hmap,120,75);
+                let (value,err) = delete(&hmap,420);
+                return (value,len(hmap));
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <TupleType as DeserializeFrom>::deserialize_from(
+            &TupleType(vec![p_num!(U64), p_num!(U64)]),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        let value = &result.value[0];
+        let value = match value {
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
+                match v.get() {
+                    Number::U64(n) => n,
+                    _ => unreachable!("Should be a u64"),
+                }
+            }
+            _ => unreachable!("Should be a u64"),
+        };
+        let len = &result.value[1];
+        let len = match len {
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
+                match v.get() {
+                    Number::U64(n) => n,
+                    _ => unreachable!("Should be a u64"),
+                }
+            }
+            _ => unreachable!("Should be a u64"),
+        };
+        assert_eq!(value, 69);
+        assert_eq!(len, 1);
+    }
+
+    #[test]
+    fn valid_map_delete_cant_read_after() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                insert(&hmap,420,69);
+                insert(&hmap,120,75);
+                let (value,err) = delete(&hmap,420);
+                let (value,err) = get(&hmap,420);
+                return err;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = data.first().unwrap();
+
+        assert_eq!(*result, 1u8, "Result does not match the expected value");
+    }
+
+    #[test]
+    fn valid_map_insert_key_str() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<str<10>,u64> = map(64);
+                insert(&hmap,"test",69);
+                insert(&hmap,"test1",80);
+                insert(&hmap,"test11",46);
+                insert(&hmap,"test111",16);
+                let (value,err) = get(&hmap,"test1");
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 80),
+            "Result does not match the expected value"
+        );
+    }
+
+    #[test]
+    fn valid_map_insert_key_string() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<String,u64> = map(64);
+                insert(&hmap,string("test"),69);
+                insert(&hmap,string("test1"),80);
+                insert(&hmap,string("test11"),46);
+                insert(&hmap,string("test111"),16);
+                insert(&hmap,f"test11{52}",28);
+                let (value,err) = get(&hmap,string("test1"));
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 80),
+            "Result does not match the expected value"
+        );
+    }
+    #[test]
+    fn valid_map_upsert_key_string() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let x = 1;
+                let hmap : Map<String,u64> = map(64);
+
+                insert(&hmap,string("test"),69);
+                insert(&hmap,string("test1"),80);
+                insert(&hmap,string("test11"),46);
+                insert(&hmap,string("test111"),16);
+                
+                insert(&hmap,f"test{x}",28);
+
+                let (value,err) = get(&hmap,string("test1"));
+                return value;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 28),
+            "Result does not match the expected value"
+        );
     }
 }

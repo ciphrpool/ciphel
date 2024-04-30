@@ -3,7 +3,7 @@ use std::cell::Ref;
 use nom::{branch::alt, combinator::map};
 
 use self::return_stat::Return;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use super::TryParse;
 use crate::{

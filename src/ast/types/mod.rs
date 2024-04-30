@@ -90,14 +90,6 @@ pub struct RangeType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapType {
-    pub keys_type: KeyType,
+    pub keys_type: SubType,
     pub values_type: SubType,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyType {
-    Primitive(PrimitiveType),
-    Address(AddrType),
-    String(StringType),
-    EnumID(ID),
 }

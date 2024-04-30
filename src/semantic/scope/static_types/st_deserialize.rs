@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use crate::{
     ast::{
@@ -42,7 +45,12 @@ impl DeserializeFrom for StaticType {
             StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
             StaticType::Unit => Ok(Data::Unit),
             StaticType::Any => Err(RuntimeError::Deserialization),
-            StaticType::Error => Err(RuntimeError::Deserialization),
+            StaticType::Error => {
+                if bytes.len() != 1 {
+                    return Err(RuntimeError::Deserialization);
+                }
+                return Ok(Data::Primitive(Primitive::Bool(bytes[0] > 0)));
+            }
             StaticType::Address(_value) => unimplemented!(),
             StaticType::Map(_value) => unimplemented!(),
             StaticType::String(value) => Ok(Data::StrSlice(
@@ -355,6 +363,7 @@ impl DeserializeFrom for StringType {
 
         Ok(StrSlice {
             value: str_slice.to_string(),
+            padding: Cell::new(0),
             metadata: Metadata {
                 info: Rc::new(RefCell::new(Info::Resolved {
                     context: None,
@@ -383,6 +392,7 @@ impl DeserializeFrom for StrSliceType {
 
         Ok(StrSlice {
             value: str_slice.to_string(),
+            padding: Cell::new(0),
             metadata: Metadata {
                 info: Rc::new(RefCell::new(Info::Resolved {
                     context: None,

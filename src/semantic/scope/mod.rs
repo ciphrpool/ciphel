@@ -14,12 +14,12 @@ use self::{
     user_type_impl::UserType,
     var_impl::Var,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use super::{EType, SemanticError};
 pub mod chan_impl;
 pub mod event_impl;
-pub mod scope_impl;
+pub mod scope;
 pub mod static_types;
 pub mod type_traits;
 pub mod user_type_impl;

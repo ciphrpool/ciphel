@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use num_traits::ToBytes;
 
 use crate::ast::expressions::{Atomic, Expression};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope, AccessLevel};
 use crate::vm::allocator::stack::Offset;
 use crate::{
@@ -374,6 +374,26 @@ impl Variable {
                 index: _,
                 metadata,
             }) => Some(metadata),
+        }
+    }
+    pub fn is_utf8(&self) -> bool {
+        match self {
+            Variable::Var(VarID { .. }) => false,
+            Variable::FieldAccess(FieldAccess { .. }) => false,
+            Variable::NumAccess(NumAccess { .. }) => false,
+            Variable::ListAccess(ListAccess { var, .. }) => {
+                let Some(var_type) = var.signature() else {
+                    return false;
+                };
+                match var_type {
+                    crate::semantic::Either::Static(value) => match value.as_ref() {
+                        crate::semantic::scope::static_types::StaticType::String(_) => true,
+                        crate::semantic::scope::static_types::StaticType::StrSlice(_) => true,
+                        _ => false,
+                    },
+                    crate::semantic::Either::User(_) => false,
+                }
+            }
         }
     }
     fn name(&self) -> &ID {
@@ -846,8 +866,14 @@ impl GenerateCode for StrSlice {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
         let size = (&str_bytes).len() as u64;
         instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
+        let padding = self.padding.get();
+        if padding > 0 {
+            instructions.push(Casm::Data(data::Data::Serialized {
+                data: vec![0; padding].into(),
+            }));
+        }
         instructions.push(Casm::Data(data::Data::Serialized {
-            data: size.to_le_bytes().into(),
+            data: (size + padding as u64).to_le_bytes().into(),
         }));
         Ok(())
     }
@@ -1255,7 +1281,7 @@ mod tests {
         compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{
                     PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
                 },

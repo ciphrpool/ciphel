@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{
     scope::{static_types::StaticType},

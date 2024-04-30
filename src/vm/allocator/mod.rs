@@ -1,4 +1,4 @@
-use crate::semantic::{AccessLevel};
+use crate::semantic::AccessLevel;
 
 use self::{
     heap::{Heap, ALIGNMENT},

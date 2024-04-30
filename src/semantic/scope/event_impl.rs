@@ -3,7 +3,7 @@ use std::cell::Ref;
 use crate::semantic::{CompatibleWith, EType, SemanticError, TypeOf};
 
 use super::{BuildEvent};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {}

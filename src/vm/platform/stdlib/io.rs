@@ -5,7 +5,7 @@ use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
 
@@ -210,6 +210,7 @@ impl Executable for PrintCasm {
             }
             PrintCasm::PrintString => {
                 let n = OpPrimitive::get_str_slice(&thread.memory())?;
+                let n = n.trim_end_matches(char::from(0));
                 thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
             }
             PrintCasm::StdOutBufOpen => {
@@ -296,7 +297,7 @@ mod tests {
 
     use crate::{
         ast::{statements::Statement, TryParse},
-        semantic::scope::scope_impl::Scope,
+        semantic::scope::scope::Scope,
         vm::vm::Runtime,
     };
 
@@ -401,7 +402,7 @@ mod tests {
         }
     }
     #[test]
-    fn valid_print_strslice() {
+    fn valid_print_strslice_complex() {
         for text in vec!["\"Hello World\"", "\"你好世界\""] {
             let statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
@@ -432,7 +433,43 @@ mod tests {
     }
 
     #[test]
-    fn valid_print_strslice_complex() {
+    fn valid_print_strslice_with_padding() {
+        let statement = Statement::parse(
+            r##"
+        {
+            let x:str<20> = "Hello World";
+            print(x);
+        }
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let scope = Scope::new();
+        let _ = statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+
+        thread.run().expect("Execution should have succeeded");
+        let output = runtime.stdio.stdout.take();
+        assert_eq!(&output, "\"Hello World\"");
+    }
+    #[test]
+    fn valid_print_strslice() {
         let statement = Statement::parse(
             r##"
         {

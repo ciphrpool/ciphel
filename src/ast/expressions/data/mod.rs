@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
@@ -105,6 +105,7 @@ pub struct Slice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
+    pub padding: Cell<usize>,
     pub metadata: Metadata,
 }
 
@@ -210,16 +211,8 @@ pub struct Enum {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map {
-    pub fields: Vec<(KeyData, Expression)>,
+    pub fields: Vec<(Expression, Expression)>,
     pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeyData {
-    Primitive(Primitive),
-    StrSlice(StrSlice),
-    Address(Address),
-    Enum(Enum),
 }
 
 impl Data {
@@ -259,7 +252,7 @@ impl Data {
                 value: _,
                 metadata,
             }) => Some(metadata),
-            Data::StrSlice(StrSlice { value: _, metadata }) => Some(metadata),
+            Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -320,7 +313,7 @@ impl Data {
                 value: _,
                 metadata,
             }) => metadata.signature(),
-            Data::StrSlice(StrSlice { value: _, metadata }) => metadata.signature(),
+            Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
         }
     }
 }

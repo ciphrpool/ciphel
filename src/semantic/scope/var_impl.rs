@@ -11,7 +11,7 @@ use super::{
     type_traits::{GetSubTypes, TypeChecking},
     BuildVar,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 #[derive(Debug, Clone, PartialEq, Copy, Eq, PartialOrd, Ord)]
 pub enum VarState {

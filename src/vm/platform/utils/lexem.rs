@@ -18,7 +18,9 @@ pub const ERROR: &str = "error";
 // ALLOC
 
 pub const APPEND: &str = "append";
+pub const EXTEND: &str = "extend";
 pub const INSERT: &str = "insert";
+pub const GET: &str = "get";
 pub const DELETE: &str = "delete";
 pub const LEN: &str = "len";
 pub const CAP: &str = "cap";
@@ -30,7 +32,7 @@ pub const CHAN: &str = "chan";
 pub const STRING: &str = "string";
 pub const MEMCPY: &str = "memcpy";
 pub const CLEAR: &str = "clear";
-pub const SIZEOF: &str = "sizeof";
+pub const SIZEOF: &str = "size_of";
 
 // THREADS
 pub const SPAWN: &str = "spawn";
@@ -42,6 +44,8 @@ pub const SEND: &str = "send";
 
 // STD
 pub const PRINT: &str = "print";
+pub const TOSTR: &str = "to_str";
+pub const JOIN: &str = "join";
 pub const CEIL: &str = "ceil";
 pub const FLOOR: &str = "floor";
 pub const ABS: &str = "abs";

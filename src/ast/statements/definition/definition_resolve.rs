@@ -1,7 +1,7 @@
 use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
 
 use crate::e_static;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildUserType;
@@ -14,7 +14,6 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
-
 
 impl Resolve for Definition {
     type Output = ();
@@ -235,7 +234,7 @@ mod tests {
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
-            scope_impl,
+            scope,
             static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
@@ -257,7 +256,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -291,7 +290,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let _ = scope
             .borrow_mut()
             .register_type(
@@ -362,7 +361,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -415,7 +414,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -448,7 +447,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -474,7 +473,7 @@ mod tests {
         let function = FnDef::parse(
             r##"
 
-        fn main(x:u64,text:string) -> Unit {
+        fn main(x:u64,text:String) -> Unit {
 
         }
 
@@ -483,7 +482,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -542,7 +541,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
@@ -577,7 +576,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
 
         let _ = scope
             .borrow_mut()
@@ -628,7 +627,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
 
         let _ = scope
             .borrow_mut()
@@ -687,7 +686,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 

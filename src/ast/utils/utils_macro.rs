@@ -168,6 +168,56 @@ macro_rules! compile_statement {
         data
     }};
 }
+
+#[macro_export]
+macro_rules! compile_statement_for_string {
+    ($statement:ident) => {{
+        let scope = Scope::new();
+        let _ = $statement
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions = CasmProgram::default();
+        $statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions.len() > 0);
+        let mut runtime = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let thread = runtime.get(tid).expect("Thread should exist");
+        thread.push_instr(instructions);
+        thread.run().expect("Execution should have succeeded");
+        let memory = &thread.memory();
+        let data = clear_stack!(memory);
+        let heap_address = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data_length = memory
+            .heap
+            .read(heap_address, 8)
+            .expect("length should be readable");
+        let length = u64::from_le_bytes(
+            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+                .expect("heap address should be deserializable"),
+        ) as usize;
+
+        let data = memory
+            .heap
+            .read(heap_address, length + 16)
+            .expect("length should be readable");
+        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+            .expect("Deserialization should have succeeded")
+            .value;
+        result
+    }};
+}
+
 #[macro_export]
 macro_rules! eval_and_compare {
     ($expr:expr, $expected:expr,$size:ident) => {{

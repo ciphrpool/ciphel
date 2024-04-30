@@ -1,4 +1,4 @@
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
@@ -601,12 +601,13 @@ mod tests {
                 data::{Number, Primitive, StrSlice},
                 Expression,
             },
+            statements::Statement,
             TryParse,
         },
-        clear_stack, eval_and_compare, eval_and_compare_bool,
+        clear_stack, compile_statement, eval_and_compare, eval_and_compare_bool,
         semantic::{
             scope::{
-                scope_impl::Scope,
+                scope::Scope,
                 static_types::{PrimitiveType, StrSliceType, StringType},
             },
             Resolve,
@@ -1372,5 +1373,34 @@ mod tests {
         .expect("Deserialization should have succeeded");
 
         assert_eq!(result.value, "Hello World")
+    }
+
+    #[test]
+    fn valid_addition_string_with_padding() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hello : str<10> = "Hello ";
+                hello[8] = 'b';
+                hello[7] = 'a';
+                let world : str<10> = "World";
+                return hello + world;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+
+        let result: StrSlice = <StrSliceType as DeserializeFrom>::deserialize_from(
+            &StrSliceType {
+                size: "Hello ".chars().count() * 4 + "world".chars().count() * 4,
+            },
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(result.value, "Hello \0ab\0World\0\0\0\0\0")
     }
 }

@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 

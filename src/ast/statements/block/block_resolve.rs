@@ -1,7 +1,7 @@
 use super::Block;
 
 use crate::resolve_metadata;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
@@ -66,7 +66,7 @@ mod tests {
         e_static, p_num,
         semantic::{
             scope::{
-                scope_impl,
+                scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
             },
             Either,
@@ -88,7 +88,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &None, &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
@@ -120,7 +120,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
@@ -148,7 +148,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
@@ -173,7 +173,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
@@ -197,7 +197,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
@@ -223,7 +223,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope_impl::Scope::new();
+        let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
         assert!(res.is_err());
     }

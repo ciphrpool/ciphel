@@ -5,7 +5,7 @@ use crate::semantic::{
 };
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 impl TypeOf for Loop {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>

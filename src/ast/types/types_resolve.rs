@@ -1,10 +1,8 @@
-
-
 use super::{
-    AddrType, ChanType, ClosureType, KeyType, MapType, PrimitiveType, RangeType, SliceType,
-    StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
+    StringType, TupleType, Type, Types, VecType,
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope::type_traits::IsEnum, MutRc, Resolve, SemanticError};
 
 impl Resolve for Type {
@@ -260,35 +258,5 @@ impl Resolve for MapType {
     {
         let _ = self.keys_type.resolve(scope, context, extra)?;
         self.values_type.resolve(scope, context, extra)
-    }
-}
-
-impl Resolve for KeyType {
-    type Output = ();
-    type Context = ();
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            KeyType::Primitive(value) => value.resolve(scope, context, extra),
-            KeyType::Address(value) => value.resolve(scope, context, extra),
-            KeyType::String(_value) => Ok(()),
-            KeyType::EnumID(value) => {
-                let borrowed_scope = scope.borrow();
-                let enum_type = borrowed_scope.find_type(value)?;
-                if enum_type.is_enum() {
-                    return Err(SemanticError::ExpectedEnum);
-                }
-                Ok(())
-            }
-        }
     }
 }

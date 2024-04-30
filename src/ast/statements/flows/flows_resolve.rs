@@ -1,5 +1,5 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::expressions::flows::Pattern,
     semantic::{
@@ -218,7 +218,7 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::p_num;
-    use crate::semantic::scope::scope_impl::Scope;
+    use crate::semantic::scope::scope::Scope;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
     use crate::semantic::scope::var_impl::Var;
     #[test]

@@ -1,6 +1,6 @@
 use std::cell::Ref;
 
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
@@ -99,7 +99,7 @@ impl Executable for StdCasm {
         match self {
             StdCasm::IO(value) => value.execute(thread),
             StdCasm::Math(value) => value.execute(thread),
-            StdCasm::Strings(_) => todo!(),
+            StdCasm::Strings(value) => value.execute(thread),
         }
     }
 }

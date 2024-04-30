@@ -1,5 +1,5 @@
 use crate::ast::statements::block::block_gencode::inner_block_gencode;
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
@@ -150,7 +150,7 @@ mod tests {
         },
         clear_stack,
         semantic::scope::{
-            scope_impl::Scope,
+            scope::Scope,
             static_types::{NumberType, PrimitiveType},
         },
         vm::vm::{DeserializeFrom, Runtime},
@@ -629,7 +629,31 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 87));
     }
+    #[test]
+    fn valid_for_str_slice_with_padding() {
+        let statement = Statement::parse(
+            r##"
+            let x = {
+                let arr:str<10> = "abc";
+                let res = 'a';
+                for i in &arr {
+                    res = i;
+                }
+                return res; 
+            };
+            "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
 
+        let data = compile_statement!(statement);
+
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('c'));
+    }
     #[test]
     fn valid_for_addr_str_slice() {
         let statement = Statement::parse(

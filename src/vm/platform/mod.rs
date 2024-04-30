@@ -9,7 +9,7 @@ use self::{
     core::{CoreCasm, CoreFn},
     stdlib::{StdCasm, StdFn},
 };
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 use super::{
     casm::CasmProgram,

@@ -5,8 +5,7 @@ use crate::{
     semantic::{EType, SemanticError, TypeOf},
 };
 
-
-use crate::semantic::scope::scope_impl::Scope;
+use crate::semantic::scope::scope::Scope;
 
 pub trait GetSubTypes {
     fn get_nth(&self, _n: &usize) -> Option<EType> {
@@ -85,6 +84,9 @@ pub trait TypeChecking {
         false
     }
     fn is_map(&self) -> bool {
+        false
+    }
+    fn is_string(&self) -> bool {
         false
     }
 }
