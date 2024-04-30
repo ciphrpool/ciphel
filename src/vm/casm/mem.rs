@@ -7,13 +7,13 @@ use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, UReg, STACK_SIZE}, MemoryAddress,
+            stack::{Offset, UReg, STACK_SIZE},
+            MemoryAddress,
         },
         scheduler::Thread,
         vm::{Executable, RuntimeError},
     },
 };
-
 
 #[derive(Debug, Clone)]
 pub enum Mem {
@@ -30,6 +30,7 @@ pub enum Mem {
     TakeToHeap { size: usize },
     TakeToStack { size: usize },
     Take { size: usize },
+    TakeUTF8Char,
 }
 
 impl Executable for Mem {
@@ -89,6 +90,32 @@ impl Executable for Mem {
                         .runtime
                         .heap
                         .write(address as usize, &data)
+                        .map_err(|e| e.into())?;
+                    let _ = thread
+                        .env
+                        .stack
+                        .push_with(&address.to_le_bytes())
+                        .map_err(|e| e.into())?;
+                }
+            }
+            Mem::TakeUTF8Char => {
+                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let value = OpPrimitive::get_char(&thread.memory())?;
+                if address < STACK_SIZE as u64 {
+                    let _ = thread
+                        .env
+                        .stack
+                        .write(
+                            Offset::SB(address as usize),
+                            AccessLevel::General,
+                            &value.to_string().as_bytes(),
+                        )
+                        .map_err(|e| e.into())?;
+                } else {
+                    let _ = thread
+                        .runtime
+                        .heap
+                        .write(address as usize, &value.to_string().as_bytes().to_vec())
                         .map_err(|e| e.into())?;
                     let _ = thread
                         .env

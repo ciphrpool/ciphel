@@ -17,7 +17,7 @@ impl SizeOf for StaticType {
             StaticType::Tuple(value) => value.size_of(),
             StaticType::Unit => 0,
             StaticType::Any => 0,
-            StaticType::Error => todo!(),
+            StaticType::Error => 1,
             StaticType::Address(value) => value.size_of(),
             StaticType::Map(value) => value.size_of(),
             StaticType::String(value) => value.size_of(),

@@ -45,8 +45,13 @@ impl GenerateCode for Assignee {
                 }
 
                 let _ = variable.locate(scope, instructions)?;
+                let is_utf8 = variable.is_utf8();
 
-                instructions.push(Casm::Mem(Mem::Take { size: var_size }))
+                if is_utf8 {
+                    instructions.push(Casm::Mem(Mem::TakeUTF8Char))
+                } else {
+                    instructions.push(Casm::Mem(Mem::Take { size: var_size }))
+                }
             }
             Assignee::PtrAccess(PtrAccess { value, metadata }) => {
                 let var_size = {

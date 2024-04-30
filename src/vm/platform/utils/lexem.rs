@@ -20,6 +20,7 @@ pub const ERROR: &str = "error";
 pub const APPEND: &str = "append";
 pub const EXTEND: &str = "extend";
 pub const INSERT: &str = "insert";
+pub const GET: &str = "get";
 pub const DELETE: &str = "delete";
 pub const LEN: &str = "len";
 pub const CAP: &str = "cap";

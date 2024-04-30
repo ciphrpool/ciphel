@@ -15,7 +15,6 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 
-
 impl Resolve for Definition {
     type Output = ();
     type Context = Option<EType>;
@@ -474,7 +473,7 @@ mod tests {
         let function = FnDef::parse(
             r##"
 
-        fn main(x:u64,text:string) -> Unit {
+        fn main(x:u64,text:String) -> Unit {
 
         }
 

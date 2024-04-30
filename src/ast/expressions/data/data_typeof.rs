@@ -224,7 +224,7 @@ impl TypeOf for StrSlice {
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.len(),
+                size: self.value.len() + self.padding.get(),
             },
             scope,
         )

@@ -294,7 +294,7 @@ impl Executable for Addition {
                 let right = OpPrimitive::get_str_slice(&thread.memory())?;
                 let left = OpPrimitive::get_str_slice(&thread.memory())?;
 
-                let str_bytes: Vec<u8> = (left + &right).into_bytes();
+                let str_bytes: Vec<u8> = (left.to_owned() + &right).into_bytes();
 
                 thread
                     .env

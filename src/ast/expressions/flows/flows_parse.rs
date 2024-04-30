@@ -414,6 +414,7 @@ mod tests {
                     PatternExpr {
                         patterns: vec![Pattern::String(StrSlice {
                             value: "Hello World".to_string(),
+                            padding: 0.into(),
                             metadata: Metadata::default()
                         })],
                         expr: ExprScope::Expr(Block {

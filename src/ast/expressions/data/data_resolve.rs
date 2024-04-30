@@ -5,7 +5,7 @@ use super::{
 };
 use crate::ast::expressions::Atomic;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType};
+use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, StrSliceType};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
@@ -431,9 +431,19 @@ impl Resolve for StrSlice {
         Self: Sized,
     {
         match context {
-            Some(context_type) => {
-                let _ = context_type.compatible_with(self, &scope.borrow())?;
-            }
+            Some(context_type) => match context_type {
+                Either::Static(value) => match value.as_ref() {
+                    StaticType::StrSlice(StrSliceType { size }) => {
+                        if *size < self.value.len() {
+                            return Err(SemanticError::IncompatibleTypes);
+                        } else if *size >= self.value.len() {
+                            self.padding.set(*size - self.value.len());
+                        }
+                    }
+                    _ => return Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+            },
             None => {}
         }
         resolve_metadata!(self.metadata, self, scope, context);

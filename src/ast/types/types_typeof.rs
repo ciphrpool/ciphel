@@ -179,7 +179,7 @@ impl CompatibleWith for static_types::StrSliceType {
             if let StaticType::StrSlice(static_types::StrSliceType { size: other_size }) =
                 other_type.as_ref()
             {
-                return (other_size == &self.size)
+                return (other_size >= &self.size)
                     .then_some(())
                     .ok_or(SemanticError::IncompatibleTypes);
             } else {

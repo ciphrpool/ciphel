@@ -105,6 +105,7 @@ pub struct Slice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
+    pub padding: Cell<usize>,
     pub metadata: Metadata,
 }
 
@@ -251,7 +252,7 @@ impl Data {
                 value: _,
                 metadata,
             }) => Some(metadata),
-            Data::StrSlice(StrSlice { value: _, metadata }) => Some(metadata),
+            Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -312,7 +313,7 @@ impl Data {
                 value: _,
                 metadata,
             }) => metadata.signature(),
-            Data::StrSlice(StrSlice { value: _, metadata }) => metadata.signature(),
+            Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
         }
     }
 }

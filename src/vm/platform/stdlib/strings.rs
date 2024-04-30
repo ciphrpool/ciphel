@@ -455,6 +455,18 @@ mod tests {
 
         let result = compile_statement_for_string!(statement);
         assert_eq!(result, "Hello false");
+
+        let statement = Statement::parse(
+            r##"
+        let x = f"Hello {false} {true}";
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let result = compile_statement_for_string!(statement);
+        assert_eq!(result, "Hello false true");
     }
 
     #[test]
