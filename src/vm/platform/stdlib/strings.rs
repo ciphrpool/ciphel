@@ -13,11 +13,14 @@ use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, StringType};
 use crate::semantic::{Either, TypeOf};
 use crate::vm::allocator::align;
+use crate::vm::allocator::heap::Heap;
+use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
-use crate::vm::scheduler::Thread;
+
+use crate::vm::stdio::StdIO;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
@@ -189,68 +192,74 @@ impl GenerateCode for StringsFn {
 }
 
 impl Executable for StringsCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             StringsCasm::ToStr(value) => {
                 let res = match value {
                     ToStrCasm::ToStrU128 => {
-                        let n = OpPrimitive::get_num16::<u128>(&thread.memory())?;
+                        let n = OpPrimitive::get_num16::<u128>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrU64 => {
-                        let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let n = OpPrimitive::get_num8::<u64>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrU32 => {
-                        let n = OpPrimitive::get_num4::<u32>(&thread.memory())?;
+                        let n = OpPrimitive::get_num4::<u32>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrU16 => {
-                        let n = OpPrimitive::get_num2::<u16>(&thread.memory())?;
+                        let n = OpPrimitive::get_num2::<u16>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrU8 => {
-                        let n = OpPrimitive::get_num1::<u8>(&thread.memory())?;
+                        let n = OpPrimitive::get_num1::<u8>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrI128 => {
-                        let n = OpPrimitive::get_num16::<i128>(&thread.memory())?;
+                        let n = OpPrimitive::get_num16::<i128>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrI64 => {
-                        let n = OpPrimitive::get_num8::<i64>(&thread.memory())?;
+                        let n = OpPrimitive::get_num8::<i64>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrI32 => {
-                        let n = OpPrimitive::get_num4::<i32>(&thread.memory())?;
+                        let n = OpPrimitive::get_num4::<i32>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrI16 => {
-                        let n = OpPrimitive::get_num2::<i16>(&thread.memory())?;
+                        let n = OpPrimitive::get_num2::<i16>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrI8 => {
-                        let n = OpPrimitive::get_num1::<i8>(&thread.memory())?;
+                        let n = OpPrimitive::get_num1::<i8>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrF64 => {
-                        let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                        let n = OpPrimitive::get_num8::<f64>(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrChar => {
-                        let n = OpPrimitive::get_char(&thread.memory())?;
+                        let n = OpPrimitive::get_char(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrBool => {
-                        let n = OpPrimitive::get_bool(&thread.memory())?;
+                        let n = OpPrimitive::get_bool(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrStrSlice => {
-                        let n = OpPrimitive::get_str_slice(&thread.memory())?;
+                        let n = OpPrimitive::get_str_slice(stack)?;
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrString => {
-                        let n = OpPrimitive::get_string(&thread.memory())?;
+                        let n = OpPrimitive::get_string(stack, heap)?;
                         format!("{}", n)
                     }
                 };
@@ -260,36 +269,18 @@ impl Executable for StringsCasm {
 
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                let address = thread
-                    .runtime
-                    .heap
-                    .alloc(alloc_size as usize)
-                    .map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = res.into_bytes();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
                 /* Write slice */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 16, &data)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
@@ -298,32 +289,26 @@ impl Executable for StringsCasm {
                     let len = match opt_len {
                         Some(len) => *len,
                         None => {
-                            let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                            let n = OpPrimitive::get_num8::<u64>(stack)?;
                             n as usize
                         }
                     };
                     let mut slice_data = Vec::new();
                     for _ in 0..len {
-                        let string_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let string_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let string_len_bytes = thread
-                            .runtime
-                            .heap
+                        let string_len_bytes = heap
                             .read(string_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let string_len_bytes =
                             TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                         let string_len = u64::from_le_bytes(*string_len_bytes);
-                        let string_data = thread
-                            .runtime
-                            .heap
+                        let string_data = heap
                             .read(string_heap_address as usize + 16, string_len as usize)
                             .map_err(|e| e.into())?;
 
-                        let _ = thread
-                            .runtime
-                            .heap
+                        let _ = heap
                             .free(string_heap_address as usize - 8)
                             .map_err(|e| e.into())?;
 
@@ -337,42 +322,24 @@ impl Executable for StringsCasm {
 
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                    let address = thread
-                        .runtime
-                        .heap
-                        .alloc(alloc_size as usize)
-                        .map_err(|e| e.into())?;
+                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                     /* Write len */
-                    let _ = thread
-                        .runtime
-                        .heap
-                        .write(address, &len_bytes)
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
                     /* Write capacity */
-                    let _ = thread
-                        .runtime
-                        .heap
-                        .write(address + 8, &cap_bytes)
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
                     /* Write slice */
-                    let _ = thread
-                        .runtime
-                        .heap
-                        .write(address + 16, &data)
-                        .map_err(|e| e.into())?;
+                    let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
 
-                    let _ = thread
-                        .env
-                        .stack
+                    let _ = stack
                         .push_with(&address.to_le_bytes())
                         .map_err(|e| e.into())?;
                 }
             },
         }
 
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }

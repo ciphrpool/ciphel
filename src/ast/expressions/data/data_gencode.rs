@@ -1608,20 +1608,23 @@ mod tests {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let arr: [u8; 8] = data.try_into().expect("");
         let heap_address = u64::from_le_bytes(arr);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * 4 + 16)
             .expect("Heap Read should have succeeded");
 

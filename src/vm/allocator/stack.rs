@@ -45,7 +45,7 @@ impl Default for Offset {
 
 #[derive(Debug, Clone)]
 pub struct Stack {
-    stack: MutRc<Box<[u8; STACK_SIZE]>>,
+    stack: [u8; STACK_SIZE],
     pub registers: Registers,
     // top: Cell<usize>,
     // registers.bottom: Cell<usize>,
@@ -187,24 +187,23 @@ pub struct StackSlice {
 impl Stack {
     pub fn new() -> Self {
         Self {
-            stack: Rc::new(RefCell::new(Box::new([0; STACK_SIZE]))),
+            stack: [0; STACK_SIZE],
             registers: Registers::default(),
         }
     }
 
-    pub fn open_window(&self) -> Result<(), StackError> {
+    pub fn open_window(&mut self) -> Result<(), StackError> {
         let bottom = self.registers.top.get();
         let _ = self.push_with(&(self.registers.window.get() as u64).to_le_bytes())?;
         self.registers.window.set(bottom);
         Ok(())
     }
 
-    pub fn close_window(&self) -> Result<(), StackError> {
+    pub fn close_window(&mut self) -> Result<(), StackError> {
         let bottom = self.registers.window.get();
-        let borrowed = self.stack.borrow();
 
         let previous_windows = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&borrowed[bottom..bottom + 8])
+            TryInto::<[u8; 8]>::try_into(&self.stack[bottom..bottom + 8])
                 .map_err(|_| StackError::ReadError)?,
         );
         self.registers.window.set(previous_windows as usize);
@@ -212,7 +211,7 @@ impl Stack {
         Ok(())
     }
 
-    pub fn frame(&self, params_size: usize, link: usize) -> Result<(), StackError> {
+    pub fn frame(&mut self, params_size: usize, link: usize) -> Result<(), StackError> {
         let bottom = self.registers.top.get();
 
         let frame_meta_size = Registers::link_size()
@@ -222,23 +221,22 @@ impl Stack {
             + params_size;
         let _ = self.push_with_zero(frame_meta_size)?;
 
-        let mut borrowed_buffer = self.stack.borrow_mut();
         // Copy past link
-        borrowed_buffer[bottom..bottom + Registers::link_size()]
+        self.stack[bottom..bottom + Registers::link_size()]
             .copy_from_slice(&(self.registers.link.get() as u64).to_le_bytes());
         // Copy past FB
-        borrowed_buffer[bottom + Registers::link_size()
+        self.stack[bottom + Registers::link_size()
             ..bottom + Registers::link_size() + Registers::bottom_size()]
             .copy_from_slice(&(self.registers.bottom.get() as u64).to_le_bytes());
         // Copy past FParamStart
-        borrowed_buffer[bottom + Registers::link_size() + Registers::bottom_size()
+        self.stack[bottom + Registers::link_size() + Registers::bottom_size()
             ..bottom
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()]
             .copy_from_slice(&(self.registers.params_start.get() as u64).to_le_bytes());
         // Copy past FZ
-        borrowed_buffer[bottom
+        self.stack[bottom
             + Registers::link_size()
             + Registers::bottom_size()
             + Registers::params_start_size()
@@ -273,7 +271,7 @@ impl Stack {
         Ok(())
     }
 
-    pub fn clean(&self) -> Result<(), StackError> {
+    pub fn clean(&mut self) -> Result<(), StackError> {
         let _top = self.top();
 
         if self.registers.bottom.get() != self.registers.params_start.get()
@@ -284,13 +282,12 @@ impl Stack {
                     + Registers::params_start_size()
                     + Registers::zero_size()
         {
-            let borrowed_buffer = self.stack.borrow();
             let Frame {
                 bottom,
                 zero,
                 params_start,
                 link,
-            } = Frame::from((&self.registers).into(), borrowed_buffer.as_ref())?;
+            } = Frame::from((&self.registers).into(), self.stack.as_ref())?;
             // update registers
             self.registers.top.set(self.registers.bottom.get());
 
@@ -401,7 +398,7 @@ impl Stack {
     pub fn top(&self) -> usize {
         self.registers.top.get()
     }
-    pub fn push(&self, size: usize) -> Result<(), StackError> {
+    pub fn push(&mut self, size: usize) -> Result<(), StackError> {
         let top = self.top();
         if top + size >= STACK_SIZE {
             return Err(StackError::StackOverflow);
@@ -410,28 +407,24 @@ impl Stack {
         Ok(())
     }
 
-    pub fn push_with(&self, data: &[u8]) -> Result<(), StackError> {
+    pub fn push_with(&mut self, data: &[u8]) -> Result<(), StackError> {
         let top = self.top();
         if top + data.len() >= STACK_SIZE {
             return Err(StackError::StackOverflow);
         }
-        let mut borrowed_buffer = self.stack.borrow_mut();
-        borrowed_buffer[top..top + data.len()].copy_from_slice(&data);
+        self.stack[top..top + data.len()].copy_from_slice(&data);
         self.registers.top.set(top + data.len());
         Ok(())
     }
-    pub fn push_with_zero(&self, size: usize) -> Result<(), StackError> {
+    pub fn push_with_zero(&mut self, size: usize) -> Result<(), StackError> {
         self.push_with(&vec![0; size])
     }
-    pub fn pop(&self, size: usize) -> Result<Vec<u8>, StackError> {
+    pub fn pop<'env>(&'env mut self, size: usize) -> Result<&'env [u8], StackError> {
         let top = self.top();
         if top < size {
             return Err(StackError::StackUnderflow);
         }
-        let res = {
-            let borrowed = self.stack.borrow();
-            borrowed[top - size..top].to_vec()
-        };
+        let res = &self.stack[top - size..top];
         self.registers.top.set(top - size);
         Ok(res)
     }
@@ -467,12 +460,10 @@ impl Stack {
                     AccessLevel::General => 0,
                     AccessLevel::Direct => self.registers.bottom.get(),
                     AccessLevel::Backward(backward) => {
-                        //
-                        let borrowed_buffer = self.stack.borrow();
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
                         while backward != 0 {
-                            let previous_frame = Frame::from(frame, borrowed_buffer.as_ref())?;
+                            let previous_frame = Frame::from(frame, self.stack.as_ref())?;
                             if backward == 1 {
                                 backward = 0;
                             } else {
@@ -493,12 +484,10 @@ impl Stack {
                     AccessLevel::General => 0,
                     AccessLevel::Direct => self.registers.zero.get(),
                     AccessLevel::Backward(backward) => {
-                        //
-                        let borrowed_buffer = self.stack.borrow();
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
                         while backward != 0 {
-                            let previous_frame = Frame::from(frame, borrowed_buffer.as_ref())?;
+                            let previous_frame = Frame::from(frame, self.stack.as_ref())?;
                             if backward == 1 {
                                 backward = 0;
                             } else {
@@ -525,12 +514,10 @@ impl Stack {
                     AccessLevel::General => 0,
                     AccessLevel::Direct => self.registers.params_start.get(),
                     AccessLevel::Backward(backward) => {
-                        //
-                        let borrowed_buffer = self.stack.borrow();
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
                         while backward != 0 {
-                            let previous_frame = Frame::from(frame, borrowed_buffer.as_ref())?;
+                            let previous_frame = Frame::from(frame, self.stack.as_ref())?;
                             if backward == 1 {
                                 backward = 0;
                             } else {
@@ -551,23 +538,22 @@ impl Stack {
         }
     }
 
-    pub fn read(
-        &self,
+    pub fn read<'env>(
+        &'env self,
         offset: Offset,
         level: AccessLevel,
         size: usize,
-    ) -> Result<Vec<u8>, StackError> {
+    ) -> Result<&'env [u8], StackError> {
         let top = self.top();
         let start = self.compute_absolute_address(offset, level)?;
         if start >= top || start + size > top {
             return Err(StackError::ReadError);
         }
-        let borrowed_buffer = self.stack.borrow();
-        Ok(borrowed_buffer[start..start + size].to_vec())
+        Ok(&self.stack[start..start + size])
     }
 
-    pub fn read_utf8(
-        &self,
+    pub fn read_utf8<'env>(
+        &'env self,
         address: Offset,
         level: AccessLevel,
         idx: usize,
@@ -577,13 +563,12 @@ impl Stack {
         if address >= top {
             return Err(StackError::ReadError);
         }
-        let borrowed = self.stack.borrow();
         let mut offset = 0;
         let mut current_idx = 0;
-        let mut byte = borrowed[address + offset];
+        let mut byte = self.stack[address + offset];
 
         while current_idx < idx {
-            byte = borrowed[address + offset];
+            byte = self.stack[address + offset];
             match byte {
                 // 7-bit ASCII character (U+0000 to U+007F)
                 0x00..=0x7F => {
@@ -595,7 +580,7 @@ impl Stack {
                     if (address + offset) + 1 >= STACK_SIZE {
                         return Err(StackError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + 1];
+                    let in_byte = self.stack[(address + offset) + 1];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(StackError::ReadError);
                     }
@@ -608,7 +593,7 @@ impl Stack {
                         if (address + offset) + i >= STACK_SIZE {
                             return Err(StackError::ReadError);
                         }
-                        let in_byte = borrowed[(address + offset) + i];
+                        let in_byte = self.stack[(address + offset) + i];
                         if (in_byte & 0xC0) != 0x80 {
                             return Err(StackError::ReadError);
                         }
@@ -622,7 +607,7 @@ impl Stack {
                         if (address + offset) + i >= STACK_SIZE {
                             return Err(StackError::ReadError);
                         }
-                        let in_byte = borrowed[(address + offset) + i];
+                        let in_byte = self.stack[(address + offset) + i];
                         if (in_byte & 0xC0) != 0x80 {
                             return Err(StackError::ReadError);
                         }
@@ -640,7 +625,7 @@ impl Stack {
             return Err(StackError::ReadError);
         }
 
-        byte = borrowed[address + offset];
+        byte = self.stack[address + offset];
         let mut bytes = [byte, 0u8, 0u8, 0u8];
         let mut size = 1;
         match byte {
@@ -651,7 +636,7 @@ impl Stack {
                 if (address + offset) + 1 >= STACK_SIZE {
                     return Err(StackError::ReadError);
                 }
-                let in_byte = borrowed[(address + offset) + 1];
+                let in_byte = self.stack[(address + offset) + 1];
                 if (in_byte & 0xC0) != 0x80 {
                     return Err(StackError::ReadError);
                 }
@@ -664,7 +649,7 @@ impl Stack {
                     if (address + offset) + i >= STACK_SIZE {
                         return Err(StackError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + i];
+                    let in_byte = self.stack[(address + offset) + i];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(StackError::ReadError);
                     }
@@ -678,7 +663,7 @@ impl Stack {
                     if (address + offset) + i >= STACK_SIZE {
                         return Err(StackError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + i];
+                    let in_byte = self.stack[(address + offset) + i];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(StackError::ReadError);
                     }
@@ -703,15 +688,19 @@ impl Stack {
     //     Ok(borrowed_buffer[top - size..top].to_vec())
     // }
 
-    pub fn write(&self, offset: Offset, level: AccessLevel, data: &[u8]) -> Result<(), StackError> {
+    pub fn write(
+        &mut self,
+        offset: Offset,
+        level: AccessLevel,
+        data: &[u8],
+    ) -> Result<(), StackError> {
         let top = self.top();
         let size = data.len();
         let start = self.compute_absolute_address(offset, level)?;
         if start >= top || start + size > top {
             return Err(StackError::WriteError);
         }
-        let mut borrowed_buffer = self.stack.borrow_mut();
-        borrowed_buffer[start..start + size].copy_from_slice(&data);
+        self.stack[start..start + size].copy_from_slice(&data);
         Ok(())
     }
 }
@@ -722,14 +711,14 @@ mod tests {
 
     #[test]
     fn valid_push() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.push(8).expect("Push should have succeeded");
         assert_eq!(stack.top(), 8);
     }
 
     #[test]
     fn robustness_push() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack
             .push(STACK_SIZE + 1)
             .expect_err("Push should have failed");
@@ -737,7 +726,7 @@ mod tests {
 
     #[test]
     fn valid_pop() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.push(64).expect("Push should have succeeded");
         let _ = stack.pop(32).expect("Pop should have succeeded");
 
@@ -746,18 +735,16 @@ mod tests {
 
     #[test]
     fn robustness_pop() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.pop(32).expect_err("Pop should have failed");
     }
 
     #[test]
     fn valid_read() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.push(8).expect("Push should have succeeded");
 
-        let mut borrowed_stack = stack.stack.borrow_mut();
-        borrowed_stack[0..8].copy_from_slice(&[1u8; 8]);
-        drop(borrowed_stack);
+        stack.stack[0..8].copy_from_slice(&[1u8; 8]);
 
         let data = stack
             .read(Offset::SB(0), AccessLevel::Direct, 8)
@@ -775,20 +762,19 @@ mod tests {
 
     #[test]
     fn valid_write() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
             .write(Offset::SB(0), AccessLevel::Direct, &vec![1; 8])
             .expect("Write should have succeeded");
 
-        let borrowed_stack = stack.stack.borrow();
-        assert_eq!(borrowed_stack[0..8], vec![1; 8]);
+        assert_eq!(stack.stack[0..8], vec![1; 8]);
     }
 
     #[test]
     fn robustness_write() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack
             .write(Offset::SB(0), AccessLevel::Direct, &vec![1; 8])
             .expect_err("Read should have failed");
@@ -796,7 +782,7 @@ mod tests {
 
     #[test]
     fn valid_frame() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
@@ -811,7 +797,7 @@ mod tests {
 
     #[test]
     fn valid_frame_clean() {
-        let stack = Stack::new();
+        let mut stack = Stack::new();
         let _ = stack
             .frame(0, 0)
             .expect("Frame creation should have succeeded");

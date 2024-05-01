@@ -45,9 +45,12 @@ macro_rules! resolve_metadata {
 macro_rules! clear_stack {
     ($memory:ident) => {{
         use num_traits::Zero;
-        let top = $memory.stack.top();
-        let data = $memory.stack.pop(top).expect("Read should have succeeded");
-        assert!($memory.stack.top().is_zero());
+        let top = $memory.top();
+        let data = $memory
+            .pop(top)
+            .expect("Read should have succeeded")
+            .to_owned();
+        assert!($memory.top().is_zero());
         data
     }};
 }
@@ -86,14 +89,18 @@ macro_rules! compile_expression {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         (expr, data)
     }};
@@ -128,14 +135,18 @@ macro_rules! compile_expression_with_type {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         (expr, data)
     }};
@@ -156,19 +167,49 @@ macro_rules! compile_statement {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
-        data
+        data.to_owned()
     }};
 }
+#[macro_export]
+macro_rules! compile_statement_for_stdout {
+    ($statement:ident) => {{
+        let scope = Scope::new();
+        let _ = $statement
+            .resolve(&scope, &None, &())
+            .expect("Resolution should have succeeded");
+        // Code generation.
+        let instructions = CasmProgram::default();
+        $statement
+            .gencode(&scope, &instructions)
+            .expect("Code generation should have succeeded");
 
+        assert!(instructions.len() > 0, "No instructions generated");
+        // Execute the instructions.
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let tid = runtime
+            .spawn()
+            .expect("Thread spawning should have succeeded");
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let output = stdio.stdout.take();
+        output
+    }};
+}
 #[macro_export]
 macro_rules! compile_statement_for_string {
     ($statement:ident) => {{
@@ -184,22 +225,24 @@ macro_rules! compile_statement_for_string {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -207,8 +250,7 @@ macro_rules! compile_statement_for_string {
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address, length + 16)
             .expect("length should be readable");
         let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
@@ -237,14 +279,17 @@ macro_rules! eval_and_compare {
         assert!(instructions.len() > 0, "No instructions generated");
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap,&mut  stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -276,14 +321,17 @@ macro_rules! eval_and_compare_bool {
         assert!(instructions.len() > 0, "No instructions generated");
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap,&mut  stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(

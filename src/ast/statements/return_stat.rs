@@ -1,11 +1,7 @@
 use std::cell::Ref;
 
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{Info};
-
-
-
-
+use crate::semantic::Info;
 
 use crate::{
     ast::{
@@ -43,10 +39,6 @@ pub enum Return {
     },
     Break,
     Continue,
-    Yield {
-        expr: Box<Expression>,
-        metadata: Metadata,
-    },
 }
 
 impl TryParse for Return {
@@ -82,13 +74,6 @@ impl TryParse for Return {
             map(
                 terminated(wst(lexem::CONTINUE), wst(lexem::SEMI_COLON)),
                 |_| Return::Continue,
-            ),
-            map(
-                delimited(wst(lexem::YIELD), Expression::parse, wst(lexem::SEMI_COLON)),
-                |e| Return::Yield {
-                    expr: Box::new(e),
-                    metadata: Metadata::default(),
-                },
             ),
         ))(input)
     }
@@ -147,15 +132,6 @@ impl Resolve for Return {
                     Err(SemanticError::ExpectedLoop)
                 }
             }
-            Return::Yield { expr, metadata } => {
-                let _ = expr.resolve(scope, &context, extra)?;
-                if scope.as_ref().borrow().state().is_generator {
-                    resolve_metadata!(metadata, self, scope, context);
-                    Ok(())
-                } else {
-                    Err(SemanticError::ExpectedLoop)
-                }
-            }
         }
     }
 }
@@ -176,7 +152,6 @@ impl TypeOf for Return {
             Return::Continue => Ok(Either::Static(
                 <StaticType as BuildStaticType>::build_unit().into(),
             )),
-            Return::Yield { expr, metadata: _ } => expr.type_of(&scope),
         }
     }
 }
@@ -211,17 +186,6 @@ impl GenerateCode for Return {
             }
             Return::Continue => {
                 instructions.push(Casm::StackFrame(StackFrame::Continue));
-                Ok(())
-            }
-            Return::Yield { expr, metadata } => {
-                let Some(return_size) = metadata.signature().map(|t| t.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let _ = expr.gencode(scope, instructions)?;
-
-                instructions.push(Casm::StackFrame(StackFrame::Yield {
-                    return_size: Some(return_size),
-                }));
                 Ok(())
             }
         }
@@ -337,21 +301,6 @@ mod tests {
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
-
-        let return_statement = Return::parse(
-            r#"
-            yield 10;
-        "#
-            .into(),
-        )
-        .unwrap()
-        .1;
-        inner_scope.as_ref().borrow_mut().to_generator();
-        let res = return_statement.resolve(&inner_scope, &Some(p_num!(U64)), &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
-        assert_eq!(p_num!(U64), return_type);
     }
 
     #[test]

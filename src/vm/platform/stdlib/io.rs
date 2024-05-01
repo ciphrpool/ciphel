@@ -9,12 +9,14 @@ use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::{Either, TypeOf};
 
+use crate::vm::allocator::heap::Heap;
+use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::branch::Label;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 
-use crate::vm::scheduler::Thread;
+use crate::vm::stdio::StdIO;
 use crate::vm::vm::{Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
@@ -136,91 +138,103 @@ impl GenerateCode for IOFn {
 }
 
 impl Executable for IOCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::Print(print) => print.execute(thread),
+            IOCasm::Print(print) => print.execute(program, stack, heap, stdio),
         }
     }
 }
 
 impl Executable for PrintCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             PrintCasm::PrintID(id) => {
-                thread.runtime.stdio.stdout.push(&id);
+                stdio.stdout.push(&id);
             }
             PrintCasm::PrintLexem(lexem) => {
-                thread.runtime.stdio.stdout.push(lexem);
+                stdio.stdout.push(lexem);
             }
             PrintCasm::PrintU8 => {
-                let n = OpPrimitive::get_num1::<u8>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num1::<u8>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU16 => {
-                let n = OpPrimitive::get_num2::<u16>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num2::<u16>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU32 => {
-                let n = OpPrimitive::get_num4::<u32>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num4::<u32>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU64 => {
-                let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<u64>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintU128 => {
-                let n = OpPrimitive::get_num16::<u128>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num16::<u128>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI8 => {
-                let n = OpPrimitive::get_num1::<i8>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num1::<i8>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI16 => {
-                let n = OpPrimitive::get_num2::<i16>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num2::<i16>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI32 => {
-                let n = OpPrimitive::get_num4::<i32>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num4::<i32>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI64 => {
-                let n = OpPrimitive::get_num8::<i64>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<i64>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintI128 => {
-                let n = OpPrimitive::get_num16::<i128>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num16::<i128>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintF64 => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintAddr => {
-                let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("0x{:X}", n));
+                let n = OpPrimitive::get_num8::<u64>(stack)?;
+                stdio.stdout.push(&format!("0x{:X}", n));
             }
             PrintCasm::PrintChar => {
-                let n = OpPrimitive::get_char(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("'{}'", n));
+                let n = OpPrimitive::get_char(stack)?;
+                stdio.stdout.push(&format!("'{}'", n));
             }
             PrintCasm::PrintBool => {
-                let n = OpPrimitive::get_bool(&thread.memory())?;
-                thread.runtime.stdio.stdout.push(&format!("{}", n));
+                let n = OpPrimitive::get_bool(stack)?;
+                stdio.stdout.push(&format!("{}", n));
             }
             PrintCasm::PrintString => {
-                let n = OpPrimitive::get_str_slice(&thread.memory())?;
+                let n = OpPrimitive::get_str_slice(stack)?;
                 let n = n.trim_end_matches(char::from(0));
-                thread.runtime.stdio.stdout.push(&format!("\"{}\"", n));
+                stdio.stdout.push(&format!("\"{}\"", n));
             }
             PrintCasm::StdOutBufOpen => {
-                thread.runtime.stdio.stdout.spawn_buffer();
+                stdio.stdout.spawn_buffer();
             }
             PrintCasm::StdOutBufRevFlush => {
-                thread.runtime.stdio.stdout.rev_flush_buffer();
+                stdio.stdout.rev_flush_buffer();
             }
             PrintCasm::StdOutBufFlush => {
-                thread.runtime.stdio.stdout.flush_buffer();
+                stdio.stdout.flush_buffer();
             }
             PrintCasm::PrintList {
                 length,
@@ -230,63 +244,53 @@ impl Executable for PrintCasm {
                 let length = match length {
                     Some(length) => *length,
                     None => {
-                        let n = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let n = OpPrimitive::get_num8::<u64>(stack)?;
                         n as usize
                     }
                 };
 
-                thread.env.program.incr();
-                let start = thread.env.program.cursor_get();
+                program.incr();
+                let start = program.cursor_get();
                 let mut current_instruction = None;
-                let borrowed_main = thread.env.program.main.as_ref().borrow();
-                thread.runtime.stdio.stdout.spawn_buffer();
-                thread
-                    .runtime
-                    .stdio
-                    .stdout
-                    .push(crate::ast::utils::lexem::SQ_BRA_C);
+                let borrowed_main = program.main.as_ref().borrow();
+                stdio.stdout.spawn_buffer();
+
+                stdio.stdout.push(crate::ast::utils::lexem::SQ_BRA_C);
                 for idx in 0..length {
                     loop {
-                        let cursor = thread.env.program.cursor_get();
+                        let cursor = program.cursor_get();
                         current_instruction = borrowed_main.get(cursor);
                         if let Some(instruction) = current_instruction {
                             match instruction {
                                 Casm::Label(Label { id, .. }) => {
                                     if id == continue_label {
-                                        thread.env.program.cursor_set(start);
+                                        program.cursor_set(start);
                                         break;
                                     } else {
-                                        thread.env.program.incr();
+                                        program.incr();
                                     }
                                 }
                                 _ => {
-                                    let _ = instruction.execute(thread)?;
+                                    let _ = instruction.execute(program, stack, heap, stdio)?;
                                 }
                             }
                         }
                     }
                     if idx != length - 1 {
-                        thread
-                            .runtime
-                            .stdio
-                            .stdout
-                            .push(crate::ast::utils::lexem::COMA);
+                        stdio.stdout.push(crate::ast::utils::lexem::COMA);
                     }
                 }
-                thread
-                    .runtime
-                    .stdio
-                    .stdout
-                    .push(crate::ast::utils::lexem::SQ_BRA_O);
-                thread.runtime.stdio.stdout.rev_flush_buffer();
-                let Some(idx) = thread.env.program.get(end_label) else {
+
+                stdio.stdout.push(crate::ast::utils::lexem::SQ_BRA_O);
+                stdio.stdout.rev_flush_buffer();
+                let Some(idx) = program.get(end_label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
-                thread.env.program.cursor_set(idx);
+                program.cursor_set(idx);
                 return Ok(());
             }
         }
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }
@@ -297,6 +301,7 @@ mod tests {
 
     use crate::{
         ast::{statements::Statement, TryParse},
+        compile_statement_for_stdout,
         semantic::scope::scope::Scope,
         vm::vm::Runtime,
     };
@@ -317,28 +322,8 @@ mod tests {
             let statement = Statement::parse(format!("print(64{});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
-            let scope = Scope::new();
-            let _ = statement
-                .resolve(&scope, &None, &())
-                .expect("Resolution should have succeeded");
-            // Code generation.
-            let instructions = CasmProgram::default();
-            statement
-                .gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
 
-            assert!(instructions.len() > 0, "No instructions generated");
-
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-
-            thread.run().expect("Execution should have succeeded");
-            let output = runtime.stdio.stdout.take();
+            let output = compile_statement_for_stdout!(statement);
             assert_eq!(&output, "64");
         }
     }
@@ -348,27 +333,7 @@ mod tests {
         let statement = Statement::parse("print('a');".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "'a'");
     }
     #[test]
@@ -377,27 +342,8 @@ mod tests {
             let statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
-            let scope = Scope::new();
-            let _ = statement
-                .resolve(&scope, &None, &())
-                .expect("Resolution should have succeeded");
-            // Code generation.
-            let instructions = CasmProgram::default();
-            statement
-                .gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
 
-            assert!(instructions.len() > 0, "No instructions generated");
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-
-            thread.run().expect("Execution should have succeeded");
-            let output = runtime.stdio.stdout.take();
+            let output = compile_statement_for_stdout!(statement);
             assert_eq!(&output, text);
         }
     }
@@ -407,27 +353,8 @@ mod tests {
             let statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
-            let scope = Scope::new();
-            let _ = statement
-                .resolve(&scope, &None, &())
-                .expect("Resolution should have succeeded");
-            // Code generation.
-            let instructions = CasmProgram::default();
-            statement
-                .gencode(&scope, &instructions)
-                .expect("Code generation should have succeeded");
 
-            assert!(instructions.len() > 0, "No instructions generated");
-            // Execute the instructions.
-            let mut runtime = Runtime::new();
-            let tid = runtime
-                .spawn()
-                .expect("Thread spawning should have succeeded");
-            let thread = runtime.get(tid).expect("Thread should exist");
-            thread.push_instr(instructions);
-
-            thread.run().expect("Execution should have succeeded");
-            let output = runtime.stdio.stdout.take();
+            let output = compile_statement_for_stdout!(statement);
             assert_eq!(&output, text);
         }
     }
@@ -445,27 +372,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "\"Hello World\"");
     }
     #[test]
@@ -481,27 +388,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "\"Hello World\"");
     }
     #[test]
@@ -517,27 +404,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "\"Hello World\"");
     }
 
@@ -551,27 +418,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "(420,true)");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -586,27 +433,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "(420,(69,27),true)");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -621,27 +448,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "[5,7,8,9,10]");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -655,27 +462,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "[[2,4],[1,3]]");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -689,27 +476,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "[[[1,2],[3,4]],[[5,6],[7,8]],[[9,10],[11,12]]]");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -724,27 +491,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "[1,2,3,4]");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -759,27 +506,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, r##"["Hello"," ","world"]"##);
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -799,27 +526,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "0x28");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -844,27 +551,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "Point{x:420,y:69}");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -887,27 +574,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "Color::YELLOW");
         // assert_eq!(&output, "\"Hello World\"");
     }
@@ -937,27 +604,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let output = runtime.stdio.stdout.take();
+        let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "Geo::Point{x:420,y:69}");
         // assert_eq!(&output, "\"Hello World\"");
     }

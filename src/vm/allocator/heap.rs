@@ -35,7 +35,7 @@ impl Into<RuntimeError> for HeapError {
 
 #[derive(Clone)]
 pub struct Heap {
-    heap: MutRc<[u8; HEAP_SIZE]>,
+    heap: [u8; HEAP_SIZE],
     first_freed_block_offset: Cell<usize>,
     allocated_size: Cell<usize>,
 }
@@ -330,12 +330,10 @@ impl Debug for Heap {
 
 impl Heap {
     fn iter_blocks(&self) -> Result<Vec<Block>, HeapError> {
-        let binding = self.heap.borrow();
-        let borrowed = binding.as_ref();
         let mut res = Vec::default();
         let mut offset = 0;
         while offset < HEAP_SIZE {
-            let block = Block::read(borrowed, offset)?;
+            let block = Block::read(&self.heap, offset)?;
             offset = block.skip();
             res.push(block);
         }
@@ -345,22 +343,21 @@ impl Heap {
     pub fn new() -> Self {
         let _header = HEAP_SIZE as u64;
 
-        let res = Self {
-            heap: Rc::new(RefCell::new([0; HEAP_SIZE])),
+        let mut res = Self {
+            heap: [0; HEAP_SIZE],
             first_freed_block_offset: Cell::new(0),
             allocated_size: Cell::new(0),
         };
-        {
-            // Store the header and the footer of the heap as freed
-            let mut borrowed = res.heap.as_ref().borrow_mut();
-            borrowed[0..8].copy_from_slice(&HEAP_SIZE.to_be_bytes());
 
-            // set free block previous and next pointer with invalid pointer
-            borrowed[8..16].copy_from_slice(&1u64.to_be_bytes());
-            borrowed[16..24].copy_from_slice(&1u64.to_be_bytes());
+        // Store the header and the footer of the heap as freed
+        res.heap[0..8].copy_from_slice(&HEAP_SIZE.to_be_bytes());
 
-            borrowed[HEAP_SIZE - 8..HEAP_SIZE].copy_from_slice(&HEAP_SIZE.to_be_bytes());
-        }
+        // set free block previous and next pointer with invalid pointer
+        res.heap[8..16].copy_from_slice(&1u64.to_be_bytes());
+        res.heap[16..24].copy_from_slice(&1u64.to_be_bytes());
+
+        res.heap[HEAP_SIZE - 8..HEAP_SIZE].copy_from_slice(&HEAP_SIZE.to_be_bytes());
+
         res
     }
 
@@ -371,13 +368,11 @@ impl Heap {
     fn best_fit(&self, aligned_size: usize) -> Result<Option<Block>, HeapError> {
         let mut fitting_block = None;
         let mut min_fitting_size = HEAP_SIZE as u64 + 1;
-        // Iterating over free block
-        let binding = self.heap.borrow();
-        let borrowed = binding.as_ref();
+        // Iterating over free block;
 
         let mut offset: usize = self.first_freed_block_offset.get();
         while offset < HEAP_SIZE {
-            let block = Block::read(borrowed, offset)?;
+            let block = Block::read(&self.heap, offset)?;
             if block.header.allocated {
                 offset = block.skip();
                 continue;
@@ -393,27 +388,22 @@ impl Heap {
         Ok(fitting_block)
     }
 
-    fn insert(&self, block: &Block) -> Result<(), HeapError> {
-        let mut borrowed = self
-            .heap
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| HeapError::Default)?;
-        borrowed[block.range_header()].copy_from_slice(&block.header.to_buf());
+    fn insert(&mut self, block: &Block) -> Result<(), HeapError> {
+        self.heap[block.range_header()].copy_from_slice(&block.header.to_buf());
 
         match block.data {
             BlockData::Allocated => {}
             BlockData::Free { previous, next } => {
-                borrowed[block.range_previous().unwrap()].copy_from_slice(&previous.to_be_bytes());
-                borrowed[block.range_next().unwrap()].copy_from_slice(&next.to_be_bytes());
+                self.heap[block.range_previous().unwrap()].copy_from_slice(&previous.to_be_bytes());
+                self.heap[block.range_next().unwrap()].copy_from_slice(&next.to_be_bytes());
             }
         }
 
-        borrowed[block.range_footer()].copy_from_slice(&block.header.to_buf());
+        self.heap[block.range_footer()].copy_from_slice(&block.header.to_buf());
         Ok(())
     }
 
-    pub fn alloc(&self, size: usize) -> Result<Pointer, HeapError> {
+    pub fn alloc(&mut self, size: usize) -> Result<Pointer, HeapError> {
         let aligned_size = BlockData::fit(align(size));
         let Some(block) = self.best_fit(aligned_size)? else {
             dbg!(aligned_size);
@@ -427,16 +417,12 @@ impl Heap {
         match opt_remaining_block {
             Some(remaining_block) => {
                 let _ = self.insert(&remaining_block)?;
-                let mut borrowed = self
-                    .heap
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| HeapError::Default)?;
+
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
-                    let previous_free_block = Block::read(borrowed.as_ref(), previous_free_block)?;
+                    let previous_free_block = Block::read(&self.heap, previous_free_block)?;
                     if !previous_free_block.header.allocated {
-                        borrowed[previous_free_block.range_next().unwrap()]
+                        self.heap[previous_free_block.range_next().unwrap()]
                             .copy_from_slice(&remaining_block.pointer.to_be_bytes());
                     }
                 } else {
@@ -445,48 +431,42 @@ impl Heap {
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
-                    let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
+                    let next_free_block = Block::read(&self.heap, next_free_block)?;
                     if !next_free_block.header.allocated {
-                        borrowed[next_free_block.range_previous().unwrap()]
+                        self.heap[next_free_block.range_previous().unwrap()]
                             .copy_from_slice(&remaining_block.pointer.to_be_bytes());
                     }
                 }
             }
             None => {
-                let mut borrowed = self
-                    .heap
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| HeapError::Default)?;
                 // update previous free block to account the change of next free block
                 if let Some(previous_free_block) = previous_free_block {
-                    let previous_free_block = Block::read(borrowed.as_ref(), previous_free_block)?;
+                    let previous_free_block = Block::read(&self.heap, previous_free_block)?;
 
                     if let Some(next_free_block) = next_free_block {
-                        let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
+                        let next_free_block = Block::read(&self.heap, next_free_block)?;
                         if !next_free_block.header.allocated
                             && !previous_free_block.header.allocated
                         {
-                            borrowed[previous_free_block.range_next().unwrap()]
+                            self.heap[previous_free_block.range_next().unwrap()]
                                 .copy_from_slice(&next_free_block.pointer.to_be_bytes());
                         }
                     }
                 } else {
                     if let Some(next_free_block) = next_free_block {
-                        let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
+                        let next_free_block = Block::read(&self.heap, next_free_block)?;
                         self.first_freed_block_offset.set(next_free_block.pointer);
                     }
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
-                    let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
+                    let next_free_block = Block::read(&self.heap, next_free_block)?;
                     if let Some(previous_free_block) = previous_free_block {
-                        let previous_free_block =
-                            Block::read(borrowed.as_ref(), previous_free_block)?;
+                        let previous_free_block = Block::read(&self.heap, previous_free_block)?;
                         if !next_free_block.header.allocated
                             && !previous_free_block.header.allocated
                         {
-                            borrowed[next_free_block.range_previous().unwrap()]
+                            self.heap[next_free_block.range_previous().unwrap()]
                                 .copy_from_slice(&previous_free_block.pointer.to_be_bytes());
                         }
                     }
@@ -500,16 +480,12 @@ impl Heap {
         Ok(address)
     }
 
-    pub fn realloc(&self, address: Pointer, size: usize) -> Result<Pointer, HeapError> {
+    pub fn realloc(&mut self, address: Pointer, size: usize) -> Result<Pointer, HeapError> {
         if address < STACK_SIZE {
             return Err(HeapError::ReadError);
         }
         let address = address - STACK_SIZE;
-        let block = {
-            let binding = self.heap.borrow();
-            let borrowed = binding.as_ref();
-            Block::read(borrowed, address)?
-        };
+        let block = Block::read(&self.heap, address)?;
         let prev_size = block.data_size();
         let data = self.read(address + STACK_SIZE + 8, prev_size)?;
 
@@ -521,17 +497,13 @@ impl Heap {
         Ok(new_address)
     }
 
-    pub fn free(&self, address: Pointer) -> Result<(), HeapError> {
+    pub fn free(&mut self, address: Pointer) -> Result<(), HeapError> {
         if address < STACK_SIZE {
             return Err(HeapError::ReadError);
         }
         let address = address - STACK_SIZE;
 
-        let block = {
-            let binding = self.heap.borrow();
-            let borrowed = binding.as_ref();
-            Block::read(borrowed, address)?
-        };
+        let block = Block::read(&self.heap, address)?;
         if !block.header.allocated {
             return Err(HeapError::FreeError);
         }
@@ -539,15 +511,13 @@ impl Heap {
         let freed_size = block.data_size();
 
         let block = {
-            let binding = self.heap.borrow();
-            let borrowed = binding.as_ref();
             let borrowed_first_freed_block_offset = self.first_freed_block_offset.get();
             let left_block = match block.peak_left() {
-                Some(range) => Block::from_footer(borrowed, range).ok(),
+                Some(range) => Block::from_footer(&self.heap, range).ok(),
                 None => None,
             };
 
-            let right_block = Block::read(borrowed, block.skip()).ok();
+            let right_block = Block::read(&self.heap, block.skip()).ok();
 
             let coalesced_left_block = match left_block {
                 Some(left_block) => {
@@ -573,9 +543,9 @@ impl Heap {
                             }
                         } else {
                             // Update the current block previous with the found free block pointer
-                            let mut searched_block = Block::read(borrowed, offset)?;
+                            let mut searched_block = Block::read(&self.heap, offset)?;
                             while offset < left_block.pointer {
-                                searched_block = Block::read(borrowed, offset)?;
+                                searched_block = Block::read(&self.heap, offset)?;
                                 if searched_block.header.allocated {
                                     offset = block.skip();
                                 } else {
@@ -648,7 +618,7 @@ impl Heap {
                             let mut offset = borrowed_first_freed_block_offset;
                             if offset < coalesced_left_block.pointer {
                                 while offset < HEAP_SIZE {
-                                    let searched_block = Block::read(borrowed.as_ref(), offset)?;
+                                    let searched_block = Block::read(&self.heap.as_ref(), offset)?;
                                     if searched_block.header.allocated {
                                         offset = block.skip();
                                     } else {
@@ -659,7 +629,7 @@ impl Heap {
                                     }
                                 }
                             }
-                            let next_pointer = Block::read(borrowed, offset)
+                            let next_pointer = Block::read(&self.heap, offset)
                                 .ok()
                                 .map(|next_block| next_block.pointer);
                             // update coalesced_left_block next free pointer with searched_block pointer
@@ -693,20 +663,15 @@ impl Heap {
         };
         let _ = self.insert(&block)?;
         {
-            let mut borrowed = self
-                .heap
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| HeapError::Default)?;
             let previous_free_block = block.previous_free();
             let next_free_block = block.next_free();
 
             // update previous free block to account the change of next free block
             if let Some(previous_free_block) = previous_free_block {
-                let previous_free_block = Block::read(borrowed.as_ref(), previous_free_block)?;
+                let previous_free_block = Block::read(&self.heap, previous_free_block)?;
 
                 if !previous_free_block.header.allocated {
-                    borrowed[previous_free_block.range_next().unwrap()]
+                    self.heap[previous_free_block.range_next().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
                     if previous_free_block.pointer < self.first_freed_block_offset.get() {
                         self.first_freed_block_offset.set(block.pointer);
@@ -719,9 +684,9 @@ impl Heap {
             }
             // update next free block to account the change of previous free block
             if let Some(next_free_block) = next_free_block {
-                let next_free_block = Block::read(borrowed.as_ref(), next_free_block)?;
+                let next_free_block = Block::read(&self.heap, next_free_block)?;
                 if !next_free_block.header.allocated {
-                    borrowed[next_free_block.range_previous().unwrap()]
+                    self.heap[next_free_block.range_previous().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
                 }
             }
@@ -757,8 +722,6 @@ impl Heap {
             return Err(HeapError::ReadError);
         }
         let res = {
-            let binding = self.heap.borrow();
-            let borrowed = binding.as_ref();
             // let data_range = block.range_data();
             // match data_range {
             //     Some(data_range) => {
@@ -775,7 +738,7 @@ impl Heap {
             // }
 
             let mut output = Vec::with_capacity(size);
-            output.extend_from_slice(&borrowed[address..address + size]);
+            output.extend_from_slice(&self.heap[address..address + size]);
             output
         };
         // let Some(res) = res else {
@@ -793,14 +756,12 @@ impl Heap {
         if address >= HEAP_SIZE {
             return Err(HeapError::ReadError);
         }
-        let binding = self.heap.borrow();
-        let borrowed = binding.as_ref();
         let mut offset = 0;
         let mut current_idx = 0;
-        let mut byte = borrowed[address + offset];
+        let mut byte = self.heap[address + offset];
 
         while current_idx < idx {
-            byte = borrowed[address + offset];
+            byte = self.heap[address + offset];
             match byte {
                 // 7-bit ASCII character (U+0000 to U+007F)
                 0x00..=0x7F => {
@@ -812,7 +773,7 @@ impl Heap {
                     if (address + offset) + 1 >= HEAP_SIZE {
                         return Err(HeapError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + 1];
+                    let in_byte = self.heap[(address + offset) + 1];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(HeapError::ReadError);
                     }
@@ -825,7 +786,7 @@ impl Heap {
                         if (address + offset) + i >= HEAP_SIZE {
                             return Err(HeapError::ReadError);
                         }
-                        let in_byte = borrowed[(address + offset) + i];
+                        let in_byte = self.heap[(address + offset) + i];
                         if (in_byte & 0xC0) != 0x80 {
                             return Err(HeapError::ReadError);
                         }
@@ -839,7 +800,7 @@ impl Heap {
                         if (address + offset) + i >= HEAP_SIZE {
                             return Err(HeapError::ReadError);
                         }
-                        let in_byte = borrowed[(address + offset) + i];
+                        let in_byte = self.heap[(address + offset) + i];
                         if (in_byte & 0xC0) != 0x80 {
                             return Err(HeapError::ReadError);
                         }
@@ -857,7 +818,7 @@ impl Heap {
             return Err(HeapError::ReadError);
         }
 
-        byte = borrowed[address + offset];
+        byte = self.heap[address + offset];
         let mut bytes = [byte, 0u8, 0u8, 0u8];
         let mut size = 1;
         match byte {
@@ -868,7 +829,7 @@ impl Heap {
                 if (address + offset) + 1 >= HEAP_SIZE {
                     return Err(HeapError::ReadError);
                 }
-                let in_byte = borrowed[(address + offset) + 1];
+                let in_byte = self.heap[(address + offset) + 1];
                 if (in_byte & 0xC0) != 0x80 {
                     return Err(HeapError::ReadError);
                 }
@@ -881,7 +842,7 @@ impl Heap {
                     if (address + offset) + i >= HEAP_SIZE {
                         return Err(HeapError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + i];
+                    let in_byte = self.heap[(address + offset) + i];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(HeapError::ReadError);
                     }
@@ -895,7 +856,7 @@ impl Heap {
                     if (address + offset) + i >= HEAP_SIZE {
                         return Err(HeapError::ReadError);
                     }
-                    let in_byte = borrowed[(address + offset) + i];
+                    let in_byte = self.heap[(address + offset) + i];
                     if (in_byte & 0xC0) != 0x80 {
                         return Err(HeapError::ReadError);
                     }
@@ -911,7 +872,7 @@ impl Heap {
         Ok((bytes, offset))
     }
 
-    pub fn write(&self, address: Pointer, data: &Vec<u8>) -> Result<(), HeapError> {
+    pub fn write(&mut self, address: Pointer, data: &[u8]) -> Result<(), HeapError> {
         if address < STACK_SIZE {
             return Err(HeapError::WriteError);
         }
@@ -930,21 +891,8 @@ impl Heap {
         // if block.data_size() < data.len() + offset {
         //     return Err(HeapError::InvalidPointer);
         // }
-        {
-            let mut borrowed = self
-                .heap
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| HeapError::Default)?;
-            // let Some(data_range) = block.range_data() else {
-            //     return Err(HeapError::InvalidPointer);
-            // };
-            // let (start, end) = (data_range.start, data_range.end);
-            // if start + offset + data.len() >= end {
-            //     return Err(HeapError::WriteError);
-            // }
-            borrowed[address..address + data.len()].copy_from_slice(&data);
-        }
+
+        self.heap[address..address + data.len()].copy_from_slice(data);
 
         Ok(())
     }
@@ -957,7 +905,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_basic() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0 + STACK_SIZE);
@@ -971,7 +919,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_free_in_fragmented() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let mut pointers = Vec::default();
         for _i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
@@ -988,7 +936,7 @@ mod tests {
 
     #[test]
     fn valid_coalescing_left() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let mut pointers = [0; 6];
         for i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
@@ -1006,7 +954,7 @@ mod tests {
 
     #[test]
     fn valid_coalescing_right() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let mut pointers = [0; 6];
         for i in 0..6 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
@@ -1025,7 +973,7 @@ mod tests {
 
     #[test]
     fn valid_coalescing_complex() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let mut pointers = [0; 10];
         for i in 0..10 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
@@ -1042,7 +990,7 @@ mod tests {
 
     #[test]
     fn robustness_coalescing_complex() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let mut pointers = [0; HEAP_SIZE / 32];
         for i in 0..HEAP_SIZE / 32 {
             let address = heap.alloc(8).expect("The allocation should have succeeded");
@@ -1062,7 +1010,7 @@ mod tests {
 
     #[test]
     fn valid_free() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0 + STACK_SIZE);
@@ -1074,7 +1022,7 @@ mod tests {
 
     #[test]
     fn robustness_heap_overflow() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
         let address = heap.alloc(HEAP_SIZE);
         assert!(address.is_err());
         let address = heap.alloc(HEAP_SIZE - 7);
@@ -1093,7 +1041,7 @@ mod tests {
 
     #[test]
     fn robustness_double_free() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0 + STACK_SIZE);
@@ -1105,7 +1053,7 @@ mod tests {
 
     #[test]
     fn valid_read() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0 + STACK_SIZE);
@@ -1131,7 +1079,7 @@ mod tests {
 
     #[test]
     fn valid_write() {
-        let heap = Heap::new();
+        let mut heap = Heap::new();
 
         let address = heap.alloc(8).expect("The allocation should have succeeded");
         assert_eq!(address, 0 + STACK_SIZE);

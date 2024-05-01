@@ -567,14 +567,18 @@ mod tests {
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_then);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_then);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -584,14 +588,17 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
 
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_else);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_else);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -649,14 +656,18 @@ mod tests {
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_then);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_then);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -666,14 +677,17 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
 
-        let mut runtime = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_else);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_else);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -753,14 +767,18 @@ mod tests {
         assert!(instructions_then.len() > 0);
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_then);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_then);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type
@@ -786,14 +804,18 @@ mod tests {
         }
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_else);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_else);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type
@@ -846,14 +868,18 @@ mod tests {
 
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions_then);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions_then);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -926,14 +952,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -983,14 +1013,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -1040,14 +1074,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -1120,14 +1158,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -1345,14 +1387,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -1401,14 +1447,18 @@ mod tests {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(

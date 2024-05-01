@@ -1,18 +1,21 @@
 use num_traits::ToBytes;
 use ulid::Ulid;
 
-
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
-            stack::{Offset, StackSlice, UReg, STACK_SIZE}, MemoryAddress,
+            heap::Heap,
+            stack::{Offset, Stack, StackSlice, UReg, STACK_SIZE},
+            MemoryAddress,
         },
         casm::operation::OpPrimitive,
-        scheduler::Thread,
+        stdio::StdIO,
         vm::{Executable, RuntimeError},
     },
 };
+
+use super::CasmProgram;
 
 #[derive(Debug, Clone)]
 pub enum Alloc {
@@ -21,27 +24,33 @@ pub enum Alloc {
 }
 
 impl Executable for Alloc {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
                 let size = match size {
                     Some(size) => *size,
                     None => {
-                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let size = OpPrimitive::get_num8::<u64>(stack)?;
                         size as usize
                     }
                 };
-                let address = thread.runtime.heap.alloc(size).map_err(|e| e.into())?;
+                let address = heap.alloc(size).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = (address as u64).to_le_bytes().to_vec();
-                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
             Alloc::Stack { size } => {
-                let _ = thread.env.stack.push(*size).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.push(*size).map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
         }
@@ -54,26 +63,30 @@ pub struct Realloc {
 }
 
 impl Executable for Realloc {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
             None => {
-                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let size = OpPrimitive::get_num8::<u64>(stack)?;
                 size as usize
             }
         };
 
-        let heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())? - 8;
-        let address = thread
-            .runtime
-            .heap
+        let heap_address = OpPrimitive::get_num8::<u64>(stack)? - 8;
+        let address = heap
             .realloc(heap_address as usize, size)
             .map_err(|e| e.into())?;
         let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
         let data = (address as u64).to_le_bytes().to_vec();
-        let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-        thread.env.program.incr();
+        let _ = stack.push_with(&data).map_err(|e| e.into())?;
+        program.incr();
         Ok(())
     }
 }
@@ -82,27 +95,26 @@ impl Executable for Realloc {
 pub struct Free();
 
 impl Executable for Free {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        let address = OpPrimitive::get_num8::<u64>(&thread.memory())? - 8;
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
+        let address = OpPrimitive::get_num8::<u64>(stack)? - 8;
         if address < STACK_SIZE as u64 {
             todo!("Decide wether runtime error or noop");
         } else {
-            thread
-                .runtime
-                .heap
-                .free(address as usize)
-                .map_err(|e| e.into())?;
+            heap.free(address as usize).map_err(|e| e.into())?;
         }
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum StackFrame {
-    Yield { return_size: Option<usize> },
-    LastYield { next_label: Ulid },
-    LastYieldNone,
     Clean,
     SoftClean,
     Break,
@@ -117,365 +129,140 @@ pub const FLAG_VOID: u8 = 0u8;
 pub const FLAG_RETURN: u8 = 1u8;
 pub const FLAG_BREAK: u8 = 2u8;
 pub const FLAG_CONTINUE: u8 = 3u8;
-pub const FLAG_YIELD: u8 = 4u8;
-pub const FLAG_YIELD_NONE: u8 = 5u8;
 
 impl Executable for StackFrame {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             StackFrame::Break => {
-                // let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                // thread.env.program.cursor_set(idx);
+                // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
+                // program.cursor_set(idx);
 
-                thread
-                    .env
-                    .program
-                    .cursor
-                    .set(thread.env.stack.registers.link.get());
+                program.cursor.set(stack.registers.link.get());
 
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean().map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&0u64.to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_BREAK])
-                    .map_err(|e| e.into())?; /* return flag set to BREAK */
+                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?; /* return flag set to BREAK */
 
                 Ok(())
             }
             StackFrame::Continue => {
-                // let idx = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                // thread.env.program.cursor_set(idx);
+                // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
+                // program.cursor_set(idx);
 
-                thread
-                    .env
-                    .program
-                    .cursor
-                    .set(thread.env.stack.registers.link.get());
+                program.cursor.set(stack.registers.link.get());
 
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean().map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&0u64.to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_CONTINUE])
-                    .map_err(|e| e.into())?; /* return flag set to CONTINUE */
+                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?; /* return flag set to CONTINUE */
 
                 Ok(())
             }
             StackFrame::SoftClean => {
-                thread.env.program.incr();
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                program.incr();
+                let _ = stack.clean().map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&0u64.to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_VOID])
-                    .map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Clean => {
-                thread
-                    .env
-                    .program
-                    .cursor
-                    .set(thread.env.stack.registers.link.get());
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                program.cursor.set(stack.registers.link.get());
+                let _ = stack.clean().map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&0u64.to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_VOID])
-                    .map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::OpenWindow => {
-                let _ = thread.env.stack.open_window().map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.open_window().map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
             StackFrame::CloseWindow => {
-                let _ = thread.env.stack.open_window().map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.open_window().map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
             StackFrame::Return { return_size } => {
+                let link = stack.registers.link.get();
                 let return_size = match return_size {
                     Some(size) => *size,
                     None => {
-                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let size = OpPrimitive::get_num8::<u64>(stack)?;
                         size as usize
                     }
                 };
-                let return_data = thread.env.stack.pop(return_size).map_err(|e| e.into())?;
+                let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
 
-                thread
-                    .env
-                    .program
-                    .cursor
-                    .set(thread.env.stack.registers.link.get());
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                program.cursor.set(link);
+                let _ = stack.clean().map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&return_data)
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
+                let _ = stack
                     .push_with(&(return_size as u64).to_le_bytes())
                     .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_RETURN])
-                    .map_err(|e| e.into())?; /* return flag set to true */
+                let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?; /* return flag set to true */
 
                 Ok(())
             }
             StackFrame::Transfer { is_direct_loop } => {
-                let flag = OpPrimitive::get_num1::<u8>(&thread.memory())?;
-                let return_size = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                let flag = OpPrimitive::get_num1::<u8>(stack)?;
+                let return_size = OpPrimitive::get_num8::<u64>(stack)? as usize;
                 match flag {
                     FLAG_BREAK => {
                         if !*is_direct_loop {
-                            thread
-                                .env
-                                .program
-                                .cursor
-                                .set(thread.env.stack.registers.link.get());
+                            program.cursor.set(stack.registers.link.get());
 
-                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean().map_err(|e| e.into())?;
 
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&0u64.to_le_bytes())
-                                .map_err(|e| e.into())?;
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&[FLAG_BREAK])
-                                .map_err(|e| e.into())?; /* return flag set to BREAK */
+                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?;
+                        /* return flag set to BREAK */
                         } else {
-                            let break_link = thread.env.stack.get_reg(UReg::R4);
-                            thread.env.program.cursor.set(break_link as usize);
+                            let break_link = stack.get_reg(UReg::R4);
+                            program.cursor.set(break_link as usize);
                         }
                     }
                     FLAG_CONTINUE => {
                         if !*is_direct_loop {
-                            thread
-                                .env
-                                .program
-                                .cursor
-                                .set(thread.env.stack.registers.link.get());
+                            program.cursor.set(stack.registers.link.get());
 
-                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean().map_err(|e| e.into())?;
 
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&0u64.to_le_bytes())
-                                .map_err(|e| e.into())?;
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&[FLAG_CONTINUE])
-                                .map_err(|e| e.into())?; /* return flag set to BREAK */
+                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?;
+                        /* return flag set to BREAK */
                         } else {
-                            let break_link = thread.env.stack.get_reg(UReg::R3);
-                            thread.env.program.cursor.set(break_link as usize);
+                            let break_link = stack.get_reg(UReg::R3);
+                            program.cursor.set(break_link as usize);
                         }
-                    }
-
-                    FLAG_YIELD => {
-                        if !*is_direct_loop {
-                            let return_data =
-                                thread.env.stack.pop(return_size).map_err(|e| e.into())?;
-
-                            thread
-                                .env
-                                .program
-                                .cursor
-                                .set(thread.env.stack.registers.link.get());
-                            let _ = thread.env.stack.clean().map_err(|e| e.into())?;
-
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&return_data)
-                                .map_err(|e| e.into())?;
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&(return_size as u64).to_le_bytes())
-                                .map_err(|e| e.into())?;
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&[FLAG_YIELD])
-                                .map_err(|e| e.into())?; /* return flag set to true */
-                        } else {
-                            let break_link = thread.env.stack.get_reg(UReg::R2);
-                            let _ = thread
-                                .env
-                                .stack
-                                .push_with(&(return_size as u64).to_le_bytes())
-                                .map_err(|e| e.into())?;
-                            thread.env.program.cursor.set(break_link as usize);
-                        }
-                    }
-
-                    FLAG_YIELD_NONE => {
-                        /* */
-                        unreachable!()
                     }
                     FLAG_RETURN => {
-                        let return_data =
-                            thread.env.stack.pop(return_size).map_err(|e| e.into())?;
+                        let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
 
-                        thread
-                            .env
-                            .program
-                            .cursor
-                            .set(thread.env.stack.registers.link.get());
-                        let _ = thread.env.stack.clean().map_err(|e| e.into())?;
+                        program.cursor.set(stack.registers.link.get());
+                        let _ = stack.clean().map_err(|e| e.into())?;
 
-                        let _ = thread
-                            .env
-                            .stack
-                            .push_with(&return_data)
-                            .map_err(|e| e.into())?;
-                        let _ = thread
-                            .env
-                            .stack
+                        let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
+                        let _ = stack
                             .push_with(&(return_size as u64).to_le_bytes())
                             .map_err(|e| e.into())?;
-                        let _ = thread
-                            .env
-                            .stack
-                            .push_with(&[FLAG_RETURN])
-                            .map_err(|e| e.into())?; /* return flag set to true */
+                        let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?;
+                        /* return flag set to true */
                     }
                     FLAG_VOID => {
-                        thread.env.program.incr();
+                        program.incr();
                     }
                     _ => return Err(RuntimeError::ReturnFlagError),
                 }
-                Ok(())
-            }
-            StackFrame::Yield { return_size } => {
-                let return_size = match return_size {
-                    Some(size) => *size,
-                    None => {
-                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                        size as usize
-                    }
-                };
-                let return_data = thread.env.stack.pop(return_size).map_err(|e| e.into())?;
-                thread
-                    .env
-                    .program
-                    .cursor
-                    .set(thread.env.stack.registers.link.get());
-
-                let _ = thread.env.stack.clean().map_err(|e| e.into())?;
-
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&return_data)
-                    .map_err(|e| e.into())?;
-
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&(return_size as u64).to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_YIELD])
-                    .map_err(|e| e.into())?; /* return flag set to YIELD */
-                Ok(())
-            }
-            StackFrame::LastYield { next_label } => {
-                let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-
-                let return_data = thread.env.stack.pop(size as usize).map_err(|e| e.into())?;
-
-                // for reg in [UReg::R4, UReg::R3, UReg::R2, UReg::R1] {
-                //     let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                //     let _ = thread.env.stack.set_reg(reg, idx);
-                // }
-
-                let Some(next_label) = thread.env.program.get(next_label) else {
-                    return Err(RuntimeError::CodeSegmentation);
-                };
-                let next_label = next_label as u64;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&next_label.to_le_bytes())
-                    .map_err(|e| e.into())?;
-
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&return_data)
-                    .map_err(|e| e.into())?;
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&(size + 8/* loop index */ + 8/* label */).to_le_bytes())
-                    .map_err(|e| e.into())?;
-
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_YIELD])
-                    .map_err(|e| e.into())?; /* return flag set to YIELD */
-
-                let break_link = thread.env.stack.get_reg(UReg::R1);
-                thread.env.program.cursor.set(break_link as usize);
-
-                Ok(())
-            }
-            StackFrame::LastYieldNone => {
-                // for reg in [UReg::R4, UReg::R3, UReg::R2, UReg::R1] {
-                //     let idx = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                //     let _ = thread.env.stack.set_reg(reg, idx);
-                // }
-
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[FLAG_YIELD_NONE])
-                    .map_err(|e| e.into())?; /* return flag set to YIELD */
-
-                let break_link = thread.env.stack.get_reg(UReg::R1);
-                thread.env.program.cursor.set(break_link as usize);
                 Ok(())
             }
         }
@@ -491,15 +278,21 @@ pub enum Access {
 }
 
 impl Executable for Access {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         let index = match self {
-            Access::RuntimeCharUTF8AtIdx => Some(OpPrimitive::get_num8::<u64>(&thread.memory())?),
+            Access::RuntimeCharUTF8AtIdx => Some(OpPrimitive::get_num8::<u64>(stack)?),
             _ => None,
         };
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),
             Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
-                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let address = OpPrimitive::get_num8::<u64>(stack)?;
                 let address = {
                     if address < STACK_SIZE as u64 {
                         MemoryAddress::Stack {
@@ -518,11 +311,11 @@ impl Executable for Access {
                 let size = match size {
                     Some(size) => *size,
                     None => {
-                        let size = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let size = OpPrimitive::get_num8::<u64>(stack)?;
                         size as usize
                     }
                 };
-                let address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let address = OpPrimitive::get_num8::<u64>(stack)?;
                 let address = {
                     if address < STACK_SIZE as u64 {
                         MemoryAddress::Stack {
@@ -540,48 +333,38 @@ impl Executable for Access {
         };
         match address {
             MemoryAddress::Heap { offset } => {
-                // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
+                // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
 
                 let data = match self {
                     Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
-                        let (bytes, _) = thread
-                            .runtime
-                            .heap
+                        let (bytes, _) = heap
                             .read_utf8(offset, index.unwrap_or(0) as usize)
                             .map_err(|err| err.into())?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = thread
-                            .runtime
-                            .heap
-                            .read(offset, size)
-                            .map_err(|err| err.into())?;
+                        let bytes = heap.read(offset, size).map_err(|err| err.into())?;
                         bytes
                     }
                 };
 
-                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
             MemoryAddress::Stack { offset, level } => {
                 if let Offset::FE(stack_idx, heap_udx) = offset {
-                    let heap_address = thread
-                        .env
-                        .stack
+                    let heap_address = stack
                         .read(Offset::FP(stack_idx), level, 8)
                         .map_err(|err| err.into())?;
-                    let data = TryInto::<&[u8; 8]>::try_into(heap_address.as_slice())
+                    let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
 
                     let data = match self {
                         Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
-                            let (bytes, _) = thread
-                                .runtime
-                                .heap
+                            let (bytes, _) = heap
                                 .read_utf8(
                                     heap_address as usize + heap_udx,
                                     index.unwrap_or(0) as usize,
@@ -591,44 +374,36 @@ impl Executable for Access {
                             bytes.to_vec()
                         }
                         _ => {
-                            let bytes = thread
-                                .runtime
-                                .heap
+                            let bytes = heap
                                 .read(heap_address as usize + heap_udx, size)
                                 .map_err(|err| err.into())?;
                             bytes
                         }
                     };
 
-                    let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                    thread.env.program.incr();
+                    let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                    program.incr();
                     return Ok(());
                 }
 
                 let data = match self {
                     Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
-                        let (bytes, _) = thread
-                            .env
-                            .stack
+                        let (bytes, _) = stack
                             .read_utf8(offset, level, index.unwrap_or(0) as usize)
                             .map_err(|err| err.into())?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = thread
-                            .env
-                            .stack
-                            .read(offset, level, size)
-                            .map_err(|err| err.into())?;
-                        bytes
+                        let bytes = stack.read(offset, level, size).map_err(|err| err.into())?;
+                        bytes.to_vec()
                     }
                 };
 
                 // dbg!(&data);
                 // Copy data onto stack;
-                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
         }
@@ -642,36 +417,33 @@ pub struct Assign {
 }
 
 impl Executable for Assign {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
-        let data = thread
-            .env
-            .stack
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
+        let data = stack
             .read(
                 self.stack_slice.offset,
                 AccessLevel::Direct,
                 self.stack_slice.size,
             )
-            .map_err(|err| err.into())?;
+            .map_err(|err| err.into())?
+            .to_owned();
 
         match self.address {
             MemoryAddress::Heap { offset } => {
-                // let address = OpPrimitive::get_num8::<u64>(&thread.memory())? as usize;
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(offset, &data)
-                    .map_err(|e| e.into())?;
+                // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
+                let _ = heap.write(offset, &data.to_vec()).map_err(|e| e.into())?;
             }
             MemoryAddress::Stack { offset, level } => {
-                let _ = thread
-                    .env
-                    .stack
-                    .write(offset, level, &data)
-                    .map_err(|e| e.into())?;
+                let _ = stack.write(offset, level, &data).map_err(|e| e.into())?;
             }
         };
 
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }

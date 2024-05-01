@@ -5,8 +5,9 @@ use ulid::Ulid;
 use self::{branch::Label, data::Data};
 
 use super::{
+    allocator::{heap::Heap, stack::Stack},
     platform,
-    scheduler::Thread,
+    stdio::StdIO,
     vm::{self, Executable, RuntimeError},
 };
 pub mod alloc;
@@ -114,17 +115,22 @@ impl CasmProgram {
         let borrowed_main = self.main.as_ref().borrow();
         borrowed_main.len()
     }
-    pub fn execute<'runtime>(&self, thread: &Thread) -> Result<(), vm::RuntimeError> {
+    pub fn execute<'runtime>(
+        &self,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), vm::RuntimeError> {
         let borrowed_main = self.main.as_ref().borrow();
         loop {
             let cursor = self.cursor.get();
             match borrowed_main.get(cursor) {
                 Some(instruction) => {
-                    // dbg!((cursor, instruction, thread.env.stack.top(),));
+                    // dbg!((cursor, instruction, stack.top(),));
                     // let mut buffer = String::new();
                     // io::stdin().read_line(&mut buffer);
 
-                    match instruction.execute(thread) {
+                    match instruction.execute(self, stack, heap, stdio) {
                         Ok(_) => {}
                         Err(RuntimeError::Exit) => return Ok(()),
                         Err(e) => {
@@ -163,30 +169,36 @@ pub enum Casm {
 }
 
 impl Executable for Casm {
-    fn execute(&self, thread: &Thread) -> Result<(), vm::RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
-            Casm::Operation(value) => value.execute(thread),
-            Casm::StackFrame(value) => value.execute(thread),
-            Casm::Data(value) => value.execute(thread),
-            Casm::Access(value) => value.execute(thread),
-            Casm::If(value) => value.execute(thread),
-            Casm::Assign(value) => value.execute(thread),
-            Casm::Label(value) => value.execute(thread),
-            Casm::Call(value) => value.execute(thread),
-            Casm::Goto(value) => value.execute(thread),
-            Casm::Alloc(value) => value.execute(thread),
-            Casm::Mem(value) => value.execute(thread),
-            Casm::Switch(value) => value.execute(thread),
-            Casm::Locate(value) => value.execute(thread),
-            Casm::LocateNextUTF8Char(value) => value.execute(thread),
-            Casm::Platform(value) => value.execute(thread),
+            Casm::Operation(value) => value.execute(program, stack, heap, stdio),
+            Casm::StackFrame(value) => value.execute(program, stack, heap, stdio),
+            Casm::Data(value) => value.execute(program, stack, heap, stdio),
+            Casm::Access(value) => value.execute(program, stack, heap, stdio),
+            Casm::If(value) => value.execute(program, stack, heap, stdio),
+            Casm::Assign(value) => value.execute(program, stack, heap, stdio),
+            Casm::Label(value) => value.execute(program, stack, heap, stdio),
+            Casm::Call(value) => value.execute(program, stack, heap, stdio),
+            Casm::Goto(value) => value.execute(program, stack, heap, stdio),
+            Casm::Alloc(value) => value.execute(program, stack, heap, stdio),
+            Casm::Mem(value) => value.execute(program, stack, heap, stdio),
+            Casm::Switch(value) => value.execute(program, stack, heap, stdio),
+            Casm::Locate(value) => value.execute(program, stack, heap, stdio),
+            Casm::LocateNextUTF8Char(value) => value.execute(program, stack, heap, stdio),
+            Casm::Platform(value) => value.execute(program, stack, heap, stdio),
             Casm::Pop(size) => {
-                thread.env.stack.pop(*size).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                stack.pop(*size).map_err(|e| e.into())?;
+                program.incr();
                 Ok(())
             }
-            Casm::Realloc(value) => value.execute(thread),
-            Casm::Free(value) => value.execute(thread),
+            Casm::Realloc(value) => value.execute(program, stack, heap, stdio),
+            Casm::Free(value) => value.execute(program, stack, heap, stdio),
         }
     }
 }

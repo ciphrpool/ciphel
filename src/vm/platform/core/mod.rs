@@ -1,12 +1,14 @@
 use std::cell::Ref;
 
 use crate::semantic::scope::scope::Scope;
+use crate::vm::allocator::heap::Heap;
+use crate::vm::allocator::stack::Stack;
+use crate::vm::stdio::StdIO;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
-        scheduler::Thread,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
@@ -106,9 +108,15 @@ impl GenerateCode for CoreFn {
 }
 
 impl Executable for CoreCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
-            CoreCasm::Alloc(value) => value.execute(thread),
+            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio),
             CoreCasm::Thread(_value) => todo!(),
             CoreCasm::Chan(_value) => todo!(),
             CoreCasm::Cursor(_value) => todo!(),
