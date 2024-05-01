@@ -35,7 +35,7 @@ pub const CLEAR: &str = "clear";
 pub const SIZEOF: &str = "size_of";
 
 // THREADS
-pub const SPAWN: &str = "spawn";
+pub const SPAWN: &str = "spawn_with_scope";
 pub const CLOSE: &str = "close";
 
 // CHANNEL

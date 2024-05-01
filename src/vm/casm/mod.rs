@@ -120,6 +120,23 @@ impl CasmProgram {
         let borrowed_main = self.main.as_ref().borrow();
         borrowed_main.len()
     }
+    pub fn evaluate(
+        &self,
+        callback: impl FnOnce(&Casm) -> Result<(), vm::RuntimeError>,
+    ) -> Result<(), vm::RuntimeError> {
+        let borrowed_main = self.main.as_ref().borrow();
+        let cursor = self.cursor.get();
+        match borrowed_main.get(cursor) {
+            Some(instruction) => callback(instruction),
+            None => {
+                if cursor == borrowed_main.len() {
+                    return Err(RuntimeError::Exit);
+                } else {
+                    return Err(RuntimeError::CodeSegmentation);
+                }
+            }
+        }
+    }
     pub fn execute<'runtime>(
         &self,
         stack: &mut Stack,

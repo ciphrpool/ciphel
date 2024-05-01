@@ -27,7 +27,7 @@ pub enum ThreadCasm {
 impl CasmMetadata for ThreadCasm {
     fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &CasmProgram) {
         match self {
-            ThreadCasm::Spawn => stdio.push_casm_lib("spawn"),
+            ThreadCasm::Spawn => stdio.push_casm_lib("spawn_with_scope"),
             ThreadCasm::Close => stdio.push_casm_lib("close"),
         }
     }

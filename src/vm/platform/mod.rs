@@ -128,7 +128,7 @@ impl Executable for LibCasm {
 //     pub const INSERT: &str = "insert";
 //     pub const DELETE: &str = "delete";
 //     pub const FREE: &str = "free";
-//     pub const SPAWN: &str = "spawn";
+//     pub const SPAWN: &str = "spawn_with_scope";
 //     pub const CLOSE: &str = "close";
 //     pub const PRINT: &str = "print";
 // }
@@ -146,7 +146,7 @@ impl Executable for LibCasm {
 //     fn insert(memory: &Memory) -> Result<(), RuntimeError>;
 //     fn delete(memory: &Memory) -> Result<(), RuntimeError>;
 //     fn free(memory: &Memory) -> Result<(), RuntimeError>;
-//     fn spawn(memory: &Memory) -> Result<(), RuntimeError>;
+//     fn spawn_with_scope(memory: &Memory) -> Result<(), RuntimeError>;
 //     fn close(memory: &Memory) -> Result<(), RuntimeError>;
 //     fn print(memory: &Memory) -> Result<(), RuntimeError>;
 // }

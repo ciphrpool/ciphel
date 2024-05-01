@@ -275,10 +275,7 @@ impl Scope {
         let _is_closure = self.state().is_closure;
         match self {
             Scope::Inner {
-                
-                parent,
-                general,
-                ..
+                parent, general, ..
             } => match parent {
                 Some(parent) => parent.upgrade().and_then(|p| {
                     let borrowed_scope = p.as_ref().borrow();
@@ -305,7 +302,7 @@ impl Scope {
                 }
             }
             .ok_or(CodeGenerationError::UnresolvedError),
-            Scope::General {  .. } => Err(CodeGenerationError::UnresolvedError),
+            Scope::General { .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
     pub fn capture(&self, var: Rc<Var>) -> bool {

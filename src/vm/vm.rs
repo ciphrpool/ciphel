@@ -38,7 +38,7 @@ pub enum RuntimeError {
 
 #[derive(Debug, Clone)]
 pub struct Runtime {
-    pub threads: Vec<(Stack, CasmProgram, usize)>,
+    pub threads: Vec<(MutRc<Scope>, Stack, CasmProgram, usize)>,
 }
 
 impl Runtime {
@@ -53,21 +53,43 @@ impl Runtime {
     }
 
     pub fn spawn(&mut self) -> Result<usize, RuntimeError> {
+        let scope = Scope::new();
         let program = CasmProgram::default();
         let stack = Stack::new();
         let tid = self.threads.len();
-        self.threads.push((stack, program, tid));
+        self.threads.push((scope, stack, program, tid));
+        Ok(tid)
+    }
+
+    pub fn spawn_with_scope(&mut self, scope: MutRc<Scope>) -> Result<usize, RuntimeError> {
+        let program = CasmProgram::default();
+        let stack = Stack::new();
+        let tid = self.threads.len();
+        self.threads.push((scope, stack, program, tid));
         Ok(tid)
     }
 
     pub fn get_mut<'runtime>(
         &'runtime mut self,
         tid: usize,
-    ) -> Result<(&'runtime mut Stack, &mut CasmProgram), RuntimeError> {
+    ) -> Result<
+        (
+            &'runtime mut MutRc<Scope>,
+            &'runtime mut Stack,
+            &mut CasmProgram,
+        ),
+        RuntimeError,
+    > {
         self.threads
             .get_mut(tid)
             .ok_or(RuntimeError::InvalidTID(tid))
-            .map(|(stack, program, _)| (stack, program))
+            .map(|(scope, stack, program, _)| (scope, stack, program))
+    }
+
+    pub fn iter_mut(
+        &mut self,
+    ) -> std::slice::IterMut<'_, (MutRc<Scope>, Stack, CasmProgram, usize)> {
+        self.threads.iter_mut()
     }
 }
 

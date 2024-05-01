@@ -1,9 +1,15 @@
 use std::cell::Ref;
 
-use nom::{branch::alt, combinator::map};
+use nom::{
+    branch::alt,
+    combinator::{eof, map},
+    multi::many0,
+    sequence::terminated,
+    Parser,
+};
 
 use self::return_stat::Return;
-use crate::semantic::scope::scope::Scope;
+use crate::{semantic::scope::scope::Scope, CompilationError};
 
 use super::TryParse;
 use crate::{
@@ -38,6 +44,15 @@ pub enum Statement {
     Definition(definition::Definition),
     Loops(loops::Loop),
     Return(Return),
+}
+
+pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError> {
+    let mut parser = terminated(many0(Statement::parse), eof);
+
+    match parser.parse(input) {
+        Ok((_, statements)) => Ok(statements),
+        Err(_) => Err(CompilationError::ParsingError()),
+    }
 }
 
 impl TryParse for Statement {

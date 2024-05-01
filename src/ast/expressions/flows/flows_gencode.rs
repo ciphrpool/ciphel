@@ -537,42 +537,24 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let statement_else = IfExpr::parse(
-            r##"
-           if false then 420 else 69 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
         let scope = Scope::new();
         let _ = statement_then
             .resolve(&scope, &None, &())
             .expect("Semantic resolution should have succeeded");
-        let _ = statement_else
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-
         // Code generation.
         let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &instructions_else)
-            .expect("Code generation should have succeeded");
 
         assert!(instructions_then.len() > 0);
-        assert!(instructions_else.len() > 0);
         // Execute the instructions.
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
 
         program
@@ -587,12 +569,37 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
+    }
 
+    #[test]
+    fn valid_if_basic_else() {
+        let statement_else = IfExpr::parse(
+            r##"
+           if false then 420 else 69 
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = statement_else
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions_else = CasmProgram::default();
+        statement_else
+            .gencode(&scope, &instructions_else)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions_else.len() > 0);
+        // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
 
         program
@@ -623,23 +630,8 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let statement_else = IfExpr::parse(
-            r##"
-           if false then 420 else { 
-            let x = 69;
-            return x;
-            } 
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
         let scope = Scope::new();
         let _ = statement_then
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
-        let _ = statement_else
             .resolve(&scope, &None, &())
             .expect("Semantic resolution should have succeeded");
 
@@ -648,20 +640,15 @@ mod tests {
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &instructions_else)
-            .expect("Code generation should have succeeded");
 
         assert!(instructions_then.len() > 0);
-        assert!(instructions_else.len() > 0);
         // Execute the instructions.
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
 
         program
@@ -676,12 +663,42 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
+    }
 
+    #[test]
+    fn valid_if_basic_scope_else() {
+        let statement_else = IfExpr::parse(
+            r##"
+           if false then 420 else { 
+            let x = 69;
+            return x;
+            } 
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+
+        let _ = statement_else
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+
+        let instructions_else = CasmProgram::default();
+        statement_else
+            .gencode(&scope, &instructions_else)
+            .expect("Code generation should have succeeded");
+
+        assert!(instructions_else.len() > 0);
+        // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
 
         program
@@ -725,22 +742,6 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let statement_else = IfExpr::parse(
-            r##"
-        if false then {
-            let point:Point;
-            point.x = 420;
-            point.y = 420;
-            return point;
-        } else Point {
-            x : 69,
-            y : 69
-        }
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
 
         let scope = Scope::new();
         let _ = scope
@@ -750,29 +751,20 @@ mod tests {
         let _ = statement_then
             .resolve(&scope, &None, &())
             .expect("Semantic resolution should have succeeded");
-        let _ = statement_else
-            .resolve(&scope, &None, &())
-            .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let instructions_then = CasmProgram::default();
         statement_then
             .gencode(&scope, &instructions_then)
             .expect("Code generation should have succeeded");
-        let instructions_else = CasmProgram::default();
-        statement_else
-            .gencode(&scope, &instructions_else)
-            .expect("Code generation should have succeeded");
-
         assert!(instructions_then.len() > 0);
-        assert!(instructions_else.len() > 0);
         // Execute the instructions.
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
 
         program
@@ -802,14 +794,58 @@ mod tests {
                 _ => assert!(false, "Expected i64"),
             }
         }
+    }
 
+    #[test]
+    fn valid_if_complex_else() {
+        let user_type = user_type_impl::Struct {
+            id: "Point".into(),
+            fields: {
+                let mut res = Vec::new();
+                res.push(("x".into(), p_num!(I64)));
+                res.push(("y".into(), p_num!(I64)));
+                res
+            },
+        };
+        let statement_else = IfExpr::parse(
+            r##"
+        if false then {
+            let point:Point;
+            point.x = 420;
+            point.y = 420;
+            return point;
+        } else Point {
+            x : 69,
+            y : 69
+        }
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .expect("Registering of user type should have succeeded");
+        let _ = statement_else
+            .resolve(&scope, &None, &())
+            .expect("Semantic resolution should have succeeded");
+
+        // Code generation.
+        let instructions_else = CasmProgram::default();
+        statement_else
+            .gencode(&scope, &instructions_else)
+            .expect("Code generation should have succeeded");
+        assert!(instructions_else.len() > 0);
         // Execute the instructions.
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
 
         program
@@ -871,9 +907,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
 
         program
@@ -955,9 +991,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -1016,9 +1052,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -1077,9 +1113,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -1161,9 +1197,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -1390,9 +1426,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -1450,9 +1486,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program

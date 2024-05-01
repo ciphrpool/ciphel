@@ -1154,7 +1154,7 @@ impl Executable for Cast {
 
 #[cfg(test)]
 mod tests {
-    use crate::vm::vm::Runtime;
+    use crate::{semantic::scope::scope::Scope, vm::vm::Runtime};
 
     use super::*;
 
@@ -1245,9 +1245,9 @@ mod tests {
     fn valid_product() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
 
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(20u32, stack).expect("init should have succeeded");
@@ -1266,9 +1266,9 @@ mod tests {
     fn valid_div() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(2u32, stack).expect("init should have succeeded");
         Division {
@@ -1286,9 +1286,9 @@ mod tests {
     fn valid_mod() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(2u32, stack).expect("init should have succeeded");
         Mod {
@@ -1306,9 +1306,9 @@ mod tests {
     fn valid_add() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(20u32, stack).expect("init should have succeeded");
         Addition {
@@ -1326,9 +1326,9 @@ mod tests {
     fn valid_sub() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         Substraction {
@@ -1346,9 +1346,9 @@ mod tests {
     fn valid_sl() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         ShiftLeft {
@@ -1366,9 +1366,9 @@ mod tests {
     fn valid_sr() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(2u32, stack).expect("init should have succeeded");
         ShiftRight {
@@ -1386,9 +1386,9 @@ mod tests {
     fn valid_bitand() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         BitwiseAnd {
@@ -1406,9 +1406,9 @@ mod tests {
     fn valid_bitxor() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         BitwiseXOR {
@@ -1426,9 +1426,9 @@ mod tests {
     fn valid_bitor() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         BitwiseOR {
@@ -1446,9 +1446,9 @@ mod tests {
     fn valid_less() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         Less {
@@ -1466,9 +1466,9 @@ mod tests {
     fn valid_less_equal() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         LessEqual {
@@ -1485,9 +1485,9 @@ mod tests {
     fn valid_cast() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num8(1u64, stack).expect("init should have succeeded");
         Cast {
             from: OpPrimitive::Number(NumberType::U64),
@@ -1503,9 +1503,9 @@ mod tests {
     fn valid_greater() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         Greater {
@@ -1523,9 +1523,9 @@ mod tests {
     fn valid_greater_equal() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         GreaterEqual {
@@ -1543,9 +1543,9 @@ mod tests {
     fn valid_equal() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(10u32, stack).expect("init should have succeeded");
         GreaterEqual {
@@ -1563,9 +1563,9 @@ mod tests {
     fn valid_not_equal() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         init_num4(5u32, stack).expect("init should have succeeded");
         GreaterEqual {
@@ -1583,9 +1583,9 @@ mod tests {
     fn valid_logical_and() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_bool(true, stack).expect("init should have succeeded");
         init_bool(true, stack).expect("init should have succeeded");
         LogicalAnd()
@@ -1600,9 +1600,9 @@ mod tests {
     fn valid_logical_or() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_bool(true, stack).expect("init should have succeeded");
         init_bool(true, stack).expect("init should have succeeded");
         LogicalOr()
@@ -1617,9 +1617,9 @@ mod tests {
     fn valid_minus() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_num4(10u32, stack).expect("init should have succeeded");
         Minus {
             data_type: OpPrimitive::Number(NumberType::U32),
@@ -1635,9 +1635,9 @@ mod tests {
     fn valid_not() {
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(Scope::new())
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_bool(true, stack).expect("init should have succeeded");
         Not()
             .execute(&program, stack, &mut heap, &mut stdio)

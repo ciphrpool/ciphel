@@ -92,9 +92,9 @@ macro_rules! compile_expression {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -138,9 +138,9 @@ macro_rules! compile_expression_with_type {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -165,13 +165,12 @@ macro_rules! compile_statement {
         $statement
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
-
         assert!(instructions.len() > 0);
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         program
             .execute(stack, &mut heap, &mut stdio)
@@ -198,9 +197,9 @@ macro_rules! compile_statement_for_stdout {
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -227,9 +226,9 @@ macro_rules! compile_statement_for_string {
         assert!(instructions.len() > 0);
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -281,9 +280,9 @@ macro_rules! eval_and_compare {
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -323,9 +322,9 @@ macro_rules! eval_and_compare_bool {
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program

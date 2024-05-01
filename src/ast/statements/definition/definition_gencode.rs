@@ -2,8 +2,10 @@ use super::{Definition, EventDef, FnDef, TypeDef};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::SizeOf;
 
+use crate::vm::allocator::stack::Offset;
 use crate::vm::allocator::MemoryAddress;
 
+use crate::vm::casm::alloc::Alloc;
 use crate::vm::casm::locate::Locate;
 
 use crate::{
@@ -50,6 +52,25 @@ impl GenerateCode for FnDef {
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
+        // If the scope is the general scope, update the address, the offset and the scope stack top
+        if let Some(stack_top) = scope.borrow().stack_top() {
+            let borrow = scope.as_ref().borrow();
+            let mut size = 8;
+            for (v, o) in borrow.vars() {
+                if v.id == *self.id {
+                    o.set(Offset::SB(stack_top));
+                    size = v.type_sig.size_of();
+                    break;
+                }
+            }
+
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+            let _ = scope
+                .borrow()
+                .update_stack_top(stack_top + size)
+                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+        }
+
         instructions.push(Casm::Goto(Goto {
             label: Some(end_closure),
         }));
@@ -62,6 +83,7 @@ impl GenerateCode for FnDef {
 
         let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
+
         let var_size = var_type.size_of();
 
         instructions.push(Casm::Locate(Locate {
@@ -124,6 +146,26 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(U64, 69));
     }
+
+    #[test]
+    fn valid_function_general() {
+        let statement = Statement::parse(
+            r##"
+            fn f(x:u64) -> u64 {
+                return x+1;
+            }
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+        assert!(data.len() != 0);
+    }
+
     #[test]
     fn valid_function_with_stack_env() {
         let statement = Statement::parse(
@@ -223,9 +265,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -280,9 +322,9 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+            .spawn_with_scope(scope)
+            .expect("Thread spawn_with_scopeing should have succeeded");
+        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
         program
