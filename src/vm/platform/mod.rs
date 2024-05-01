@@ -12,8 +12,9 @@ use self::{
 use crate::semantic::scope::scope::Scope;
 
 use super::{
+    allocator::{heap::Heap, stack::Stack},
     casm::CasmProgram,
-    scheduler::Thread,
+    stdio::StdIO,
     vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
 };
 
@@ -87,10 +88,16 @@ impl GenerateCode for Lib {
     }
 }
 impl Executable for LibCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
-            LibCasm::Core(value) => value.execute(thread),
-            LibCasm::Std(value) => value.execute(thread),
+            LibCasm::Core(value) => value.execute(program, stack, heap, stdio),
+            LibCasm::Std(value) => value.execute(program, stack, heap, stdio),
         }
     }
 }

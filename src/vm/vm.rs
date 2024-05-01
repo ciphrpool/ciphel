@@ -6,11 +6,10 @@ use crate::semantic::MutRc;
 use super::{
     allocator::{
         heap::{Heap, HeapError},
-        stack::StackError,
+        stack::{Stack, StackError},
         vtable::VTableError,
     },
     casm::CasmProgram,
-    scheduler::{Env, Thread},
     stdio::StdIO,
 };
 
@@ -33,41 +32,42 @@ pub enum RuntimeError {
     Exit,
     CodeSegmentation,
     IncorrectVariant,
+    InvalidTID(usize),
     Default,
 }
 
 #[derive(Debug, Clone)]
 pub struct Runtime {
-    pub heap: Heap,
-    pub stdio: StdIO,
-    pub threads: Vec<Env>,
+    pub threads: Vec<(Stack, CasmProgram, usize)>,
 }
 
 impl Runtime {
-    pub fn new() -> Self {
-        Self {
-            heap: Heap::new(),
-            stdio: StdIO::default(),
-            threads: Default::default(),
-        }
+    pub fn new() -> (Self, Heap, StdIO) {
+        (
+            Self {
+                threads: Default::default(),
+            },
+            Heap::new(),
+            StdIO::default(),
+        )
     }
 
     pub fn spawn(&mut self) -> Result<usize, RuntimeError> {
-        let env = Env::default();
+        let program = CasmProgram::default();
+        let stack = Stack::new();
         let tid = self.threads.len();
-        self.threads.push(env);
+        self.threads.push((stack, program, tid));
         Ok(tid)
     }
 
-    pub fn get<'runtime>(&'runtime self, tid: usize) -> Result<Thread<'runtime>, RuntimeError> {
+    pub fn get_mut<'runtime>(
+        &'runtime mut self,
+        tid: usize,
+    ) -> Result<(&'runtime mut Stack, &mut CasmProgram), RuntimeError> {
         self.threads
-            .get(tid)
-            .ok_or(RuntimeError::Default)
-            .map(|env| Thread {
-                env,
-                tid,
-                runtime: self,
-            })
+            .get_mut(tid)
+            .ok_or(RuntimeError::InvalidTID(tid))
+            .map(|(stack, program, _)| (stack, program))
     }
 }
 
@@ -80,7 +80,13 @@ pub trait GenerateCode {
 }
 
 pub trait Executable {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError>;
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError>;
 }
 
 pub trait DeserializeFrom {

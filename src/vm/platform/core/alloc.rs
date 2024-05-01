@@ -9,8 +9,12 @@ use crate::{
         static_types::{MapType, SliceType, TupleType},
         type_traits::TypeChecking,
     },
-    vm::platform::core::alloc::map_impl::{
-        bucket_idx, bucket_layout, hash_of, map_layout, top_hash,
+    vm::{
+        allocator::{heap::Heap, stack::Stack},
+        platform::core::alloc::map_impl::{
+            bucket_idx, bucket_layout, hash_of, map_layout, top_hash,
+        },
+        stdio::StdIO,
     },
 };
 
@@ -36,7 +40,6 @@ use crate::{
             Casm, CasmProgram,
         },
         platform::{utils::lexem, LibCasm},
-        scheduler::Thread,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
@@ -1173,8 +1176,7 @@ mod map_impl {
     use rand::Rng;
 
     use crate::vm::{
-        allocator::heap::{HeapError, HEAP_SIZE},
-        scheduler::Thread,
+        allocator::heap::{Heap, HeapError, HEAP_SIZE},
         vm::RuntimeError,
     };
 
@@ -1224,7 +1226,8 @@ mod map_impl {
             top_hash: u8,
             key: &[u8],
             ref_access: DerefHashing,
-            thread: &Thread,
+
+            heap: &mut Heap,
         ) -> Result<Option<(u64, u64, u64, bool)>, RuntimeError> {
             let mut indexes = None;
             let mut first_empty_cell = None;
@@ -1237,9 +1240,7 @@ mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = thread
-                        .runtime
-                        .heap
+                    let found_key = heap
                         .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
                         .map_err(|e| e.into())?;
                     match ref_access {
@@ -1249,18 +1250,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize * item_size)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1278,18 +1275,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1340,7 +1333,8 @@ mod map_impl {
             top_hash: u8,
             key: &[u8],
             ref_access: DerefHashing,
-            thread: &Thread,
+
+            heap: &mut Heap,
         ) -> Result<Option<u64>, RuntimeError> {
             for (idx, self_top_hash) in self.keys_top_hash.iter().enumerate() {
                 if *self_top_hash == TopHashValue::EmptyCell as u8 {
@@ -1348,9 +1342,7 @@ mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = thread
-                        .runtime
-                        .heap
+                    let found_key = heap
                         .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
                         .map_err(|e| e.into())?;
                     match ref_access {
@@ -1360,18 +1352,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize * item_size)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1384,18 +1372,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1420,7 +1404,8 @@ mod map_impl {
             top_hash: u8,
             key: &[u8],
             ref_access: DerefHashing,
-            thread: &Thread,
+
+            heap: &mut Heap,
         ) -> Result<Option<u64>, RuntimeError> {
             let mut found_idx = None;
             for (idx, self_top_hash) in self.keys_top_hash.iter().enumerate() {
@@ -1429,9 +1414,7 @@ mod map_impl {
                 }
                 if *self_top_hash == top_hash {
                     // Read key
-                    let found_key = thread
-                        .runtime
-                        .heap
+                    let found_key = heap
                         .read(self.ptr_keys as usize + idx * self.key_size, self.key_size)
                         .map_err(|e| e.into())?;
                     match ref_access {
@@ -1441,18 +1424,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize * item_size)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1465,18 +1444,14 @@ mod map_impl {
                                 TryInto::<&[u8; 8]>::try_into(found_key.as_slice())
                                     .map_err(|_| RuntimeError::Deserialization)?;
                             let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                            let len_bytes = thread
-                                .runtime
-                                .heap
+                            let len_bytes = heap
                                 .read(vec_heap_address as usize, 8)
                                 .map_err(|e| e.into())?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes);
 
-                            let items_bytes = thread
-                                .runtime
-                                .heap
+                            let items_bytes = heap
                                 .read(vec_heap_address as usize + 16, len as usize)
                                 .map_err(|e| e.into())?;
                             if items_bytes.as_slice() == key {
@@ -1501,35 +1476,26 @@ mod map_impl {
                     let next_top_hash = self.keys_top_hash[idx + 1];
                     if next_top_hash == TopHashValue::RestIsEmpty as u8 {
                         // Write RestIsEmpty
-                        thread
-                            .runtime
-                            .heap
-                            .write(
-                                self.ptr_top_hash as usize + idx,
-                                &vec![TopHashValue::RestIsEmpty as u8],
-                            )
-                            .map_err(|e| e.into())?;
-                    } else {
-                        // Write EmptyCell
-                        thread
-                            .runtime
-                            .heap
-                            .write(
-                                self.ptr_top_hash as usize + idx,
-                                &vec![TopHashValue::EmptyCell as u8],
-                            )
-                            .map_err(|e| e.into())?;
-                    }
-                } else {
-                    // Write RestIsEmpty
-                    thread
-                        .runtime
-                        .heap
-                        .write(
+                        heap.write(
                             self.ptr_top_hash as usize + idx,
                             &vec![TopHashValue::RestIsEmpty as u8],
                         )
                         .map_err(|e| e.into())?;
+                    } else {
+                        // Write EmptyCell
+                        heap.write(
+                            self.ptr_top_hash as usize + idx,
+                            &vec![TopHashValue::EmptyCell as u8],
+                        )
+                        .map_err(|e| e.into())?;
+                    }
+                } else {
+                    // Write RestIsEmpty
+                    heap.write(
+                        self.ptr_top_hash as usize + idx,
+                        &vec![TopHashValue::RestIsEmpty as u8],
+                    )
+                    .map_err(|e| e.into())?;
                 }
                 Ok(Some(self.ptr_values + (idx * self.value_size) as u64))
             } else {
@@ -1570,14 +1536,9 @@ mod map_impl {
             }
         }
 
-        pub fn init_in_mem(&self, thread: &Thread) -> Result<usize, RuntimeError> {
+        pub fn init_in_mem(&self, heap: &mut Heap) -> Result<usize, RuntimeError> {
             // alloc map layout
-            let map_ptr = thread
-                .runtime
-                .heap
-                .alloc(MAP_LAYOUT_SIZE)
-                .map_err(|e| e.into())?
-                + 8;
+            let map_ptr = heap.alloc(MAP_LAYOUT_SIZE).map_err(|e| e.into())? + 8;
 
             let mut data = [0; MAP_LAYOUT_SIZE];
             // write len
@@ -1588,16 +1549,12 @@ mod map_impl {
             data[9..13].copy_from_slice(&self.hash_seed.to_le_bytes());
 
             // alloc buckets
-            let buckets_ptr = thread
-                .runtime
-                .heap
+            let buckets_ptr = heap
                 .alloc((1 << self.log_cap) * self.bucket_size)
                 .map_err(|e| e.into())?
                 + 8;
             // clean buckets
-            let _ = thread
-                .runtime
-                .heap
+            let _ = heap
                 .write(
                     buckets_ptr,
                     &vec![0u8; (1 << self.log_cap) * self.bucket_size],
@@ -1610,19 +1567,13 @@ mod map_impl {
             data[13..].copy_from_slice(&buckets_ptr.to_le_bytes());
 
             // write map layout in mem
-            let _ = thread
-                .runtime
-                .heap
-                .write(map_ptr, &data.to_vec())
-                .map_err(|e| e.into())?;
+            let _ = heap.write(map_ptr, &data.to_vec()).map_err(|e| e.into())?;
 
             Ok(map_ptr)
         }
 
-        fn update_log_cap(&self, new_log_cap: u8, thread: &Thread) -> Result<(), RuntimeError> {
-            let _ = thread
-                .runtime
-                .heap
+        fn update_log_cap(&self, new_log_cap: u8, heap: &mut Heap) -> Result<(), RuntimeError> {
+            let _ = heap
                 .write(
                     self.ptr_map_layout as usize + MapLayout::log_cap_offset(),
                     &vec![new_log_cap],
@@ -1631,10 +1582,8 @@ mod map_impl {
             Ok(())
         }
 
-        fn update_buckets_ptr(&self, bucket_ptr: u64, thread: &Thread) -> Result<(), RuntimeError> {
-            let _ = thread
-                .runtime
-                .heap
+        fn update_buckets_ptr(&self, bucket_ptr: u64, heap: &mut Heap) -> Result<(), RuntimeError> {
+            let _ = heap
                 .write(
                     self.ptr_map_layout as usize + MapLayout::ptr_buckets_offset(),
                     &bucket_ptr.to_le_bytes().to_vec(),
@@ -1643,14 +1592,12 @@ mod map_impl {
             Ok(())
         }
 
-        pub fn resize(&self, thread: &Thread) -> Result<(), RuntimeError> {
+        pub fn resize(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
             let mut new_log_cap = self.log_cap + 1;
 
             let previous_ptr_bucket = self.ptr_buckets;
             // get all buckets
-            let bytes_buckets = thread
-                .runtime
-                .heap
+            let bytes_buckets = heap
                 .read(
                     self.ptr_buckets as usize,
                     (1 << self.log_cap) * self.bucket_size,
@@ -1731,29 +1678,23 @@ mod map_impl {
             }
 
             // Update log_cap in memory: log_cap += 1
-            let _ = self.update_log_cap(new_log_cap, thread)?;
+            let _ = self.update_log_cap(new_log_cap, heap)?;
 
             // free previous_buckets
-            let _ = thread
-                .runtime
-                .heap
+            let _ = heap
                 .free((previous_ptr_bucket - 8) as usize)
                 .map_err(|e| e.into())?;
 
             // alloc new buckets
-            let new_buckets_ptr = thread
-            .runtime
-            .heap
+            let new_buckets_ptr = heap
             .alloc(new_bytes_buckets.len()).map_err(|e| e.into())? + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
             // copy new buckets in memory
-            let _ = thread
-                .runtime
-                .heap
+            let _ = heap
                 .write(new_buckets_ptr, &new_bytes_buckets)
                 .map_err(|e| e.into())?;
 
             // update buckets ptr
-            let _ = self.update_buckets_ptr(new_buckets_ptr as u64, thread)?;
+            let _ = self.update_buckets_ptr(new_buckets_ptr as u64, heap)?;
 
             Ok(())
         }
@@ -1767,11 +1708,10 @@ mod map_impl {
         address: u64,
         key_size: usize,
         value_size: usize,
-        thread: &Thread,
+
+        heap: &mut Heap,
     ) -> Result<BucketLayout, RuntimeError> {
-        let data = thread
-            .runtime
-            .heap
+        let data = heap
             .read(address as usize, MAP_BUCKET_SIZE)
             .map_err(|e| e.into())?;
         if data.len() != MAP_BUCKET_SIZE {
@@ -1793,13 +1733,9 @@ mod map_impl {
         address: u64,
         key_size: usize,
         value_size: usize,
-        thread: &Thread,
+        heap: &mut Heap,
     ) -> Result<MapLayout, RuntimeError> {
-        let data = thread
-            .runtime
-            .heap
-            .read(address as usize, 21)
-            .map_err(|e| e.into())?;
+        let data = heap.read(address as usize, 21).map_err(|e| e.into())?;
         if data.len() != 21 {
             return Err(RuntimeError::CodeSegmentation);
         }
@@ -1862,32 +1798,33 @@ mod map_impl {
 }
 
 impl Executable for AllocCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             AllocCasm::AppendChar => {
-                let chara = OpPrimitive::get_char(&thread.memory())?;
+                let chara = OpPrimitive::get_char(stack)?;
                 let chara = chara.to_string();
                 let item_data = chara.as_bytes().to_vec();
                 let item_len = chara.len();
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -1895,9 +1832,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -1910,9 +1845,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + (item_len as u64)) * 2) as usize) + 16;
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -1931,31 +1864,23 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new item */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize + 16 + new_len as usize - item_len,
                         &item_data,
                     )
                     .map_err(|e| e.into())?;
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -1967,31 +1892,26 @@ impl Executable for AllocCasm {
                 let item_size = match self {
                     AllocCasm::AppendItem(_) => *item_size,
                     AllocCasm::AppendStrSlice(_) => {
-                        let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let len = OpPrimitive::get_num8::<u64>(stack)?;
                         len as usize
                     }
                     _ => unreachable!(),
                 };
-                let item_data = thread.env.stack.pop(item_size).map_err(|e| e.into())?;
+                let item_data = stack.pop(item_size).map_err(|e| e.into())?.to_owned();
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -1999,9 +1919,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -2026,9 +1944,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -2044,34 +1960,26 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new item */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize
                             + 16
                             + (new_len as usize * size_factor as usize)
                             - item_size,
-                        &item_data,
+                        &item_data.to_vec(),
                     )
                     .map_err(|e| e.into())?;
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -2080,46 +1988,35 @@ impl Executable for AllocCasm {
                     .map_err(|err| err.into())?;
             }
             AllocCasm::AppendString => {
-                let item_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let item_len_bytes = thread
-                    .runtime
-                    .heap
+                let item_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                let item_len_bytes = heap
                     .read(item_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let item_len_bytes = TryInto::<&[u8; 8]>::try_into(item_len_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let item_len = u64::from_le_bytes(*item_len_bytes);
 
-                let item_data = thread
-                    .runtime
-                    .heap
+                let item_data = heap
                     .read(item_heap_address as usize + 16, item_len as usize)
                     .map_err(|e| e.into())?;
 
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .free(item_heap_address as usize - 8)
                     .map_err(|e| e.into())?;
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -2127,9 +2024,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -2142,9 +2037,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + item_len) * 2) as usize) + 16;
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -2155,31 +2048,23 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new item */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize + 16 + new_len as usize - item_len as usize,
                         &item_data,
                     )
                     .map_err(|e| e.into())?;
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -2192,67 +2077,56 @@ impl Executable for AllocCasm {
                 value_size,
                 ref_access,
             } => {
-                let value_data = thread.env.stack.pop(*value_size).map_err(|e| e.into())?;
+                let value_data = stack.pop(*value_size).map_err(|e| e.into())?.to_owned();
                 let (key_data_ref_if_exist, key_data) = match ref_access {
                     DerefHashing::Vec(item_size) => {
-                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let len_bytes = heap
                             .read(vec_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(vec_heap_address as usize + 16, len as usize * *item_size)
                             .map_err(|e| e.into())?;
                         (Some(vec_heap_address.to_le_bytes()), items_bytes)
                     }
                     DerefHashing::String => {
-                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                        let len_bytes = heap
                             .read(str_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(str_heap_address as usize + 16, len as usize)
                             .map_err(|e| e.into())?;
                         (Some(str_heap_address.to_le_bytes()), items_bytes)
                     }
                     DerefHashing::Default => {
-                        (None, thread.env.stack.pop(*key_size).map_err(|e| e.into())?)
+                        (None, stack.pop(*key_size).map_err(|e| e.into())?.to_vec())
                     }
                 };
 
-                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = thread
-                    .env
-                    .stack
+                let map_heap_address_bytes = stack
                     .read(
                         Offset::SB(map_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let map_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
                 let mut insertion_successful = false;
 
                 while !insertion_successful {
-                    let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+                    let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
 
                     let hash = hash_of(&key_data, map_layout.hash_seed);
                     let top_hash = top_hash(hash);
@@ -2263,54 +2137,44 @@ impl Executable for AllocCasm {
                         map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
 
                     let bucket_layout =
-                        bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+                        bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
                     // dbg!((bucket_idx, &bucket_layout));
 
                     let opt_ptr_key_value =
-                        bucket_layout.assign(top_hash, &key_data, *ref_access, thread)?;
+                        bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
                     match opt_ptr_key_value {
                         Some((ptr_tophash, ptr_key, ptr_value, is_new_value)) => {
                             // trigger resizing if overload
                             if is_new_value {
                                 if over_load_factor(map_layout.len + 1, map_layout.log_cap) {
-                                    let _ = map_layout.resize(thread)?;
+                                    let _ = map_layout.resize(heap)?;
                                     // resizing invalidates everything so perform the whole operation again
                                     continue;
                                 }
                             }
                             // insert in found place
-                            let _ = thread
-                                .runtime
-                                .heap
+                            let _ = heap
                                 .write(ptr_tophash as usize, &vec![top_hash])
                                 .map_err(|e| e.into())?;
                             match key_data_ref_if_exist {
                                 Some(real_key_data) => {
-                                    let _ = thread
-                                        .runtime
-                                        .heap
+                                    let _ = heap
                                         .write(ptr_key as usize, &real_key_data.to_vec())
                                         .map_err(|e| e.into())?;
                                 }
                                 None => {
-                                    let _ = thread
-                                        .runtime
-                                        .heap
+                                    let _ = heap
                                         .write(ptr_key as usize, &key_data)
                                         .map_err(|e| e.into())?;
                                 }
                             }
-                            let _ = thread
-                                .runtime
-                                .heap
-                                .write(ptr_value as usize, &value_data)
+                            let _ = heap
+                                .write(ptr_value as usize, &value_data.to_vec())
                                 .map_err(|e| e.into())?;
                             if is_new_value {
                                 // update len
-                                let _ = thread
-                                    .runtime
-                                    .heap
+                                let _ = heap
                                     .write(
                                         map_heap_address as usize,
                                         &(map_layout.len + 1).to_le_bytes().to_vec(),
@@ -2321,7 +2185,7 @@ impl Executable for AllocCasm {
                         }
                         None => {
                             // resize and retry
-                            let _ = map_layout.resize(thread)?;
+                            let _ = map_layout.resize(heap)?;
                         }
                     }
                 }
@@ -2334,61 +2198,48 @@ impl Executable for AllocCasm {
             } => {
                 let key_data = match ref_access {
                     DerefHashing::Vec(item_size) => {
-                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let len_bytes = heap
                             .read(vec_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(vec_heap_address as usize + 16, len as usize * *item_size)
                             .map_err(|e| e.into())?;
                         items_bytes
                     }
                     DerefHashing::String => {
-                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                        let len_bytes = heap
                             .read(str_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(str_heap_address as usize + 16, len as usize)
                             .map_err(|e| e.into())?;
                         items_bytes
                     }
-                    DerefHashing::Default => {
-                        thread.env.stack.pop(*key_size).map_err(|e| e.into())?
-                    }
+                    DerefHashing::Default => stack.pop(*key_size).map_err(|e| e.into())?.to_vec(),
                 };
 
-                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = thread
-                    .env
-                    .stack
+                let map_heap_address_bytes = stack
                     .read(
                         Offset::SB(map_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let map_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
-                let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+                let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
 
                 let hash = hash_of(&key_data, map_layout.hash_seed);
                 let top_hash = top_hash(hash);
@@ -2398,38 +2249,30 @@ impl Executable for AllocCasm {
                 let bucket_address =
                     map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
 
-                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
                 // dbg!(&map_layout);
                 // dbg!((bucket_idx, &bucket_layout));
 
-                let opt_ptr_value = bucket_layout.get(top_hash, &key_data, *ref_access, thread)?;
+                let opt_ptr_value = bucket_layout.get(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {
                     Some(ptr_value) => {
-                        let value_data = thread
-                            .runtime
-                            .heap
+                        let value_data = heap
                             .read(ptr_value as usize, *value_size)
                             .map_err(|e| e.into())?;
 
-                        let _ = thread
-                            .env
-                            .stack
-                            .push_with(&value_data)
-                            .map_err(|e| e.into())?;
+                        let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
                         // push NO_ERROR
                         // TODO : NO_ERROR value
-                        let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
                     }
                     None => {
-                        let _ = thread
-                            .env
-                            .stack
+                        let _ = stack
                             .push_with(&vec![0u8; *value_size])
                             .map_err(|e| e.into())?;
                         // push ERROR
                         // TODO : ERROR value
-                        let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
                     }
                 }
             }
@@ -2440,61 +2283,48 @@ impl Executable for AllocCasm {
             } => {
                 let key_data = match ref_access {
                     DerefHashing::Vec(item_size) => {
-                        let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let len_bytes = heap
                             .read(vec_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(vec_heap_address as usize + 16, len as usize * *item_size)
                             .map_err(|e| e.into())?;
                         items_bytes
                     }
                     DerefHashing::String => {
-                        let str_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                        let len_bytes = thread
-                            .runtime
-                            .heap
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                        let len_bytes = heap
                             .read(str_heap_address as usize, 8)
                             .map_err(|e| e.into())?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes);
-                        let items_bytes = thread
-                            .runtime
-                            .heap
+                        let items_bytes = heap
                             .read(str_heap_address as usize + 16, len as usize)
                             .map_err(|e| e.into())?;
                         items_bytes
                     }
-                    DerefHashing::Default => {
-                        thread.env.stack.pop(*key_size).map_err(|e| e.into())?
-                    }
+                    DerefHashing::Default => stack.pop(*key_size).map_err(|e| e.into())?.to_vec(),
                 };
 
-                let map_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = thread
-                    .env
-                    .stack
+                let map_heap_address_bytes = stack
                     .read(
                         Offset::SB(map_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let map_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
-                let map_layout = map_layout(map_heap_address, *key_size, *value_size, thread)?;
+                let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
 
                 let hash = hash_of(&key_data, map_layout.hash_seed);
                 let top_hash = top_hash(hash);
@@ -2504,59 +2334,46 @@ impl Executable for AllocCasm {
                 let bucket_address =
                     map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
 
-                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, thread)?;
+                let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
                 // dbg!(&map_layout);
                 // dbg!((bucket_idx, &bucket_layout));
 
-                let opt_ptr_value =
-                    bucket_layout.delete(top_hash, &key_data, *ref_access, thread)?;
+                let opt_ptr_value = bucket_layout.delete(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {
                     Some(ptr_value) => {
                         // update len
-                        let _ = thread
-                            .runtime
-                            .heap
+                        let _ = heap
                             .write(
                                 map_heap_address as usize,
                                 &(map_layout.len - 1).to_le_bytes().to_vec(),
                             )
                             .map_err(|e| e.into())?;
                         // read in found place
-                        let value_data = thread
-                            .runtime
-                            .heap
+                        let value_data = heap
                             .read(ptr_value as usize, *value_size)
                             .map_err(|e| e.into())?;
 
-                        let _ = thread
-                            .env
-                            .stack
-                            .push_with(&value_data)
-                            .map_err(|e| e.into())?;
+                        let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
                         // push NO_ERROR
                         // TODO : NO_ERROR value
-                        let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
                     }
                     None => {
-                        let _ = thread
-                            .env
-                            .stack
+                        let _ = stack
                             .push_with(&vec![0u8; *value_size])
                             .map_err(|e| e.into())?;
                         // push ERROR
                         // TODO : ERROR value
-                        let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
                     }
                 }
             }
             AllocCasm::DeleteVec(item_size) => {
-                let index = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let index = OpPrimitive::get_num8::<u64>(stack)?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -2564,13 +2381,10 @@ impl Executable for AllocCasm {
                     )
                     .map_err(|err| err.into())?;
 
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -2582,9 +2396,7 @@ impl Executable for AllocCasm {
 
                 if index < previous_len {
                     // Read deleted item
-                    let deleted_item_data = thread
-                        .runtime
-                        .heap
+                    let deleted_item_data = heap
                         .read(
                             vec_heap_address as usize + 16 + ((index) * item_size) as usize,
                             item_size as usize,
@@ -2594,17 +2406,13 @@ impl Executable for AllocCasm {
                     /* index not last item */
                     {
                         /* move below */
-                        let data = thread
-                            .runtime
-                            .heap
+                        let data = heap
                             .read(
                                 vec_heap_address as usize + 16 + ((index + 1) * item_size) as usize,
                                 (previous_len * item_size - (index + 1) * item_size) as usize,
                             )
                             .map_err(|e| e.into())?;
-                        let _ = thread
-                            .runtime
-                            .heap
+                        let _ = heap
                             .write(
                                 vec_heap_address as usize + 16 + (index * item_size) as usize,
                                 &data,
@@ -2612,9 +2420,7 @@ impl Executable for AllocCasm {
                             .map_err(|e| e.into())?;
                     }
                     /* clear last item */
-                    let _ = thread
-                        .runtime
-                        .heap
+                    let _ = heap
                         .write(
                             vec_heap_address as usize
                                 + 16
@@ -2625,31 +2431,23 @@ impl Executable for AllocCasm {
 
                     let len_bytes = (previous_len - 1).to_le_bytes().as_slice().to_vec();
                     /* Write len */
-                    let _ = thread
-                        .runtime
-                        .heap
+                    let _ = heap
                         .write(vec_heap_address as usize, &len_bytes)
                         .map_err(|e| e.into())?;
 
                     // Push deleted item and error
-                    let _ = thread
-                        .env
-                        .stack
-                        .push_with(&deleted_item_data)
-                        .map_err(|e| e.into())?;
+                    let _ = stack.push_with(&deleted_item_data).map_err(|e| e.into())?;
                     // Push no error
                     // TODO : NO_ERROR value
-                    let _ = thread.env.stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
                 } else {
                     // Push zeroes and error
-                    let _ = thread
-                        .env
-                        .stack
+                    let _ = stack
                         .push_with(&vec![0; item_size as usize])
                         .map_err(|e| e.into())?;
                     // Push no error
                     // TODO : ERROR value
-                    let _ = thread.env.stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
                 }
             }
             AllocCasm::Vec { item_size } | AllocCasm::VecWithCapacity { item_size } => {
@@ -2660,11 +2458,11 @@ impl Executable for AllocCasm {
                     _ => unreachable!(),
                 };
                 let (len, cap) = if with_capacity {
-                    let cap = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                    let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    let cap = OpPrimitive::get_num8::<u64>(stack)?;
+                    let len = OpPrimitive::get_num8::<u64>(stack)?;
                     (len, cap)
                 } else {
-                    let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    let len = OpPrimitive::get_num8::<u64>(stack)?;
                     (len, align(len as usize) as u64)
                 };
                 let alloc_size = cap * (*item_size as u64) + 16;
@@ -2672,29 +2470,15 @@ impl Executable for AllocCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = thread
-                    .runtime
-                    .heap
-                    .alloc(alloc_size as usize)
-                    .map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
@@ -2714,7 +2498,7 @@ impl Executable for AllocCasm {
                 };
                 let mut log_cap: u8 = 0;
                 if with_capacity {
-                    let cap = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    let cap = OpPrimitive::get_num8::<u64>(stack)?;
                     // to reduce cap size and therefore number of created bucket -> the map will try to fill up buckets in priority rather than reallocating
                     if cap <= MAP_BUCKET_SIZE as u64 {
                         log_cap = 0;
@@ -2731,57 +2515,39 @@ impl Executable for AllocCasm {
                 }
 
                 let map = MapLayout::new(*key_size, *value_size, log_cap);
-                let map_ptr = map.init_in_mem(thread)?;
-                let _ = thread
-                    .env
-                    .stack
+                let map_ptr = map.init_in_mem(heap)?;
+                let _ = stack
                     .push_with(&(map_ptr as u64).to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             AllocCasm::Chan => todo!(),
             AllocCasm::StringFromSlice => {
-                let len = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let len = OpPrimitive::get_num8::<u64>(stack)?;
                 let cap = align(len as usize) as u64;
                 let alloc_size = cap + 16;
 
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = thread
-                    .runtime
-                    .heap
-                    .alloc(alloc_size as usize)
-                    .map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
-                let data = thread.env.stack.pop(len as usize).map_err(|e| e.into())?;
+                let data = stack.pop(len as usize).map_err(|e| e.into())?;
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
                 /* Write slice */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 16, &data)
+                let _ = heap
+                    .write(address + 16, &data.to_vec())
                     .map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             AllocCasm::StringFromChar => {
-                let chara = OpPrimitive::get_char(&thread.memory())?;
+                let chara = OpPrimitive::get_char(stack)?;
                 let chara = chara.to_string();
                 let chara = chara.as_bytes();
 
@@ -2792,80 +2558,50 @@ impl Executable for AllocCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = thread
-                    .runtime
-                    .heap
-                    .alloc(alloc_size as usize)
-                    .map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address, &len_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
-                    .write(address + 8, &cap_bytes)
-                    .map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
                 /* Write slice */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(address + 16, &chara.to_vec())
                     .map_err(|e| e.into())?;
 
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&address.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             AllocCasm::Len => {
-                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let len_bytes = thread
-                    .runtime
-                    .heap
+                let len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let len = u64::from_le_bytes(*len_bytes);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&len.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&len.to_le_bytes()).map_err(|e| e.into())?;
             }
             AllocCasm::Cap => {
-                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let cap_bytes = thread
-                    .runtime
-                    .heap
+                let cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let cap_bytes = TryInto::<&[u8; 8]>::try_into(cap_bytes.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let cap = u64::from_le_bytes(*cap_bytes);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&cap.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&cap.to_le_bytes()).map_err(|e| e.into())?;
             }
             AllocCasm::CapMap => {
-                let vec_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let log_cap_bytes = thread
-                    .runtime
-                    .heap
+                let log_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 1)
                     .map_err(|e| e.into())?;
                 let log_cap = log_cap_bytes[0];
@@ -2875,18 +2611,14 @@ impl Executable for AllocCasm {
                 } else {
                     (1u64 << log_cap) as usize * MAP_BUCKET_SIZE
                 };
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&(cap as u64).to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             AllocCasm::ClearVec(item_size) | AllocCasm::ClearString(item_size) => {
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -2894,13 +2626,10 @@ impl Executable for AllocCasm {
                     )
                     .map_err(|err| err.into())?;
 
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -2911,9 +2640,7 @@ impl Executable for AllocCasm {
                 let item_size = *item_size as u64;
 
                 /* clear */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         vec_heap_address as usize + 16,
                         &vec![0; (previous_len * item_size) as usize],
@@ -2922,9 +2649,7 @@ impl Executable for AllocCasm {
 
                 let len_bytes = 0u64.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
             }
@@ -2932,31 +2657,25 @@ impl Executable for AllocCasm {
             AllocCasm::ExtendItemFromSlice { size, len } => {
                 let item_size = *size;
                 let slice_len = *len;
-                let slice_data = thread
-                    .env
-                    .stack
+                let slice_data = stack
                     .pop(item_size * slice_len)
-                    .map_err(|e| e.into())?;
+                    .map_err(|e| e.into())?
+                    .to_owned();
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -2964,9 +2683,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -2981,9 +2698,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -2998,34 +2713,26 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new items */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize
                             + 16
                             + (previous_len as usize * size_factor as usize),
-                        &slice_data,
+                        &slice_data.to_vec(),
                     )
                     .map_err(|e| e.into())?;
 
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -3036,44 +2743,35 @@ impl Executable for AllocCasm {
             AllocCasm::ExtendItemFromVec { size } => {
                 let item_size = *size;
 
-                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let other_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                let previous_len_bytes = heap
                     .read(other_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
                     TryInto::<&[u8; 8]>::try_into(previous_len_bytes.as_slice())
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let slice_len = u64::from_le_bytes(*previous_len_bytes);
-                let slice_data = thread
-                    .runtime
-                    .heap
+                let slice_data = heap
                     .read(
                         other_heap_address as usize + 16,
                         slice_len as usize * item_size,
                     )
                     .map_err(|e| e.into())?;
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -3081,9 +2779,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -3098,9 +2794,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -3115,22 +2809,16 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new items */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize
                             + 16
@@ -3140,9 +2828,7 @@ impl Executable for AllocCasm {
                     .map_err(|e| e.into())?;
 
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -3153,20 +2839,16 @@ impl Executable for AllocCasm {
             AllocCasm::ExtendStringFromSlice { len } => {
                 let mut slice_data = Vec::new();
                 for _ in 0..*len {
-                    let string_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                    let string_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                    let string_len_bytes = thread
-                        .runtime
-                        .heap
+                    let string_len_bytes = heap
                         .read(string_heap_address as usize, 8)
                         .map_err(|e| e.into())?;
                     let string_len_bytes =
                         TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_len = u64::from_le_bytes(*string_len_bytes);
-                    let string_data = thread
-                        .runtime
-                        .heap
+                    let string_data = heap
                         .read(string_heap_address as usize + 16, string_len as usize)
                         .map_err(|e| e.into())?;
                     slice_data.push(string_data);
@@ -3174,25 +2856,20 @@ impl Executable for AllocCasm {
                 let slice_data = slice_data.into_iter().rev().flatten().collect::<Vec<u8>>();
                 let slice_len = slice_data.len();
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -3200,9 +2877,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -3217,9 +2892,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -3234,22 +2907,16 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new items */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize
                             + 16
@@ -3259,9 +2926,7 @@ impl Executable for AllocCasm {
                     .map_err(|e| e.into())?;
 
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -3270,10 +2935,8 @@ impl Executable for AllocCasm {
                     .map_err(|err| err.into())?;
             }
             AllocCasm::ExtendStringFromVec => {
-                let other_heap_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let other_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                let previous_len_bytes = heap
                     .read(other_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -3283,9 +2946,7 @@ impl Executable for AllocCasm {
 
                 let mut slice_data = Vec::new();
                 for i in 0..other_len as usize {
-                    let string_heap_address = thread
-                        .runtime
-                        .heap
+                    let string_heap_address = heap
                         .read(other_heap_address as usize + 16 + 8 * i, 8)
                         .map_err(|e| e.into())?;
                     let string_heap_address =
@@ -3293,43 +2954,34 @@ impl Executable for AllocCasm {
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_heap_address = u64::from_le_bytes(*string_heap_address);
 
-                    let string_len_bytes = thread
-                        .runtime
-                        .heap
+                    let string_len_bytes = heap
                         .read(string_heap_address as usize, 8)
                         .map_err(|e| e.into())?;
                     let string_len_bytes =
                         TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                     let string_len = u64::from_le_bytes(*string_len_bytes);
-                    let string_data = thread
-                        .runtime
-                        .heap
+                    let string_data = heap
                         .read(string_heap_address as usize + 16, string_len as usize)
                         .map_err(|e| e.into())?;
                     slice_data.extend(string_data);
                 }
                 let slice_len = slice_data.len();
 
-                let vec_stack_address = OpPrimitive::get_num8::<u64>(&thread.memory())?;
+                let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = thread
-                    .env
-                    .stack
+                let vec_heap_address_bytes = stack
                     .read(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
                         8,
                     )
                     .map_err(|err| err.into())?;
-                let vec_heap_address_bytes =
-                    TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes.as_slice())
-                        .map_err(|_| RuntimeError::Deserialization)?;
+                let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
 
-                let previous_len_bytes = thread
-                    .runtime
-                    .heap
+                let previous_len_bytes = heap
                     .read(vec_heap_address as usize, 8)
                     .map_err(|e| e.into())?;
                 let previous_len_bytes =
@@ -3337,9 +2989,7 @@ impl Executable for AllocCasm {
                         .map_err(|_| RuntimeError::Deserialization)?;
                 let previous_len = u64::from_le_bytes(*previous_len_bytes);
 
-                let previous_cap_bytes = thread
-                    .runtime
-                    .heap
+                let previous_cap_bytes = heap
                     .read(vec_heap_address as usize + 8, 8)
                     .map_err(|e| e.into())?;
                 let previous_cap_bytes =
@@ -3354,9 +3004,7 @@ impl Executable for AllocCasm {
                 {
                     /* Reallocation */
                     let size = align(((previous_len + len_offset) * 2) as usize * size_factor + 16);
-                    let address = thread
-                        .runtime
-                        .heap
+                    let address = heap
                         .realloc(vec_heap_address as usize - 8, size)
                         .map_err(|e| e.into())?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
@@ -3371,22 +3019,16 @@ impl Executable for AllocCasm {
                 let len_bytes = new_len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = new_cap.to_le_bytes().as_slice().to_vec();
                 /* Write len */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
                 /* Write capacity */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(new_vec_heap_address as usize + 8, &cap_bytes)
                     .map_err(|e| e.into())?;
 
                 /* Write new items */
-                let _ = thread
-                    .runtime
-                    .heap
+                let _ = heap
                     .write(
                         new_vec_heap_address as usize
                             + 16
@@ -3396,9 +3038,7 @@ impl Executable for AllocCasm {
                     .map_err(|e| e.into())?;
 
                 /* Update vector pointer */
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .write(
                         Offset::SB(vec_stack_address as usize),
                         AccessLevel::Direct,
@@ -3408,7 +3048,7 @@ impl Executable for AllocCasm {
             }
         }
 
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }
@@ -3470,22 +3110,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -3523,15 +3165,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -3566,22 +3211,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -3590,8 +3237,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 9);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * 9 + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -3632,22 +3278,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -3656,8 +3304,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 9);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * 9 + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -3766,28 +3413,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
@@ -3809,28 +3435,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
-
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
@@ -3852,28 +3457,8 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
@@ -3895,28 +3480,8 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
             &data,
@@ -3950,16 +3515,19 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        assert_eq!(memory.heap.allocated_size(), 0);
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
+        assert_eq!(heap.allocated_size(), 0);
     }
 
     #[test]
@@ -3988,16 +3556,19 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        assert_eq!(memory.heap.allocated_size(), 16);
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
+        assert_eq!(heap.allocated_size(), 16);
 
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
@@ -4005,8 +3576,7 @@ mod tests {
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let data = u64::from_le_bytes(
@@ -4042,22 +3612,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4066,8 +3638,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 7);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * length + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -4108,22 +3679,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4132,8 +3705,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 7);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * length + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -4197,15 +3769,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -4237,15 +3812,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -4282,22 +3860,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4306,8 +3886,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 8);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * length + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -4349,15 +3928,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let data: Vec<u64> = data
@@ -4398,22 +3980,24 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4422,8 +4006,7 @@ mod tests {
         ) as usize;
         assert_eq!(length, 0);
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address as usize, 8 * 8 + 16)
             .expect("Heap Read should have succeeded");
         let data: Vec<u64> = data
@@ -4464,31 +4047,32 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data_length[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address, 5 + 16)
             .expect("length should be readable");
 
@@ -4537,15 +4121,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -4588,15 +4175,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),
@@ -4633,15 +4223,18 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
@@ -4666,28 +4259,8 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = statement
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let instructions = CasmProgram::default();
-        statement
-            .gencode(&scope, &instructions)
-            .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let mut runtime = Runtime::new();
-        let tid = runtime
-            .spawn()
-            .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
-        let data = clear_stack!(memory);
+        let data = compile_statement!(statement);
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::I64),
             &data,
@@ -4723,23 +4296,25 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4747,8 +4322,7 @@ mod tests {
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address, length + 16)
             .expect("length should be readable");
 
@@ -4785,23 +4359,25 @@ mod tests {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
 
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
         let heap_address = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&data[0..8])
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data_length = memory
-            .heap
+        let data_length = heap
             .read(heap_address, 8)
             .expect("length should be readable");
         let length = u64::from_le_bytes(
@@ -4809,8 +4385,7 @@ mod tests {
                 .expect("heap address should be deserializable"),
         ) as usize;
 
-        let data = memory
-            .heap
+        let data = heap
             .read(heap_address, length + 16)
             .expect("length should be readable");
 

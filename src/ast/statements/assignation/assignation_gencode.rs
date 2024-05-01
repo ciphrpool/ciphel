@@ -193,14 +193,18 @@ mod tests {
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
@@ -255,14 +259,18 @@ mod tests {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type
@@ -315,14 +323,18 @@ mod tests {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Tuple = TupleType(vec![p_num!(U64), p_num!(U64)])
@@ -423,14 +435,18 @@ mod tests {
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type
@@ -509,14 +525,18 @@ mod tests {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type
@@ -617,14 +637,18 @@ mod tests {
         assert!(instructions.len() > 0);
 
         // Execute the instructions.
-        let mut runtime = Runtime::new();
+
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn()
             .expect("Thread spawning should have succeeded");
-        let thread = runtime.get(tid).expect("Thread should exist");
-        thread.push_instr(instructions);
-        thread.run().expect("Execution should have succeeded");
-        let memory = &thread.memory();
+        let (mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        program.merge(instructions);
+
+        program
+            .execute(stack, &mut heap, &mut stdio)
+            .expect("Execution should have succeeded");
+        let memory = stack;
         let data = clear_stack!(memory);
 
         let result: Struct = user_type_point

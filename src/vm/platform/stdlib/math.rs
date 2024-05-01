@@ -9,11 +9,14 @@ use num_traits::ToBytes;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{Either, TypeOf};
+use crate::vm::allocator::heap::Heap;
+use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
-use crate::vm::scheduler::Thread;
+
+use crate::vm::stdio::StdIO;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
@@ -352,341 +355,227 @@ impl GenerateCode for MathFn {
 }
 
 impl Executable for MathCasm {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             MathCasm::Pi => {
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&PI.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&PI.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::E => {
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&E.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&E.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Inf => {
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&INFINITY.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             MathCasm::NInf => {
-                let _ = thread
-                    .env
-                    .stack
+                let _ = stack
                     .push_with(&NEG_INFINITY.to_le_bytes())
                     .map_err(|e| e.into())?;
             }
             MathCasm::IsNaN => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::is_nan(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[res as u8])
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&[res as u8]).map_err(|e| e.into())?;
             }
             MathCasm::IsInf => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::is_infinite(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&[res as u8])
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&[res as u8]).map_err(|e| e.into())?;
             }
 
             MathCasm::Ceil => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::ceil(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Floor => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::floor(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Abs => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::abs(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Exp => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::exp(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Ln => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::ln(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Log10 => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::log10(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Sqrt => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sqrt(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Acos => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::acos(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Asin => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::asin(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Atan => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::atan(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Cos => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::cos(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Sin => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sin(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Tan => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::tan(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Deg => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::to_degrees(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Rad => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::to_radians(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::CosH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::cosh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::SinH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::sinh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::TanH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::tanh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::ACosH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::acosh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::ASinH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::asinh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::ATanH => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::atanh(n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
 
             MathCasm::Pow => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
-                let x = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
+                let x = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::powf(x, n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Log => {
-                let n = OpPrimitive::get_num8::<f64>(&thread.memory())?;
-                let x = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let n = OpPrimitive::get_num8::<f64>(stack)?;
+                let x = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::log(x, n);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Hypot => {
-                let y = OpPrimitive::get_num8::<f64>(&thread.memory())?;
-                let x = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let y = OpPrimitive::get_num8::<f64>(stack)?;
+                let x = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::hypot(x, y);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
             MathCasm::Atan2 => {
-                let x = OpPrimitive::get_num8::<f64>(&thread.memory())?;
-                let y = OpPrimitive::get_num8::<f64>(&thread.memory())?;
+                let x = OpPrimitive::get_num8::<f64>(stack)?;
+                let y = OpPrimitive::get_num8::<f64>(stack)?;
 
                 let res = f64::atan2(y, x);
 
-                let _ = thread
-                    .env
-                    .stack
-                    .push_with(&res.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                let _ = stack.push_with(&res.to_le_bytes()).map_err(|e| e.into())?;
             }
         }
-        thread.env.program.incr();
+        program.incr();
         Ok(())
     }
 }

@@ -1,9 +1,12 @@
 use ulid::Ulid;
 
 use crate::vm::{
-    scheduler::Thread,
+    allocator::{heap::Heap, stack::Stack},
+    stdio::StdIO,
     vm::{Executable, RuntimeError},
 };
+
+use super::CasmProgram;
 
 #[derive(Debug, Clone)]
 pub enum Data {
@@ -14,14 +17,20 @@ pub enum Data {
 }
 
 impl Executable for Data {
-    fn execute(&self, thread: &Thread) -> Result<(), RuntimeError> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         match self {
             Data::Serialized { data } => {
-                let _ = thread.env.stack.push_with(&data).map_err(|e| e.into())?;
-                thread.env.program.incr();
+                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                program.incr();
             }
-            Data::Dump { data } => thread.env.program.incr(),
-            Data::Table { data } => thread.env.program.incr(),
+            Data::Dump { data } => program.incr(),
+            Data::Table { data } => program.incr(),
             // Data::Get { label, idx } => todo!(),
         }
         Ok(())
