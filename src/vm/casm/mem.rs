@@ -12,7 +12,7 @@ use crate::{
             MemoryAddress,
         },
         stdio::StdIO,
-        vm::{Executable, RuntimeError},
+        vm::{CasmMetadata, Executable, RuntimeError},
     },
 };
 
@@ -32,6 +32,40 @@ pub enum Mem {
     TakeToStack { size: usize },
     Take { size: usize },
     TakeUTF8Char,
+}
+
+impl CasmMetadata for Mem {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Mem::MemCopy => stdio.push_casm("memcpy"),
+            Mem::Dup(n) => stdio.push_casm(&format!("dup {n}")),
+            Mem::DumpRegisters => stdio.push_casm("dmp_regs"),
+            Mem::RecoverRegisters => stdio.push_casm("set_regs"),
+            Mem::SetReg(reg, Some(n)) => stdio.push_casm(&format!("set_reg {} {n}", reg.name())),
+            Mem::SetReg(reg, None) => stdio.push_casm(&format!("set_reg {}", reg.name())),
+            Mem::GetReg(reg) => stdio.push_casm(&format!("dmp_reg {}", reg.name())),
+            Mem::AddReg(reg, Some(n)) => stdio.push_casm(&format!("reg_add {} {n}", reg.name())),
+            Mem::AddReg(reg, None) => stdio.push_casm(&format!("reg_add {}", reg.name())),
+            Mem::SubReg(reg, Some(n)) => stdio.push_casm(&format!("reg_sub {} {n}", reg.name())),
+            Mem::SubReg(reg, None) => stdio.push_casm(&format!("reg_sub {}", reg.name())),
+            Mem::CloneFromSmartPointer(n) => stdio.push_casm(&format!("clone {n}")),
+            Mem::LabelOffset(label) => {
+                let label = program
+                    .get_label_name(label)
+                    .unwrap_or("".into())
+                    .to_string();
+                stdio.push_casm(&format!("dmp_label {label}"))
+            }
+            Mem::TakeToHeap { size } => stdio.push_casm(&format!("htake {size}")),
+            Mem::TakeToStack { size } => stdio.push_casm(&format!("stake {size}")),
+            Mem::Take { size } => stdio.push_casm(&format!("take {size}")),
+            Mem::TakeUTF8Char => stdio.push_casm("take_utf8_char"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl Executable for Mem {

@@ -11,7 +11,7 @@ use crate::{
         },
         casm::operation::OpPrimitive,
         stdio::StdIO,
-        vm::{Executable, RuntimeError},
+        vm::{CasmMetadata, Executable, RuntimeError},
     },
 };
 
@@ -23,6 +23,21 @@ pub enum Alloc {
     Stack { size: usize },
 }
 
+impl CasmMetadata for Alloc {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Alloc::Heap { size } => match size {
+                None => stdio.push_casm("halloc"),
+                Some(n) => stdio.push_casm(&format!("halloc {n}")),
+            },
+            Alloc::Stack { size } => stdio.push_casm(&format!("salloc {size}")),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for Alloc {
     fn execute(
         &self,
@@ -61,7 +76,18 @@ impl Executable for Alloc {
 pub struct Realloc {
     pub size: Option<usize>,
 }
+impl CasmMetadata for Realloc {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self.size {
+            Some(n) => stdio.push_casm(&format!("realloc {n}")),
+            None => stdio.push_casm("realloc"),
+        }
+    }
 
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for Realloc {
     fn execute(
         &self,
@@ -93,7 +119,15 @@ impl Executable for Realloc {
 
 #[derive(Debug, Clone)]
 pub struct Free();
+impl CasmMetadata for Free {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        stdio.push_casm("free");
+    }
 
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for Free {
     fn execute(
         &self,
@@ -124,7 +158,31 @@ pub enum StackFrame {
     Return { return_size: Option<usize> },
     Transfer { is_direct_loop: bool },
 }
+impl CasmMetadata for StackFrame {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        stdio.push_casm("free");
+        match self {
+            StackFrame::Clean => stdio.push_casm("clean"),
+            StackFrame::SoftClean => stdio.push_casm("soft_clean"),
+            StackFrame::Break => stdio.push_casm("break"),
+            StackFrame::Continue => stdio.push_casm("continue"),
+            StackFrame::OpenWindow => stdio.push_casm("op_win"),
+            StackFrame::CloseWindow => stdio.push_casm("cl_win"),
+            StackFrame::Return { return_size } => match return_size {
+                Some(n) => stdio.push_casm(&format!("return {n}")),
+                None => stdio.push_casm("return"),
+            },
+            StackFrame::Transfer { is_direct_loop } => match is_direct_loop {
+                true => stdio.push_casm("transfer_loop"),
+                false => stdio.push_casm("transfer"),
+            },
+        }
+    }
 
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 pub const FLAG_VOID: u8 = 0u8;
 pub const FLAG_RETURN: u8 = 1u8;
 pub const FLAG_BREAK: u8 = 2u8;
@@ -277,6 +335,26 @@ pub enum Access {
     RuntimeCharUTF8AtIdx,
 }
 
+impl CasmMetadata for Access {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Access::Static { address, size } => {
+                stdio.push_casm(&format!("ld {} {size}", address.name()))
+            }
+            Access::Runtime { size } => match size {
+                Some(n) => stdio.push_casm(&format!("ld {n}")),
+                None => stdio.push_casm("ld"),
+            },
+            Access::RuntimeCharUTF8 => stdio.push_casm("ld_utf8"),
+            Access::RuntimeCharUTF8AtIdx => stdio.push_casm("ld_utf8_at"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
+
 impl Executable for Access {
     fn execute(
         &self,
@@ -410,40 +488,49 @@ impl Executable for Access {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Assign {
-    address: MemoryAddress,
-    stack_slice: StackSlice,
-}
+// #[derive(Debug, Clone)]
+// pub struct Assign {
+//     address: MemoryAddress,
+//     stack_slice: StackSlice,
+// }
 
-impl Executable for Assign {
-    fn execute(
-        &self,
-        program: &CasmProgram,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-    ) -> Result<(), RuntimeError> {
-        let data = stack
-            .read(
-                self.stack_slice.offset,
-                AccessLevel::Direct,
-                self.stack_slice.size,
-            )
-            .map_err(|err| err.into())?
-            .to_owned();
+// impl CasmMetadata for Assign {
+//     fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+//         stdio.push_casm(&format!("ld {} {size}", address.name()))
+//     }
 
-        match self.address {
-            MemoryAddress::Heap { offset } => {
-                // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                let _ = heap.write(offset, &data.to_vec()).map_err(|e| e.into())?;
-            }
-            MemoryAddress::Stack { offset, level } => {
-                let _ = stack.write(offset, level, &data).map_err(|e| e.into())?;
-            }
-        };
+//     fn weight(&self) -> usize {
+//         todo!()
+//     }
+// }
+// impl Executable for Assign {
+//     fn execute(
+//         &self,
+//         program: &CasmProgram,
+//         stack: &mut Stack,
+//         heap: &mut Heap,
+//         stdio: &mut StdIO,
+//     ) -> Result<(), RuntimeError> {
+//         let data = stack
+//             .read(
+//                 self.stack_slice.offset,
+//                 AccessLevel::Direct,
+//                 self.stack_slice.size,
+//             )
+//             .map_err(|err| err.into())?
+//             .to_owned();
 
-        program.incr();
-        Ok(())
-    }
-}
+//         match self.address {
+//             MemoryAddress::Heap { offset } => {
+//                 // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
+//                 let _ = heap.write(offset, &data.to_vec()).map_err(|e| e.into())?;
+//             }
+//             MemoryAddress::Stack { offset, level } => {
+//                 let _ = stack.write(offset, level, &data).map_err(|e| e.into())?;
+//             }
+//         };
+
+//         program.incr();
+//         Ok(())
+//     }
+// }

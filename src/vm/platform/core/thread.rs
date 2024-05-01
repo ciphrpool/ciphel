@@ -3,6 +3,7 @@ use std::cell::Ref;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::TypeOf;
 use crate::vm::platform::utils::lexem;
+use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError},
@@ -21,6 +22,19 @@ pub enum ThreadFn {
 pub enum ThreadCasm {
     Spawn,
     Close,
+}
+
+impl CasmMetadata for ThreadCasm {
+    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &CasmProgram) {
+        match self {
+            ThreadCasm::Spawn => stdio.push_casm_lib("spawn"),
+            ThreadCasm::Close => stdio.push_casm_lib("close"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 impl ThreadFn {
     pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {

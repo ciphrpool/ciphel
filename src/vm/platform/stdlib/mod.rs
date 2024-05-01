@@ -4,6 +4,7 @@ use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::stdio::StdIO;
+use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
@@ -35,6 +36,20 @@ pub enum StdCasm {
     IO(IOCasm),
     Math(MathCasm),
     Strings(StringsCasm),
+}
+
+impl CasmMetadata for StdCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            StdCasm::IO(value) => value.name(stdio, program),
+            StdCasm::Math(value) => value.name(stdio, program),
+            StdCasm::Strings(value) => value.name(stdio, program),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl StdFn {

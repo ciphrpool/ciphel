@@ -8,7 +8,7 @@ use super::{
     allocator::{heap::Heap, stack::Stack},
     platform,
     stdio::StdIO,
-    vm::{self, Executable, RuntimeError},
+    vm::{self, CasmMetadata, Executable, RuntimeError},
 };
 pub mod alloc;
 pub mod branch;
@@ -22,7 +22,7 @@ pub mod operation;
 pub struct CasmProgram {
     pub main: MutRc<Vec<Casm>>,
     cursor: Cell<usize>,
-    pub labels: MutRc<HashMap<Ulid, usize>>,
+    pub labels: MutRc<HashMap<Ulid, (usize, Box<str>)>>,
 }
 
 impl Default for CasmProgram {
@@ -54,14 +54,14 @@ impl CasmProgram {
         let id = Ulid::new();
         let mut borrowed_labels = self.labels.as_ref().borrow_mut();
         let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, borrowed_main.len());
+        borrowed_labels.insert(id, (borrowed_main.len(), label.clone().into()));
         borrowed_main.push(Casm::Label(Label { id, name: label }));
         id
     }
     pub fn push_label_id(&self, id: Ulid, label: String) -> Ulid {
         let mut borrowed_labels = self.labels.as_ref().borrow_mut();
         let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, borrowed_main.len());
+        borrowed_labels.insert(id, (borrowed_main.len(), label.clone().into()));
         borrowed_main.push(Casm::Label(Label { id, name: label }));
         id
     }
@@ -70,14 +70,19 @@ impl CasmProgram {
         let id = Ulid::new();
         let mut borrowed_labels = self.labels.as_ref().borrow_mut();
         let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, borrowed_main.len());
+        borrowed_labels.insert(id, (borrowed_main.len(), "data".into()));
         borrowed_main.push(Casm::Data(data));
         id
     }
 
     pub fn get(&self, label: &Ulid) -> Option<usize> {
         let borrowed_labels = self.labels.as_ref().borrow();
-        borrowed_labels.get(label).cloned()
+        borrowed_labels.get(label).map(|(i, _)| i).cloned()
+    }
+
+    pub fn get_label_name(&self, label: &Ulid) -> Option<Box<str>> {
+        let borrowed_labels = self.labels.as_ref().borrow();
+        borrowed_labels.get(label).map(|(_, name)| name).cloned()
     }
 
     pub fn data_at_offset(&self, offset: usize) -> Result<Vec<Box<[u8]>>, RuntimeError> {
@@ -129,7 +134,7 @@ impl CasmProgram {
                     // dbg!((cursor, instruction, stack.top(),));
                     // let mut buffer = String::new();
                     // io::stdin().read_line(&mut buffer);
-
+                    // instruction.name(stdio, self);
                     match instruction.execute(self, stack, heap, stdio) {
                         Ok(_) => {}
                         Err(RuntimeError::Exit) => return Ok(()),
@@ -159,7 +164,7 @@ pub enum Casm {
     Access(alloc::Access),
     Locate(locate::Locate),
     If(branch::BranchIf),
-    Assign(alloc::Assign),
+    // Assign(alloc::Assign),
     LocateNextUTF8Char(locate::LocateNextUTF8Char),
     Label(branch::Label),
     Call(branch::Call),
@@ -182,7 +187,7 @@ impl Executable for Casm {
             Casm::Data(value) => value.execute(program, stack, heap, stdio),
             Casm::Access(value) => value.execute(program, stack, heap, stdio),
             Casm::If(value) => value.execute(program, stack, heap, stdio),
-            Casm::Assign(value) => value.execute(program, stack, heap, stdio),
+            // Casm::Assign(value) => value.execute(program, stack, heap, stdio),
             Casm::Label(value) => value.execute(program, stack, heap, stdio),
             Casm::Call(value) => value.execute(program, stack, heap, stdio),
             Casm::Goto(value) => value.execute(program, stack, heap, stdio),
@@ -200,5 +205,34 @@ impl Executable for Casm {
             Casm::Realloc(value) => value.execute(program, stack, heap, stdio),
             Casm::Free(value) => value.execute(program, stack, heap, stdio),
         }
+    }
+}
+
+impl CasmMetadata for Casm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Casm::Platform(value) => value.name(stdio, program),
+            Casm::StackFrame(value) => value.name(stdio, program),
+            Casm::Alloc(value) => value.name(stdio, program),
+            Casm::Realloc(value) => value.name(stdio, program),
+            Casm::Free(value) => value.name(stdio, program),
+            Casm::Mem(value) => value.name(stdio, program),
+            Casm::Operation(value) => value.name(stdio, program),
+            Casm::Data(value) => value.name(stdio, program),
+            Casm::Access(value) => value.name(stdio, program),
+            Casm::Locate(value) => value.name(stdio, program),
+            Casm::If(value) => value.name(stdio, program),
+            // Casm::Assign(value) => value.name(stdio, program),
+            Casm::LocateNextUTF8Char(value) => value.name(stdio, program),
+            Casm::Label(value) => value.name(stdio, program),
+            Casm::Call(value) => value.name(stdio, program),
+            Casm::Goto(value) => value.name(stdio, program),
+            Casm::Switch(value) => value.name(stdio, program),
+            Casm::Pop(n) => {}
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
     }
 }

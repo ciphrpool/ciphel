@@ -1,10 +1,9 @@
-use crate::{semantic::MutRc};
-
-
+use crate::semantic::MutRc;
 
 #[derive(Debug, Clone)]
 pub struct StdIO {
     pub stdout: StdOut,
+    pub casm_out: String,
     pub stdin: StdIn,
 }
 
@@ -13,7 +12,28 @@ impl Default for StdIO {
         Self {
             stdin: StdIn::default(),
             stdout: StdOut::default(),
+            casm_out: String::new(),
         }
+    }
+}
+
+impl StdIO {
+    pub fn push_casm(&mut self, content: &str) {
+        self.casm_out.push('\t');
+        self.casm_out.push_str(content);
+        self.casm_out.push('\n');
+        println!("\t{content}")
+    }
+    pub fn push_casm_lib(&mut self, content: &str) {
+        self.casm_out.push_str("\tsyscall ");
+        self.casm_out.push_str(content);
+        self.casm_out.push('\n');
+        println!("\tsyscall {content}")
+    }
+    pub fn push_casm_label(&mut self, content: &str) {
+        self.casm_out.push_str(content);
+        self.casm_out.push_str(" :\n");
+        println!("{content} :")
     }
 }
 
@@ -105,6 +125,7 @@ impl StdOut {
         let mut buffer = self.buffer.borrow_mut();
         buffer.push(content, &mut self.data.borrow_mut());
     }
+
     pub fn spawn_buffer(&self) {
         self.buffer.borrow_mut().spawn();
     }

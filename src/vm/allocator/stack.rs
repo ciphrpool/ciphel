@@ -37,6 +37,19 @@ pub enum Offset {
     FE(usize, usize),
 }
 
+impl Offset {
+    pub fn name(&self, level: &AccessLevel) -> String {
+        match self {
+            Offset::SB(n) => format!("SB[{n}{}]", level.name()),
+            Offset::ST(n) => format!("ST[{n}{}]", level.name()),
+            Offset::FB(n) => format!("FB[{n}{}]", level.name()),
+            Offset::FZ(n) => format!("FZ[{n}{}]", level.name()),
+            Offset::FP(n) => format!("FP[{n}{}]", level.name()),
+            Offset::FE(n, m) => format!("FE[{n},{m}{}]", level.name()),
+        }
+    }
+}
+
 impl Default for Offset {
     fn default() -> Self {
         Offset::ST(0)
@@ -72,6 +85,17 @@ pub enum UReg {
     R2,
     R3,
     R4,
+}
+
+impl UReg {
+    pub fn name(&self) -> &'static str {
+        match self {
+            UReg::R1 => "rg1",
+            UReg::R2 => "rg2",
+            UReg::R3 => "rg3",
+            UReg::R4 => "rg4",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -17,7 +17,7 @@ use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 
 use crate::vm::stdio::StdIO;
-use crate::vm::vm::{Executable, Printer, RuntimeError};
+use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError},
@@ -35,6 +35,18 @@ pub enum IOFn {
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOCasm {
     Print(PrintCasm),
+}
+
+impl CasmMetadata for IOCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            IOCasm::Print(_) => stdio.push_casm_lib("print"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -8,7 +8,7 @@ use crate::{
             stack::{Offset, Stack},
         },
         stdio::StdIO,
-        vm::{Executable, RuntimeError},
+        vm::{CasmMetadata, Executable, RuntimeError},
     },
 };
 
@@ -24,6 +24,16 @@ pub struct Label {
 impl Label {
     pub fn gen() -> Ulid {
         Ulid::new()
+    }
+}
+
+impl CasmMetadata for Label {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        stdio.push_casm_label(&self.name);
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
     }
 }
 
@@ -44,6 +54,25 @@ impl Executable for Label {
 pub enum Call {
     From { label: Ulid, param_size: usize },
     Stack,
+}
+
+impl CasmMetadata for Call {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Call::From { label, param_size } => {
+                let label = program
+                    .get_label_name(label)
+                    .unwrap_or("".into())
+                    .to_string();
+                stdio.push_casm(&format!("call {label} {param_size}"));
+            }
+            Call::Stack => stdio.push_casm("call"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl Executable for Call {
@@ -100,6 +129,24 @@ pub struct Goto {
     pub label: Option<Ulid>,
 }
 
+impl CasmMetadata for Goto {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self.label {
+            Some(label) => {
+                let label = program
+                    .get_label_name(&label)
+                    .unwrap_or("".into())
+                    .to_string();
+                stdio.push_casm(&format!("goto {label}"));
+            }
+            None => stdio.push_casm("goto"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for Goto {
     fn execute(
         &self,
@@ -130,6 +177,19 @@ pub struct BranchIf {
     pub else_label: Ulid,
 }
 
+impl CasmMetadata for BranchIf {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        let label = program
+            .get_label_name(&self.else_label)
+            .unwrap_or("".into())
+            .to_string();
+        stdio.push_casm(&format!("else {label}"));
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for BranchIf {
     fn execute(
         &self,
@@ -163,6 +223,62 @@ pub enum BranchTable {
         table_label: Option<Ulid>,
         else_label: Option<Ulid>,
     },
+}
+
+impl CasmMetadata for BranchTable {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            BranchTable::Swith {
+                size,
+                data_label,
+                else_label,
+            } => {
+                let data_label = match data_label {
+                    Some(label) => program
+                        .get_label_name(label)
+                        .unwrap_or("".into())
+                        .to_string(),
+                    None => "".into(),
+                };
+                let else_label = match else_label {
+                    Some(label) => program
+                        .get_label_name(label)
+                        .unwrap_or("".into())
+                        .to_string(),
+                    None => "".into(),
+                };
+                let size = match size {
+                    Some(size) => format!("{size}"),
+                    None => "".into(),
+                };
+                stdio.push_casm(&format!("table {data_label} {else_label} {size}"));
+            }
+            BranchTable::Table {
+                table_label,
+                else_label,
+            } => {
+                let table_label = match table_label {
+                    Some(label) => program
+                        .get_label_name(label)
+                        .unwrap_or("".into())
+                        .to_string(),
+                    None => "".into(),
+                };
+                let else_label = match else_label {
+                    Some(label) => program
+                        .get_label_name(label)
+                        .unwrap_or("".into())
+                        .to_string(),
+                    None => "".into(),
+                };
+                stdio.push_casm(&format!("table {table_label} {else_label}"));
+            }
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl Executable for BranchTable {

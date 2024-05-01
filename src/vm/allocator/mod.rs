@@ -19,6 +19,15 @@ pub enum MemoryAddress {
     Stack { offset: Offset, level: AccessLevel },
 }
 
+impl MemoryAddress {
+    pub fn name(&self) -> String {
+        match self {
+            MemoryAddress::Heap { offset } => format!("HP[{offset}]"),
+            MemoryAddress::Stack { offset, level } => format!("{}", offset.name(level)),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Memory<'runtime> {
     pub heap: &'runtime Heap,

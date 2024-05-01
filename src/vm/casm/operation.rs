@@ -8,7 +8,7 @@ use crate::{
     vm::{
         allocator::{align, heap::Heap, stack::Stack, Memory},
         stdio::StdIO,
-        vm::{CodeGenerationError, Executable, RuntimeError},
+        vm::{CasmMetadata, CodeGenerationError, Executable, RuntimeError},
     },
 };
 use nom::AsBytes;
@@ -39,6 +39,75 @@ impl Executable for Operation {
     }
 }
 
+impl CasmMetadata for Operation {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self.kind {
+            OperationKind::Align => stdio.push_casm("align"),
+            OperationKind::CastCharToUTF8 => stdio.push_casm("char_to_utf8"),
+            OperationKind::Mult(Mult { left, right }) => {
+                stdio.push_casm(&format!("mult_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Div(Division { left, right }) => {
+                stdio.push_casm(&format!("div_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Mod(Mod { left, right }) => {
+                stdio.push_casm(&format!("mod_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Addition(Addition { left, right }) => {
+                stdio.push_casm(&format!("add_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Substraction(Substraction { left, right }) => {
+                stdio.push_casm(&format!("sub_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::ShiftLeft(ShiftLeft { left, right }) => {
+                stdio.push_casm(&format!("shl_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::ShiftRight(ShiftRight { left, right }) => {
+                stdio.push_casm(&format!("shr_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::BitwiseAnd(BitwiseAnd { left, right }) => {
+                stdio.push_casm(&format!("band_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::BitwiseXOR(BitwiseXOR { left, right }) => {
+                stdio.push_casm(&format!("bxor_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::BitwiseOR(BitwiseOR { left, right }) => {
+                stdio.push_casm(&format!("bor_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Cast(Cast { from, to }) => {
+                stdio.push_casm(&format!("cast_{}_{}", from.name(), to.name()))
+            }
+            OperationKind::Less(Less { left, right }) => {
+                stdio.push_casm(&format!("le_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::LessEqual(LessEqual { left, right }) => {
+                stdio.push_casm(&format!("leq_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Greater(Greater { left, right }) => {
+                stdio.push_casm(&format!("ge_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::GreaterEqual(GreaterEqual { left, right }) => {
+                stdio.push_casm(&format!("geq_{}_{}", left.name(), right.name()))
+            }
+            OperationKind::Equal(Equal { left, right }) => {
+                stdio.push_casm(&format!("eq {}B", left))
+            }
+            OperationKind::NotEqual(NotEqual { left, right }) => {
+                stdio.push_casm(&format!("neq {}B", left))
+            }
+            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_casm(&format!("and")),
+            OperationKind::LogicalOr(LogicalOr()) => stdio.push_casm(&format!("or")),
+            OperationKind::Minus(Minus { data_type }) => {
+                stdio.push_casm(&format!("neg_{}", data_type.name()))
+            }
+            OperationKind::Not(Not()) => stdio.push_casm("not"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 #[derive(Debug, Clone)]
 pub enum OperationKind {
     Align,
@@ -104,6 +173,27 @@ impl OpPrimitive {
     //         .map_err(|_| RuntimeError::Deserialization)?;
     //     Ok(f64::from_le_bytes(*data))
     // }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            OpPrimitive::Number(num) => match num {
+                NumberType::U8 => "u8",
+                NumberType::U16 => "u16",
+                NumberType::U32 => "u32",
+                NumberType::U64 => "u64",
+                NumberType::U128 => "u128",
+                NumberType::I8 => "i8",
+                NumberType::I16 => "i16",
+                NumberType::I32 => "i32",
+                NumberType::I64 => "i64",
+                NumberType::I128 => "i128",
+                NumberType::F64 => "f64",
+            },
+            OpPrimitive::Bool => "bool",
+            OpPrimitive::Char => "char",
+            OpPrimitive::String => "str",
+        }
+    }
 
     pub fn get_num16<N: FromBytes<Bytes = [u8; 16]>>(
         memory: &mut Stack,

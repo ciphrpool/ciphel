@@ -89,6 +89,11 @@ pub trait Executable {
     ) -> Result<(), RuntimeError>;
 }
 
+pub trait CasmMetadata {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram);
+    fn weight(&self) -> usize;
+}
+
 pub trait DeserializeFrom {
     type Output;
     fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;

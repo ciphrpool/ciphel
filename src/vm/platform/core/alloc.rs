@@ -15,6 +15,7 @@ use crate::{
             bucket_idx, bucket_layout, hash_of, map_layout, top_hash,
         },
         stdio::StdIO,
+        vm::CasmMetadata,
     },
 };
 
@@ -202,6 +203,60 @@ pub enum AllocCasm {
     Chan,
     StringFromSlice,
     StringFromChar,
+}
+
+impl CasmMetadata for AllocCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            AllocCasm::AppendChar => stdio.push_casm_lib("append"),
+            AllocCasm::AppendItem(_) => stdio.push_casm_lib("append"),
+            AllocCasm::AppendStrSlice(_) => stdio.push_casm_lib("append"),
+            AllocCasm::AppendString => stdio.push_casm_lib("append"),
+            AllocCasm::ExtendItemFromSlice { size, len } => stdio.push_casm_lib("extend"),
+            AllocCasm::ExtendItemFromVec { size } => stdio.push_casm_lib("extend"),
+            AllocCasm::ExtendStringFromSlice { len } => stdio.push_casm_lib("extend"),
+            AllocCasm::ExtendStringFromVec => stdio.push_casm_lib("extend"),
+            AllocCasm::Insert {
+                ref_access,
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("inster"),
+            AllocCasm::Get {
+                ref_access,
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("get"),
+            AllocCasm::DeleteVec(_) => stdio.push_casm_lib("delete"),
+            AllocCasm::DeleteMapKey {
+                ref_access,
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("delete"),
+            AllocCasm::ClearVec(_) => stdio.push_casm_lib("clear"),
+            AllocCasm::ClearString(_) => stdio.push_casm_lib("clear"),
+            AllocCasm::ClearMap(_) => stdio.push_casm_lib("clear"),
+            AllocCasm::Len => stdio.push_casm_lib("len"),
+            AllocCasm::Cap => stdio.push_casm_lib("cap"),
+            AllocCasm::CapMap => stdio.push_casm_lib("cap"),
+            AllocCasm::Vec { item_size } => stdio.push_casm_lib("vec"),
+            AllocCasm::VecWithCapacity { item_size } => stdio.push_casm_lib("vec"),
+            AllocCasm::Map {
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("map"),
+            AllocCasm::MapWithCapacity {
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("map"),
+            AllocCasm::Chan => stdio.push_casm_lib("chan"),
+            AllocCasm::StringFromSlice => stdio.push_casm_lib("string"),
+            AllocCasm::StringFromChar => stdio.push_casm_lib("string"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl AllocFn {

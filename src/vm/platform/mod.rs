@@ -15,7 +15,7 @@ use super::{
     allocator::{heap::Heap, stack::Stack},
     casm::CasmProgram,
     stdio::StdIO,
-    vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
+    vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
 };
 
 pub mod core;
@@ -32,6 +32,19 @@ pub enum Lib {
 pub enum LibCasm {
     Core(CoreCasm),
     Std(StdCasm),
+}
+
+impl CasmMetadata for LibCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            LibCasm::Core(value) => value.name(stdio, program),
+            LibCasm::Std(value) => value.name(stdio, program),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl Lib {

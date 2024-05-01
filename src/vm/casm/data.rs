@@ -1,12 +1,24 @@
+use std::fmt;
+
 use ulid::Ulid;
 
 use crate::vm::{
     allocator::{heap::Heap, stack::Stack},
     stdio::StdIO,
-    vm::{Executable, RuntimeError},
+    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
 use super::CasmProgram;
+struct HexSlice<'a>(&'a [u8]);
+
+impl<'a> fmt::Display for HexSlice<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for &byte in self.0 {
+            write!(f, "{:0>2x}", byte)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Data {
@@ -16,6 +28,35 @@ pub enum Data {
     // Get { label: Ulid, idx: Option<usize> },
 }
 
+impl CasmMetadata for Data {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            Data::Serialized { data } => {
+                stdio.push_casm(&format!("dmp 0x{}", HexSlice(data.as_ref())))
+            }
+            Data::Dump { data } => {
+                let arr: Vec<String> = data.iter().map(|e| format!("0x{}", HexSlice(e))).collect();
+                let arr = arr.join(", ");
+                stdio.push_casm(&format!("data {}", arr))
+            }
+            Data::Table { data } => {
+                let arr: Vec<String> = data
+                    .iter()
+                    .map(|e| {
+                        let label = program.get_label_name(e).unwrap_or("".into()).to_string();
+                        label.to_string()
+                    })
+                    .collect();
+                let arr = arr.join(", ");
+                stdio.push_casm(&format!("labels {}", arr))
+            }
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
 impl Executable for Data {
     fn execute(
         &self,

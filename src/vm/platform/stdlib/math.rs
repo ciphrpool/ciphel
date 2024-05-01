@@ -17,6 +17,7 @@ use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 
 use crate::vm::stdio::StdIO;
+use crate::vm::vm::CasmMetadata;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
@@ -95,6 +96,49 @@ pub enum MathCasm {
     IsNaN,
     IsInf,
 }
+
+impl CasmMetadata for MathCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            MathCasm::Ceil => stdio.push_casm_lib("ceil"),
+            MathCasm::Floor => stdio.push_casm_lib("floor"),
+            MathCasm::Abs => stdio.push_casm_lib("abs"),
+            MathCasm::Exp => stdio.push_casm_lib("exp"),
+            MathCasm::Ln => stdio.push_casm_lib("ln"),
+            MathCasm::Log => stdio.push_casm_lib("log"),
+            MathCasm::Log10 => stdio.push_casm_lib("log10"),
+            MathCasm::Pow => stdio.push_casm_lib("pow"),
+            MathCasm::Sqrt => stdio.push_casm_lib("sqrt"),
+            MathCasm::Acos => stdio.push_casm_lib("acos"),
+            MathCasm::Asin => stdio.push_casm_lib("asin"),
+            MathCasm::Atan => stdio.push_casm_lib("atan"),
+            MathCasm::Atan2 => stdio.push_casm_lib("atan2"),
+            MathCasm::Cos => stdio.push_casm_lib("cos"),
+            MathCasm::Sin => stdio.push_casm_lib("sin"),
+            MathCasm::Tan => stdio.push_casm_lib("tan"),
+            MathCasm::Hypot => stdio.push_casm_lib("hypot"),
+            MathCasm::Deg => stdio.push_casm_lib("deg"),
+            MathCasm::Rad => stdio.push_casm_lib("rad"),
+            MathCasm::CosH => stdio.push_casm_lib("cosh"),
+            MathCasm::SinH => stdio.push_casm_lib("sinh"),
+            MathCasm::TanH => stdio.push_casm_lib("tanh"),
+            MathCasm::ACosH => stdio.push_casm_lib("acosh"),
+            MathCasm::ASinH => stdio.push_casm_lib("asinh"),
+            MathCasm::ATanH => stdio.push_casm_lib("atanh"),
+            MathCasm::Pi => stdio.push_casm_lib("pi"),
+            MathCasm::E => stdio.push_casm_lib("e"),
+            MathCasm::Inf => stdio.push_casm_lib("inf"),
+            MathCasm::NInf => stdio.push_casm_lib("ninf"),
+            MathCasm::IsNaN => stdio.push_casm_lib("isnan"),
+            MathCasm::IsInf => stdio.push_casm_lib("isinf"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
+}
+
 impl MathFn {
     pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
         match suffixe {

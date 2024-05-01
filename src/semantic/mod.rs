@@ -113,6 +113,15 @@ pub enum AccessLevel {
     Backward(usize),
 }
 
+impl AccessLevel {
+    pub fn name(&self) -> String {
+        match self {
+            AccessLevel::General => ", 0".into(),
+            AccessLevel::Direct => "".into(),
+            AccessLevel::Backward(n) => format!(", -{n}"),
+        }
+    }
+}
 pub trait Resolve {
     type Output;
     type Context: Default;

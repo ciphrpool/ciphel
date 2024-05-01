@@ -4,6 +4,7 @@ use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::stdio::StdIO;
+use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
@@ -39,6 +40,21 @@ pub enum CoreCasm {
     Thread(ThreadCasm),
     Chan(ChanCasm),
     Cursor(CursorCasm),
+}
+
+impl CasmMetadata for CoreCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            CoreCasm::Alloc(value) => value.name(stdio, program),
+            CoreCasm::Thread(value) => value.name(stdio, program),
+            CoreCasm::Chan(value) => {}
+            CoreCasm::Cursor(value) => {}
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 impl CoreFn {

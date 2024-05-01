@@ -21,7 +21,7 @@ use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 
 use crate::vm::stdio::StdIO;
-use crate::vm::vm::{Executable, RuntimeError};
+use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError},
@@ -58,6 +58,19 @@ pub enum ToStrCasm {
     ToStrBool,
     ToStrStrSlice,
     ToStrString,
+}
+
+impl CasmMetadata for StringsCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+        match self {
+            StringsCasm::ToStr(_) => stdio.push_casm_lib("to_str"),
+            StringsCasm::Join(_) => stdio.push_casm_lib("str_join"),
+        }
+    }
+
+    fn weight(&self) -> usize {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
