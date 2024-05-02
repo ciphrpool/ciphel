@@ -67,10 +67,6 @@ impl CasmMetadata for StringsCasm {
             StringsCasm::Join(_) => stdio.push_casm_lib("str_join"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]

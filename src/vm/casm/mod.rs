@@ -40,7 +40,6 @@ impl CasmProgram {
         let mut borrowed = self.main.as_ref().borrow_mut();
         borrowed.push(value);
     }
-
     pub fn incr(&self) {
         self.cursor.set(self.cursor.get() + 1)
     }
@@ -247,9 +246,5 @@ impl CasmMetadata for Casm {
             Casm::Switch(value) => value.name(stdio, program),
             Casm::Pop(n) => {}
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }

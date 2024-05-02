@@ -43,10 +43,6 @@ impl CasmMetadata for IOCasm {
             IOCasm::Print(_) => stdio.push_casm_lib("print"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

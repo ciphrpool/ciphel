@@ -46,10 +46,6 @@ impl CasmMetadata for StdCasm {
             StdCasm::Strings(value) => value.name(stdio, program),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl StdFn {

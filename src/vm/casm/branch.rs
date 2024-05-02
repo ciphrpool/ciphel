@@ -31,10 +31,6 @@ impl CasmMetadata for Label {
     fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
         stdio.push_casm_label(&self.name);
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl Executable for Label {
@@ -68,10 +64,6 @@ impl CasmMetadata for Call {
             }
             Call::Stack => stdio.push_casm("call"),
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 
@@ -142,10 +134,6 @@ impl CasmMetadata for Goto {
             None => stdio.push_casm("goto"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 impl Executable for Goto {
     fn execute(
@@ -184,10 +172,6 @@ impl CasmMetadata for BranchIf {
             .unwrap_or("".into())
             .to_string();
         stdio.push_casm(&format!("else {label}"));
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 impl Executable for BranchIf {
@@ -274,10 +258,6 @@ impl CasmMetadata for BranchTable {
                 stdio.push_casm(&format!("table {table_label} {else_label}"));
             }
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 

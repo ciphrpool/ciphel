@@ -133,10 +133,6 @@ impl CasmMetadata for MathCasm {
             MathCasm::IsInf => stdio.push_casm_lib("isinf"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl MathFn {

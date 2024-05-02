@@ -51,10 +51,6 @@ impl CasmMetadata for CoreCasm {
             CoreCasm::Cursor(value) => {}
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl CoreFn {
@@ -133,7 +129,7 @@ impl Executable for CoreCasm {
     ) -> Result<(), RuntimeError> {
         match self {
             CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio),
-            CoreCasm::Thread(_value) => todo!(),
+            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio),
             CoreCasm::Chan(_value) => todo!(),
             CoreCasm::Cursor(_value) => todo!(),
         }

@@ -43,6 +43,14 @@ impl Ciphel {
         Ok(main_tid)
     }
 
+    pub fn available_tids(&self) -> Vec<usize> {
+        self.runtime
+            .threads
+            .iter()
+            .map(|(_, _, _, tid)| *tid)
+            .collect()
+    }
+
     pub fn compile(&mut self, tid: usize, src_code: &str) -> Result<(), CompilationError> {
         let (scope, stack, program) = self
             .runtime
@@ -105,7 +113,7 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run();
+        ciphel.run().expect("no error should arise");
     }
 
     #[test]
@@ -145,6 +153,46 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run();
+        ciphel.run().expect("no error should arise");
+    }
+
+    #[test]
+    fn valid_multiple_thread() {
+        let mut ciphel = Ciphel::new();
+        let main_tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World\n");
+        }
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(main_tid, src)
+            .expect("Compilation should have succeeded");
+
+        let tid = ciphel
+            .runtime
+            .spawn()
+            .expect("spawning should have succeeded");
+
+        let src = r##"
+        fn add(x:u64,y:u64) -> u64 {
+            return x+y;
+        }
+        let res = add(10,10);
+
+        print(f"result = {res}");
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+
+        ciphel.run().expect("no error should arise");
     }
 }

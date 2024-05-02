@@ -33,10 +33,6 @@ impl CasmMetadata for Alloc {
             Alloc::Stack { size } => stdio.push_casm(&format!("salloc {size}")),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 impl Executable for Alloc {
     fn execute(
@@ -83,10 +79,6 @@ impl CasmMetadata for Realloc {
             None => stdio.push_casm("realloc"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 impl Executable for Realloc {
     fn execute(
@@ -122,10 +114,6 @@ pub struct Free();
 impl CasmMetadata for Free {
     fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
         stdio.push_casm("free");
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 impl Executable for Free {
@@ -177,10 +165,6 @@ impl CasmMetadata for StackFrame {
                 false => stdio.push_casm("transfer"),
             },
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 pub const FLAG_VOID: u8 = 0u8;
@@ -348,10 +332,6 @@ impl CasmMetadata for Access {
             Access::RuntimeCharUTF8 => stdio.push_casm("ld_utf8"),
             Access::RuntimeCharUTF8AtIdx => stdio.push_casm("ld_utf8_at"),
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 

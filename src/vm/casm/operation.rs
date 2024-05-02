@@ -103,10 +103,6 @@ impl CasmMetadata for Operation {
             OperationKind::Not(Not()) => stdio.push_casm("not"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 #[derive(Debug, Clone)]
 pub enum OperationKind {

@@ -12,7 +12,6 @@ use crate::semantic::{
 };
 use crate::semantic::{EType, Either, MutRc};
 
-
 impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
@@ -143,7 +142,7 @@ impl Resolve for DeclaredVar {
                 let Some(var_type) = context else {
                     return Err(SemanticError::CantInferType);
                 };
-                if var_type.is_any() || var_type.is_unit() {
+                if var_type.is_any() {
                     return Err(SemanticError::CantInferType);
                 }
 
@@ -193,7 +192,7 @@ impl Resolve for PatternVar {
                     }) else {
                         return Err(SemanticError::InvalidPattern);
                     };
-                    if field_type.is_any() || field_type.is_unit() {
+                    if field_type.is_any() {
                         return Err(SemanticError::CantInferType);
                     }
                     scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
@@ -208,14 +207,16 @@ impl Resolve for PatternVar {
                 let Some(fields) = <EType as GetSubTypes>::get_fields(user_type) else {
                     return Err(SemanticError::InvalidPattern);
                 };
+
                 if value.len() != fields.len() {
                     return Err(SemanticError::InvalidPattern);
                 }
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &value[index];
-                    if field_type.is_any() || field_type.is_unit() {
+                    if field_type.is_any() {
                         return Err(SemanticError::CantInferType);
                     }
+
                     scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
                 }
                 Ok(scope_vars)

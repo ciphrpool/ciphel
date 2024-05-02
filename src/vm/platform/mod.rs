@@ -41,10 +41,6 @@ impl CasmMetadata for LibCasm {
             LibCasm::Std(value) => value.name(stdio, program),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl Lib {

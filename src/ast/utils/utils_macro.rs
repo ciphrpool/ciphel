@@ -27,6 +27,16 @@ macro_rules! v_num {
 }
 
 #[macro_export]
+macro_rules! err_tuple {
+    ($value:expr) => {
+        e_static!(StaticType::Tuple(TupleType(vec![
+            $value,
+            e_static!(StaticType::Error)
+        ])))
+    };
+}
+
+#[macro_export]
 macro_rules! resolve_metadata {
     ($metadata:expr,$self:expr,$scope:expr,$context:expr) => {{
         let mut borrowed_metadata = $metadata

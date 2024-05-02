@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    err_tuple,
     semantic::scope::{
         scope::Scope,
         static_types::{MapType, SliceType, TupleType},
@@ -252,10 +253,6 @@ impl CasmMetadata for AllocCasm {
             AllocCasm::StringFromSlice => stdio.push_casm_lib("string"),
             AllocCasm::StringFromChar => stdio.push_casm_lib("string"),
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 
@@ -995,21 +992,11 @@ impl TypeOf for AllocFn {
             AllocFn::Get { metadata, .. } => metadata
                 .signature()
                 .ok_or(SemanticError::NotResolvedYet)
-                .map(|value| {
-                    e_static!(StaticType::Tuple(TupleType(vec![
-                        value,
-                        e_static!(StaticType::Error)
-                    ])))
-                }),
+                .map(|value| err_tuple!(value)),
             AllocFn::Delete { metadata, .. } => metadata
                 .signature()
                 .ok_or(SemanticError::NotResolvedYet)
-                .map(|value| {
-                    e_static!(StaticType::Tuple(TupleType(vec![
-                        value,
-                        e_static!(StaticType::Error)
-                    ])))
-                }),
+                .map(|value| err_tuple!(value)),
             AllocFn::Free => Ok(e_static!(StaticType::Unit)),
             AllocFn::Vec { metadata, .. } => {
                 metadata.signature().ok_or(SemanticError::NotResolvedYet)

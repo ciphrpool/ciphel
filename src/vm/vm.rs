@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use ulid::Ulid;
 
 use crate::semantic::scope::scope::Scope;
@@ -19,6 +21,18 @@ pub enum CodeGenerationError {
     Default,
 }
 
+pub type Tid = usize;
+
+#[derive(Debug, Clone)]
+pub enum Signal {
+    SPAWN,
+    CLOSE(Tid),
+    WAIT(Tid),
+    WAKE(Tid),
+    SLEEP(usize),
+    JOIN(Tid),
+}
+
 #[derive(Debug, Clone)]
 pub enum RuntimeError {
     StackError(StackError),
@@ -33,45 +47,77 @@ pub enum RuntimeError {
     CodeSegmentation,
     IncorrectVariant,
     InvalidTID(usize),
+    TooManyThread,
+    Signal(Signal),
     Default,
 }
 
+pub const MAX_THREAD_COUNT: usize = 4;
+
 #[derive(Debug, Clone)]
 pub struct Runtime {
-    pub threads: Vec<(MutRc<Scope>, Stack, CasmProgram, usize)>,
+    pub tid_count: Cell<usize>,
+    pub threads: Vec<(MutRc<Scope>, Stack, CasmProgram, Tid)>,
 }
 
 impl Runtime {
     pub fn new() -> (Self, Heap, StdIO) {
         (
             Self {
-                threads: Default::default(),
+                tid_count: Cell::new(0),
+                threads: Vec::with_capacity(MAX_THREAD_COUNT),
             },
             Heap::new(),
             StdIO::default(),
         )
     }
 
-    pub fn spawn(&mut self) -> Result<usize, RuntimeError> {
+    pub fn spawn(&mut self) -> Result<Tid, RuntimeError> {
+        if self.threads.len() >= MAX_THREAD_COUNT {
+            return Err(RuntimeError::TooManyThread);
+        }
         let scope = Scope::new();
         let program = CasmProgram::default();
         let stack = Stack::new();
-        let tid = self.threads.len();
+        let tid = self.tid_count.get() + 1;
+        self.tid_count.set(tid);
         self.threads.push((scope, stack, program, tid));
         Ok(tid)
+    }
+
+    pub fn spawn_with_tid(&mut self, tid: Tid) -> Result<(), RuntimeError> {
+        if self.threads.len() >= MAX_THREAD_COUNT {
+            return Err(RuntimeError::TooManyThread);
+        }
+        let scope = Scope::new();
+        let program = CasmProgram::default();
+        let stack = Stack::new();
+        self.tid_count.set(tid + 1);
+        self.threads.push((scope, stack, program, tid));
+        Ok(())
+    }
+    pub fn close(&mut self, tid: Tid) -> Result<(), RuntimeError> {
+        let idx = self.threads.iter().position(|(_, _, _, id)| *id == tid);
+        if let Some(idx) = idx {
+            let _ = self.threads.remove(idx);
+            Ok(())
+        } else {
+            Err(RuntimeError::InvalidTID(tid))
+        }
     }
 
     pub fn spawn_with_scope(&mut self, scope: MutRc<Scope>) -> Result<usize, RuntimeError> {
         let program = CasmProgram::default();
         let stack = Stack::new();
-        let tid = self.threads.len();
+        let tid = self.tid_count.get() + 1;
+        self.tid_count.set(tid);
         self.threads.push((scope, stack, program, tid));
         Ok(tid)
     }
 
     pub fn get_mut<'runtime>(
         &'runtime mut self,
-        tid: usize,
+        tid: Tid,
     ) -> Result<
         (
             &'runtime mut MutRc<Scope>,
@@ -81,14 +127,13 @@ impl Runtime {
         RuntimeError,
     > {
         self.threads
-            .get_mut(tid)
+            .iter_mut()
+            .find(|(_, _, _, id)| *id == tid)
             .ok_or(RuntimeError::InvalidTID(tid))
             .map(|(scope, stack, program, _)| (scope, stack, program))
     }
 
-    pub fn iter_mut(
-        &mut self,
-    ) -> std::slice::IterMut<'_, (MutRc<Scope>, Stack, CasmProgram, usize)> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, (MutRc<Scope>, Stack, CasmProgram, Tid)> {
         self.threads.iter_mut()
     }
 }
@@ -113,7 +158,9 @@ pub trait Executable {
 
 pub trait CasmMetadata {
     fn name(&self, stdio: &mut StdIO, program: &CasmProgram);
-    fn weight(&self) -> usize;
+    fn weight(&self) -> usize {
+        1
+    }
 }
 
 pub trait DeserializeFrom {

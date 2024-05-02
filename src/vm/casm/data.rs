@@ -52,10 +52,6 @@ impl CasmMetadata for Data {
             }
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 impl Executable for Data {
     fn execute(

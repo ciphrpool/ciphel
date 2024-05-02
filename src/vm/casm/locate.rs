@@ -24,10 +24,6 @@ impl CasmMetadata for Locate {
     fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
         stdio.push_casm(&format!("addr {}", self.address.name()));
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl Executable for Locate {
@@ -83,10 +79,6 @@ impl CasmMetadata for LocateNextUTF8Char {
             LocateNextUTF8Char::RuntimeNext => stdio.push_casm("addr_utf8 "),
             LocateNextUTF8Char::RuntimeAtIdx => stdio.push_casm("addr_utf8_at"),
         }
-    }
-
-    fn weight(&self) -> usize {
-        todo!()
     }
 }
 impl Executable for LocateNextUTF8Char {

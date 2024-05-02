@@ -62,10 +62,6 @@ impl CasmMetadata for Mem {
             Mem::TakeUTF8Char => stdio.push_casm("take_utf8_char"),
         }
     }
-
-    fn weight(&self) -> usize {
-        todo!()
-    }
 }
 
 impl Executable for Mem {
