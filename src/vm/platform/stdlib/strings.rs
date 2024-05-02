@@ -88,9 +88,6 @@ impl StringsFn {
             lexem::TOSTR => Some(StringsFn::ToStr(Cell::new(StringsCasm::ToStr(
                 ToStrCasm::ToStrI64,
             )))),
-            lexem::JOIN => Some(StringsFn::ToStr(Cell::new(StringsCasm::ToStr(
-                ToStrCasm::ToStrI64,
-            )))),
             _ => None,
         }
     }

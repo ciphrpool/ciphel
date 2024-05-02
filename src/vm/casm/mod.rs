@@ -8,7 +8,7 @@ use super::{
     allocator::{heap::Heap, stack::Stack},
     platform,
     stdio::StdIO,
-    vm::{self, CasmMetadata, Executable, RuntimeError},
+    vm::{self, CasmMetadata, Executable, RuntimeError, Signal},
 };
 pub mod alloc;
 pub mod branch;
@@ -39,6 +39,9 @@ impl CasmProgram {
     pub fn push(&self, value: Casm) {
         let mut borrowed = self.main.as_ref().borrow_mut();
         borrowed.push(value);
+    }
+    pub fn cursor_is_at_end(&self) -> bool {
+        self.cursor.get() == self.main.as_ref().borrow().len()
     }
     pub fn incr(&self) {
         self.cursor.set(self.cursor.get() + 1)
@@ -128,11 +131,7 @@ impl CasmProgram {
         match borrowed_main.get(cursor) {
             Some(instruction) => callback(instruction),
             None => {
-                if cursor == borrowed_main.len() {
-                    return Err(RuntimeError::Exit);
-                } else {
-                    return Err(RuntimeError::CodeSegmentation);
-                }
+                return Err(RuntimeError::CodeSegmentation);
             }
         }
     }
@@ -153,7 +152,7 @@ impl CasmProgram {
                     // instruction.name(stdio, self);
                     match instruction.execute(self, stack, heap, stdio) {
                         Ok(_) => {}
-                        Err(RuntimeError::Exit) => return Ok(()),
+                        Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
                         Err(e) => {
                             todo!("{:?} in {:?}", e, instruction)
                         }
@@ -244,7 +243,7 @@ impl CasmMetadata for Casm {
             Casm::Call(value) => value.name(stdio, program),
             Casm::Goto(value) => value.name(stdio, program),
             Casm::Switch(value) => value.name(stdio, program),
-            Casm::Pop(n) => {}
+            Casm::Pop(n) => stdio.push_casm(&format!("pop {n}")),
         }
     }
 }

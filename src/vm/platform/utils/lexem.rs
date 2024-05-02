@@ -37,6 +37,11 @@ pub const SIZEOF: &str = "size_of";
 // THREADS
 pub const SPAWN: &str = "spawn";
 pub const CLOSE: &str = "close";
+pub const EXIT: &str = "exit";
+pub const WAIT: &str = "wait";
+pub const WAKE: &str = "wake";
+pub const SLEEP: &str = "sleep";
+pub const JOIN: &str = "join";
 
 // CHANNEL
 pub const RECEIVE: &str = "receive";
@@ -45,7 +50,7 @@ pub const SEND: &str = "send";
 // STD
 pub const PRINT: &str = "print";
 pub const TOSTR: &str = "to_str";
-pub const JOIN: &str = "join";
+// pub const JOIN: &str = "join";
 pub const CEIL: &str = "ceil";
 pub const FLOOR: &str = "floor";
 pub const ABS: &str = "abs";

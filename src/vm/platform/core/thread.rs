@@ -1,4 +1,5 @@
 use std::cell::Ref;
+use std::collections::HashSet;
 
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, TupleType};
@@ -8,7 +9,9 @@ use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
-use crate::vm::vm::{CasmMetadata, Executable, RuntimeError, Signal, Tid, MAX_THREAD_COUNT};
+use crate::vm::vm::{
+    CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid, MAX_THREAD_COUNT,
+};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, MutRc, Resolve, SemanticError},
@@ -24,6 +27,7 @@ use super::CoreCasm;
 pub enum ThreadFn {
     Spawn,
     Close,
+    Exit,
     Wait,
     Wake,
     Sleep,
@@ -34,6 +38,7 @@ pub enum ThreadFn {
 pub enum ThreadCasm {
     Spawn,
     Close,
+    Exit,
     Wait,
     Wake,
     Sleep,
@@ -45,6 +50,7 @@ impl CasmMetadata for ThreadCasm {
         match self {
             ThreadCasm::Spawn => stdio.push_casm_lib("spawn"),
             ThreadCasm::Close => stdio.push_casm_lib("close"),
+            ThreadCasm::Exit => stdio.push_casm_lib("exit"),
             ThreadCasm::Wait => stdio.push_casm_lib("wait"),
             ThreadCasm::Wake => stdio.push_casm_lib("wake"),
             ThreadCasm::Sleep => stdio.push_casm_lib("sleep"),
@@ -65,6 +71,11 @@ impl ThreadFn {
         match id.as_str() {
             lexem::SPAWN => Some(ThreadFn::Spawn),
             lexem::CLOSE => Some(ThreadFn::Close),
+            lexem::EXIT => Some(ThreadFn::Exit),
+            lexem::WAIT => Some(ThreadFn::Wait),
+            lexem::WAKE => Some(ThreadFn::Wake),
+            lexem::SLEEP => Some(ThreadFn::Sleep),
+            lexem::JOIN => Some(ThreadFn::Join),
             _ => None,
         }
     }
@@ -104,8 +115,19 @@ impl Resolve for ThreadFn {
                 }
                 Ok(())
             }
+            ThreadFn::Exit => {
+                if extra.len() != 0 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                Ok(())
+            }
             ThreadFn::Close => expect_one_u64(extra, scope),
-            ThreadFn::Wait => expect_one_u64(extra, scope),
+            ThreadFn::Wait => {
+                if extra.len() != 0 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                Ok(())
+            }
             ThreadFn::Wake => expect_one_u64(extra, scope),
             ThreadFn::Sleep => expect_one_u64(extra, scope),
             ThreadFn::Join => expect_one_u64(extra, scope),
@@ -122,7 +144,8 @@ impl TypeOf for ThreadFn {
             ThreadFn::Close => Ok(e_static!(StaticType::Error)),
             ThreadFn::Wait => Ok(e_static!(StaticType::Error)),
             ThreadFn::Wake => Ok(e_static!(StaticType::Error)),
-            ThreadFn::Sleep => Ok(e_static!(StaticType::Error)),
+            ThreadFn::Exit => Ok(e_static!(StaticType::Unit)),
+            ThreadFn::Sleep => Ok(e_static!(StaticType::Unit)),
             ThreadFn::Join => Ok(e_static!(StaticType::Error)),
         }
     }
@@ -137,6 +160,9 @@ impl GenerateCode for ThreadFn {
         match self {
             ThreadFn::Spawn => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
                 ThreadCasm::Spawn,
+            )))),
+            ThreadFn::Exit => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
+                ThreadCasm::Exit,
             )))),
             ThreadFn::Close => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
                 ThreadCasm::Close,
@@ -190,6 +216,7 @@ pub fn sig_spawn(
         Err(RuntimeError::TooManyThread)
     }
 }
+
 pub fn sig_close(
     tid: &Tid,
     availaible_tids: &mut Vec<Tid>,
@@ -219,6 +246,91 @@ pub fn sig_close(
     }
 }
 
+pub fn sig_wait(state: &mut ThreadState, program: &CasmProgram) -> Result<(), RuntimeError> {
+    let _ = state.to(ThreadState::WAITING)?;
+    program.incr();
+    Err(RuntimeError::Signal(Signal::WAIT))
+}
+
+pub fn sig_wake(
+    tid: &Tid,
+    availaible_tids: &mut Vec<Tid>,
+    wakingup_tid: &mut HashSet<Tid>,
+    program: &CasmProgram,
+    stack: &mut Stack,
+) -> Result<(), RuntimeError> {
+    if availaible_tids.contains(tid) {
+        wakingup_tid.insert(*tid);
+        // TODO : NO_ERROR value
+        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        program.incr();
+        Ok(())
+    } else {
+        // TODO : ERROR value
+        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        program.incr();
+        Err(RuntimeError::InvalidTID(*tid))
+    }
+}
+
+pub fn sig_sleep(
+    nb_maf: &usize,
+    state: &mut ThreadState,
+    program: &CasmProgram,
+) -> Result<(), RuntimeError> {
+    let _ = state.to(ThreadState::SLEEPING(*nb_maf))?;
+    program.incr();
+    Err(RuntimeError::Signal(Signal::SLEEP(*nb_maf)))
+}
+
+pub fn sig_join(
+    own_tid: Tid,
+    join_tid: Tid,
+    state: &mut ThreadState,
+    join_waiting_list: &mut Vec<(Tid, Tid)>,
+    availaible_tids: &mut Vec<Tid>,
+    program: &CasmProgram,
+    stack: &mut Stack,
+) -> Result<(), RuntimeError> {
+    dbg!((own_tid, join_tid));
+    if availaible_tids.contains(&join_tid) {
+        let _ = state.to(ThreadState::WAITING)?;
+        join_waiting_list.push((own_tid, join_tid));
+        // TODO : NO_ERROR value
+        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        program.incr();
+        Err(RuntimeError::Signal(Signal::JOIN(join_tid)))
+    } else {
+        // TODO : ERROR value
+        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        program.incr();
+        Err(RuntimeError::InvalidTID(join_tid))
+    }
+}
+pub fn sig_exit(
+    tid: Tid,
+    state: &mut ThreadState,
+    closed_tid: &mut Vec<Tid>,
+    join_waiting_list: &mut Vec<(Tid, Tid)>,
+    wakingup_tid: &mut HashSet<Tid>,
+) -> Result<(), RuntimeError> {
+    let _ = state.to(ThreadState::COMPLETED);
+    closed_tid.push(tid);
+    let idx_tid_list: Vec<(usize, usize)> = join_waiting_list
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, otid))| *otid == tid)
+        .map(|(idx, (tid, _))| (idx, *tid))
+        .collect();
+
+    for (idx, tid) in idx_tid_list {
+        join_waiting_list.remove(idx);
+        wakingup_tid.insert(tid);
+    }
+
+    Err(RuntimeError::Signal(Signal::EXIT))
+}
+
 impl Executable for ThreadCasm {
     fn execute(
         &self,
@@ -229,21 +341,19 @@ impl Executable for ThreadCasm {
     ) -> Result<(), RuntimeError> {
         match self {
             ThreadCasm::Spawn => Err(RuntimeError::Signal(Signal::SPAWN)),
+            ThreadCasm::Exit => Err(RuntimeError::Signal(Signal::EXIT)),
             ThreadCasm::Close => {
                 let tid = OpPrimitive::get_num8::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::CLOSE(tid as usize)))
             }
-            ThreadCasm::Wait => {
-                let tid = OpPrimitive::get_num8::<u64>(stack)?;
-                Err(RuntimeError::Signal(Signal::WAIT(tid as usize)))
-            }
+            ThreadCasm::Wait => Err(RuntimeError::Signal(Signal::WAIT)),
             ThreadCasm::Wake => {
                 let tid = OpPrimitive::get_num8::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::WAKE(tid as usize)))
             }
             ThreadCasm::Sleep => {
-                let tid = OpPrimitive::get_num8::<u64>(stack)?;
-                Err(RuntimeError::Signal(Signal::SLEEP(tid as usize)))
+                let nb_maf = OpPrimitive::get_num8::<u64>(stack)?;
+                Err(RuntimeError::Signal(Signal::SLEEP(nb_maf as usize)))
             }
             ThreadCasm::Join => {
                 let tid = OpPrimitive::get_num8::<u64>(stack)?;
@@ -340,7 +450,6 @@ mod tests {
             .expect("Compilation should have succeeded");
         ciphel.run().expect("no error should arise");
         let tids = ciphel.available_tids();
-        assert!(tids.len() == 1);
 
         let src = r##"
             
@@ -351,6 +460,189 @@ mod tests {
         ciphel
             .compile(tid, src)
             .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+        let tids = ciphel.available_tids();
+        assert!(tids.len() == 1);
+    }
+
+    #[test]
+    fn valid_sleep() {
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World");
+        }
+        sleep(5);
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+    }
+
+    #[test]
+    fn valid_wait_wake() {
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World");
+        }
+        let (child_tid,err) = spawn();
+        wait();
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+
+        let tids = ciphel.available_tids();
+        let child_tid = tids
+            .into_iter()
+            .find(|id| *id != tid)
+            .expect("Child should have an id");
+
+        let child_src = r##"
+        
+        sleep(3);
+        wake(1);
+        "##;
+
+        ciphel
+            .compile(child_tid, child_src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+    }
+
+    #[test]
+    fn valid_join() {
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World");
+        }
+        let (child_tid,err) = spawn();
+        join(child_tid);
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+
+        let tids = ciphel.available_tids();
+        let child_tid = tids
+            .into_iter()
+            .find(|id| *id != tid)
+            .expect("Child should have an id");
+
+        let child_src = r##"
+        sleep(5);
+        "##;
+
+        ciphel
+            .compile(child_tid, child_src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+    }
+
+    #[test]
+    fn valid_exit() {
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World");
+        }
+        exit();
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+        let tids = ciphel.available_tids();
+        assert!(tids.len() == 0);
+    }
+
+    #[test]
+    fn valid_join_exit() {
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        fn main() -> Unit {
+            print("Hello World");
+        }
+        let (child_tid,err) = spawn();
+        join(child_tid);
+        main();
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+
+        let tids = ciphel.available_tids();
+        let child_tid = tids
+            .into_iter()
+            .find(|id| *id != tid)
+            .expect("Child should have an id");
+
+        let child_src = r##"
+        sleep(3);
+        exit();
+        let x = 4+5;
+        "##;
+
+        ciphel
+            .compile(child_tid, child_src)
+            .expect("Compilation should have succeeded");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
+        ciphel.run().expect("no error should arise");
         ciphel.run().expect("no error should arise");
         let tids = ciphel.available_tids();
         assert!(tids.len() == 1);

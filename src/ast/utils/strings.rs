@@ -45,29 +45,47 @@ pub mod eater {
         value(
             (), // Output is thrown away.
             terminated(
-                pair(
-                    delimited(multispace0, tag(lexem::SL_COMMENT), multispace0),
-                    is_not("\n\r\0"),
-                ),
+                pair(tag(lexem::SL_COMMENT), is_not("\n\r\0")),
                 one_of("\n\r\0"),
             ),
         )(input)
     }
 
+    // pub fn ml_comment(input: Span) -> PResult<()> {
+    //     value(
+    //         (),
+    //         many0(alt((
+    //             value(
+    //                 (),
+    //                 tuple((
+    //                     delimited(multispace0, tag(lexem::ML_OP_COMMENT), multispace0),
+    //                     take_until(lexem::ML_CL_COMMENT),
+    //                     delimited(multispace0, tag(lexem::ML_CL_COMMENT), multispace0),
+    //                 )),
+    //             ),
+    //             sl_comment,
+    //         ))),
+    //     )(input)
+    // }
+
     pub fn ml_comment(input: Span) -> PResult<()> {
         value(
             (),
-            many0(alt((
-                value(
-                    (),
-                    tuple((
-                        delimited(multispace0, tag(lexem::ML_OP_COMMENT), multispace0),
-                        take_until(lexem::ML_CL_COMMENT),
-                        delimited(multispace0, tag(lexem::ML_CL_COMMENT), multispace0),
-                    )),
-                ),
-                sl_comment,
-            ))),
+            many0(delimited(
+                multispace0,
+                alt((
+                    value(
+                        (),
+                        tuple((
+                            tag(lexem::ML_OP_COMMENT),
+                            take_until(lexem::ML_CL_COMMENT),
+                            tag(lexem::ML_CL_COMMENT),
+                        )),
+                    ),
+                    sl_comment,
+                )),
+                multispace0,
+            )),
         )(input)
     }
 
@@ -407,7 +425,6 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         assert_eq!(res, vec![FItem::Str("Hello,{  World".into())]);
-
 
         let res = parse_fstring::<Expression>(r#""Hello, }}  World""#.into())
             .expect("Parsing should have succeeded")

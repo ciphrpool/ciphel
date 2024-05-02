@@ -52,6 +52,7 @@ pub const GENERATOR: &str = "Gen";
 pub const FN: &str = "fn";
 
 // PONCTUATION
+pub const UNDERSCORE: &str = "_";
 pub const COMA: &str = ",";
 pub const DOT: &str = ".";
 pub const SEMI_COLON: &str = ";";

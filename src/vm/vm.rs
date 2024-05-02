@@ -26,8 +26,9 @@ pub type Tid = usize;
 #[derive(Debug, Clone)]
 pub enum Signal {
     SPAWN,
+    EXIT,
     CLOSE(Tid),
-    WAIT(Tid),
+    WAIT,
     WAKE(Tid),
     SLEEP(usize),
     JOIN(Tid),
@@ -43,10 +44,10 @@ pub enum RuntimeError {
     MathError,
     ReturnFlagError,
     InvalidUTF8Char,
-    Exit,
     CodeSegmentation,
     IncorrectVariant,
     InvalidTID(usize),
+    InvalidThreadStateTransition(ThreadState, ThreadState),
     TooManyThread,
     Signal(Signal),
     Default,
@@ -54,10 +55,119 @@ pub enum RuntimeError {
 
 pub const MAX_THREAD_COUNT: usize = 4;
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ThreadState {
+    IDLE,
+    WAITING,
+    SLEEPING(usize), // remaining maf until awakening
+    ACTIVE,
+    COMPLETED,
+}
+
+impl ThreadState {
+    pub fn is_noop(&self) -> bool {
+        match self {
+            ThreadState::IDLE => true,
+            ThreadState::WAITING => true,
+            ThreadState::SLEEPING(_) => true,
+            ThreadState::ACTIVE => false,
+            ThreadState::COMPLETED => true,
+        }
+    }
+
+    pub fn init_maf(&mut self, program_at_end: bool) {
+        match self {
+            ThreadState::IDLE => {
+                if !program_at_end {
+                    *self = ThreadState::ACTIVE
+                }
+            }
+            ThreadState::WAITING => {}
+            ThreadState::SLEEPING(0) => {
+                if !program_at_end {
+                    *self = ThreadState::ACTIVE
+                } else {
+                    *self = ThreadState::IDLE
+                }
+            }
+            ThreadState::SLEEPING(n) => *n -= 1,
+            ThreadState::ACTIVE => {
+                if program_at_end {
+                    *self = ThreadState::IDLE
+                }
+            }
+            ThreadState::COMPLETED => {}
+        }
+    }
+
+    pub fn to(&mut self, dest: Self) -> Result<(), RuntimeError> {
+        let dest = match self {
+            ThreadState::IDLE => match dest {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED => dest,
+            },
+            ThreadState::WAITING => match dest {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED => dest,
+            },
+            ThreadState::SLEEPING(_) => match self {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED => dest,
+            },
+            ThreadState::ACTIVE => match self {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED => dest,
+            },
+            ThreadState::COMPLETED => match self {
+                ThreadState::IDLE => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::WAITING => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::SLEEPING(_) => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::ACTIVE => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+                ThreadState::COMPLETED => dest,
+            },
+        };
+        *self = dest;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Thread {
+    pub state: ThreadState,
+    pub scope: MutRc<Scope>,
+    pub stack: Stack,
+    pub program: CasmProgram,
+    pub tid: Tid,
+}
+
 #[derive(Debug, Clone)]
 pub struct Runtime {
     pub tid_count: Cell<usize>,
-    pub threads: Vec<(MutRc<Scope>, Stack, CasmProgram, Tid)>,
+    pub threads: Vec<Thread>,
 }
 
 impl Runtime {
@@ -72,6 +182,16 @@ impl Runtime {
         )
     }
 
+    pub fn all_noop(&self) -> bool {
+        let mut noop = true;
+        for thread in &self.threads {
+            if !thread.state.is_noop() {
+                noop = false
+            }
+        }
+        noop
+    }
+
     pub fn spawn(&mut self) -> Result<Tid, RuntimeError> {
         if self.threads.len() >= MAX_THREAD_COUNT {
             return Err(RuntimeError::TooManyThread);
@@ -81,7 +201,13 @@ impl Runtime {
         let stack = Stack::new();
         let tid = self.tid_count.get() + 1;
         self.tid_count.set(tid);
-        self.threads.push((scope, stack, program, tid));
+        self.threads.push(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
         Ok(tid)
     }
 
@@ -93,11 +219,17 @@ impl Runtime {
         let program = CasmProgram::default();
         let stack = Stack::new();
         self.tid_count.set(tid + 1);
-        self.threads.push((scope, stack, program, tid));
+        self.threads.push(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
         Ok(())
     }
     pub fn close(&mut self, tid: Tid) -> Result<(), RuntimeError> {
-        let idx = self.threads.iter().position(|(_, _, _, id)| *id == tid);
+        let idx = self.threads.iter().position(|t| t.tid == tid);
         if let Some(idx) = idx {
             let _ = self.threads.remove(idx);
             Ok(())
@@ -111,7 +243,13 @@ impl Runtime {
         let stack = Stack::new();
         let tid = self.tid_count.get() + 1;
         self.tid_count.set(tid);
-        self.threads.push((scope, stack, program, tid));
+        self.threads.push(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
         Ok(tid)
     }
 
@@ -128,12 +266,19 @@ impl Runtime {
     > {
         self.threads
             .iter_mut()
-            .find(|(_, _, _, id)| *id == tid)
+            .find(|thread| thread.tid == tid)
             .ok_or(RuntimeError::InvalidTID(tid))
-            .map(|(scope, stack, program, _)| (scope, stack, program))
+            .map(
+                |Thread {
+                     scope,
+                     stack,
+                     program,
+                     ..
+                 }| (scope, stack, program),
+            )
     }
 
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, (MutRc<Scope>, Stack, CasmProgram, Tid)> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Thread> {
         self.threads.iter_mut()
     }
 }

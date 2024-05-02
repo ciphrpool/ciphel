@@ -44,11 +44,7 @@ impl Ciphel {
     }
 
     pub fn available_tids(&self) -> Vec<usize> {
-        self.runtime
-            .threads
-            .iter()
-            .map(|(_, _, _, tid)| *tid)
-            .collect()
+        self.runtime.threads.iter().map(|t| t.tid).collect()
     }
 
     pub fn compile(&mut self, tid: usize, src_code: &str) -> Result<(), CompilationError> {
@@ -139,12 +135,10 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run();
-
         let src = r##"
         
         let res = add(10,10);
-
+        
         print(f"result = {res}");
         
         "##;
@@ -153,6 +147,7 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
+        ciphel.run().expect("no error should arise");
         ciphel.run().expect("no error should arise");
     }
 

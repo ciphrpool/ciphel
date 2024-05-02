@@ -50,7 +50,16 @@ impl GenerateCode for CallStat {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        self.call.gencode(scope, instructions)
+        let _ = self.call.gencode(scope, instructions)?;
+        let Some(return_type) = self.call.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let size = return_type.size_of();
+        dbg!(size);
+        if size != 0 {
+            instructions.push(Casm::Pop(size));
+        }
+        Ok(())
     }
 }
 

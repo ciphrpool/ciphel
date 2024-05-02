@@ -11,7 +11,7 @@ use nom::{
 use self::return_stat::Return;
 use crate::{semantic::scope::scope::Scope, CompilationError};
 
-use super::TryParse;
+use super::{utils::strings::eater, TryParse};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
@@ -47,17 +47,20 @@ pub enum Statement {
 }
 
 pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError> {
-    let mut parser = terminated(many0(Statement::parse), eof);
+    let mut parser = terminated(many0(Statement::parse), eater::ws(eof));
 
     match parser.parse(input) {
         Ok((_, statements)) => Ok(statements),
-        Err(_) => Err(CompilationError::ParsingError()),
+        Err(e) => {
+            // dbg!(e);
+            Err(CompilationError::ParsingError())
+        }
     }
 }
 
 impl TryParse for Statement {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
+        eater::ws(alt((
             map(Return::parse, |value| Statement::Return(value)),
             map(block::Block::parse, |value| Statement::Scope(value)),
             map(flows::Flow::parse, |value| Statement::Flow(value)),
@@ -71,7 +74,7 @@ impl TryParse for Statement {
                 Statement::Definition(value)
             }),
             map(loops::Loop::parse, |value| Statement::Loops(value)),
-        ))(input)
+        )))(input)
     }
 }
 impl Resolve for Statement {

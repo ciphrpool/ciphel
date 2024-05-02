@@ -1,3 +1,4 @@
+use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
@@ -116,13 +117,17 @@ impl GenerateCode for Declaration {
                     if var_size == 0 {
                         continue;
                     }
-                    instructions.push(Casm::Locate(Locate {
-                        address: MemoryAddress::Stack {
-                            offset: address,
-                            level,
-                        },
-                    }));
-                    instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }))
+                    if id != lexem::UNDERSCORE {
+                        instructions.push(Casm::Locate(Locate {
+                            address: MemoryAddress::Stack {
+                                offset: address,
+                                level,
+                            },
+                        }));
+                        instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }))
+                    } else {
+                        instructions.push(Casm::Pop(var_size));
+                    }
                 }
                 Ok(())
             }
@@ -184,6 +189,28 @@ mod tests {
     }
 
     #[test]
+    fn valid_declaration_underscore() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let _ = 420;
+            return 69;
+        };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 69));
+    }
+
+    #[test]
     fn valid_declaration_inplace_tuple_in_scope() {
         let statement = Statement::parse(
             r##"
@@ -209,6 +236,34 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(x, v_num!(I64, 420));
         assert_eq!(y, v_num!(I64, 69));
+    }
+
+    #[test]
+    fn valid_declaration_tuple_underscore() {
+        let statement = Statement::parse(
+            r##"
+        let (x,y) = {
+            let (x,_) = (420,69);
+            return (x,70);
+        };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let x = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data[0..8],
+        )
+        .expect("Deserialization should have succeeded");
+        let y = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data[8..16],
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(x, v_num!(I64, 420));
+        assert_eq!(y, v_num!(I64, 70));
     }
 
     #[test]
