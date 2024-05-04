@@ -206,14 +206,9 @@ impl TypeOf for Slice {
     where
         Self: Sized + Resolve,
     {
-        let mut list_type = e_static!(<StaticType as BuildStaticType>::build_unit());
-        for expr in &self.value {
-            let expr_type = expr.type_of(&scope)?;
-            list_type = list_type.merge(&expr_type, scope)?;
-        }
-
-        StaticType::build_slice_from(&self.value.len(), &list_type, scope)
-            .map(|value| (e_static!(value)))
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
 
@@ -237,12 +232,9 @@ impl TypeOf for Vector {
     where
         Self: Sized + Resolve,
     {
-        let Some(expr_type) = self.value.first().map(|expr| expr.type_of(&scope)) else {
-            return Err(SemanticError::CantInferType);
-        };
-        let expr_type = expr_type?;
-
-        StaticType::build_vec_from(&expr_type, scope).map(|value| e_static!(value))
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
 
@@ -251,13 +243,9 @@ impl TypeOf for Tuple {
     where
         Self: Sized + Resolve,
     {
-        let mut list_types = Vec::with_capacity(self.value.len());
-        for expr in &self.value {
-            let expr_type = expr.type_of(&scope)?;
-            list_types.push(expr_type);
-        }
-
-        StaticType::build_tuple_from(&list_types, scope).map(|value| e_static!(value))
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
 
@@ -364,12 +352,8 @@ impl TypeOf for Map {
     where
         Self: Sized + Resolve,
     {
-        let Some((key, value)) = self.fields.first() else {
-            return Err(SemanticError::CantInferType);
-        };
-        let key_type = key.type_of(&scope)?;
-        let value_type = value.type_of(&scope)?;
-
-        StaticType::build_map_from(&key_type, &value_type, scope).map(|value| e_static!(value))
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }

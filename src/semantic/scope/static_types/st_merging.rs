@@ -42,7 +42,7 @@ impl MergeType for StaticType {
             StaticType::Chan(value) => value.merge(other, scope),
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
-            StaticType::Any => Err(SemanticError::CantInferType),
+            StaticType::Any => Ok(other_type),
             StaticType::Error => Ok(e_static!(StaticType::Error)),
             StaticType::Address(value) => value.merge(other, scope),
             StaticType::Map(value) => value.merge(other, scope),
@@ -171,7 +171,8 @@ impl MergeType for StrSliceType {
             if let StaticType::StrSlice(StrSliceType { size: other_size }) = other_type.as_ref() {
                 return Ok(Either::Static(
                     StaticType::StrSlice(StrSliceType {
-                        size: self.size + other_size,
+                        // size: self.size + other_size,
+                        size: max(self.size, *other_size),
                     })
                     .into(),
                 ));

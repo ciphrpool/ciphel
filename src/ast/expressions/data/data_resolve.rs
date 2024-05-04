@@ -1,3 +1,5 @@
+use nom_supreme::context;
+
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, MultiData,
     NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
@@ -5,7 +7,9 @@ use super::{
 };
 use crate::ast::expressions::Atomic;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::{AddrType, NumberType, PrimitiveType, StrSliceType};
+use crate::semantic::scope::static_types::{
+    AddrType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType, VecType,
+};
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
@@ -13,7 +17,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MutRc};
+use crate::semantic::{EType, Info, MergeType, MutRc};
 use crate::{e_static, p_num, resolve_metadata};
 
 impl Resolve for Data {
@@ -394,26 +398,71 @@ impl Resolve for Slice {
     where
         Self: Sized,
     {
-        let (param_context, maybe_length) = match context {
-            Some(context) => (
-                <EType as GetSubTypes>::get_item(context),
-                <EType as GetSubTypes>::get_length(context),
-            ),
-            None => (None, None),
-        };
-        match maybe_length {
-            Some(length) => {
-                if length != self.value.len() {
-                    return Err(SemanticError::IncompatibleTypes);
+        match context {
+            Some(rcontext) => match rcontext {
+                Either::Static(rcontext) => match rcontext.as_ref() {
+                    StaticType::Slice(SliceType { size, item_type }) => {
+                        let item_type = item_type.as_ref().clone();
+                        let sitem_type = &Some(item_type.clone());
+                        if self.value.len() > *size {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                        for value in &self.value {
+                            let _ = value.resolve(scope, sitem_type, &())?;
+                            let _ = item_type.compatible_with(value, &scope.borrow())?;
+                        }
+
+                        {
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(e_static!(StaticType::Slice(SliceType {
+                                    size: *size,
+                                    item_type: Box::new(item_type),
+                                }))),
+                            };
+                        }
+                        Ok(())
+                    }
+                    _ => Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+            },
+            None => {
+                let mut item_type = e_static!(StaticType::Any);
+                for value in &self.value {
+                    let _ = value.resolve(scope, &None, &())?;
+                    item_type = item_type.merge(value, &scope.borrow())?;
                 }
+
+                let sitem_type = Some(item_type.clone());
+                for value in &self.value {
+                    let _ = value.resolve(scope, &sitem_type, &())?;
+                }
+
+                {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Slice(SliceType {
+                            size: self.value.len(),
+                            item_type: Box::new(item_type),
+                        }))),
+                    };
+                }
+                Ok(())
             }
-            None => {}
         }
-        for expr in &self.value {
-            let _ = expr.resolve(scope, &param_context, &())?;
-        }
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
     }
 }
 
@@ -464,28 +513,65 @@ impl Resolve for Vector {
     where
         Self: Sized,
     {
-        let param_context = match context {
-            Some(context) => <EType as GetSubTypes>::get_item(context),
-            None => None,
-        };
+        match context {
+            Some(rcontext) => match rcontext {
+                Either::Static(rcontext) => match rcontext.as_ref() {
+                    StaticType::Vec(VecType(item_type)) => {
+                        let item_type = item_type.as_ref().clone();
+                        let sitem_type = &Some(item_type.clone());
 
-        for expr in &self.value {
-            let _ = expr.resolve(scope, &param_context, &())?;
-        }
-        {
-            let mut borrowed_metadata = self
-                .metadata
-                .info
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| SemanticError::Default)?;
+                        for value in &self.value {
+                            let _ = value.resolve(scope, sitem_type, &())?;
+                            let _ = item_type.compatible_with(value, &scope.borrow())?;
+                        }
 
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
+                        {
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
+                                    item_type
+                                ),)))),
+                            };
+                        }
+                        Ok(())
+                    }
+                    _ => Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+            },
+            None => {
+                let mut item_type = e_static!(StaticType::Any);
+                for value in &self.value {
+                    let _ = value.resolve(scope, &None, &())?;
+                    item_type = item_type.merge(value, &scope.borrow())?;
+                }
+
+                let sitem_type = Some(item_type.clone());
+                for value in &self.value {
+                    let _ = value.resolve(scope, &sitem_type, &())?;
+                }
+
+                {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Vec(VecType(Box::new(item_type),)))),
+                    };
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 }
 impl Resolve for Tuple {
@@ -501,47 +587,63 @@ impl Resolve for Tuple {
     where
         Self: Sized,
     {
-        let _ = self.value.resolve(scope, context, extra)?;
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
+        match context {
+            Some(rcontext) => match rcontext {
+                Either::Static(rcontext) => match rcontext.as_ref() {
+                    StaticType::Tuple(TupleType(values_type)) => {
+                        if values_type.len() != self.value.len() {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                        for (value, value_type) in self.value.iter().zip(values_type) {
+                            let _ = value.resolve(scope, &Some(value_type.clone()), &())?;
+                            let _ = value_type.compatible_with(value, &scope.borrow())?;
+                        }
+
+                        {
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(e_static!(StaticType::Tuple(TupleType(
+                                    values_type.clone()
+                                )))),
+                            };
+                        }
+                        Ok(())
+                    }
+                    _ => Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+            },
+            None => {
+                let mut values_type = Vec::new();
+                for value in &self.value {
+                    let _ = value.resolve(scope, &None, &())?;
+                    values_type.push(value.type_of(&scope.borrow())?);
+                }
+
+                {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Tuple(TupleType(values_type)))),
+                    };
+                }
+                Ok(())
+            }
+        }
     }
 }
 
-impl Resolve for MultiData {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        _extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let maybe_length = match context {
-            Some(context) => <EType as GetSubTypes>::get_length(context),
-            None => None,
-        };
-        match maybe_length {
-            Some(length) => {
-                if length != self.len() {
-                    return Err(SemanticError::IncompatibleTypes);
-                }
-            }
-            None => {}
-        }
-        for (index, expr) in self.iter().enumerate() {
-            let param_context = match context {
-                Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
-                None => None,
-            };
-            let _ = expr.resolve(scope, &param_context, &())?;
-        }
-        Ok(())
-    }
-}
 impl Resolve for Closure {
     type Output = ();
     type Context = Option<EType>;
@@ -892,33 +994,81 @@ impl Resolve for Map {
     where
         Self: Sized,
     {
-        let item_type = match context {
-            Some(context) => <EType as GetSubTypes>::get_item(context),
-            None => None,
-        };
+        match context {
+            Some(rcontext) => match rcontext {
+                Either::Static(rcontext) => match rcontext.as_ref() {
+                    StaticType::Map(MapType {
+                        keys_type,
+                        values_type,
+                    }) => {
+                        let key_type = keys_type.as_ref().clone();
+                        let skey_type = &Some(key_type);
+                        let value_type = values_type.as_ref().clone();
+                        let svalue_type = &Some(value_type);
 
-        let key_type = match context {
-            Some(context) => <EType as GetSubTypes>::get_key(context),
-            None => None,
-        };
-        for (key, value) in &self.fields {
-            let _ = key.resolve(scope, &key_type, &())?;
-            let _ = value.resolve(scope, &item_type, &())?;
-        }
-        {
-            let mut borrowed_metadata = self
-                .metadata
-                .info
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| SemanticError::Default)?;
+                        for (key, value) in &self.fields {
+                            let _ = key.resolve(scope, skey_type, &())?;
+                            let _ = keys_type.compatible_with(key, &scope.borrow())?;
+                            let _ = value.resolve(scope, svalue_type, &())?;
+                            let _ = values_type.compatible_with(value, &scope.borrow())?;
+                        }
 
-            *borrowed_metadata = Info::Resolved {
-                context: context.clone(),
-                signature: Some(self.type_of(&scope.borrow())?),
-            };
+                        {
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(e_static!(StaticType::Map(MapType {
+                                    keys_type: keys_type.clone(),
+                                    values_type: values_type.clone(),
+                                }))),
+                            };
+                        }
+                        Ok(())
+                    }
+                    _ => Err(SemanticError::IncompatibleTypes),
+                },
+                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+            },
+            None => {
+                let mut keys_type = e_static!(StaticType::Any);
+                let mut values_type = e_static!(StaticType::Any);
+                for (key, value) in &self.fields {
+                    let _ = key.resolve(scope, &None, &())?;
+                    keys_type = keys_type.merge(key, &scope.borrow())?;
+                    let _ = value.resolve(scope, &None, &())?;
+                    values_type = values_type.merge(value, &scope.borrow())?;
+                }
+
+                let skeys_type = Some(keys_type.clone());
+                let svalues_type = Some(values_type.clone());
+                for (key, value) in &self.fields {
+                    let _ = key.resolve(scope, &skeys_type, &())?;
+                    let _ = value.resolve(scope, &svalues_type, &())?;
+                }
+
+                {
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Map(MapType {
+                            keys_type: Box::new(keys_type),
+                            values_type: Box::new(values_type),
+                        }))),
+                    };
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 }
 
@@ -1042,21 +1192,6 @@ mod tests {
                     item_type: Box::new(Either::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
-                })
-                .into(),
-            )),
-            &(),
-        );
-        assert!(res.is_err());
-
-        let slice = Slice::parse("[1,2]".into()).unwrap().1;
-
-        let res = slice.resolve(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Slice(SliceType {
-                    size: 4,
-                    item_type: Box::new(p_num!(I64)),
                 })
                 .into(),
             )),
@@ -1313,6 +1448,7 @@ mod tests {
         let map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
             .unwrap()
             .1;
+        dbg!(&map);
         let scope = Scope::new();
         let res = map.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);

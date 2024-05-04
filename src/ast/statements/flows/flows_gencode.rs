@@ -55,7 +55,7 @@ impl GenerateCode for CallStat {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let size = return_type.size_of();
-        dbg!(size);
+
         if size != 0 {
             instructions.push(Casm::Pop(size));
         }

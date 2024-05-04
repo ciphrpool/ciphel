@@ -88,7 +88,6 @@ impl TypeChecking for StaticType {
     fn is_any(&self) -> bool {
         match self {
             StaticType::Any => true,
-            StaticType::Address(AddrType(value)) => <EType as TypeChecking>::is_any(value),
             _ => false,
         }
     }

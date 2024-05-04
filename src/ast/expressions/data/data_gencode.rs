@@ -6,6 +6,9 @@ use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope, AccessLevel};
 use crate::vm::allocator::stack::Offset;
+use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
+use crate::vm::platform::core::CoreCasm;
+use crate::vm::platform::LibCasm;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
@@ -1254,10 +1257,45 @@ impl GenerateCode for Enum {
 impl GenerateCode for Map {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let cap = align(self.fields.len());
+        let Some(map_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(key_type) = map_type.get_key() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(value_type) = map_type.get_item() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let key_size = key_type.size_of();
+        let value_size = value_type.size_of();
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: cap.to_le_bytes().into(),
+        }));
+        instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Alloc(
+            AllocCasm::MapWithCapacity {
+                key_size,
+                value_size,
+            },
+        ))));
+
+        for (key, value) in &self.fields {
+            let _ = key.gencode(scope, instructions)?;
+            let _ = value.gencode(scope, instructions)?;
+
+            instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Alloc(
+                AllocCasm::InsertAndForward {
+                    key_size,
+                    value_size,
+                    ref_access: DerefHashing::from(&map_type),
+                },
+            ))));
+        }
+
+        Ok(())
     }
 }
 
@@ -2047,5 +2085,69 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 1));
+    }
+
+    #[test]
+    fn valid_map_init() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let hmap : Map<u64,u64> = map {
+                5:1,
+                8:2,
+                9:3,
+                7:4,
+                1:5,
+            };
+            let (value,_) = get(&hmap,9);
+            return value;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(U64, 3));
+    }
+
+    #[test]
+    fn valid_map_init_no_typedef() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let hmap = map {
+                "test":1,
+                "test1":2,
+                "test11":3,
+                "test111":4,
+                "test1111":5,
+            };
+            let (value,_) = get(&hmap,"test11");
+            return value;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(U64, 3));
     }
 }

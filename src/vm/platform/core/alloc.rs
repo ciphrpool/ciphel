@@ -9,6 +9,7 @@ use crate::{
         scope::Scope,
         static_types::{MapType, SliceType, TupleType},
         type_traits::TypeChecking,
+        user_type_impl::UserType,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack},
@@ -144,6 +145,19 @@ pub enum DerefHashing {
     Default,
 }
 
+impl From<&Either<UserType, StaticType>> for DerefHashing {
+    fn from(value: &Either<UserType, StaticType>) -> Self {
+        match value {
+            Either::Static(tmp) => match tmp.as_ref() {
+                StaticType::String(_) => DerefHashing::String,
+                StaticType::Vec(VecType(item_subtype)) => DerefHashing::Vec(item_subtype.size_of()),
+                _ => DerefHashing::Default,
+            },
+            Either::User(_) => DerefHashing::Default,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocCasm {
     AppendChar,
@@ -164,6 +178,11 @@ pub enum AllocCasm {
     ExtendStringFromVec,
 
     Insert {
+        ref_access: DerefHashing,
+        key_size: usize,
+        value_size: usize,
+    },
+    InsertAndForward {
         ref_access: DerefHashing,
         key_size: usize,
         value_size: usize,
@@ -221,7 +240,12 @@ impl CasmMetadata for AllocCasm {
                 ref_access,
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("inster"),
+            } => stdio.push_casm_lib("insert"),
+            AllocCasm::InsertAndForward {
+                ref_access,
+                key_size,
+                value_size,
+            } => stdio.push_casm_lib("finsert"),
             AllocCasm::Get {
                 ref_access,
                 key_size,
@@ -2231,6 +2255,118 @@ impl Executable for AllocCasm {
                         }
                     }
                 }
+            }
+            AllocCasm::InsertAndForward {
+                ref_access,
+                key_size,
+                value_size,
+            } => {
+                let value_data = stack.pop(*value_size).map_err(|e| e.into())?.to_owned();
+                let (key_data_ref_if_exist, key_data) = match ref_access {
+                    DerefHashing::Vec(item_size) => {
+                        let vec_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+
+                        let len_bytes = heap
+                            .read(vec_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = heap
+                            .read(vec_heap_address as usize + 16, len as usize * *item_size)
+                            .map_err(|e| e.into())?;
+                        (Some(vec_heap_address.to_le_bytes()), items_bytes)
+                    }
+                    DerefHashing::String => {
+                        let str_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+                        let len_bytes = heap
+                            .read(str_heap_address as usize, 8)
+                            .map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes);
+                        let items_bytes = heap
+                            .read(str_heap_address as usize + 16, len as usize)
+                            .map_err(|e| e.into())?;
+                        (Some(str_heap_address.to_le_bytes()), items_bytes)
+                    }
+                    DerefHashing::Default => {
+                        (None, stack.pop(*key_size).map_err(|e| e.into())?.to_vec())
+                    }
+                };
+
+                let map_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
+
+                let mut insertion_successful = false;
+
+                while !insertion_successful {
+                    let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
+
+                    let hash = hash_of(&key_data, map_layout.hash_seed);
+                    let top_hash = top_hash(hash);
+                    let bucket_idx = bucket_idx(hash, map_layout.log_cap) as u64;
+
+                    // get address of the bucket
+                    let bucket_address =
+                        map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
+
+                    let bucket_layout =
+                        bucket_layout(bucket_address, *key_size, *value_size, heap)?;
+
+                    // dbg!((bucket_idx, &bucket_layout));
+
+                    let opt_ptr_key_value =
+                        bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
+                    match opt_ptr_key_value {
+                        Some((ptr_tophash, ptr_key, ptr_value, is_new_value)) => {
+                            // trigger resizing if overload
+                            if is_new_value {
+                                if over_load_factor(map_layout.len + 1, map_layout.log_cap) {
+                                    let _ = map_layout.resize(heap)?;
+                                    // resizing invalidates everything so perform the whole operation again
+                                    continue;
+                                }
+                            }
+                            // insert in found place
+                            let _ = heap
+                                .write(ptr_tophash as usize, &vec![top_hash])
+                                .map_err(|e| e.into())?;
+                            match key_data_ref_if_exist {
+                                Some(real_key_data) => {
+                                    let _ = heap
+                                        .write(ptr_key as usize, &real_key_data.to_vec())
+                                        .map_err(|e| e.into())?;
+                                }
+                                None => {
+                                    let _ = heap
+                                        .write(ptr_key as usize, &key_data)
+                                        .map_err(|e| e.into())?;
+                                }
+                            }
+                            let _ = heap
+                                .write(ptr_value as usize, &value_data.to_vec())
+                                .map_err(|e| e.into())?;
+                            if is_new_value {
+                                // update len
+                                let _ = heap
+                                    .write(
+                                        map_heap_address as usize,
+                                        &(map_layout.len + 1).to_le_bytes().to_vec(),
+                                    )
+                                    .map_err(|e| e.into())?;
+                            }
+                            insertion_successful = true;
+                        }
+                        None => {
+                            // resize and retry
+                            let _ = map_layout.resize(heap)?;
+                        }
+                    }
+                }
+
+                let _ = stack
+                    .push_with(&map_heap_address.to_le_bytes())
+                    .map_err(|e| e.into())?;
             }
 
             AllocCasm::Get {

@@ -10,7 +10,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Either, MutRc};
+use crate::semantic::{CompatibleWith, EType, Either, MutRc};
 
 impl Resolve for Declaration {
     type Output = ();
@@ -41,7 +41,9 @@ impl Resolve for Declaration {
                 let _ = value.resolve(scope, &(), &())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
-
+                if var_type.is_any() {
+                    return Err(SemanticError::CantInferType);
+                }
                 if value.rec {
                     /* update params size */
                     let var_type = match var_type {
@@ -87,10 +89,12 @@ impl Resolve for Declaration {
                         }
                     }
                     let _ = scope.borrow_mut().register_var(var)?;
-                    let _ = right.resolve(scope, &Some(var_type), &())?;
+                    let _ = right.resolve(scope, &Some(var_type.clone()), &())?;
+                    let _ = var_type.compatible_with(right, &scope.borrow())?;
                 } else {
-                    let _ = right.resolve(scope, &Some(var_type), &())?;
+                    let _ = right.resolve(scope, &Some(var_type.clone()), &())?;
                     let _ = scope.borrow_mut().register_var(var)?;
+                    let _ = var_type.compatible_with(right, &scope.borrow())?;
                 }
 
                 Ok(())
