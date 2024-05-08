@@ -1,5 +1,5 @@
-use super::{ExprFlow, FCall, FnCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
-use crate::ast::expressions::data::{Data, StrSlice, VarID, Variable};
+use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
+use crate::ast::expressions::data::{Data, StrSlice, Variable};
 use crate::ast::expressions::flows::FormatItem;
 use crate::ast::expressions::{Atomic, Expression};
 use crate::resolve_metadata;
@@ -35,7 +35,6 @@ impl Resolve for ExprFlow {
             ExprFlow::If(value) => value.resolve(scope, context, extra),
             ExprFlow::Match(value) => value.resolve(scope, context, extra),
             ExprFlow::Try(value) => value.resolve(scope, context, extra),
-            ExprFlow::Call(value) => value.resolve(scope, context, extra),
             ExprFlow::SizeOf(value, metadata) => {
                 let _ = value.resolve(scope, &(), extra);
                 resolve_metadata!(metadata, self, scope, context);
@@ -58,7 +57,7 @@ impl Resolve for IfExpr {
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, context, extra)?;
+        let _ = self.condition.resolve(scope, context, &None)?;
         // Check if condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
@@ -243,7 +242,7 @@ impl Resolve for MatchExpr {
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, extra)?;
+        let _ = self.expr.resolve(scope, &None, &None)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
@@ -359,58 +358,6 @@ impl Resolve for TryExpr {
         Ok(())
     }
 }
-impl Resolve for FnCall {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match &self.fn_var {
-            Variable::Var(VarID { id, .. }) => {
-                let found = scope.as_ref().borrow().find_var(id);
-                if found.is_err() || self.lib.is_some() {
-                    if let Some(api) = Lib::from(&self.lib, id) {
-                        let _ = api.resolve(scope, context, &self.params)?;
-                        *self.platform.as_ref().borrow_mut() = Some(api);
-                        resolve_metadata!(self.metadata, self, scope, context);
-                        return Ok(());
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        let _ = self.fn_var.resolve(scope, context, extra)?;
-        let fn_var_type = self.fn_var.type_of(&scope.borrow())?;
-        if !<EType as TypeChecking>::is_callable(&fn_var_type) {
-            return Err(SemanticError::ExpectedCallable);
-        }
-
-        for (index, expr) in self.params.iter().enumerate() {
-            let param_context = <EType as GetSubTypes>::get_nth(&fn_var_type, &index);
-            let _ = expr.resolve(scope, &param_context, &())?;
-        }
-
-        let Some(fields) = <EType as GetSubTypes>::get_fields(&fn_var_type) else {
-            return Err(SemanticError::ExpectedCallable);
-        };
-        if self.params.len() != fields.len() {
-            return Err(SemanticError::IncorrectArguments);
-        }
-        for (index, (_, field_type)) in fields.iter().enumerate() {
-            let _ = field_type.compatible_with(&self.params[index], &scope.borrow())?;
-        }
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
-    }
-}
 
 impl Resolve for FCall {
     type Output = ();
@@ -429,7 +376,7 @@ impl Resolve for FCall {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    let _ = expr.resolve(scope, &None, &())?;
+                    let _ = expr.resolve(scope, &None, &None)?;
                 }
             }
         }
@@ -781,97 +728,5 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
-    }
-
-    #[test]
-    fn valid_call() {
-        let expr = FnCall::parse("f(10,20+20)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                state: Cell::default(),
-                id: "f".into(),
-                type_sig: Either::Static(
-                    StaticType::StaticFn(FnType {
-                        params: vec![p_num!(I64), p_num!(I64)],
-                        ret: Box::new(p_num!(I64)),
-                        scope_params_size: 24,
-                    })
-                    .into(),
-                ),
-                is_declared: Cell::new(false),
-            })
-            .unwrap();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_ok(), "{:?}", res);
-
-        let ret_type = expr.type_of(&scope.borrow()).unwrap();
-        assert_eq!(ret_type, p_num!(I64))
-    }
-
-    #[test]
-    fn robustness_call() {
-        let expr = FnCall::parse("f(10,20+20)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                state: Cell::default(),
-                id: "f".into(),
-                type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
-            })
-            .unwrap();
-        let res = expr.resolve(&scope, &None, &());
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn valid_call_lib() {
-        let expr = FnCall::parse("io::print(true)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                state: Cell::default(),
-                id: "print".into(),
-                type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
-            })
-            .unwrap();
-        let _ = expr
-            .resolve(&scope, &None, &())
-            .expect("Resolution should have succeeded");
-    }
-
-    #[test]
-    fn robustness_call_lib() {
-        let expr = FnCall::parse("print(true)".into())
-            .expect("Parsing should have succeeded")
-            .1;
-
-        let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
-            .register_var(Var {
-                state: Cell::default(),
-                id: "print".into(),
-                type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
-            })
-            .unwrap();
-        let _ = expr
-            .resolve(&scope, &None, &())
-            .expect_err("Resolution should have failed");
     }
 }

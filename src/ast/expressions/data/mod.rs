@@ -39,37 +39,9 @@ pub enum Data {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Variable {
-    Var(VarID),
-    FieldAccess(FieldAccess),
-    NumAccess(NumAccess),
-    ListAccess(ListAccess),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct VarID {
+pub struct Variable {
     pub id: ID,
-    pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ListAccess {
-    pub var: Box<Variable>,
-    pub index: Box<Expression>,
-    pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct FieldAccess {
-    pub var: Box<Variable>,
-    pub field: Box<Variable>,
-    pub metadata: Metadata,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct NumAccess {
-    pub var: Box<Variable>,
-    pub index: usize,
+    pub from_field: Cell<bool>,
     pub metadata: Metadata,
 }
 
@@ -230,7 +202,7 @@ impl Data {
             Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
             Data::Address(Address { value: _, metadata }) => Some(metadata),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
-            Data::Variable(v) => v.metadata(),
+            Data::Variable(Variable { metadata, .. }) => Some(metadata),
             Data::Unit => None,
             Data::Map(Map {
                 fields: _,
@@ -291,7 +263,7 @@ impl Data {
             Data::Tuple(Tuple { value: _, metadata }) => metadata.signature(),
             Data::Address(Address { value: _, metadata }) => metadata.signature(),
             Data::PtrAccess(PtrAccess { value: _, metadata }) => metadata.signature(),
-            Data::Variable(v) => v.signature(),
+            Data::Variable(Variable { metadata, .. }) => metadata.signature(),
             Data::Unit => Some(e_static!(StaticType::Unit)),
             Data::Map(Map {
                 fields: _,

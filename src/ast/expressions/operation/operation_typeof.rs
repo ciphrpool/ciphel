@@ -1,11 +1,15 @@
 use std::cell::Ref;
 
 use crate::{
+    ast::expressions::{
+        data::{Data, Variable},
+        Atomic, Expression,
+    },
     e_static,
     semantic::{
         scope::{
             static_types::{self, StaticType},
-            type_traits::OperandMerging,
+            type_traits::{GetSubTypes, OperandMerging},
             BuildStaticType,
         },
         EType, Either, MergeType, Resolve, SemanticError, TypeOf,
@@ -13,8 +17,9 @@ use crate::{
 };
 
 use super::{
-    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
-    LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, FieldAccess, FnCall,
+    ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, TupleAccess,
+    UnaryOperation,
 };
 use crate::semantic::scope::scope::Scope;
 
@@ -27,6 +32,62 @@ impl TypeOf for UnaryOperation {
             UnaryOperation::Minus { value, .. } => value.type_of(&scope),
             UnaryOperation::Not { value, .. } => value.type_of(&scope),
         }
+    }
+}
+
+impl TypeOf for TupleAccess {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+impl TypeOf for ListAccess {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+impl TypeOf for FieldAccess {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+
+impl TypeOf for FnCall {
+    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        match self.fn_var.as_ref() {
+            Expression::Atomic(Atomic::Data(Data::Variable(Variable { .. }))) => {
+                let borrow = self.platform.as_ref().borrow();
+                match borrow.as_ref() {
+                    Some(api) => return api.type_of(scope),
+                    None => {}
+                }
+            }
+            _ => {}
+        }
+
+        let fn_var_type = self.fn_var.type_of(&scope)?;
+        let Some(return_type) = fn_var_type.get_return() else {
+            return Err(SemanticError::CantInferType);
+        };
+
+        Ok(return_type)
     }
 }
 

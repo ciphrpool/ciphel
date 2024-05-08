@@ -1,16 +1,23 @@
+use std::{cell::Cell, rc::Rc};
+
 use nom::{
     branch::alt,
-    combinator::{map, opt, value},
-    sequence::{pair, preceded},
+    bytes::complete::take_while_m_n,
+    character::complete::digit1,
+    combinator::{map, opt, peek, value},
+    multi::separated_list0,
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
 };
+use nom_supreme::error::ErrorTree;
 
 use crate::{
     ast::{
+        expressions::data::{Data, Variable},
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{wst},
+            strings::{parse_id, wst},
         },
         TryParse,
     },
@@ -19,7 +26,8 @@ use crate::{
 
 use super::{
     Addition, Atomic, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, Expression,
-    LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    FieldAccess, FnCall, ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction,
+    TupleAccess, UnaryOperation,
 };
 
 impl TryParse for UnaryOperation {
@@ -47,6 +55,228 @@ impl TryParse for UnaryOperation {
     }
 }
 
+pub trait TryParseOperation {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized;
+}
+
+impl TryParseOperation for TupleAccess {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = map(Atomic::parse, |res| Expression::Atomic(res))(input)?;
+        let (_, peeked_result) = opt(peek(preceded(
+            wst(lexem::DOT),
+            take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
+        )))(remainder)?;
+
+        if let Some(_) = peeked_result {
+            let (remainder, (_, num)) = tuple((wst(lexem::DOT), digit1))(remainder)?;
+
+            match num.parse::<usize>() {
+                Ok(index) => {
+                    return Ok((
+                        remainder,
+                        Expression::TupleAccess(TupleAccess {
+                            var: Box::new(left),
+                            index,
+                            metadata: Metadata::default(),
+                        }),
+                    ));
+                }
+                Err(_) => {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: remainder,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+            }
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+impl TryParseOperation for ListAccess {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = TupleAccess::parse(input)?;
+        let (remainder, index) = opt(delimited(
+            wst(lexem::SQ_BRA_O),
+            Expression::parse,
+            wst(lexem::SQ_BRA_C),
+        ))(remainder)?;
+
+        if let Some(index) = index {
+            Ok((
+                remainder,
+                Expression::ListAccess(ListAccess {
+                    var: Box::new(left),
+                    index: Box::new(index),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+impl TryParseOperation for FieldAccess {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = ListAccess::parse(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
+        }
+        let (remainder, dot_field) = opt(wst(lexem::DOT))(remainder)?;
+
+        if let Some(_) = dot_field {
+            let (remainder, num) = opt(digit1)(remainder)?;
+            if let Some(try_num) = num {
+                let index = try_num.parse::<usize>();
+                if index.is_err() {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: try_num,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+                let index = index.unwrap();
+                return Ok((
+                    remainder,
+                    Expression::TupleAccess(TupleAccess {
+                        var: Box::new(left),
+                        index,
+                        metadata: Metadata::default(),
+                    }),
+                ));
+            }
+            let (remainder, right) = FieldAccess::parse(remainder)?;
+            Ok((
+                remainder,
+                Expression::FieldAccess(FieldAccess {
+                    var: Box::new(left),
+                    field: Box::new(right),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+impl FnCall {
+    pub fn parse_statement(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, opt_libcall) = opt(tuple((
+            parse_id,
+            wst(lexem::SEP),
+            parse_id,
+            wst(lexem::PAR_O),
+        )))(input)?;
+        let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
+            let (remainder, opt_params) = opt(terminated(
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ))(remainder)?;
+            (
+                remainder,
+                Some(lib),
+                Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                    id: func,
+                    metadata: Metadata::default(),
+                    from_field: Cell::new(false),
+                })))),
+                opt_params,
+            )
+        } else {
+            let (remainder, left) = FieldAccess::parse(input)?;
+            let (remainder, opt_params) = opt(delimited(
+                wst(lexem::PAR_O),
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ))(remainder)?;
+            (remainder, None, Box::new(left), opt_params)
+        };
+        if let Some(params) = opt_params {
+            Ok((
+                remainder,
+                Expression::FnCall(FnCall {
+                    lib,
+                    fn_var,
+                    params,
+                    metadata: Metadata::default(),
+                    platform: Rc::default(),
+                }),
+            ))
+        } else {
+            return Err(nom::Err::Error(ErrorTree::Base {
+                location: remainder,
+                kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+            }));
+        }
+    }
+}
+impl TryParseOperation for FnCall {
+    fn parse(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, opt_libcall) = opt(tuple((
+            parse_id,
+            wst(lexem::SEP),
+            parse_id,
+            wst(lexem::PAR_O),
+        )))(input)?;
+        let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
+            let (remainder, opt_params) = opt(terminated(
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ))(remainder)?;
+            (
+                remainder,
+                Some(lib),
+                Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                    id: func,
+                    metadata: Metadata::default(),
+                    from_field: Cell::new(false),
+                })))),
+                opt_params,
+            )
+        } else {
+            let (remainder, left) = FieldAccess::parse(input)?;
+            let (remainder, opt_params) = opt(delimited(
+                wst(lexem::PAR_O),
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ))(remainder)?;
+            (remainder, None, Box::new(left), opt_params)
+        };
+        if let Some(params) = opt_params {
+            Ok((
+                remainder,
+                Expression::FnCall(FnCall {
+                    lib,
+                    fn_var,
+                    params,
+                    metadata: Metadata::default(),
+                    platform: Rc::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, *fn_var))
+        }
+    }
+}
+
 impl TryParseOperation for Range {
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = LogicalOr::parse(input)?;
@@ -70,12 +300,6 @@ impl TryParseOperation for Range {
             Ok((remainder, left))
         }
     }
-}
-
-pub trait TryParseOperation {
-    fn parse(input: Span) -> PResult<Expression>
-    where
-        Self: Sized;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -313,22 +537,21 @@ impl TryParseOperation for Cast {
      * Cast := Atom as Type | Atom
      */
     fn parse(input: Span) -> PResult<Expression> {
-        let (remainder, left) = Atomic::parse(input)?;
+        let (remainder, left) = FnCall::parse(input)?;
         let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) = Type::parse(remainder)?;
-            let left = Box::new(Expression::Atomic(left));
             Ok((
                 remainder,
                 Expression::Cast(Cast {
-                    left,
+                    left: left.into(),
                     right,
                     metadata: Metadata::default(),
                 }),
             ))
         } else {
-            Ok((remainder, Expression::Atomic(left)))
+            Ok((remainder, left))
         }
     }
 }
@@ -893,6 +1116,66 @@ mod tests {
                 incr: None,
                 inclusive: false,
                 metadata: Metadata::default()
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_fn_call() {
+        let res = FnCall::parse("f(x,10)".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::FnCall(FnCall {
+                lib: None,
+                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                    id: "f".into(),
+                    metadata: Metadata::default(),
+                    from_field: Cell::new(false),
+                })))),
+                params: vec![
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                        id: "x".into(),
+                        metadata: Metadata::default(),
+                        from_field: Cell::new(false),
+                    }))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::Unresolved(10).into()
+                    ))))
+                ],
+                metadata: Metadata::default(),
+                platform: Rc::default(),
+            }),
+            value
+        );
+    }
+
+    #[test]
+    fn valid_lib_call() {
+        let res = FnCall::parse("core::f(x,10)".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::FnCall(FnCall {
+                lib: Some("core".into()),
+                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                    id: "f".into(),
+                    metadata: Metadata::default(),
+                    from_field: Cell::new(false),
+                })))),
+                params: vec![
+                    Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                        id: "x".into(),
+                        metadata: Metadata::default(),
+                        from_field: Cell::new(false),
+                    }))),
+                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
+                        Number::Unresolved(10).into()
+                    ))))
+                ],
+                metadata: Metadata::default(),
+                platform: Rc::default(),
             }),
             value
         );

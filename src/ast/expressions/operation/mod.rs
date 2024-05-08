@@ -1,14 +1,12 @@
 use std::cell::Cell;
 
 use crate::{
-    ast::{types::Type},
-    semantic::{Metadata},
+    ast::{types::Type, utils::strings::ID},
+    semantic::{Metadata, MutRc},
+    vm::platform::Lib,
 };
 
-use super::{
-    data::{Number},
-    Atomic, Expression,
-};
+use super::{data::Number, Atomic, Expression};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
@@ -24,6 +22,35 @@ pub enum UnaryOperation {
         value: Box<Expression>,
         metadata: Metadata,
     },
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldAccess {
+    pub var: Box<Expression>,
+    pub field: Box<Expression>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TupleAccess {
+    pub var: Box<Expression>,
+    pub index: usize,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListAccess {
+    pub var: Box<Expression>,
+    pub index: Box<Expression>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnCall {
+    pub lib: Option<ID>,
+    pub fn_var: Box<Expression>,
+    pub params: Vec<Expression>,
+    pub metadata: Metadata,
+    pub platform: MutRc<Option<Lib>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

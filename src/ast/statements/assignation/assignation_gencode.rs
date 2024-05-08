@@ -1,5 +1,8 @@
 use crate::{
-    ast::{expressions::data::PtrAccess, statements::assignation::AssignValue},
+    ast::{
+        expressions::{data::PtrAccess, operation::ListAccess},
+        statements::assignation::AssignValue,
+    },
     semantic::{MutRc, SizeOf},
     vm::{
         casm::{
@@ -7,11 +10,11 @@ use crate::{
             mem::Mem,
             Casm, CasmProgram,
         },
-        vm::{CodeGenerationError, GenerateCode},
+        vm::{CodeGenerationError, GenerateCode, Locatable},
     },
 };
 
-use super::{Assignation, Assignee};
+use super::Assignation;
 use crate::semantic::scope::scope::Scope;
 
 impl GenerateCode for Assignation {
@@ -21,51 +24,40 @@ impl GenerateCode for Assignation {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
-        self.left.gencode(scope, instructions)
-    }
-}
-
-impl GenerateCode for Assignee {
-    fn gencode(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Assignee::Variable(variable) => {
-                // Push the address of the variable on the stack
-                let var_size = {
-                    let Some(var_type) = variable.signature() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    var_type.size_of()
-                };
-                if var_size == 0 {
-                    return Ok(());
-                }
-
-                let _ = variable.locate(scope, instructions)?;
-                let is_utf8 = variable.is_utf8();
-
-                if is_utf8 {
-                    instructions.push(Casm::Mem(Mem::TakeUTF8Char))
-                } else {
-                    instructions.push(Casm::Mem(Mem::Take { size: var_size }))
-                }
-            }
-            Assignee::PtrAccess(PtrAccess { value, metadata }) => {
-                let var_size = {
-                    let Some(var_type) = metadata.signature() else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
-                    var_type.size_of()
-                };
-                if var_size == 0 {
-                    return Ok(());
-                }
-                let _ = value.gencode(scope, instructions)?;
-                instructions.push(Casm::Mem(Mem::Take { size: var_size }))
-            }
+        // self.left.gencode(scope, instructions)
+        let (var_size, is_utf8_char) = {
+            let Some(var_type) = self.left.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            (
+                var_type.size_of(),
+                match &self.left {
+                    crate::ast::expressions::Expression::ListAccess(ListAccess {
+                        metadata,
+                        ..
+                    }) => match metadata
+                        .context()
+                        .ok_or(CodeGenerationError::UnresolvedError)?
+                    {
+                        crate::semantic::Either::Static(value) => match value.as_ref() {
+                            crate::semantic::scope::static_types::StaticType::String(_) => true,
+                            crate::semantic::scope::static_types::StaticType::StrSlice(_) => true,
+                            _ => false,
+                        },
+                        _ => false,
+                    },
+                    _ => false,
+                },
+            )
+        };
+        if var_size == 0 {
+            return Ok(());
+        }
+        let _ = self.left.locate(scope, instructions)?;
+        if is_utf8_char {
+            instructions.push(Casm::Mem(Mem::TakeUTF8Char));
+        } else {
+            instructions.push(Casm::Mem(Mem::Take { size: var_size }));
         }
         Ok(())
     }

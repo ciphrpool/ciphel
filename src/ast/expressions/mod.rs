@@ -11,9 +11,10 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{EType, Metadata, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{AccessLevel, EType, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf},
     vm::{
-        casm::CasmProgram,
+        allocator::{stack::Offset, MemoryAddress},
+        casm::{locate::Locate, Casm, CasmProgram},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -21,7 +22,8 @@ use crate::{semantic::scope::scope::Scope, vm::vm::Locatable};
 
 use self::operation::{
     operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
-    Comparaison, Equation, LogicalAnd, Product, Range, Shift, Substraction, UnaryOperation,
+    Comparaison, Equation, FieldAccess, FnCall, ListAccess, LogicalAnd, Product, Range, Shift,
+    Substraction, TupleAccess, UnaryOperation,
 };
 
 use super::TryParse;
@@ -46,6 +48,10 @@ pub enum Expression {
     LogicalAnd(operation::LogicalAnd),
     LogicalOr(operation::LogicalOr),
     Range(operation::Range),
+    FieldAccess(operation::FieldAccess),
+    ListAccess(operation::ListAccess),
+    TupleAccess(operation::TupleAccess),
+    FnCall(operation::FnCall),
     Atomic(Atomic),
 }
 
@@ -89,7 +95,7 @@ impl TryParse for Atomic {
 impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = ();
+    type Extra = Option<EType>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -101,9 +107,9 @@ impl Resolve for Atomic {
     {
         match self {
             Atomic::Data(value) => value.resolve(scope, context, extra),
-            Atomic::UnaryOperation(value) => value.resolve(scope, context, extra),
+            Atomic::UnaryOperation(value) => value.resolve(scope, context, &()),
             Atomic::Paren(value) => value.resolve(scope, context, extra),
-            Atomic::ExprFlow(value) => value.resolve(scope, context, extra),
+            Atomic::ExprFlow(value) => value.resolve(scope, context, &()),
             Atomic::Error(value) => value.resolve(scope, &(), &()),
         }
     }
@@ -147,7 +153,7 @@ impl TryParse for Expression {
 impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = ();
+    type Extra = Option<EType>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -158,20 +164,24 @@ impl Resolve for Expression {
         Self: Sized,
     {
         match self {
-            Expression::Product(value) => value.resolve(scope, context, extra),
-            Expression::Addition(value) => value.resolve(scope, context, extra),
-            Expression::Substraction(value) => value.resolve(scope, context, extra),
-            Expression::Shift(value) => value.resolve(scope, context, extra),
-            Expression::BitwiseAnd(value) => value.resolve(scope, context, extra),
-            Expression::BitwiseXOR(value) => value.resolve(scope, context, extra),
-            Expression::BitwiseOR(value) => value.resolve(scope, context, extra),
-            Expression::Comparaison(value) => value.resolve(scope, context, extra),
-            Expression::LogicalAnd(value) => value.resolve(scope, context, extra),
-            Expression::Equation(value) => value.resolve(scope, context, extra),
-            Expression::LogicalOr(value) => value.resolve(scope, context, extra),
+            Expression::Product(value) => value.resolve(scope, context, &()),
+            Expression::Addition(value) => value.resolve(scope, context, &()),
+            Expression::Substraction(value) => value.resolve(scope, context, &()),
+            Expression::Shift(value) => value.resolve(scope, context, &()),
+            Expression::BitwiseAnd(value) => value.resolve(scope, context, &()),
+            Expression::BitwiseXOR(value) => value.resolve(scope, context, &()),
+            Expression::BitwiseOR(value) => value.resolve(scope, context, &()),
+            Expression::Comparaison(value) => value.resolve(scope, context, &()),
+            Expression::LogicalAnd(value) => value.resolve(scope, context, &()),
+            Expression::Equation(value) => value.resolve(scope, context, &()),
+            Expression::LogicalOr(value) => value.resolve(scope, context, &()),
             Expression::Atomic(value) => value.resolve(scope, context, extra),
-            Expression::Cast(value) => value.resolve(scope, context, extra),
-            Expression::Range(value) => value.resolve(scope, context, extra),
+            Expression::Cast(value) => value.resolve(scope, context, &()),
+            Expression::Range(value) => value.resolve(scope, context, &()),
+            Expression::FieldAccess(value) => value.resolve(scope, context, extra),
+            Expression::ListAccess(value) => value.resolve(scope, context, extra),
+            Expression::TupleAccess(value) => value.resolve(scope, context, extra),
+            Expression::FnCall(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -196,6 +206,10 @@ impl TypeOf for Expression {
             Expression::Atomic(value) => value.type_of(&scope),
             Expression::Cast(value) => value.type_of(&scope),
             Expression::Range(value) => value.type_of(&scope),
+            Expression::FieldAccess(value) => value.type_of(&scope),
+            Expression::ListAccess(value) => value.type_of(&scope),
+            Expression::TupleAccess(value) => value.type_of(&scope),
+            Expression::FnCall(value) => value.type_of(&scope),
         }
     }
 }
@@ -221,6 +235,10 @@ impl GenerateCode for Expression {
             Expression::LogicalOr(value) => value.gencode(scope, instructions),
             Expression::Atomic(value) => value.gencode(scope, instructions),
             Expression::Range(value) => value.gencode(scope, instructions),
+            Expression::FieldAccess(value) => value.gencode(scope, instructions),
+            Expression::ListAccess(value) => value.gencode(scope, instructions),
+            Expression::TupleAccess(value) => value.gencode(scope, instructions),
+            Expression::FnCall(value) => value.gencode(scope, instructions),
         }
     }
 }
@@ -232,24 +250,28 @@ impl Locatable for Expression {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Expression::Product(_) => todo!(),
-            Expression::Addition(_) => todo!(),
-            Expression::Substraction(_) => todo!(),
-            Expression::Shift(_) => todo!(),
-            Expression::BitwiseAnd(_) => todo!(),
-            Expression::BitwiseXOR(_) => todo!(),
-            Expression::BitwiseOR(_) => todo!(),
-            Expression::Cast(_) => todo!(),
-            Expression::Comparaison(_) => todo!(),
-            Expression::Equation(_) => todo!(),
-            Expression::LogicalAnd(_) => todo!(),
-            Expression::LogicalOr(_) => todo!(),
-            Expression::Range(_) => todo!(),
             Expression::Atomic(value) => value.locate(scope, instructions),
+            Expression::FieldAccess(value) => value.locate(scope, instructions),
+            Expression::ListAccess(value) => value.locate(scope, instructions),
+            Expression::TupleAccess(value) => value.locate(scope, instructions),
+            Expression::FnCall(value) => value.locate(scope, instructions),
+            _ => {
+                let _ = self.gencode(scope, instructions)?;
+                let Some(value_type) = self.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Locate(Locate {
+                    address: MemoryAddress::Stack {
+                        offset: Offset::ST(-(value_type.size_of() as isize)),
+                        level: AccessLevel::Direct,
+                    },
+                }));
+                Ok(())
+            }
         }
     }
 
-    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool {
+    fn is_assignable(&self) -> bool {
         match self {
             Expression::Product(_) => false,
             Expression::Addition(_) => false,
@@ -258,13 +280,26 @@ impl Locatable for Expression {
             Expression::BitwiseAnd(_) => false,
             Expression::BitwiseXOR(_) => false,
             Expression::BitwiseOR(_) => false,
-            Expression::Cast(_) => todo!(),
+            Expression::Cast(_) => false,
             Expression::Comparaison(_) => false,
             Expression::Equation(_) => false,
             Expression::LogicalAnd(_) => false,
             Expression::LogicalOr(_) => false,
             Expression::Range(_) => false,
-            Expression::Atomic(value) => value.is_assignable(scope),
+            Expression::Atomic(value) => value.is_assignable(),
+            Expression::FieldAccess(value) => value.is_assignable(),
+            Expression::ListAccess(value) => value.is_assignable(),
+            Expression::TupleAccess(value) => value.is_assignable(),
+            Expression::FnCall(_) => false,
+        }
+    }
+    fn most_left_id(&self) -> Option<super::utils::strings::ID> {
+        match self {
+            Expression::FieldAccess(value) => value.most_left_id(),
+            Expression::ListAccess(value) => value.most_left_id(),
+            Expression::TupleAccess(value) => value.most_left_id(),
+            Expression::Atomic(value) => value.most_left_id(),
+            _ => None,
         }
     }
 }
@@ -293,20 +328,41 @@ impl Locatable for Atomic {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.locate(scope, instructions),
-            Atomic::UnaryOperation(_) => todo!(),
-            Atomic::Paren(_) => todo!(),
-            Atomic::ExprFlow(_) => todo!(),
+            Atomic::Paren(value) => value.locate(scope, instructions),
             Atomic::Error(_) => todo!(),
+            _ => {
+                let _ = self.gencode(scope, instructions)?;
+                let Some(value_type) = self.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Locate(Locate {
+                    address: MemoryAddress::Stack {
+                        offset: Offset::ST(-(value_type.size_of() as isize)),
+                        level: AccessLevel::Direct,
+                    },
+                }));
+                Ok(())
+            }
         }
     }
 
-    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool {
+    fn is_assignable(&self) -> bool {
         match self {
-            Atomic::Data(_) => todo!(),
-            Atomic::UnaryOperation(_) => todo!(),
-            Atomic::Paren(_) => todo!(),
-            Atomic::ExprFlow(_) => todo!(),
-            Atomic::Error(_) => todo!(),
+            Atomic::Data(value) => value.is_assignable(),
+            Atomic::UnaryOperation(_) => false,
+            Atomic::Paren(value) => value.is_assignable(),
+            Atomic::ExprFlow(_) => false,
+            Atomic::Error(_) => false,
+        }
+    }
+
+    fn most_left_id(&self) -> Option<super::utils::strings::ID> {
+        match self {
+            Atomic::Data(value) => value.most_left_id(),
+            Atomic::UnaryOperation(_) => None,
+            Atomic::Paren(value) => value.most_left_id(),
+            Atomic::ExprFlow(value) => None,
+            Atomic::Error(_) => None,
         }
     }
 }
@@ -335,6 +391,10 @@ impl Expression {
             Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
             Expression::Range(Range { metadata, .. }) => Some(metadata),
             Expression::Atomic(value) => value.metadata(),
+            Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
+            Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
+            Expression::TupleAccess(TupleAccess { metadata, .. }) => Some(metadata),
+            Expression::FnCall(FnCall { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -365,6 +425,10 @@ impl Expression {
             Expression::LogicalOr(LogicalOr { metadata, .. }) => metadata.signature(),
             Expression::Range(Range { metadata, .. }) => metadata.signature(),
             Expression::Atomic(value) => value.signature(),
+            Expression::FieldAccess(FieldAccess { metadata, .. }) => metadata.signature(),
+            Expression::ListAccess(ListAccess { metadata, .. }) => metadata.signature(),
+            Expression::TupleAccess(TupleAccess { metadata, .. }) => metadata.signature(),
+            Expression::FnCall(FnCall { metadata, .. }) => metadata.signature(),
         }
     }
 }

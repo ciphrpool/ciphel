@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess,
-    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
+    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
@@ -40,95 +40,98 @@ impl TypeOf for Data {
     }
 }
 
-impl Variable {
-    pub fn typeof_based(&self, context: &EType) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            Variable::Var(VarID {
-                id: value,
-                metadata: _,
-            }) => {
-                <EType as GetSubTypes>::get_field(context, value).ok_or(SemanticError::UnknownField)
-            }
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata: _,
-            }) => {
-                let var_type = var.typeof_based(context)?;
-                field.typeof_based(&var_type)
-            }
-            Variable::ListAccess(ListAccess { var, .. }) => {
-                let var_type = var.typeof_based(context)?;
-                <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
-            }
-            Variable::NumAccess(NumAccess { var, index, .. }) => {
-                let var_type = var.typeof_based(context)?;
-                <EType as GetSubTypes>::get_nth(&var_type, index)
-                    .ok_or(SemanticError::ExpectedIndexable)
-            }
-        }
-    }
-}
+// impl Variable {
+//     pub fn typeof_based(&self, context: &EType) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized,
+//     {
+//         match self {
+//             Variable::Var(VarID {
+//                 id: value,
+//                 metadata: _,
+//             }) => {
+//                 <EType as GetSubTypes>::get_field(context, value).ok_or(SemanticError::UnknownField)
+//             }
+//             Variable::FieldAccess(FieldAccess {
+//                 var,
+//                 field,
+//                 metadata: _,
+//             }) => {
+//                 let var_type = var.typeof_based(context)?;
+//                 field.typeof_based(&var_type)
+//             }
+//             Variable::ListAccess(ListAccess { var, .. }) => {
+//                 let var_type = var.typeof_based(context)?;
+//                 <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
+//             }
+//             Variable::NumAccess(NumAccess { var, index, .. }) => {
+//                 let var_type = var.typeof_based(context)?;
+//                 <EType as GetSubTypes>::get_nth(&var_type, index)
+//                     .ok_or(SemanticError::ExpectedIndexable)
+//             }
+//         }
+//     }
+// }
 
 impl TypeOf for Variable {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        match self {
-            Variable::Var(value) => value.type_of(&scope),
-            Variable::FieldAccess(value) => value.type_of(&scope),
-            Variable::ListAccess(value) => value.type_of(&scope),
-            Variable::NumAccess(value) => value.type_of(&scope),
-        }
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+        // match self {
+        //     Variable::Var(value) => value.type_of(&scope),
+        //     Variable::FieldAccess(value) => value.type_of(&scope),
+        //     Variable::ListAccess(value) => value.type_of(&scope),
+        //     Variable::NumAccess(value) => value.type_of(&scope),
+        // }
     }
 }
 
-impl TypeOf for VarID {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        let var = scope.find_var(&self.id)?;
-        var.type_of(&scope)
-    }
-}
+// impl TypeOf for VarID {
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized + Resolve,
+//     {
+//         let var = scope.find_var(&self.id)?;
+//         var.type_of(&scope)
+//     }
+// }
 
-impl TypeOf for FieldAccess {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        let var_type = self.var.type_of(&scope)?;
-        self.field.typeof_based(&var_type)
-    }
-}
+// impl TypeOf for FieldAccess {
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized + Resolve,
+//     {
+//         let var_type = self.var.type_of(&scope)?;
+//         self.field.typeof_based(&var_type)
+//     }
+// }
 
-impl TypeOf for NumAccess {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        let var_type = self.var.type_of(&scope)?;
+// impl TypeOf for NumAccess {
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized + Resolve,
+//     {
+//         let var_type = self.var.type_of(&scope)?;
 
-        <EType as GetSubTypes>::get_nth(&var_type, &self.index)
-            .ok_or(SemanticError::ExpectedIndexable)
-    }
-}
+//         <EType as GetSubTypes>::get_nth(&var_type, &self.index)
+//             .ok_or(SemanticError::ExpectedIndexable)
+//     }
+// }
 
-impl TypeOf for ListAccess {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        let var_type = self.var.type_of(&scope)?;
+// impl TypeOf for ListAccess {
+//     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized + Resolve,
+//     {
+//         let var_type = self.var.type_of(&scope)?;
 
-        <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
-    }
-}
+//         <EType as GetSubTypes>::get_item(&var_type).ok_or(SemanticError::ExpectedIterable)
+//     }
+// }
 
 // impl TypeOf for String {
 //     fn type_of(&self, block: &Ref) -> Result<EType, SemanticError>

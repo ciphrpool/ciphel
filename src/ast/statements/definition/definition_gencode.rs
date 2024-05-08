@@ -234,13 +234,13 @@ mod tests {
         let statement = Statement::parse(
             r##"
         let x = {
-            fn rec(x:u64) -> u64 {
+            fn recursive(x:u64) -> u64 {
                 if x == 0u64 {
                     return 0;
                 }
-                return 1u64 + rec(x-1);
+                return 1u64 + recursive(x-1);
             }
-            return rec(3); 
+            return recursive(3); 
         };
 
         "##

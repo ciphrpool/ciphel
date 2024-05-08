@@ -2,8 +2,8 @@ use std::cell::Cell;
 
 use ulid::Ulid;
 
-use crate::semantic::scope::scope::Scope;
 use crate::semantic::MutRc;
+use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
 use super::{
     allocator::{
@@ -299,7 +299,9 @@ pub trait Locatable {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 
-    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool;
+    fn is_assignable(&self) -> bool;
+
+    fn most_left_id(&self) -> Option<ID>;
 }
 pub trait Executable {
     fn execute(

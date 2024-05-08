@@ -106,7 +106,7 @@ impl Resolve for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &())?;
+                let _ = param.resolve(scope, &None, &None)?;
                 *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
                 Ok(())
             }

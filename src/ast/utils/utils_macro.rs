@@ -277,7 +277,7 @@ macro_rules! eval_and_compare {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -319,7 +319,7 @@ macro_rules! eval_and_compare_bool {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

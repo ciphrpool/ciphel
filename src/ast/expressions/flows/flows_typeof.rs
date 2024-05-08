@@ -4,7 +4,7 @@ use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StringType;
 use crate::{
-    ast::expressions::data::{VarID, Variable},
+    ast::expressions::data::Variable,
     p_num,
     semantic::{
         scope::{
@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::{ExprFlow, FCall, FnCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
+use super::{ExprFlow, FCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl TypeOf for ExprFlow {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
@@ -26,7 +26,6 @@ impl TypeOf for ExprFlow {
             ExprFlow::If(value) => value.type_of(&scope),
             ExprFlow::Match(value) => value.type_of(&scope),
             ExprFlow::Try(value) => value.type_of(&scope),
-            ExprFlow::Call(value) => value.type_of(&scope),
             ExprFlow::FCall(value) => value.type_of(&scope),
             ExprFlow::SizeOf(..) => Ok(p_num!(U64)),
         }
@@ -88,30 +87,6 @@ impl TypeOf for TryExpr {
     {
         let try_branch_type = self.try_branch.type_of(&scope)?;
         try_branch_type.merge(&self.else_branch, scope)
-    }
-}
-impl TypeOf for FnCall {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match &self.fn_var {
-            Variable::Var(VarID { id: _, .. }) => {
-                let borrow = self.platform.as_ref().borrow();
-                match borrow.as_ref() {
-                    Some(api) => return api.type_of(scope),
-                    None => {}
-                }
-            }
-            _ => {}
-        }
-
-        let fn_var_type = self.fn_var.type_of(&scope)?;
-        let Some(return_type) = <EType as GetSubTypes>::get_return(&fn_var_type) else {
-            return Err(SemanticError::CantInferType);
-        };
-
-        Ok(return_type)
     }
 }
 

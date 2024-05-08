@@ -43,7 +43,7 @@ impl Resolve for ForIterator {
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, extra)?;
+        let _ = self.expr.resolve(scope, &None, &None)?;
         let expr_type = self.expr.type_of(&scope.borrow())?;
         if !expr_type.is_iterable() {
             return Err(SemanticError::ExpectedIterable);
@@ -132,7 +132,7 @@ impl Resolve for WhileLoop {
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, &None, &())?;
+        let _ = self.condition.resolve(scope, &None, &None)?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {

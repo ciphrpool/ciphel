@@ -11,16 +11,11 @@ pub mod assignation_typeof;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Assignation {
-    left: Assignee,
+    left: Expression,
     right: AssignValue,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignValue {
     Scope(Block),
     Expr(Box<Expression>),
-}
-#[derive(Debug, Clone, PartialEq)]
-pub enum Assignee {
-    Variable(Variable),
-    PtrAccess(PtrAccess),
 }
