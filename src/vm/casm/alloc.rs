@@ -457,7 +457,6 @@ impl Executable for Access {
                         bytes.to_vec()
                     }
                 };
-
                 // dbg!(&data);
                 // Copy data onto stack;
                 let _ = stack.push_with(&data).map_err(|e| e.into())?;

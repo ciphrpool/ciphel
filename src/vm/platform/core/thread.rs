@@ -296,6 +296,8 @@ pub fn sig_join(
     if availaible_tids.contains(&join_tid) {
         let _ = state.to(ThreadState::WAITING)?;
         join_waiting_list.push((own_tid, join_tid));
+        let _ = stack.push_with(&[true as u8]).map_err(|e| e.into())?;
+
         // TODO : NO_ERROR value
         let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
         program.incr();

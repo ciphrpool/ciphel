@@ -17,6 +17,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub enum CodeGenerationError {
+    CantLocate,
     UnresolvedError,
     Default,
 }
@@ -291,6 +292,15 @@ pub trait GenerateCode {
     ) -> Result<(), CodeGenerationError>;
 }
 
+pub trait Locatable {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError>;
+
+    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool;
+}
 pub trait Executable {
     fn execute(
         &self,
