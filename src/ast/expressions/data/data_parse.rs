@@ -492,13 +492,13 @@ impl TryParse for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::{cell::Cell, rc::Rc};
 
     use crate::{
         ast::{
             expressions::{
                 data::Number,
-                operation::{FieldAccess, ListAccess, Range},
+                operation::{FieldAccess, FnCall, ListAccess, Range, TupleAccess},
                 Atomic,
             },
             statements::block::Block,
@@ -1013,6 +1013,31 @@ mod tests {
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
+                metadata: Metadata::default()
+            }),
+            value
+        );
+
+        let res = Expression::parse("f(10).1".into());
+        assert!(res.is_ok(), "{:?}", res);
+        let value = res.unwrap().1;
+        assert_eq!(
+            Expression::TupleAccess(TupleAccess {
+                var: Expression::FnCall(FnCall {
+                    lib: None,
+                    fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                        id: "f".into(),
+                        metadata: Metadata::default(),
+                        from_field: Cell::new(false),
+                    })))),
+                    params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
+                        Primitive::Number(Number::Unresolved(10).into())
+                    )))],
+                    metadata: Metadata::default(),
+                    platform: Rc::default(),
+                })
+                .into(),
+                index: 1,
                 metadata: Metadata::default()
             }),
             value

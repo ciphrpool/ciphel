@@ -4788,6 +4788,34 @@ mod tests {
     }
 
     #[test]
+    fn valid_map_access_complex() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map(64);
+                insert(&hmap,420,69);
+                return get(&hmap,420).0;
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let _ = compile_statement!(statement);
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 69),
+            "Result does not match the expected value"
+        );
+    }
+    #[test]
     fn robustness_map_access() {
         let statement = Statement::parse(
             r##"
