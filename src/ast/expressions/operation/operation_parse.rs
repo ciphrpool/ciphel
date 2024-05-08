@@ -207,7 +207,6 @@ impl FnCall {
             (remainder, None, Box::new(left), opt_params)
         };
         if let Some(params) = opt_params {
-            let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
             let left = Expression::FnCall(FnCall {
                 lib,
                 fn_var,
@@ -215,45 +214,7 @@ impl FnCall {
                 metadata: Metadata::default(),
                 platform: Rc::default(),
             });
-            if peeked.is_some() {
-                return Ok((remainder, left));
-            }
-            let (remainder, dot_field) = opt(wst(lexem::DOT))(remainder)?;
-
-            if let Some(_) = dot_field {
-                let (remainder, num) = opt(digit1)(remainder)?;
-                if let Some(try_num) = num {
-                    let index = try_num.parse::<usize>();
-                    if index.is_err() {
-                        return Err(nom::Err::Error(ErrorTree::Base {
-                            location: try_num,
-                            kind: nom_supreme::error::BaseErrorKind::Kind(
-                                nom::error::ErrorKind::Fail,
-                            ),
-                        }));
-                    }
-                    let index = index.unwrap();
-                    return Ok((
-                        remainder,
-                        Expression::TupleAccess(TupleAccess {
-                            var: Box::new(left),
-                            index,
-                            metadata: Metadata::default(),
-                        }),
-                    ));
-                }
-                let (remainder, right) = FieldAccess::parse(remainder)?;
-                Ok((
-                    remainder,
-                    Expression::FieldAccess(FieldAccess {
-                        var: Box::new(left),
-                        field: Box::new(right),
-                        metadata: Metadata::default(),
-                    }),
-                ))
-            } else {
-                Ok((remainder, left))
-            }
+            Ok((remainder, left))
         } else {
             return Err(nom::Err::Error(ErrorTree::Base {
                 location: remainder,
