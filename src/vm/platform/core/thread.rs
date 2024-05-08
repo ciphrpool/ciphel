@@ -383,6 +383,7 @@ mod tests {
         }
 
         let (child_tid,err) = spawn();
+        assert(err);
         main();
         
         "##;
@@ -408,6 +409,7 @@ mod tests {
         }
 
         let (child_tid,err) = spawn();
+        assert(err);
         main();
         
         "##;
@@ -444,6 +446,7 @@ mod tests {
         let src = r##"
         
             let err = close(child_tid);
+            assert(err);
                 
         "##;
 
@@ -506,6 +509,7 @@ mod tests {
             print("Hello World");
         }
         let (child_tid,err) = spawn();
+        assert(err);
         wait();
         main();
         
@@ -550,6 +554,7 @@ mod tests {
             print("Hello World");
         }
         let (child_tid,err) = spawn();
+        assert(err);
         join(child_tid);
         main();
         
@@ -616,6 +621,7 @@ mod tests {
             print("Hello World");
         }
         let (child_tid,err) = spawn();
+        assert(err);
         join(child_tid);
         main();
         

@@ -153,6 +153,7 @@ impl CasmProgram {
                     match instruction.execute(self, stack, heap, stdio) {
                         Ok(_) => {}
                         Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
+                        Err(RuntimeError::AssertError) => return Ok(()),
                         Err(e) => {
                             todo!("{:?} in {:?}", e, instruction)
                         }

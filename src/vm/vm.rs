@@ -51,6 +51,7 @@ pub enum RuntimeError {
     InvalidThreadStateTransition(ThreadState, ThreadState),
     TooManyThread,
     Signal(Signal),
+    AssertError,
     Default,
 }
 

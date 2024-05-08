@@ -44,7 +44,12 @@ impl Scheduler {
             .set(INSTRUCTION_MAX_COUNT / number_of_thread);
     }
 
-    pub fn run_major_frame(&self, runtime: &mut Runtime, heap: &mut Heap, stdio: &mut StdIO) {
+    pub fn run_major_frame(
+        &self,
+        runtime: &mut Runtime,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+    ) -> Result<(), RuntimeError> {
         let info = {
             let mut buf = String::new();
             for Thread {
@@ -174,13 +179,16 @@ impl Scheduler {
                             }
                             _ => {}
                         },
+                        Err(e @ RuntimeError::AssertError) => {
+                            return Err(e);
+                        }
                         Err(e) => {
                             if program.cursor_is_at_end() {
                                 let _ = state.to(ThreadState::IDLE);
                             }
                             /* TODO : error handling */
-                            // panic!("{:?}", e);
-                            break;
+                            panic!("{:?}", e);
+                            return Err(e);
                         }
                     }
                 }
@@ -212,5 +220,6 @@ impl Scheduler {
         for tid in closed_tid {
             let _ = runtime.close(tid);
         }
+        Ok(())
     }
 }

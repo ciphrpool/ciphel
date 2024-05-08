@@ -4764,6 +4764,7 @@ mod tests {
                 let hmap : Map<u64,u64> = map(64);
                 insert(&hmap,420,69);
                 let (value,err) = get(&hmap,420);
+                assert(err);
                 return value;
             };
         "##
@@ -4824,6 +4825,7 @@ mod tests {
                 insert(&hmap,109,13);
                 insert(&hmap,110,14);
                 let (value,err) = get(&hmap,103);
+                assert(err);
                 return value;
             };
         "##
@@ -4863,6 +4865,7 @@ mod tests {
                 insert(&hmap,110,14);
                 insert(&hmap,103,420);
                 let (value,err) = get(&hmap,103);
+                assert(err);
                 return value;
             };
         "##
@@ -4922,6 +4925,7 @@ mod tests {
                 insert(&hmap,420,69);
                 insert(&hmap,120,75);
                 let (value,err) = delete(&hmap,420);
+                assert(err);
                 return (value,len(hmap));
             };
         "##
@@ -4968,6 +4972,7 @@ mod tests {
                 insert(&hmap,420,69);
                 insert(&hmap,120,75);
                 let (value,err) = delete(&hmap,420);
+                assert(err);
                 let (value,err) = get(&hmap,420);
                 return err;
             };
@@ -4994,6 +4999,7 @@ mod tests {
                 insert(&hmap,"test11",46);
                 insert(&hmap,"test111",16);
                 let (value,err) = get(&hmap,"test1");
+                assert(err);
                 return value;
             };
         "##
@@ -5027,6 +5033,7 @@ mod tests {
                 insert(&hmap,string("test111"),16);
                 insert(&hmap,f"test11{52}",28);
                 let (value,err) = get(&hmap,string("test1"));
+                assert(err);
                 return value;
             };
         "##
@@ -5063,6 +5070,7 @@ mod tests {
                 insert(&hmap,f"test{x}",28);
 
                 let (value,err) = get(&hmap,string("test1"));
+                assert(err);
                 return value;
             };
         "##

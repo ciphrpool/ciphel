@@ -79,7 +79,7 @@ impl Ciphel {
         self.scheduler.prepare(self.runtime.threads.len());
 
         self.scheduler
-            .run_major_frame(&mut self.runtime, &mut self.heap, &mut self.stdio);
+            .run_major_frame(&mut self.runtime, &mut self.heap, &mut self.stdio)?;
         let stdout_buffer = self.stdio.stdout.take();
         println!("{}", stdout_buffer);
         Ok(())

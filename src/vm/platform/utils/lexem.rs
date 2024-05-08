@@ -14,6 +14,7 @@ pub const CLEAR_CELL: &str = "clear_cell";
 
 // ERROR
 pub const ERROR: &str = "error";
+pub const ASSERT: &str = "assert";
 
 // ALLOC
 
