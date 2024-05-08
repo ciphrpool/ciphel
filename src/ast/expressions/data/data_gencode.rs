@@ -9,6 +9,7 @@ use crate::vm::allocator::stack::Offset;
 use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
 use crate::vm::platform::core::CoreCasm;
 use crate::vm::platform::LibCasm;
+use crate::vm::vm::Locatable;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
@@ -60,6 +61,50 @@ impl GenerateCode for Data {
             Data::Union(value) => value.gencode(scope, instructions),
             Data::Enum(value) => value.gencode(scope, instructions),
             Data::StrSlice(value) => value.gencode(scope, instructions),
+        }
+    }
+}
+
+impl Locatable for Data {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Data::Primitive(_) => Err(CodeGenerationError::CantLocate),
+            Data::Slice(_) => Err(CodeGenerationError::CantLocate),
+            Data::StrSlice(_) => Err(CodeGenerationError::CantLocate),
+            Data::Vec(_) => Err(CodeGenerationError::CantLocate),
+            Data::Closure(_) => Err(CodeGenerationError::CantLocate),
+            Data::Tuple(_) => Err(CodeGenerationError::CantLocate),
+            Data::Address(_) => Err(CodeGenerationError::CantLocate),
+            Data::PtrAccess(_) => Err(CodeGenerationError::CantLocate),
+            Data::Variable(_) => todo!(),
+            Data::Unit => Err(CodeGenerationError::CantLocate),
+            Data::Map(_) => Err(CodeGenerationError::CantLocate),
+            Data::Struct(_) => Err(CodeGenerationError::CantLocate),
+            Data::Union(_) => Err(CodeGenerationError::CantLocate),
+            Data::Enum(_) => Err(CodeGenerationError::CantLocate),
+        }
+    }
+
+    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool {
+        match self {
+            Data::Primitive(_) => false,
+            Data::Slice(_) => false,
+            Data::StrSlice(_) => false,
+            Data::Vec(_) => false,
+            Data::Closure(_) => false,
+            Data::Tuple(_) => false,
+            Data::Address(_) => false,
+            Data::PtrAccess(_) => true,
+            Data::Variable(_) => true,
+            Data::Unit => false,
+            Data::Map(_) => false,
+            Data::Struct(_) => false,
+            Data::Union(_) => false,
+            Data::Enum(_) => false,
         }
     }
 }

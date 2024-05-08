@@ -1,10 +1,7 @@
-use std::{
-    cell::{Ref},
-};
+use std::cell::Ref;
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
-use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{
         expressions::operation::LogicalOr,
@@ -14,14 +11,13 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{
-        EType, Metadata, MutRc, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{EType, Metadata, MutRc, Resolve, SemanticError, TypeOf},
     vm::{
-        casm::{CasmProgram},
+        casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
+use crate::{semantic::scope::scope::Scope, vm::vm::Locatable};
 
 use self::operation::{
     operation_parse::TryParseOperation, Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast,
@@ -228,6 +224,51 @@ impl GenerateCode for Expression {
         }
     }
 }
+
+impl Locatable for Expression {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Expression::Product(_) => todo!(),
+            Expression::Addition(_) => todo!(),
+            Expression::Substraction(_) => todo!(),
+            Expression::Shift(_) => todo!(),
+            Expression::BitwiseAnd(_) => todo!(),
+            Expression::BitwiseXOR(_) => todo!(),
+            Expression::BitwiseOR(_) => todo!(),
+            Expression::Cast(_) => todo!(),
+            Expression::Comparaison(_) => todo!(),
+            Expression::Equation(_) => todo!(),
+            Expression::LogicalAnd(_) => todo!(),
+            Expression::LogicalOr(_) => todo!(),
+            Expression::Range(_) => todo!(),
+            Expression::Atomic(value) => value.locate(scope, instructions),
+        }
+    }
+
+    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool {
+        match self {
+            Expression::Product(_) => false,
+            Expression::Addition(_) => false,
+            Expression::Substraction(_) => false,
+            Expression::Shift(_) => false,
+            Expression::BitwiseAnd(_) => false,
+            Expression::BitwiseXOR(_) => false,
+            Expression::BitwiseOR(_) => false,
+            Expression::Cast(_) => todo!(),
+            Expression::Comparaison(_) => false,
+            Expression::Equation(_) => false,
+            Expression::LogicalAnd(_) => false,
+            Expression::LogicalOr(_) => false,
+            Expression::Range(_) => false,
+            Expression::Atomic(value) => value.is_assignable(scope),
+        }
+    }
+}
+
 impl GenerateCode for Atomic {
     fn gencode(
         &self,
@@ -239,6 +280,32 @@ impl GenerateCode for Atomic {
             Atomic::UnaryOperation(value) => value.gencode(scope, instructions),
             Atomic::Paren(value) => value.gencode(scope, instructions),
             Atomic::ExprFlow(value) => value.gencode(scope, instructions),
+            Atomic::Error(_) => todo!(),
+        }
+    }
+}
+
+impl Locatable for Atomic {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Atomic::Data(value) => value.locate(scope, instructions),
+            Atomic::UnaryOperation(_) => todo!(),
+            Atomic::Paren(_) => todo!(),
+            Atomic::ExprFlow(_) => todo!(),
+            Atomic::Error(_) => todo!(),
+        }
+    }
+
+    fn is_assignable(&self, scope: &MutRc<Scope>) -> bool {
+        match self {
+            Atomic::Data(_) => todo!(),
+            Atomic::UnaryOperation(_) => todo!(),
+            Atomic::Paren(_) => todo!(),
+            Atomic::ExprFlow(_) => todo!(),
             Atomic::Error(_) => todo!(),
         }
     }
@@ -320,7 +387,9 @@ impl Atomic {
             Atomic::UnaryOperation(UnaryOperation::Minus { value: _, metadata }) => {
                 metadata.signature()
             }
-            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => metadata.signature(),
+            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => {
+                metadata.signature()
+            }
             Atomic::Paren(value) => value.signature(),
             Atomic::ExprFlow(value) => value.signature(),
             Atomic::Error(_value) => todo!(),
