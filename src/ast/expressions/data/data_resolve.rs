@@ -1,9 +1,8 @@
 use nom_supreme::context;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, MultiData,
-    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
+    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::expressions::Atomic;
 use crate::semantic::scope::scope::Scope;
@@ -23,7 +22,7 @@ use crate::{e_static, p_num, resolve_metadata};
 impl Resolve for Data {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = ();
+    type Extra = Option<EType>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -34,128 +33,20 @@ impl Resolve for Data {
         Self: Sized,
     {
         match self {
-            Data::Primitive(value) => value.resolve(scope, context, extra),
-            Data::Slice(value) => value.resolve(scope, context, extra),
-            Data::Vec(value) => value.resolve(scope, context, extra),
-            Data::Closure(value) => value.resolve(scope, context, extra),
-            Data::Tuple(value) => value.resolve(scope, context, extra),
-            Data::Address(value) => value.resolve(scope, context, extra),
-            Data::PtrAccess(value) => value.resolve(scope, context, extra),
+            Data::Primitive(value) => value.resolve(scope, context, &()),
+            Data::Slice(value) => value.resolve(scope, context, &()),
+            Data::Vec(value) => value.resolve(scope, context, &()),
+            Data::Closure(value) => value.resolve(scope, context, &()),
+            Data::Tuple(value) => value.resolve(scope, context, &()),
+            Data::Address(value) => value.resolve(scope, context, &()),
+            Data::PtrAccess(value) => value.resolve(scope, context, &()),
             Data::Variable(value) => value.resolve(scope, context, extra),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve(scope, context, extra),
-            Data::Struct(value) => value.resolve(scope, context, extra),
-            Data::Union(value) => value.resolve(scope, context, extra),
-            Data::Enum(value) => value.resolve(scope, context, extra),
-            Data::StrSlice(value) => value.resolve(scope, context, extra),
-        }
-    }
-}
-
-impl Variable {
-    fn resolve_based(&self, scope: &MutRc<Scope>, context: &EType) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            Variable::Var(VarID {
-                id: value,
-                metadata,
-            }) => {
-                let var_type = <EType as GetSubTypes>::get_field(context, value)
-                    .ok_or(SemanticError::UnknownField)?;
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
-                        context: Some(var_type.clone()),
-                        signature: Some(var_type.clone()),
-                    };
-                }
-                Ok(var_type)
-            }
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata,
-            }) => {
-                let var_type = var.resolve_based(scope, context)?;
-                let field_type = field.resolve_based(scope, &var_type)?;
-                {
-                    let mut borrowed_metadata = metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
-                        context: Some(field_type.clone()),
-                        signature: Some(field_type.clone()),
-                    };
-                }
-                Ok(field_type)
-            }
-            Variable::ListAccess(ListAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let var_type = var.resolve_based(scope, context)?;
-                if !<EType as TypeChecking>::is_indexable(&var_type) {
-                    Err(SemanticError::ExpectedIterable)
-                } else {
-                    let _ = index.resolve(scope, &Some(p_num!(U64)), &())?;
-                    let Some(item_type) = var_type.get_item() else {
-                        return Err(SemanticError::ExpectedIndexable);
-                    };
-                    {
-                        let mut borrowed_metadata = metadata
-                            .info
-                            .as_ref()
-                            .try_borrow_mut()
-                            .map_err(|_| SemanticError::Default)?;
-                        *borrowed_metadata = Info::Resolved {
-                            context: Some(item_type.clone()),
-                            signature: Some(item_type.clone()),
-                        };
-                    }
-                    Ok(item_type)
-                }
-            }
-            Variable::NumAccess(NumAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let _ = var.resolve_based(scope, context)?;
-                let var_type = var.typeof_based(&context)?;
-
-                if !<EType as TypeChecking>::is_dotnum_indexable(&var_type) {
-                    Err(SemanticError::ExpectedIndexable)
-                } else {
-                    let Some(fields) = <EType as GetSubTypes>::get_fields(&var_type) else {
-                        return Err(SemanticError::InvalidPattern);
-                    };
-                    if index >= &fields.len() {
-                        Err(SemanticError::InvalidPattern)
-                    } else {
-                        {
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
-                                context: Some(fields[*index].1.clone()),
-                                signature: Some(fields[*index].1.clone()),
-                            };
-                        }
-                        Ok(fields[*index].1.clone())
-                    }
-                }
-            }
+            Data::Map(value) => value.resolve(scope, context, &()),
+            Data::Struct(value) => value.resolve(scope, context, &()),
+            Data::Union(value) => value.resolve(scope, context, &()),
+            Data::Enum(value) => value.resolve(scope, context, &()),
+            Data::StrSlice(value) => value.resolve(scope, context, &()),
         }
     }
 }
@@ -163,7 +54,7 @@ impl Variable {
 impl Resolve for Variable {
     type Output = ();
     type Context = Option<EType>;
-    type Extra = ();
+    type Extra = Option<EType>;
     fn resolve(
         &self,
         scope: &MutRc<Scope>,
@@ -173,119 +64,37 @@ impl Resolve for Variable {
     where
         Self: Sized,
     {
-        match self {
-            Variable::Var(value) => value.resolve(scope, context, extra),
-            Variable::FieldAccess(value) => value.resolve(scope, context, extra),
-            Variable::ListAccess(value) => value.resolve(scope, context, extra),
-            Variable::NumAccess(value) => value.resolve(scope, context, extra),
-        }
-    }
-}
-impl Resolve for VarID {
-    type Output = ();
+        match extra {
+            Some(extra) => {
+                self.from_field.set(true);
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(extra.clone()),
+                };
+            }
+            None => {
+                let var = scope.borrow().find_var(&self.id)?;
+                let var_type = var.type_sig.clone();
 
-    type Context = Option<EType>;
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        _extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
-    }
-}
-impl Resolve for FieldAccess {
-    type Output = ();
-
-    type Context = Option<EType>;
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let _ = self.var.resolve(scope, context, extra)?;
-        let var_type = self.var.type_of(&scope.borrow())?;
-        let _ = self.field.resolve_based(scope, &var_type)?;
-
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
-    }
-}
-impl Resolve for NumAccess {
-    type Output = ();
-
-    type Context = Option<EType>;
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let _ = self.var.resolve(scope, context, extra)?;
-        let var_type = self.var.type_of(&scope.borrow())?;
-        if !<EType as TypeChecking>::is_dotnum_indexable(&var_type) {
-            Err(SemanticError::ExpectedIndexable)
-        } else {
-            let Some(fields) = <EType as GetSubTypes>::get_fields(&var_type) else {
-                return Err(SemanticError::InvalidPattern);
-            };
-            if self.index >= fields.len() {
-                Err(SemanticError::InvalidPattern)
-            } else {
-                resolve_metadata!(self.metadata, self, scope, context);
-                Ok(())
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(var_type),
+                };
             }
         }
-    }
-}
-
-impl Resolve for ListAccess {
-    type Output = ();
-
-    type Context = Option<EType>;
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        let _ = self.var.resolve(scope, context, extra)?;
-        let var_type = self.var.type_of(&scope.borrow())?;
-
-        if <EType as TypeChecking>::is_indexable(&var_type) {
-            let _ = self.index.resolve(scope, &Some(p_num!(U64)), extra)?;
-            let index_type = self.index.type_of(&scope.borrow())?;
-            if <EType as TypeChecking>::is_u64(&index_type) {
-                resolve_metadata!(self.metadata, self, scope, context);
-                Ok(())
-            } else {
-                Err(SemanticError::ExpectedIndexable)
-            }
-        } else {
-            Err(SemanticError::ExpectedIndexable)
-        }
+        Ok(())
     }
 }
 
@@ -408,7 +217,7 @@ impl Resolve for Slice {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                         for value in &self.value {
-                            let _ = value.resolve(scope, sitem_type, &())?;
+                            let _ = value.resolve(scope, sitem_type, &None)?;
                             let _ = item_type.compatible_with(value, &scope.borrow())?;
                         }
 
@@ -436,13 +245,13 @@ impl Resolve for Slice {
             None => {
                 let mut item_type = e_static!(StaticType::Any);
                 for value in &self.value {
-                    let _ = value.resolve(scope, &None, &())?;
+                    let _ = value.resolve(scope, &None, &None)?;
                     item_type = item_type.merge(value, &scope.borrow())?;
                 }
 
                 let sitem_type = Some(item_type.clone());
                 for value in &self.value {
-                    let _ = value.resolve(scope, &sitem_type, &())?;
+                    let _ = value.resolve(scope, &sitem_type, &None)?;
                 }
 
                 {
@@ -521,7 +330,7 @@ impl Resolve for Vector {
                         let sitem_type = &Some(item_type.clone());
 
                         for value in &self.value {
-                            let _ = value.resolve(scope, sitem_type, &())?;
+                            let _ = value.resolve(scope, sitem_type, &None)?;
                             let _ = item_type.compatible_with(value, &scope.borrow())?;
                         }
 
@@ -548,13 +357,13 @@ impl Resolve for Vector {
             None => {
                 let mut item_type = e_static!(StaticType::Any);
                 for value in &self.value {
-                    let _ = value.resolve(scope, &None, &())?;
+                    let _ = value.resolve(scope, &None, &None)?;
                     item_type = item_type.merge(value, &scope.borrow())?;
                 }
 
                 let sitem_type = Some(item_type.clone());
                 for value in &self.value {
-                    let _ = value.resolve(scope, &sitem_type, &())?;
+                    let _ = value.resolve(scope, &sitem_type, &None)?;
                 }
 
                 {
@@ -595,7 +404,7 @@ impl Resolve for Tuple {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                         for (value, value_type) in self.value.iter().zip(values_type) {
-                            let _ = value.resolve(scope, &Some(value_type.clone()), &())?;
+                            let _ = value.resolve(scope, &Some(value_type.clone()), &None)?;
                             let _ = value_type.compatible_with(value, &scope.borrow())?;
                         }
 
@@ -622,7 +431,7 @@ impl Resolve for Tuple {
             None => {
                 let mut values_type = Vec::new();
                 for value in &self.value {
-                    let _ = value.resolve(scope, &None, &())?;
+                    let _ = value.resolve(scope, &None, &None)?;
                     values_type.push(value.type_of(&scope.borrow())?);
                 }
 
@@ -793,7 +602,7 @@ impl Resolve for Address {
             Atomic::ExprFlow(_) => return Err(SemanticError::IncompatibleTypes),
             Atomic::Error(_) => {}
         }
-        let _ = self.value.resolve(scope, context, extra)?;
+        let _ = self.value.resolve(scope, context, &None)?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
     }
@@ -811,7 +620,7 @@ impl Resolve for PtrAccess {
     where
         Self: Sized,
     {
-        let _ = self.value.resolve(scope, context, extra)?;
+        let _ = self.value.resolve(scope, context, &None)?;
 
         let address_type = self.value.type_of(&scope.borrow())?;
 
@@ -879,7 +688,7 @@ impl Resolve for Struct {
         for (field_name, expr) in &self.fields {
             let field_context = <EType as GetSubTypes>::get_field(&user_type, &field_name);
 
-            let _ = expr.resolve(scope, &field_context, &())?;
+            let _ = expr.resolve(scope, &field_context, &None)?;
         }
 
         let Some(fields_type) = <EType as GetSubTypes>::get_fields(&user_type) else {
@@ -928,7 +737,7 @@ impl Resolve for Union {
         for (field_name, expr) in &self.fields {
             let field_context = <EType as GetSubTypes>::get_field(&variant_type, &field_name);
 
-            let _ = expr.resolve(scope, &field_context, &())?;
+            let _ = expr.resolve(scope, &field_context, &None)?;
         }
 
         let Some(fields_type) = <EType as GetSubTypes>::get_fields(&variant_type) else {
@@ -1007,9 +816,9 @@ impl Resolve for Map {
                         let svalue_type = &Some(value_type);
 
                         for (key, value) in &self.fields {
-                            let _ = key.resolve(scope, skey_type, &())?;
+                            let _ = key.resolve(scope, skey_type, &None)?;
                             let _ = keys_type.compatible_with(key, &scope.borrow())?;
-                            let _ = value.resolve(scope, svalue_type, &())?;
+                            let _ = value.resolve(scope, svalue_type, &None)?;
                             let _ = values_type.compatible_with(value, &scope.borrow())?;
                         }
 
@@ -1038,17 +847,17 @@ impl Resolve for Map {
                 let mut keys_type = e_static!(StaticType::Any);
                 let mut values_type = e_static!(StaticType::Any);
                 for (key, value) in &self.fields {
-                    let _ = key.resolve(scope, &None, &())?;
+                    let _ = key.resolve(scope, &None, &None)?;
                     keys_type = keys_type.merge(key, &scope.borrow())?;
-                    let _ = value.resolve(scope, &None, &())?;
+                    let _ = value.resolve(scope, &None, &None)?;
                     values_type = values_type.merge(value, &scope.borrow())?;
                 }
 
                 let skeys_type = Some(keys_type.clone());
                 let svalues_type = Some(values_type.clone());
                 for (key, value) in &self.fields {
-                    let _ = key.resolve(scope, &skeys_type, &())?;
-                    let _ = value.resolve(scope, &svalues_type, &())?;
+                    let _ = key.resolve(scope, &skeys_type, &None)?;
+                    let _ = value.resolve(scope, &svalues_type, &None)?;
                 }
 
                 {
@@ -1080,7 +889,7 @@ mod tests {
     };
 
     use crate::{
-        ast::{statements, TryParse},
+        ast::{expressions::Expression, statements, TryParse},
         p_num,
         semantic::scope::{
             scope::Scope,
@@ -1249,7 +1058,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());
@@ -1270,7 +1079,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -1286,12 +1095,12 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn robustness_variable_array() {
-        let variable = Variable::parse("x[\"Test\"]".into()).unwrap().1;
+        let variable = Expression::parse("x[\"Test\"]".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1308,12 +1117,12 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
     #[test]
     fn valid_variable_tuple() {
-        let variable = Variable::parse("x.0".into()).unwrap().1;
+        let variable = Expression::parse("x.0".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1326,7 +1135,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());
@@ -1336,7 +1145,7 @@ mod tests {
     }
     #[test]
     fn valid_variable_struct() {
-        let variable = Variable::parse("point.x".into()).unwrap().1;
+        let variable = Expression::parse("point.x".into()).unwrap().1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1361,7 +1170,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &());
+        let res = variable.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());

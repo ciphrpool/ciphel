@@ -48,7 +48,7 @@ impl Resolve for IfStat {
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, &None, extra)?;
+        let _ = self.condition.resolve(scope, &None, &None)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
@@ -58,7 +58,7 @@ impl Resolve for IfStat {
         let _ = self.then_branch.resolve(scope, &context, &Vec::default())?;
 
         for (else_if_cond, else_if_scope) in &self.else_if_branches {
-            let _ = else_if_cond.resolve(scope, &None, extra)?;
+            let _ = else_if_cond.resolve(scope, &None, &None)?;
             let condition_type = else_if_cond.type_of(&scope.borrow())?;
             if !<EType as TypeChecking>::is_boolean(&condition_type) {
                 return Err(SemanticError::ExpectedBoolean);
@@ -85,7 +85,7 @@ impl Resolve for MatchStat {
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, extra)?;
+        let _ = self.expr.resolve(scope, &None, &None)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
@@ -207,7 +207,7 @@ impl Resolve for CallStat {
     where
         Self: Sized,
     {
-        self.call.resolve(scope, &None, extra)
+        self.call.resolve(scope, &None, &None)
     }
 }
 

@@ -87,7 +87,7 @@ fn expect_one_u64(params: &Vec<Expression>, scope: &MutRc<Scope>) -> Result<(), 
 
     let size = &params[0];
 
-    let _ = size.resolve(scope, &Some(p_num!(U64)), &())?;
+    let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
     let size_type = size.type_of(&scope.borrow())?;
     match &size_type {
         Either::Static(value) => match value.as_ref() {

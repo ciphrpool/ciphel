@@ -1,4 +1,8 @@
-use crate::ast::{expressions::flows::FnCall, statements::block::Block, TryParse};
+use crate::ast::{
+    expressions::operation::{operation_parse::TryParseOperation, FnCall},
+    statements::block::Block,
+    TryParse,
+};
 use nom::{
     branch::alt,
     combinator::{map, opt},
@@ -144,9 +148,10 @@ impl TryParse for CallStat {
      * FnCallStat := ID \(  Fn_Args \) ;
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(terminated(FnCall::parse, wst(lexem::SEMI_COLON)), |call| {
-            CallStat { call }
-        })(input)
+        map(
+            terminated(FnCall::parse_statement, wst(lexem::SEMI_COLON)),
+            |call| CallStat { call },
+        )(input)
     }
 }
 
@@ -160,7 +165,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, VarID, Variable},
+                data::{Data, Number, Primitive, Variable},
                 Atomic, Expression,
             },
             statements::{
@@ -197,18 +202,21 @@ mod tests {
                 then_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
@@ -220,18 +228,21 @@ mod tests {
                 else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
@@ -269,18 +280,21 @@ mod tests {
                 then_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
@@ -293,18 +307,21 @@ mod tests {
                     Block {
                         metadata: Metadata::default(),
                         instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                            call: FnCall {
+                            call: Expression::FnCall(FnCall {
                                 lib: None,
-                                fn_var: Variable::Var(VarID {
-                                    id: "f".into(),
-                                    metadata: Metadata::default()
-                                }),
+                                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                    Variable {
+                                        id: "f".into(),
+                                        from_field: Cell::new(false),
+                                        metadata: Metadata::default(),
+                                    }
+                                )))),
                                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                     v_num!(Unresolved, 10)
                                 )))],
                                 metadata: Metadata::default(),
                                 platform: Rc::default(),
-                            }
+                            })
                         }))],
                         can_capture: Cell::new(ClosureState::DEFAULT),
                         is_loop: Cell::new(false),
@@ -316,18 +333,21 @@ mod tests {
                 else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
@@ -359,18 +379,21 @@ mod tests {
                 try_branch: Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
@@ -381,18 +404,21 @@ mod tests {
                 else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Flow(Flow::Call(CallStat {
-                        call: FnCall {
+                        call: Expression::FnCall(FnCall {
                             lib: None,
-                            fn_var: Variable::Var(VarID {
-                                id: "f".into(),
-                                metadata: Metadata::default()
-                            }),
+                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                Variable {
+                                    id: "f".into(),
+                                    from_field: Cell::new(false),
+                                    metadata: Metadata::default(),
+                                }
+                            )))),
                             params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
                             platform: Rc::default(),
-                        }
+                        })
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),

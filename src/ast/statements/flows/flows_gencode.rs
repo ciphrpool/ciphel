@@ -51,7 +51,7 @@ impl GenerateCode for CallStat {
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.call.gencode(scope, instructions)?;
-        let Some(return_type) = self.call.metadata.signature() else {
+        let Some(return_type) = self.call.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let size = return_type.size_of();

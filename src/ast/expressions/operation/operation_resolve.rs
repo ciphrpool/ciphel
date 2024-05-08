@@ -1,18 +1,25 @@
 use super::{
-    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, LogicalAnd,
-    LogicalOr, Product, Range, Shift, Substraction, UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, FieldAccess, FnCall,
+    ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, TupleAccess,
+    UnaryOperation,
 };
 
-use crate::ast::expressions::data::{Data, Primitive};
+use crate::ast::expressions::data::{Data, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
-use crate::resolve_metadata;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType, RangeType, StaticType};
+use crate::semantic::scope::static_types::{
+    AddrType, NumberType, PrimitiveType, RangeType, StaticType,
+};
+use crate::vm::platform::Lib;
+use crate::{p_num, resolve_metadata};
 
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info, MutRc};
+use crate::vm::vm::Locatable;
 
 impl Resolve for UnaryOperation {
     type Output = ();
@@ -32,7 +39,7 @@ impl Resolve for UnaryOperation {
                 // let binding = Some(Either::Static(
                 //     StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
                 // ));
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let value_type = value.type_of(&scope.borrow())?;
 
                 // let _ = <EType as OperandMerging>::can_substract(&value_type)?;
@@ -68,7 +75,7 @@ impl Resolve for UnaryOperation {
                 Ok(())
             }
             UnaryOperation::Not { value, metadata } => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let value_type = value.type_of(&scope.borrow())?;
                 let _ = <EType as OperandMerging>::can_negate(&value_type)?;
                 {
@@ -86,6 +93,199 @@ impl Resolve for UnaryOperation {
                 Ok(())
             }
         }
+    }
+}
+
+impl Resolve for TupleAccess {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = Option<EType>;
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let _ = self.var.resolve(scope, context, extra)?;
+        let var_type = self.var.type_of(&scope.borrow())?;
+        if !var_type.is_dotnum_indexable() {
+            Err(SemanticError::ExpectedIndexable)
+        } else {
+            let Some(fields) = &var_type.get_fields() else {
+                return Err(SemanticError::InvalidPattern);
+            };
+            if self.index >= fields.len() {
+                Err(SemanticError::InvalidPattern)
+            } else {
+                let item_type = var_type
+                    .get_nth(&self.index)
+                    .ok_or(SemanticError::ExpectedIndexable)?;
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: Some(var_type),
+                    signature: Some(item_type),
+                };
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Resolve for ListAccess {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = Option<EType>;
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let _ = self.var.resolve(scope, context, extra)?;
+        let var_type = self.var.type_of(&scope.borrow())?;
+        if var_type.is_indexable() {
+            let _ = self.index.resolve(scope, &Some(p_num!(U64)), extra)?;
+            let index_type = self.index.type_of(&scope.borrow())?;
+            if index_type.is_u64() {
+                let item_type = var_type.get_item().ok_or(SemanticError::ExpectedIterable)?;
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: Some(var_type),
+                    signature: Some(item_type),
+                };
+                Ok(())
+            } else {
+                Err(SemanticError::ExpectedIndexable)
+            }
+        } else {
+            Err(SemanticError::ExpectedIndexable)
+        }
+    }
+}
+
+impl Resolve for FieldAccess {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = Option<EType>;
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let _ = self.var.resolve(scope, context, extra)?;
+        let mut var_type = self.var.type_of(&scope.borrow())?;
+
+        match &var_type {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Address(AddrType(inner)) => var_type = inner.as_ref().clone(),
+                _ => return Err(SemanticError::ExpectedStruct),
+            },
+            _ => {}
+        }
+        match &var_type {
+            Either::Static(_) => return Err(SemanticError::ExpectedStruct),
+            Either::User(value) => match value.as_ref() {
+                UserType::Struct(value) => {
+                    let Some(field_id) = self.field.as_ref().most_left_id() else {
+                        return Err(SemanticError::UnknownField);
+                    };
+                    let Some((_, field_type)) = value.fields.iter().find(|(id, _)| *id == field_id)
+                    else {
+                        return Err(SemanticError::UnknownField);
+                    };
+                    let _ = self
+                        .field
+                        .resolve(scope, context, &Some(field_type.clone()))?;
+                    let field_type = self.field.type_of(&scope.borrow())?;
+
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: Some(var_type),
+                        signature: Some(field_type),
+                    };
+                    Ok(())
+                }
+                _ => return Err(SemanticError::ExpectedStruct),
+            },
+        }
+    }
+}
+
+impl Resolve for FnCall {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = Option<EType>;
+    fn resolve(
+        &self,
+        scope: &MutRc<Scope>,
+        context: &Self::Context,
+        extra: &Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        match self.fn_var.as_ref() {
+            Expression::Atomic(Atomic::Data(Data::Variable(Variable { id, .. }))) => {
+                let found = scope.as_ref().borrow().find_var(id);
+                if found.is_err() || self.lib.is_some() {
+                    if let Some(api) = Lib::from(&self.lib, id) {
+                        let _ = api.resolve(scope, context, &self.params)?;
+                        *self.platform.as_ref().borrow_mut() = Some(api);
+                        resolve_metadata!(self.metadata, self, scope, context);
+                        return Ok(());
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        let _ = self.fn_var.resolve(scope, context, extra)?;
+        let fn_var_type = self.fn_var.type_of(&scope.borrow())?;
+        if !<EType as TypeChecking>::is_callable(&fn_var_type) {
+            return Err(SemanticError::ExpectedCallable);
+        }
+
+        for (index, expr) in self.params.iter().enumerate() {
+            let param_context = <EType as GetSubTypes>::get_nth(&fn_var_type, &index);
+            let _ = expr.resolve(scope, &param_context, &None)?;
+        }
+
+        let Some(fields) = <EType as GetSubTypes>::get_fields(&fn_var_type) else {
+            return Err(SemanticError::ExpectedCallable);
+        };
+        if self.params.len() != fields.len() {
+            return Err(SemanticError::IncorrectArguments);
+        }
+        for (index, (_, field_type)) in fields.iter().enumerate() {
+            let _ = field_type.compatible_with(&self.params[index], &scope.borrow())?;
+        }
+        resolve_metadata!(self.metadata, self, scope, context);
+        Ok(())
     }
 }
 
@@ -115,8 +315,8 @@ impl Resolve for Range {
             None => None,
         };
 
-        let _ = self.lower.resolve(scope, &inner_context, extra)?;
-        let _ = self.upper.resolve(scope, &inner_context, extra)?;
+        let _ = self.lower.resolve(scope, &inner_context, &None)?;
+        let _ = self.upper.resolve(scope, &inner_context, &None)?;
 
         let _ = resolve_metadata!(self.metadata, self, scope, context);
         Ok(())
@@ -156,18 +356,18 @@ impl Resolve for Product {
 
         match (left.as_ref(), right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = right.type_of(&scope.borrow())?;
-                let _ = left.resolve(scope, &Some(right_type), extra)?;
+                let _ = left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = left.type_of(&scope.borrow())?;
-                let _ = right.resolve(scope, &Some(left_type), extra)?;
+                let _ = right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = left.resolve(scope, context, extra)?;
-                let _ = right.resolve(scope, context, extra)?;
+                let _ = left.resolve(scope, context, &None)?;
+                let _ = right.resolve(scope, context, &None)?;
             }
         }
 
@@ -197,18 +397,18 @@ impl Resolve for Addition {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -239,18 +439,18 @@ impl Resolve for Substraction {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -294,18 +494,18 @@ impl Resolve for Shift {
 
         match (left.as_ref(), right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = right.type_of(&scope.borrow())?;
-                let _ = left.resolve(scope, &Some(right_type), extra)?;
+                let _ = left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = left.type_of(&scope.borrow())?;
-                let _ = right.resolve(scope, &Some(left_type), extra)?;
+                let _ = right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = left.resolve(scope, context, extra)?;
-                let _ = right.resolve(scope, context, extra)?;
+                let _ = left.resolve(scope, context, &None)?;
+                let _ = right.resolve(scope, context, &None)?;
             }
         }
         let left_type = left.type_of(&scope.borrow())?;
@@ -334,18 +534,18 @@ impl Resolve for BitwiseAnd {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
         let left_type = self.left.type_of(&scope.borrow())?;
@@ -374,18 +574,18 @@ impl Resolve for BitwiseXOR {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -415,18 +615,18 @@ impl Resolve for BitwiseOR {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -455,8 +655,8 @@ impl Resolve for Cast {
     where
         Self: Sized,
     {
-        let _ = self.left.resolve(scope, context, extra)?;
-        let _ = self.right.resolve(scope, &(), extra)?;
+        let _ = self.left.resolve(scope, context, &None)?;
+        let _ = self.right.resolve(scope, &(), &())?;
 
         if let Some(l_metadata) = self.left.metadata() {
             let signature = l_metadata.signature();
@@ -515,18 +715,18 @@ impl Resolve for Comparaison {
 
         match (left.as_ref(), right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = right.type_of(&scope.borrow())?;
-                let _ = left.resolve(scope, &Some(right_type), extra)?;
+                let _ = left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = left.type_of(&scope.borrow())?;
-                let _ = right.resolve(scope, &Some(left_type), extra)?;
+                let _ = right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = left.resolve(scope, context, extra)?;
-                let _ = right.resolve(scope, context, extra)?;
+                let _ = left.resolve(scope, context, &None)?;
+                let _ = right.resolve(scope, context, &None)?;
             }
         }
 
@@ -570,18 +770,18 @@ impl Resolve for Equation {
 
         match (left.as_ref(), right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = right.type_of(&scope.borrow())?;
-                let _ = left.resolve(scope, &Some(right_type), extra)?;
+                let _ = left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = left.type_of(&scope.borrow())?;
-                let _ = right.resolve(scope, &Some(left_type), extra)?;
+                let _ = right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = left.resolve(scope, context, extra)?;
-                let _ = right.resolve(scope, context, extra)?;
+                let _ = left.resolve(scope, context, &None)?;
+                let _ = right.resolve(scope, context, &None)?;
             }
         }
 
@@ -612,18 +812,18 @@ impl Resolve for LogicalAnd {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -653,18 +853,18 @@ impl Resolve for LogicalOr {
     {
         match (self.left.as_ref(), self.right.as_ref()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let right_type = self.right.type_of(&scope.borrow())?;
-                let _ = self.left.resolve(scope, &Some(right_type), extra)?;
+                let _ = self.left.resolve(scope, &Some(right_type), &None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let left_type = self.left.type_of(&scope.borrow())?;
-                let _ = self.right.resolve(scope, &Some(left_type), extra)?;
+                let _ = self.right.resolve(scope, &Some(left_type), &None)?;
             }
             _ => {
-                let _ = self.left.resolve(scope, context, extra)?;
-                let _ = self.right.resolve(scope, context, extra)?;
+                let _ = self.left.resolve(scope, context, &None)?;
+                let _ = self.right.resolve(scope, context, &None)?;
             }
         }
 
@@ -703,22 +903,22 @@ mod tests {
     fn valid_high_ord_math() {
         let expr = Product::parse("10 * 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * (10+10)".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("(10+10) * 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * x".into()).unwrap().1;
@@ -732,7 +932,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -740,17 +940,17 @@ mod tests {
     fn robustness_high_ord_math() {
         let expr = Product::parse("10 * 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Product::parse("'a' * 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Product::parse("10 * x".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -758,42 +958,42 @@ mod tests {
     fn valid_low_ord_math() {
         let expr = Addition::parse("10 + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 - 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + 10*10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Addition::parse("10 + x".into()).unwrap().1;
@@ -807,7 +1007,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -815,22 +1015,22 @@ mod tests {
     fn robustness_low_ord_math() {
         let expr = Addition::parse("10 + 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Addition::parse("'a' + 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Addition::parse("10 + x".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Addition::parse("10.0 + 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -838,12 +1038,12 @@ mod tests {
     fn valid_shift() {
         let expr = Shift::parse("10 >> 1".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Shift::parse("10 << 1".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -851,12 +1051,12 @@ mod tests {
     fn robustness_shift() {
         let expr = Shift::parse("10 >> 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Shift::parse("'a' >> 1".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -864,17 +1064,17 @@ mod tests {
     fn valid_bitwise() {
         let expr = BitwiseAnd::parse("10 & 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = BitwiseOR::parse("10 | 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = BitwiseXOR::parse("10 ^ 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -882,17 +1082,17 @@ mod tests {
     fn robustness_bitwise() {
         let expr = BitwiseAnd::parse("10 & 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = BitwiseOR::parse("'a' | 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = BitwiseXOR::parse("10 ^ 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -900,14 +1100,14 @@ mod tests {
     fn valid_cast() {
         let expr = Cast::parse("10 as f64".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(F64), expr_type);
 
         let expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
         let expr_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(U64), expr_type);
@@ -917,12 +1117,12 @@ mod tests {
     fn valid_comparaison() {
         let expr = Expression::parse("10 < 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("'a' > 'b'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -930,7 +1130,7 @@ mod tests {
     fn robustness_comparaison() {
         let expr = Expression::parse("10 > 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -938,12 +1138,12 @@ mod tests {
     fn valid_equation() {
         let expr = Expression::parse("10 == 10".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -951,7 +1151,7 @@ mod tests {
     fn robustness_equation() {
         let expr = Expression::parse("10 == 'a'".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -959,24 +1159,24 @@ mod tests {
     fn valid_and_or() {
         let expr = Expression::parse("true and false".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true or false".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
         let expr = Expression::parse("true and true and true".into())
             .unwrap()
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -984,12 +1184,12 @@ mod tests {
     fn robustness_and_or() {
         let expr = Expression::parse("true and 2".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
 
         let expr = Expression::parse("1 or true".into()).unwrap().1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
     }
 
@@ -1034,5 +1234,97 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_call() {
+        let expr = FnCall::parse("f(10,20+20)".into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "f".into(),
+                type_sig: Either::Static(
+                    StaticType::StaticFn(FnType {
+                        params: vec![p_num!(I64), p_num!(I64)],
+                        ret: Box::new(p_num!(I64)),
+                        scope_params_size: 24,
+                    })
+                    .into(),
+                ),
+                is_declared: Cell::new(false),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &None);
+        assert!(res.is_ok(), "{:?}", res);
+
+        let ret_type = expr.type_of(&scope.borrow()).unwrap();
+        assert_eq!(ret_type, p_num!(I64))
+    }
+
+    #[test]
+    fn robustness_call() {
+        let expr = FnCall::parse("f(10,20+20)".into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "f".into(),
+                type_sig: p_num!(I64),
+                is_declared: Cell::new(false),
+            })
+            .unwrap();
+        let res = expr.resolve(&scope, &None, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn valid_call_lib() {
+        let expr = FnCall::parse("io::print(true)".into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "print".into(),
+                type_sig: p_num!(I64),
+                is_declared: Cell::new(false),
+            })
+            .unwrap();
+        let _ = expr
+            .resolve(&scope, &None, &None)
+            .expect("Resolution should have succeeded");
+    }
+
+    #[test]
+    fn robustness_call_lib() {
+        let expr = FnCall::parse("print(true)".into())
+            .expect("Parsing should have succeeded")
+            .1;
+
+        let scope = Scope::new();
+        let _ = scope
+            .borrow_mut()
+            .register_var(Var {
+                state: Cell::default(),
+                id: "print".into(),
+                type_sig: p_num!(I64),
+                is_declared: Cell::new(false),
+            })
+            .unwrap();
+        let _ = expr
+            .resolve(&scope, &None, &None)
+            .expect_err("Resolution should have failed");
     }
 }

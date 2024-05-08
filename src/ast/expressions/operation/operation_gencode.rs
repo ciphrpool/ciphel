@@ -1,4 +1,15 @@
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::static_types::ClosureType;
+use crate::semantic::scope::type_traits::GetSubTypes;
+use crate::semantic::AccessLevel;
+use crate::vm::allocator::stack::Offset;
+use crate::vm::allocator::MemoryAddress;
+use crate::vm::casm::alloc::Access;
+use crate::vm::casm::branch::Call;
+use crate::vm::casm::data;
+use crate::vm::casm::locate::{Locate, LocateNextUTF8Char};
+use crate::vm::casm::mem::Mem;
+use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
@@ -19,7 +30,7 @@ use crate::{
     },
 };
 
-use super::Range;
+use super::{FieldAccess, ListAccess, Range, TupleAccess};
 
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
@@ -52,6 +63,308 @@ impl GenerateCode for super::UnaryOperation {
                 Ok(())
             }
         }
+    }
+}
+
+impl Locatable for TupleAccess {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let _ = self.var.locate(scope, instructions)?;
+        let Some(from_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (offset as u64).to_le_bytes().into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::Addition(Addition {
+                left: OpPrimitive::Number(NumberType::U64),
+                right: OpPrimitive::Number(NumberType::U64),
+            }),
+        }));
+        Ok(())
+    }
+
+    fn is_assignable(&self) -> bool {
+        true
+    }
+
+    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
+        self.var.most_left_id()
+    }
+}
+impl GenerateCode for TupleAccess {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let _ = self.var.locate(scope, instructions)?;
+        let Some(from_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (offset as u64).to_le_bytes().into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::Addition(Addition {
+                left: OpPrimitive::Number(NumberType::U64),
+                right: OpPrimitive::Number(NumberType::U64),
+            }),
+        }));
+        if size == 0 {
+            return Ok(());
+        }
+        instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+        Ok(())
+    }
+}
+
+impl Locatable for ListAccess {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        // Locate the variable
+        let _ = self.var.locate(scope, instructions)?;
+
+        if let Some(signature) = self.var.signature() {
+            match signature {
+                Either::Static(signature) => match signature.as_ref() {
+                    StaticType::String(_) | StaticType::Vec(_) => {
+                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        instructions.push(Casm::Data(data::Data::Serialized {
+                            data: (16u64).to_le_bytes().into(),
+                        }));
+                        instructions.push(Casm::Operation(Operation {
+                            kind: OperationKind::Addition(Addition {
+                                left: OpPrimitive::Number(NumberType::U64),
+                                right: OpPrimitive::Number(NumberType::U64),
+                            }),
+                        }));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        // Access the field
+        let _ = self.index.gencode(scope, instructions)?;
+
+        let is_utf8_access = match self
+            .var
+            .signature()
+            .ok_or(CodeGenerationError::UnresolvedError)?
+        {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::String(_) | StaticType::StrSlice(_) => true,
+                _ => false,
+            },
+            _ => false,
+        };
+
+        if is_utf8_access {
+            instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeAtIdx));
+        } else {
+            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            if size == 0 {
+                instructions.push(Casm::Pop(8)); //Pop index
+                return Ok(());
+            }
+            instructions.push(Casm::Data(data::Data::Serialized {
+                data: (size as u64).to_le_bytes().into(),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Mult(Mult {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Addition(Addition {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+        }
+
+        Ok(())
+    }
+
+    fn is_assignable(&self) -> bool {
+        true
+    }
+
+    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
+        self.var.most_left_id()
+    }
+}
+impl GenerateCode for ListAccess {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        // Locate the variable
+        let _ = self.var.locate(scope, instructions)?;
+
+        if let Some(signature) = self.var.signature() {
+            match signature {
+                Either::Static(signature) => match signature.as_ref() {
+                    StaticType::String(_) | StaticType::Vec(_) => {
+                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        instructions.push(Casm::Data(data::Data::Serialized {
+                            data: (16u64).to_le_bytes().into(),
+                        }));
+                        instructions.push(Casm::Operation(Operation {
+                            kind: OperationKind::Addition(Addition {
+                                left: OpPrimitive::Number(NumberType::U64),
+                                right: OpPrimitive::Number(NumberType::U64),
+                            }),
+                        }));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        // Access the field
+        let _ = self.index.gencode(scope, instructions)?;
+
+        let is_utf8_access = match self
+            .var
+            .signature()
+            .ok_or(CodeGenerationError::UnresolvedError)?
+        {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::String(_) | StaticType::StrSlice(_) => true,
+                _ => false,
+            },
+            _ => false,
+        };
+
+        if is_utf8_access {
+            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
+        } else {
+            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            if size == 0 {
+                instructions.push(Casm::Pop(8)); //Pop index
+                return Ok(());
+            }
+            instructions.push(Casm::Data(data::Data::Serialized {
+                data: (size as u64).to_le_bytes().into(),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Mult(Mult {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+            instructions.push(Casm::Operation(Operation {
+                kind: OperationKind::Addition(Addition {
+                    left: OpPrimitive::Number(NumberType::U64),
+                    right: OpPrimitive::Number(NumberType::U64),
+                }),
+            }));
+            instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+        }
+
+        Ok(())
+    }
+}
+
+impl Locatable for FieldAccess {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        // Locate the variable
+        let _ = self.var.locate(scope, instructions)?;
+        // Access the field
+        let Some(from_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(offset) = from_type.get_field_offset(
+            &self
+                .field
+                .most_left_id()
+                .ok_or(CodeGenerationError::UnresolvedError)?,
+        ) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (offset as u64).to_le_bytes().into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::Addition(Addition {
+                left: OpPrimitive::Number(NumberType::U64),
+                right: OpPrimitive::Number(NumberType::U64),
+            }),
+        }));
+        let _ = self.field.locate(scope, instructions)?;
+        Ok(())
+    }
+
+    fn is_assignable(&self) -> bool {
+        true
+    }
+
+    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
+        self.var.most_left_id()
+    }
+}
+impl GenerateCode for FieldAccess {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        // Locate the variable
+        let _ = self.var.locate(scope, instructions)?;
+        // Access the field
+        let Some(from_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(offset) = from_type.get_field_offset(
+            &self
+                .field
+                .most_left_id()
+                .ok_or(CodeGenerationError::UnresolvedError)?,
+        ) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        instructions.push(Casm::Data(data::Data::Serialized {
+            data: (offset as u64).to_le_bytes().into(),
+        }));
+        instructions.push(Casm::Operation(Operation {
+            kind: OperationKind::Addition(Addition {
+                left: OpPrimitive::Number(NumberType::U64),
+                right: OpPrimitive::Number(NumberType::U64),
+            }),
+        }));
+        let _ = self.field.gencode(scope, instructions)?;
+        Ok(())
     }
 }
 
@@ -95,6 +408,168 @@ impl GenerateCode for Range {
     }
 }
 
+impl Locatable for super::FnCall {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let _ = self.gencode(scope, instructions)?;
+        let Some(value_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        instructions.push(Casm::Locate(Locate {
+            address: MemoryAddress::Stack {
+                offset: Offset::ST(-(value_type.size_of() as isize)),
+                level: AccessLevel::Direct,
+            },
+        }));
+        Ok(())
+    }
+
+    fn is_assignable(&self) -> bool {
+        false
+    }
+
+    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
+        self.fn_var.most_left_id()
+    }
+}
+
+impl GenerateCode for super::FnCall {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        let params_size: usize = self
+            .params
+            .iter()
+            .map(|p| p.signature().map_or(0, |s| s.size_of()))
+            .sum();
+
+        if let Some(platform_api) = self.platform.as_ref().borrow().as_ref() {
+            for param in &self.params {
+                let _ = param.gencode(scope, instructions)?;
+            }
+            platform_api.gencode(scope, instructions)
+        } else {
+            let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            let Some(signature) = self.metadata.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            let sig_params_size = match fn_sig.as_ref() {
+                StaticType::Closure(value) => value.scope_params_size,
+                StaticType::StaticFn(value) => value.scope_params_size,
+                _ => return Err(CodeGenerationError::UnresolvedError),
+            };
+            let _return_size = signature.size_of();
+
+            match fn_sig.as_ref() {
+                StaticType::Closure(ClosureType { closed: false, .. })
+                | StaticType::StaticFn(_) => {
+                    /* Call static function */
+                    // Load Param
+                    for param in &self.params {
+                        let _ = param.gencode(scope, instructions)?;
+                    }
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    if let Some(8) = sig_params_size.checked_sub(params_size) {
+                        // Load function address
+                        instructions.push(Casm::Mem(Mem::Dup(8)));
+                    }
+                    // Call function
+                    // Load param size
+                    instructions.push(Casm::Data(Data::Serialized {
+                        data: (sig_params_size as u64).to_le_bytes().into(),
+                    }));
+
+                    instructions.push(Casm::Call(Call::Stack));
+                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+                }
+                StaticType::Closure(ClosureType { closed: true, .. }) => {
+                    // Load Param
+                    for param in &self.params {
+                        let _ = param.gencode(scope, instructions)?;
+                    }
+
+                    let _ = self.fn_var.gencode(scope, instructions)?;
+                    match sig_params_size.checked_sub(params_size) {
+                        Some(16) => {
+                            /* Rec and closed */
+                            /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
+                            // Load Env heap address
+                            instructions.push(Casm::Data(Data::Serialized {
+                                data: (16u64).to_le_bytes().into(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Addition(Addition {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
+                            instructions.push(Casm::Data(Data::Serialized {
+                                data: (16u64).to_le_bytes().into(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Substraction(Substraction {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        }
+                        Some(8) => {
+                            /* closed */
+                            /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+                            // Load Env heap address
+                            instructions.push(Casm::Data(Data::Serialized {
+                                data: (16u64).to_le_bytes().into(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Addition(Addition {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Mem(Mem::Dup(8)));
+                            instructions.push(Casm::Data(Data::Serialized {
+                                data: (16u64).to_le_bytes().into(),
+                            }));
+                            instructions.push(Casm::Operation(Operation {
+                                kind: OperationKind::Substraction(Substraction {
+                                    left: OpPrimitive::Number(NumberType::U64),
+                                    right: OpPrimitive::Number(NumberType::U64),
+                                }),
+                            }));
+                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+                        }
+                        _ => return Err(CodeGenerationError::UnresolvedError),
+                    }
+
+                    // Call function
+
+                    // Load param size
+                    // instructions.push(Casm::Mem(MemCopy::GetReg(UReg::R3))); // env size
+                    instructions.push(Casm::Data(Data::Serialized {
+                        data: (sig_params_size).to_le_bytes().into(),
+                    }));
+
+                    instructions.push(Casm::Call(Call::Stack));
+                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+                }
+                _ => {
+                    return Err(CodeGenerationError::UnresolvedError);
+                }
+            }
+            Ok(())
+        }
+    }
+}
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
@@ -1344,7 +1819,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

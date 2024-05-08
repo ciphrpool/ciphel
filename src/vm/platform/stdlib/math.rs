@@ -226,7 +226,7 @@ impl Resolve for MathFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let n = &extra[0];
-                let _ = n.resolve(scope, &Some(p_num!(F64)), &())?;
+                let _ = n.resolve(scope, &Some(p_num!(F64)), &None)?;
                 let n_type = n.type_of(&scope.borrow())?;
 
                 match &n_type {
@@ -247,8 +247,8 @@ impl Resolve for MathFn {
                 let x = &extra[0];
                 let y = &extra[1];
 
-                let _ = x.resolve(scope, &Some(p_num!(F64)), &())?;
-                let _ = y.resolve(scope, &Some(p_num!(F64)), &())?;
+                let _ = x.resolve(scope, &Some(p_num!(F64)), &None)?;
+                let _ = y.resolve(scope, &Some(p_num!(F64)), &None)?;
 
                 let x_type = x.type_of(&scope.borrow())?;
                 let y_type = y.type_of(&scope.borrow())?;

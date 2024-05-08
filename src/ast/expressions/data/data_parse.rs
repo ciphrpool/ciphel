@@ -23,18 +23,18 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::take_while_m_n,
+    bytes::complete::{is_not, take_while_m_n},
     character::complete::digit1,
     combinator::{map, opt, peek, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
+    Parser,
 };
 use nom_supreme::error::ErrorTree;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, MultiData,
-    NumAccess, Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID,
-    Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
+    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -57,125 +57,81 @@ impl TryParse for Data {
     }
 }
 
-impl VarID {
-    fn parse(input: Span) -> PResult<Variable> {
-        map(parse_id, |id| {
-            Variable::Var(VarID {
-                id,
-                metadata: Metadata::default(),
-            })
-        })(input)
-    }
-}
-
-impl NumAccess {
-    fn parse(input: Span) -> PResult<Variable> {
-        let (remainder, var) = VarID::parse(input)?;
-        let (_, peeked_result) = opt(peek(preceded(
-            wst(lexem::DOT),
-            take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
-        )))(remainder)?;
-
-        if let Some(_) = peeked_result {
-            let (remainder, (_, num)) = tuple((wst(lexem::DOT), digit1))(remainder)?;
-
-            match num.parse::<usize>() {
-                Ok(index) => {
-                    return Ok((
-                        remainder,
-                        Variable::NumAccess(NumAccess {
-                            var: Box::new(var),
-                            index,
-                            metadata: Metadata::default(),
-                        }),
-                    ));
-                }
-                Err(_) => {
-                    return Err(nom::Err::Error(ErrorTree::Base {
-                        location: remainder,
-                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
-                    }));
-                }
-            }
-        } else {
-            Ok((remainder, var))
-        }
-    }
-}
-
-impl ListAccess {
-    fn parse(input: Span) -> PResult<Variable> {
-        let (remainder, var) = NumAccess::parse(input)?;
-        let (remainder, index) = opt(delimited(
-            wst(lexem::SQ_BRA_O),
-            Expression::parse,
-            wst(lexem::SQ_BRA_C),
-        ))(remainder)?;
-
-        if let Some(index) = index {
-            Ok((
-                remainder,
-                Variable::ListAccess(ListAccess {
-                    var: Box::new(var),
-                    index: Box::new(index),
-                    metadata: Metadata::default(),
-                }),
-            ))
-        } else {
-            Ok((remainder, var))
-        }
-    }
-}
-
-impl FieldAccess {
-    fn parse(input: Span) -> PResult<Variable> {
-        let (remainder, var) = ListAccess::parse(input)?;
-        let (remainder, index) = opt(wst(lexem::DOT))(remainder)?;
-
-        if let Some(_index) = index {
-            let (remainder, num) = opt(digit1)(remainder)?;
-            if let Some(try_num) = num {
-                let index = try_num.parse::<usize>();
-                if index.is_err() {
-                    return Err(nom::Err::Error(ErrorTree::Base {
-                        location: try_num,
-                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
-                    }));
-                }
-                let index = index.unwrap();
-                return Ok((
-                    remainder,
-                    Variable::NumAccess(NumAccess {
-                        var: Box::new(var),
-                        index,
-                        metadata: Metadata::default(),
-                    }),
-                ));
-            }
-            let (remainder, right) = FieldAccess::parse(remainder)?;
-            Ok((
-                remainder,
-                Variable::FieldAccess(FieldAccess {
-                    var: Box::new(var),
-                    field: Box::new(right),
-                    metadata: Metadata::default(),
-                }),
-            ))
-        } else {
-            Ok((remainder, var))
-        }
-    }
-}
-
 impl TryParse for Variable {
     /*
      * @desc Parse variable
      *
      * @grammar
-     * Variable := ID | Variable . Variable | Variable [ num ]
+     * Variable := ID
      */
     fn parse(input: Span) -> PResult<Self> {
-        FieldAccess::parse(input)
+        let (remainder, id) = parse_id(input)?;
+        let is_in_lexem = match id.as_str() {
+            lexem::ENUM => true,
+            lexem::STRUCT => true,
+            lexem::UNION => true,
+            lexem::AS => true,
+            lexem::ELSE => true,
+            lexem::TRY => true,
+            lexem::IF => true,
+            lexem::THEN => true,
+            lexem::MATCH => true,
+            lexem::CASE => true,
+            lexem::RETURN => true,
+            lexem::LET => true,
+            lexem::EVENT => true,
+            lexem::WHILE => true,
+            lexem::FOR => true,
+            lexem::LOOP => true,
+            lexem::BREAK => true,
+            lexem::CONTINUE => true,
+            lexem::YIELD => true,
+            lexem::MOVE => true,
+            lexem::REC => true,
+            lexem::DYN => true,
+            lexem::U8 => true,
+            lexem::U16 => true,
+            lexem::U32 => true,
+            lexem::U64 => true,
+            lexem::U128 => true,
+            lexem::I8 => true,
+            lexem::I16 => true,
+            lexem::I32 => true,
+            lexem::I64 => true,
+            lexem::I128 => true,
+            lexem::FLOAT => true,
+            lexem::CHAR => true,
+            lexem::STRING => true,
+            lexem::STR => true,
+            lexem::BOOL => true,
+            lexem::UNIT => true,
+            lexem::ANY => true,
+            lexem::UUNIT => true,
+            lexem::UVEC => true,
+            lexem::UMAP => true,
+            lexem::UCHAN => true,
+            lexem::RANGE_I => true,
+            lexem::RANGE_E => true,
+            lexem::GENERATOR => true,
+            lexem::FN => true,
+            lexem::TRUE => true,
+            lexem::FALSE => true,
+            _ => false,
+        };
+        if is_in_lexem {
+            return Err(nom::Err::Error(ErrorTree::Base {
+                location: remainder,
+                kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+            }));
+        }
+        Ok((
+            remainder,
+            Variable {
+                id,
+                from_field: Cell::new(false),
+                metadata: Metadata::default(),
+            },
+        ))
     }
 }
 
@@ -540,7 +496,11 @@ mod tests {
 
     use crate::{
         ast::{
-            expressions::{data::Number, operation::Range, Atomic},
+            expressions::{
+                data::Number,
+                operation::{FieldAccess, ListAccess, Range},
+                Atomic,
+            },
             statements::block::Block,
         },
         semantic::scope::ClosureState,
@@ -669,10 +629,11 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable::Var(VarID {
+                            Variable {
                                 id: "x".into(),
+                                from_field: Cell::new(false),
                                 metadata: Metadata::default()
-                            })
+                            }
                         )))),
                         metadata: Metadata::default()
                     })],
@@ -705,10 +666,11 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable::Var(VarID {
+                            Variable {
                                 id: "x".into(),
+                                from_field: Cell::new(false),
                                 metadata: Metadata::default()
-                            })
+                            }
                         )))),
                         metadata: Metadata::default()
                     })],
@@ -744,10 +706,11 @@ mod tests {
                     metadata: Metadata::default(),
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable::Var(VarID {
+                            Variable {
                                 id: "x".into(),
+                                from_field: Cell::new(false),
                                 metadata: Metadata::default()
-                            })
+                            }
                         )))),
                         metadata: Metadata::default()
                     })],
@@ -788,10 +751,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Address {
-                value: Atomic::Data(Data::Variable(Variable::Var(VarID {
+                value: Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
+                    from_field: Cell::new(false),
                     metadata: Metadata::default()
-                })))
+                }))
                 .into(),
                 metadata: Metadata::default()
             },
@@ -806,10 +770,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             PtrAccess {
-                value: Atomic::Data(Data::Variable(Variable::Var(VarID {
+                value: Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
+                    from_field: Cell::new(false),
                     metadata: Metadata::default()
-                })))
+                }))
                 .into(),
                 metadata: Metadata::default()
             },
@@ -926,26 +891,28 @@ mod tests {
 
     #[test]
     fn valid_variable() {
-        let res = Variable::parse("x".into());
+        let res = Expression::parse("x".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::Var(VarID {
+            Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                 id: "x".into(),
-                metadata: Metadata::default()
-            }),
+                metadata: Metadata::default(),
+                from_field: false.into()
+            }))),
             value
         );
 
-        let res = Variable::parse("x[3]".into());
+        let res = Expression::parse("x[3]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::ListAccess(ListAccess {
-                var: Box::new(Variable::Var(VarID {
+            Expression::ListAccess(ListAccess {
+                var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
-                    metadata: Metadata::default()
-                })),
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                     Unresolved, 3
                 ))))),
@@ -954,61 +921,68 @@ mod tests {
             value
         );
 
-        let res = Variable::parse("x.y".into());
+        let res = Expression::parse("x.y".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID {
+            Expression::FieldAccess(FieldAccess {
+                var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
-                    metadata: Metadata::default()
-                })),
-                field: Box::new(Variable::Var(VarID {
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
+                field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "y".into(),
-                    metadata: Metadata::default()
-                })),
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
                 metadata: Metadata::default()
             }),
             value
         );
-        let res = Variable::parse("x.y.z".into());
+        let res = Expression::parse("x.y.z".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID {
+            Expression::FieldAccess(FieldAccess {
+                var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
-                    metadata: Metadata::default()
-                })),
-                field: Box::new(Variable::FieldAccess(FieldAccess {
-                    var: Box::new(Variable::Var(VarID {
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
+                field: Box::new(Expression::FieldAccess(FieldAccess {
+                    var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "y".into(),
-                        metadata: Metadata::default()
-                    })),
-                    field: Box::new(Variable::Var(VarID {
+                        metadata: Metadata::default(),
+                        from_field: false.into()
+                    })))),
+                    field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "z".into(),
-                        metadata: Metadata::default()
-                    })),
+                        metadata: Metadata::default(),
+                        from_field: false.into()
+                    })))),
                     metadata: Metadata::default()
                 })),
                 metadata: Metadata::default()
             }),
             value
         );
-        let res = Variable::parse("x.y[3]".into());
+        let res = Expression::parse("x.y[3]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::Var(VarID {
+            Expression::FieldAccess(FieldAccess {
+                var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
-                    metadata: Metadata::default()
-                })),
-                field: Box::new(Variable::ListAccess(ListAccess {
-                    var: Box::new(Variable::Var(VarID {
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
+                field: Box::new(Expression::ListAccess(ListAccess {
+                    var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "y".into(),
-                        metadata: Metadata::default()
-                    })),
+                        metadata: Metadata::default(),
+                        from_field: false.into()
+                    })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
                     ))))),
@@ -1018,25 +992,27 @@ mod tests {
             }),
             value
         );
-        let res = Variable::parse("x[3].y".into());
+        let res = Expression::parse("x[3].y".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
-            Variable::FieldAccess(FieldAccess {
-                var: Box::new(Variable::ListAccess(ListAccess {
-                    var: Box::new(Variable::Var(VarID {
+            Expression::FieldAccess(FieldAccess {
+                var: Box::new(Expression::ListAccess(ListAccess {
+                    var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".into(),
-                        metadata: Metadata::default()
-                    })),
+                        metadata: Metadata::default(),
+                        from_field: false.into()
+                    })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
                     ))))),
                     metadata: Metadata::default()
                 })),
-                field: Box::new(Variable::Var(VarID {
+                field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "y".into(),
-                    metadata: Metadata::default()
-                })),
+                    metadata: Metadata::default(),
+                    from_field: false.into()
+                })))),
                 metadata: Metadata::default()
             }),
             value

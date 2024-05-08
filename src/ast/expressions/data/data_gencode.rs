@@ -9,6 +9,7 @@ use crate::vm::allocator::stack::Offset;
 use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
 use crate::vm::platform::core::CoreCasm;
 use crate::vm::platform::LibCasm;
+use crate::vm::vm::Locatable;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
@@ -35,8 +36,8 @@ use crate::{
 };
 
 use super::{
-    Address, Closure, Data, Enum, ExprScope, FieldAccess, ListAccess, Map, NumAccess, Number,
-    Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarID, Variable, Vector,
+    Address, Closure, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
+    Struct, Tuple, Union, Variable, Vector,
 };
 
 impl GenerateCode for Data {
@@ -60,6 +61,82 @@ impl GenerateCode for Data {
             Data::Union(value) => value.gencode(scope, instructions),
             Data::Enum(value) => value.gencode(scope, instructions),
             Data::StrSlice(value) => value.gencode(scope, instructions),
+        }
+    }
+}
+
+impl Locatable for Data {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        match self {
+            Data::Variable(Variable {
+                id,
+                from_field,
+                metadata,
+            }) => {
+                if from_field.get() {
+                    Ok(())
+                } else {
+                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+
+                    let var_type = &var.as_ref().type_sig;
+                    let _var_size = var_type.size_of();
+
+                    instructions.push(Casm::Locate(Locate {
+                        address: MemoryAddress::Stack {
+                            offset: address,
+                            level,
+                        },
+                    }));
+                    Ok(())
+                }
+            }
+            Data::PtrAccess(PtrAccess { value, .. }) => {
+                let _ = value.gencode(scope, instructions)?;
+                Ok(())
+            }
+            _ => {
+                let _ = self.gencode(scope, instructions)?;
+                let Some(value_type) = self.signature() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Locate(Locate {
+                    address: MemoryAddress::Stack {
+                        offset: Offset::ST(-(value_type.size_of() as isize)),
+                        level: AccessLevel::Direct,
+                    },
+                }));
+                Ok(())
+            }
+        }
+    }
+
+    fn is_assignable(&self) -> bool {
+        match self {
+            Data::Variable(_) => true,
+            Data::PtrAccess(_) => true,
+            Data::Primitive(_) => false,
+            Data::Slice(_) => false,
+            Data::StrSlice(_) => false,
+            Data::Vec(_) => false,
+            Data::Closure(_) => false,
+            Data::Tuple(_) => false,
+            Data::Address(_) => false,
+            Data::Unit => false,
+            Data::Map(_) => false,
+            Data::Struct(_) => false,
+            Data::Union(_) => false,
+            Data::Enum(_) => false,
+        }
+    }
+
+    fn most_left_id(&self) -> Option<ID> {
+        match self {
+            Data::Variable(Variable { id, metadata, .. }) => Some(id.clone()),
+            _ => None,
         }
     }
 }
@@ -176,657 +253,35 @@ impl GenerateCode for Variable {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        match self {
-            Variable::Var(VarID { id, metadata: _ }) => {
-                let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
-                // dbg!((&var, &address, &level));
-                let var_type = &var.as_ref().type_sig;
-                let var_size = var_type.size_of();
-                if var_size == 0 {
-                    return Ok(());
-                }
-                instructions.push(Casm::Access(Access::Static {
-                    address: MemoryAddress::Stack {
-                        offset: address,
-                        level,
-                    },
-                    size: var_size,
-                }));
-
-                Ok(())
+        if self.from_field.get() {
+            let Some(var_type) = self.metadata.signature() else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            let var_size = var_type.size_of();
+            if var_size == 0 {
+                return Ok(());
             }
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata: _,
-            }) => {
-                // Locate the variable
-                let _ = var.locate(scope, instructions)?;
-                // Access the field
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_field_offset(field.name()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                field.access_from(from_type, scope, instructions)
+            instructions.push(Casm::Access(Access::Runtime {
+                size: Some(var_size),
+            }));
+            Ok(())
+        } else {
+            let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
+            // dbg!((&var, &address, &level));
+            let var_type = &var.as_ref().type_sig;
+            let var_size = var_type.size_of();
+            if var_size == 0 {
+                return Ok(());
             }
-            Variable::NumAccess(NumAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                // Locate the variable
-                let _ = var.locate(scope, instructions)?;
+            instructions.push(Casm::Access(Access::Static {
+                address: MemoryAddress::Stack {
+                    offset: address,
+                    level,
+                },
+                size: var_size,
+            }));
 
-                // Access the field
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_inline_field_offset(*index) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    if size == 0 {
-                        return Ok(());
-                    }
-                    instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-                }
-                Ok(())
-            }
-            Variable::ListAccess(ListAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                // Locate the variable
-                let _ = var.locate(scope, instructions)?;
-
-                if let Some(signature) = var.signature() {
-                    match signature {
-                        Either::Static(signature) => match signature.as_ref() {
-                            StaticType::String(_) | StaticType::Vec(_) => {
-                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Data(data::Data::Serialized {
-                                    data: (16u64).to_le_bytes().into(),
-                                }));
-                                instructions.push(Casm::Operation(Operation {
-                                    kind: OperationKind::Addition(Addition {
-                                        left: OpPrimitive::Number(NumberType::U64),
-                                        right: OpPrimitive::Number(NumberType::U64),
-                                    }),
-                                }));
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-
-                // Access the field
-                let _ = index.gencode(scope, instructions)?;
-
-                match var
-                    .signature()
-                    .ok_or(CodeGenerationError::UnresolvedError)?
-                {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::String(_) => {
-                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
-                            return Ok(());
-                        }
-                        StaticType::StrSlice(_) => {
-                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
-                            return Ok(());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Data(data::Data::Serialized {
-                    data: (size as u64).to_le_bytes().into(),
-                }));
-                instructions.push(Casm::Operation(Operation {
-                    kind: OperationKind::Mult(Mult {
-                        left: OpPrimitive::Number(NumberType::U64),
-                        right: OpPrimitive::Number(NumberType::U64),
-                    }),
-                }));
-                instructions.push(Casm::Operation(Operation {
-                    kind: OperationKind::Addition(Addition {
-                        left: OpPrimitive::Number(NumberType::U64),
-                        right: OpPrimitive::Number(NumberType::U64),
-                    }),
-                }));
-                if size == 0 {
-                    return Ok(());
-                }
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-
-                Ok(())
-            }
-        }
-    }
-}
-
-impl Variable {
-    pub fn signature(&self) -> Option<EType> {
-        match self {
-            Variable::Var(VarID { id: _, metadata }) => metadata.signature(),
-            Variable::FieldAccess(FieldAccess {
-                var: _,
-                field: _,
-                metadata,
-            }) => metadata.signature(),
-            Variable::NumAccess(NumAccess {
-                var: _,
-                index: _,
-                metadata,
-            }) => metadata.signature(),
-            Variable::ListAccess(ListAccess {
-                var: _,
-                index: _,
-                metadata,
-            }) => metadata.signature(),
-        }
-    }
-    pub fn metadata(&self) -> Option<&Metadata> {
-        match self {
-            Variable::Var(VarID { id: _, metadata }) => Some(metadata),
-            Variable::FieldAccess(FieldAccess {
-                var: _,
-                field: _,
-                metadata,
-            }) => Some(metadata),
-            Variable::NumAccess(NumAccess {
-                var: _,
-                index: _,
-                metadata,
-            }) => Some(metadata),
-            Variable::ListAccess(ListAccess {
-                var: _,
-                index: _,
-                metadata,
-            }) => Some(metadata),
-        }
-    }
-    pub fn is_utf8(&self) -> bool {
-        match self {
-            Variable::Var(VarID { .. }) => false,
-            Variable::FieldAccess(FieldAccess { .. }) => false,
-            Variable::NumAccess(NumAccess { .. }) => false,
-            Variable::ListAccess(ListAccess { var, .. }) => {
-                let Some(var_type) = var.signature() else {
-                    return false;
-                };
-                match var_type {
-                    crate::semantic::Either::Static(value) => match value.as_ref() {
-                        crate::semantic::scope::static_types::StaticType::String(_) => true,
-                        crate::semantic::scope::static_types::StaticType::StrSlice(_) => true,
-                        _ => false,
-                    },
-                    crate::semantic::Either::User(_) => false,
-                }
-            }
-        }
-    }
-    fn name(&self) -> &ID {
-        match self {
-            Variable::Var(VarID { id, metadata: _ }) => id,
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field: _,
-                metadata: _,
-            }) => var.name(),
-            Variable::NumAccess(NumAccess {
-                var,
-                index: _,
-                metadata: _,
-            }) => var.name(),
-            Variable::ListAccess(ListAccess {
-                var,
-                index: _,
-                metadata: _,
-            }) => var.name(),
-        }
-    }
-
-    fn access_from(
-        &self,
-        from_type: EType,
-
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Variable::Var(VarID { id: _, metadata }) => {
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                if size == 0 {
-                    return Ok(());
-                }
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-                Ok(())
-            }
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata: _,
-            }) => {
-                // Access the field
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_field_offset(field.name()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                field.access_from(from_type, scope, instructions)
-            }
-            Variable::NumAccess(NumAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let _ = var.locate_from(from_type, scope, instructions)?;
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_inline_field_offset(*index) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    if size == 0 {
-                        return Ok(());
-                    }
-                    instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-                }
-                Ok(())
-            }
-            Variable::ListAccess(ListAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let _ = var.locate_from(from_type, scope, instructions)?;
-                if let Some(signature) = var.signature() {
-                    match signature {
-                        Either::Static(signature) => match signature.as_ref() {
-                            StaticType::String(_) | StaticType::Vec(_) => {
-                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Data(data::Data::Serialized {
-                                    data: (16u64).to_le_bytes().into(),
-                                }));
-                                instructions.push(Casm::Operation(Operation {
-                                    kind: OperationKind::Addition(Addition {
-                                        left: OpPrimitive::Number(NumberType::U64),
-                                        right: OpPrimitive::Number(NumberType::U64),
-                                    }),
-                                }));
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-                let _ = index.gencode(scope, instructions)?;
-
-                match var
-                    .signature()
-                    .ok_or(CodeGenerationError::UnresolvedError)?
-                {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::String(_) | StaticType::StrSlice(_) => {
-                            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
-                            return Ok(());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-
-                let Some(size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-
-                instructions.push(Casm::Data(data::Data::Serialized {
-                    data: (size as u64).to_le_bytes().into(),
-                }));
-                instructions.push(Casm::Operation(Operation {
-                    kind: OperationKind::Mult(Mult {
-                        left: OpPrimitive::Number(NumberType::U64),
-                        right: OpPrimitive::Number(NumberType::U64),
-                    }),
-                    // result: OpPrimitive::Number(NumberType::U64),
-                }));
-                instructions.push(Casm::Operation(Operation {
-                    kind: OperationKind::Addition(Addition {
-                        left: OpPrimitive::Number(NumberType::U64),
-                        right: OpPrimitive::Number(NumberType::U64),
-                    }),
-                    // result: OpPrimitive::Number(NumberType::U64),
-                }));
-                if size == 0 {
-                    return Ok(());
-                }
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-
-                Ok(())
-            }
-        }
-    }
-
-    pub fn locate(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Variable::Var(VarID { id, metadata: _ }) => {
-                let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
-
-                let var_type = &var.as_ref().type_sig;
-                let _var_size = var_type.size_of();
-
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: address,
-                        level,
-                    },
-                }));
-
-                Ok(())
-            }
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata: _,
-            }) => {
-                let _ = var.locate(scope, instructions)?;
-                // Locate the field
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_field_offset(field.name()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                field.locate_from(from_type, scope, instructions)
-            }
-            Variable::NumAccess(NumAccess {
-                var,
-                index,
-                metadata: _,
-            }) => {
-                let _ = var.locate(scope, instructions)?;
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_inline_field_offset(*index) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                Ok(())
-            }
-            Variable::ListAccess(ListAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let _ = var.locate(scope, instructions)?;
-                if let Some(signature) = var.signature() {
-                    match signature {
-                        Either::Static(signature) => match signature.as_ref() {
-                            StaticType::String(_) | StaticType::Vec(_) => {
-                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Data(data::Data::Serialized {
-                                    data: (16u64).to_le_bytes().into(),
-                                }));
-                                instructions.push(Casm::Operation(Operation {
-                                    kind: OperationKind::Addition(Addition {
-                                        left: OpPrimitive::Number(NumberType::U64),
-                                        right: OpPrimitive::Number(NumberType::U64),
-                                    }),
-                                }));
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-                let _ = index.gencode(scope, instructions)?;
-
-                match var
-                    .signature()
-                    .ok_or(CodeGenerationError::UnresolvedError)?
-                {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::String(_) | StaticType::StrSlice(_) => {
-                            instructions
-                                .push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeAtIdx));
-                            return Ok(());
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
-
-                let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (item_size as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Mult(Mult {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                Ok(())
-            }
-        }
-    }
-
-    fn locate_from(
-        &self,
-        from_type: EType,
-
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Variable::Var(VarID { id: _, metadata: _ }) => Ok(()),
-            Variable::FieldAccess(FieldAccess {
-                var,
-                field,
-                metadata: _,
-            }) => {
-                // Access the field
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_field_offset(field.name()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                field.locate_from(from_type, scope, instructions)
-            }
-            Variable::NumAccess(NumAccess {
-                var,
-                index,
-                metadata: _,
-            }) => {
-                let _ = var.locate_from(from_type, scope, instructions)?;
-                let Some(from_type) = var.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let Some(offset) = from_type.get_inline_field_offset(*index) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (offset as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                Ok(())
-            }
-            Variable::ListAccess(ListAccess {
-                var,
-                index,
-                metadata,
-            }) => {
-                let _ = var.locate_from(from_type, scope, instructions)?;
-                if let Some(signature) = var.signature() {
-                    match signature {
-                        Either::Static(signature) => match signature.as_ref() {
-                            StaticType::String(_) | StaticType::Vec(_) => {
-                                instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                                instructions.push(Casm::Data(data::Data::Serialized {
-                                    data: (16u64).to_le_bytes().into(),
-                                }));
-                                instructions.push(Casm::Operation(Operation {
-                                    kind: OperationKind::Addition(Addition {
-                                        left: OpPrimitive::Number(NumberType::U64),
-                                        right: OpPrimitive::Number(NumberType::U64),
-                                    }),
-                                }));
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-
-                let _ = index.gencode(scope, instructions)?;
-                let Some(item_size) = metadata.signature().map(|sig| sig.size_of()) else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                {
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: (item_size as u64).to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Mult(Mult {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                    instructions.push(Casm::Operation(Operation {
-                        kind: OperationKind::Addition(Addition {
-                            left: OpPrimitive::Number(NumberType::U64),
-                            right: OpPrimitive::Number(NumberType::U64),
-                        }),
-                        // result: OpPrimitive::Number(NumberType::U64),
-                    }));
-                }
-                Ok(())
-            }
+            Ok(())
         }
     }
 }
@@ -1029,51 +484,6 @@ impl GenerateCode for Closure {
         Ok(())
     }
 }
-fn rec_addr_gencode(
-    atomic: &Atomic,
-    scope: &MutRc<Scope>,
-    instructions: &CasmProgram,
-) -> Result<(), CodeGenerationError> {
-    match atomic {
-        Atomic::Data(value) => match value {
-            Data::Variable(var) => {
-                let _ = var.locate(scope, instructions)?;
-            }
-
-            _ => {
-                let _ = atomic.gencode(scope, instructions)?;
-                let Some(value_type) = atomic.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-(value_type.size_of() as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                }));
-            }
-        },
-        Atomic::UnaryOperation(_) => unreachable!(),
-        Atomic::Paren(expr) => match expr.as_ref() {
-            Expression::Atomic(a) => return rec_addr_gencode(a, scope, instructions),
-            _ => {
-                let _ = expr.gencode(scope, instructions)?;
-                let Some(value_type) = expr.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-(value_type.size_of() as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                }));
-            }
-        },
-        Atomic::ExprFlow(_) => unreachable!(),
-        Atomic::Error(_) => todo!(),
-    }
-    Ok(())
-}
 
 impl GenerateCode for Address {
     fn gencode(
@@ -1081,7 +491,8 @@ impl GenerateCode for Address {
         scope: &MutRc<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let _ = rec_addr_gencode(&self.value, scope, instructions)?;
+        // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
+        let _ = self.value.locate(scope, instructions)?;
         Ok(())
     }
 }
@@ -2108,6 +1519,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
+        dbg!(&statement);
 
         let data = compile_statement!(statement);
 

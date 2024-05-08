@@ -1,6 +1,7 @@
-use super::{AssignValue, Assignation, Assignee};
+use super::{AssignValue, Assignation};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{CompatibleWith, EType, MutRc, Resolve, SemanticError, TypeOf};
+use crate::vm::vm::Locatable;
 
 impl Resolve for Assignation {
     type Output = ();
@@ -15,10 +16,14 @@ impl Resolve for Assignation {
     where
         Self: Sized,
     {
-        let _ = self.left.resolve(scope, &(), &())?;
-        let left_type = Some(self.left.type_of(&scope.borrow())?);
-        let _ = self.right.resolve(scope, &left_type, &())?;
-        Ok(())
+        let _ = self.left.resolve(scope, &None, &None)?;
+        if self.left.is_assignable() {
+            let left_type = Some(self.left.type_of(&scope.borrow())?);
+            let _ = self.right.resolve(scope, &left_type, &())?;
+            Ok(())
+        } else {
+            Err(SemanticError::ExpectedLeftExpression)
+        }
     }
 }
 impl Resolve for AssignValue {
@@ -48,7 +53,7 @@ impl Resolve for AssignValue {
                 Ok(())
             }
             AssignValue::Expr(value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve(scope, context, &None)?;
                 let scope_type = value.type_of(&scope.borrow())?;
                 match context {
                     Some(context) => {
@@ -58,26 +63,6 @@ impl Resolve for AssignValue {
                 }
                 Ok(())
             }
-        }
-    }
-}
-
-impl Resolve for Assignee {
-    type Output = ();
-    type Context = ();
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        _context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            Assignee::Variable(value) => value.resolve(scope, &None, extra),
-            Assignee::PtrAccess(value) => value.resolve(scope, &None, extra),
         }
     }
 }

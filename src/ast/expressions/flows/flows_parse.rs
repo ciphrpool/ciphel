@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use nom::{
     branch::alt,
@@ -10,7 +10,8 @@ use nom::{
 use crate::{
     ast::{
         expressions::{
-            data::{ExprScope, Primitive, StrSlice, VarID, Variable},
+            data::{Data, ExprScope, Primitive, StrSlice, Variable},
+            operation::{FieldAccess, FnCall},
             Atomic, Expression,
         },
         types::Type,
@@ -29,9 +30,7 @@ use crate::{
     vm::{self, platform},
 };
 
-use super::{
-    ExprFlow, FCall, FnCall, FormatItem, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr,
-};
+use super::{ExprFlow, FCall, FormatItem, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 
 impl TryParse for ExprFlow {
     /*
@@ -53,7 +52,6 @@ impl TryParse for ExprFlow {
                 |value| ExprFlow::SizeOf(value, Metadata::default()),
             ),
             map(FCall::parse, |value| ExprFlow::FCall(value)),
-            map(FnCall::parse, |value| ExprFlow::Call(value)),
         ))(input)
     }
 }
@@ -229,35 +227,6 @@ impl TryParse for TryExpr {
     }
 }
 
-impl TryParse for FnCall {
-    /*
-     * @desc Parse fn call
-     *
-     * @grammar
-     * FnCall := ID\( Fn_Args \)
-     * Fn_Args := Expr , Fn_Args
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            pair(
-                pair(opt(terminated(parse_id, wst(lexem::SEP))), Variable::parse),
-                delimited(
-                    wst(lexem::PAR_O),
-                    separated_list0(wst(lexem::COMA), Expression::parse),
-                    wst(lexem::PAR_C),
-                ),
-            ),
-            |((lib, fn_var), params)| FnCall {
-                lib,
-                fn_var,
-                params,
-                metadata: Metadata::default(),
-                platform: Rc::default(),
-            },
-        )(input)
-    }
-}
-
 impl TryParse for FCall {
     /*
      * @desc Parse fn call
@@ -275,18 +244,19 @@ impl TryParse for FCall {
                             FormatItem::Str(string)
                         }
                         crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
-                            FormatItem::Expr(Expression::Atomic(Atomic::ExprFlow(ExprFlow::Call(
-                                FnCall {
-                                    lib: Some(platform::utils::lexem::STD.into()),
-                                    fn_var: Variable::Var(VarID {
+                            FormatItem::Expr(Expression::FnCall(FnCall {
+                                lib: Some(platform::utils::lexem::STD.into()),
+                                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+                                    Variable {
                                         id: platform::utils::lexem::TOSTR.into(),
                                         metadata: Metadata::default(),
-                                    }),
-                                    params: vec![expr],
-                                    metadata: Metadata::default(),
-                                    platform: Rc::default(),
-                                },
-                            ))))
+                                        from_field: Cell::new(false),
+                                    },
+                                )))),
+                                params: vec![expr],
+                                metadata: Metadata::default(),
+                                platform: Rc::default(),
+                            }))
                         }
                     })
                     .collect(),
@@ -303,7 +273,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, StrSlice, VarID, Variable},
+                data::{Data, Number, Primitive, StrSlice, Variable},
                 flows::PatternExpr,
                 Atomic, Expression,
             },
@@ -382,12 +352,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             MatchExpr {
-                expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                    Variable::Var(VarID {
-                        id: "x".into(),
-                        metadata: Metadata::default()
-                    })
-                )))),
+                expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
+                    id: "x".into(),
+                    metadata: Metadata::default(),
+                    from_field: Cell::new(false),
+                })))),
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
@@ -576,62 +545,6 @@ mod tests {
                     inner_scope: RefCell::new(None),
                 }),
                 metadata: Metadata::default(),
-            },
-            value
-        );
-    }
-
-    #[test]
-    fn valid_fn_call() {
-        let res = FnCall::parse("f(x,10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            FnCall {
-                lib: None,
-                fn_var: Variable::Var(VarID {
-                    id: "f".into(),
-                    metadata: Metadata::default()
-                }),
-                params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
-                        id: "x".into(),
-                        metadata: Metadata::default()
-                    })))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::Unresolved(10).into()
-                    ))))
-                ],
-                metadata: Metadata::default(),
-                platform: Rc::default(),
-            },
-            value
-        );
-    }
-
-    #[test]
-    fn valid_lib_call() {
-        let res = FnCall::parse("core::f(x,10)".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            FnCall {
-                lib: Some("core".into()),
-                fn_var: Variable::Var(VarID {
-                    id: "f".into(),
-                    metadata: Metadata::default()
-                }),
-                params: vec![
-                    Expression::Atomic(Atomic::Data(Data::Variable(Variable::Var(VarID {
-                        id: "x".into(),
-                        metadata: Metadata::default()
-                    })))),
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
-                        Number::Unresolved(10).into()
-                    ))))
-                ],
-                metadata: Metadata::default(),
-                platform: Rc::default(),
             },
             value
         );

@@ -104,7 +104,7 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve(scope, &context, extra)?;
+                let _ = expr.resolve(scope, &context, &None)?;
                 match context {
                     Some(c) => {
                         let return_type = expr.type_of(&scope.borrow())?;

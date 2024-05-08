@@ -372,7 +372,7 @@ impl Resolve for AllocFn {
                 let vector = &extra[0];
                 let item = &extra[1];
 
-                let _ = vector.resolve(scope, &None, &())?;
+                let _ = vector.resolve(scope, &None, &None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -387,7 +387,7 @@ impl Resolve for AllocFn {
                         StaticType::Vec(_) => {
                             let item_type = vector_type.get_item();
                             append_kind.set(AppendKind::Vec);
-                            let _ = item.resolve(scope, &item_type, &())?;
+                            let _ = item.resolve(scope, &item_type, &None)?;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
@@ -395,7 +395,7 @@ impl Resolve for AllocFn {
                             Ok(())
                         }
                         StaticType::String(_) => {
-                            let _ = item.resolve(scope, &None, &())?;
+                            let _ = item.resolve(scope, &None, &None)?;
                             let item_type = item.type_of(&scope.borrow())?;
                             match &item_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -431,7 +431,7 @@ impl Resolve for AllocFn {
                 let vector = &extra[0];
                 let items = &extra[1];
 
-                let _ = vector.resolve(scope, &None, &())?;
+                let _ = vector.resolve(scope, &None, &None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -443,7 +443,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = items.resolve(scope, &None, &())?;
+                            let _ = items.resolve(scope, &None, &None)?;
                             let items_type = items.type_of(&scope.borrow())?;
 
                             match items_type {
@@ -468,7 +468,7 @@ impl Resolve for AllocFn {
                             }
                         }
                         StaticType::String(_) => {
-                            let _ = items.resolve(scope, &None, &())?;
+                            let _ = items.resolve(scope, &None, &None)?;
                             let items_type = items.type_of(&scope.borrow())?;
 
                             match items_type {
@@ -513,7 +513,7 @@ impl Resolve for AllocFn {
                 let key = &extra[1];
                 let item = &extra[2];
 
-                let _ = map.resolve(scope, &None, &())?;
+                let _ = map.resolve(scope, &None, &None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -529,9 +529,9 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
                             let _ =
-                                item.resolve(scope, &Some(values_type.as_ref().clone()), &())?;
+                                item.resolve(scope, &Some(values_type.as_ref().clone()), &None)?;
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
@@ -565,7 +565,7 @@ impl Resolve for AllocFn {
                 let map = &extra[0];
                 let key = &extra[1];
 
-                let _ = map.resolve(scope, &None, &())?;
+                let _ = map.resolve(scope, &None, &None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -581,7 +581,7 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
                             value_size.set(values_type.size_of());
                             key_size.set(keys_type.size_of());
 
@@ -624,7 +624,7 @@ impl Resolve for AllocFn {
                 let vector = &extra[0];
                 let index = &extra[1];
 
-                let _ = vector.resolve(scope, &None, &())?;
+                let _ = vector.resolve(scope, &None, &None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -637,7 +637,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = index.resolve(scope, &Some(p_num!(U64)), &())?;
+                            let _ = index.resolve(scope, &Some(p_num!(U64)), &None)?;
                             let index_type = index.type_of(&scope.borrow())?;
                             match &index_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -686,7 +686,8 @@ impl Resolve for AllocFn {
                                 }
                             }
 
-                            let _ = index.resolve(scope, &Some(keys_type.as_ref().clone()), &())?;
+                            let _ =
+                                index.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
                             value_size.set(values_type.size_of());
                             key_size.set(keys_type.size_of());
                             let mut borrowed_metadata = metadata
@@ -712,7 +713,7 @@ impl Resolve for AllocFn {
 
                 let address = &extra[0];
 
-                let _ = address.resolve(scope, &None, &())?;
+                let _ = address.resolve(scope, &None, &None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
@@ -737,7 +738,7 @@ impl Resolve for AllocFn {
                     with_capacity.set(false);
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &())?;
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -778,7 +779,7 @@ impl Resolve for AllocFn {
                     with_capacity.set(false);
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &())?;
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -816,7 +817,7 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &())?;
+                let _ = param.resolve(scope, &None, &None)?;
                 let param_type = param.type_of(&scope.borrow())?;
                 match param_type {
                     Either::Static(value) => match value.as_ref() {
@@ -844,7 +845,7 @@ impl Resolve for AllocFn {
 
                 let size = &extra[0];
 
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &())?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -861,7 +862,7 @@ impl Resolve for AllocFn {
                 }
                 let address = &extra[0];
 
-                let _ = address.resolve(scope, &None, &())?;
+                let _ = address.resolve(scope, &None, &None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
@@ -880,7 +881,7 @@ impl Resolve for AllocFn {
                 }
                 let address = &extra[0];
 
-                let _ = address.resolve(scope, &None, &())?;
+                let _ = address.resolve(scope, &None, &None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 for_map.set(false);
                 match &address_type {
@@ -902,7 +903,7 @@ impl Resolve for AllocFn {
                 }
                 let param = &extra[0];
 
-                let _ = param.resolve(scope, &None, &())?;
+                let _ = param.resolve(scope, &None, &None)?;
                 let param_type = param.type_of(&scope.borrow())?;
 
                 size.set(param_type.size_of());
@@ -918,8 +919,8 @@ impl Resolve for AllocFn {
                 let src = &extra[1];
                 let size = &extra[2];
 
-                let _ = dest.resolve(scope, &None, &())?;
-                let _ = src.resolve(scope, &None, &())?;
+                let _ = dest.resolve(scope, &None, &None)?;
+                let _ = src.resolve(scope, &None, &None)?;
                 let dest_type = dest.type_of(&scope.borrow())?;
                 let src_type = src.type_of(&scope.borrow())?;
                 match &dest_type {
@@ -942,7 +943,7 @@ impl Resolve for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &())?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -963,7 +964,7 @@ impl Resolve for AllocFn {
 
                 let src = &extra[0];
 
-                let _ = src.resolve(scope, &None, &())?;
+                let _ = src.resolve(scope, &None, &None)?;
                 let src_type = src.type_of(&scope.borrow())?;
 
                 match &src_type {

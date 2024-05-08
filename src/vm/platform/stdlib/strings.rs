@@ -111,7 +111,7 @@ impl Resolve for StringsFn {
 
                 let src = &extra[0];
 
-                let _ = src.resolve(scope, &None, &())?;
+                let _ = src.resolve(scope, &None, &None)?;
                 let src_type = src.type_of(&scope.borrow())?;
 
                 match &src_type {

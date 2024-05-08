@@ -1,7 +1,4 @@
-use crate::ast::expressions::{
-    flows::{FnCall, Pattern},
-    Expression,
-};
+use crate::ast::expressions::{flows::Pattern, Expression};
 
 use super::block::Block;
 
@@ -47,5 +44,5 @@ pub struct TryStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
-    pub call: FnCall,
+    pub call: Expression,
 }

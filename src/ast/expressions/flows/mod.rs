@@ -21,7 +21,6 @@ pub enum ExprFlow {
     If(IfExpr),
     Match(MatchExpr),
     Try(TryExpr),
-    Call(FnCall),
     FCall(FCall),
     SizeOf(Type, Metadata),
 }
@@ -76,15 +75,6 @@ pub struct TryExpr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnCall {
-    pub lib: Option<ID>,
-    pub fn_var: Variable,
-    pub params: Vec<Expression>,
-    pub metadata: Metadata,
-    pub platform: Rc<RefCell<Option<Lib>>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum FormatItem {
     Str(String),
     Expr(Expression),
@@ -102,7 +92,6 @@ impl ExprFlow {
             ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
             ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
-            ExprFlow::Call(FnCall { metadata, .. }) => Some(metadata),
             ExprFlow::SizeOf(_, metadata) => Some(metadata),
             ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
         }
@@ -112,7 +101,6 @@ impl ExprFlow {
             ExprFlow::If(IfExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Match(MatchExpr { metadata, .. }) => metadata.signature(),
             ExprFlow::Try(TryExpr { metadata, .. }) => metadata.signature(),
-            ExprFlow::Call(FnCall { metadata, .. }) => metadata.signature(),
             ExprFlow::FCall(FCall { metadata, .. }) => metadata.signature(),
             ExprFlow::SizeOf(_, metadata) => metadata.signature(),
         }

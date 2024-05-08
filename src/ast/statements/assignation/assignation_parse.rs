@@ -19,7 +19,7 @@ use crate::ast::{
     TryParse,
 };
 
-use super::{AssignValue, Assignation, Assignee};
+use super::{AssignValue, Assignation};
 
 impl TryParse for Assignation {
     /*
@@ -33,7 +33,7 @@ impl TryParse for Assignation {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            separated_pair(Assignee::parse, wst(lexem::EQUAL), AssignValue::parse),
+            separated_pair(Expression::parse, wst(lexem::EQUAL), AssignValue::parse),
             |(left, right)| Assignation { left, right },
         )(input)
     }
@@ -59,30 +59,14 @@ impl TryParse for AssignValue {
     }
 }
 
-impl TryParse for Assignee {
-    /*
-     * @desc Parse assigne
-     *
-     * @grammar
-     * Assigne := ID | Access | * Expr
-     * Access := ID . Access | ID
-     *
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PtrAccess::parse, |value| Assignee::PtrAccess(value)),
-            map(Variable::parse, |value| Assignee::Variable(value)),
-        ))(input)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
 
     use crate::{
         ast::expressions::{
-            data::{Data, FieldAccess, Number, Primitive, VarID, Variable},
+            data::{Data, Number, Primitive, Variable},
+            operation::FieldAccess,
             Atomic,
         },
         semantic::Metadata,
@@ -98,10 +82,11 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::Variable(Variable::Var(VarID {
+                left: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".into(),
-                    metadata: Metadata::default()
-                })),
+                    from_field: Cell::new(false),
+                    metadata: Metadata::default(),
+                }))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))
@@ -114,14 +99,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::PtrAccess(PtrAccess {
-                    value: Atomic::Data(Data::Variable(Variable::Var(VarID {
+                left: Expression::Atomic(Atomic::Data(Data::PtrAccess(PtrAccess {
+                    value: Atomic::Data(Data::Variable(Variable {
                         id: "x".into(),
-                        metadata: Metadata::default()
-                    })))
+                        from_field: Cell::new(false),
+                        metadata: Metadata::default(),
+                    }))
                     .into(),
                     metadata: Metadata::default()
-                }),
+                }))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))
@@ -134,17 +120,19 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Assignee::Variable(Variable::FieldAccess(FieldAccess {
-                    var: Box::new(Variable::Var(VarID {
+                left: Expression::FieldAccess(FieldAccess {
+                    var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".into(),
-                        metadata: Metadata::default()
-                    })),
-                    field: Box::new(Variable::Var(VarID {
+                        from_field: Cell::new(false),
+                        metadata: Metadata::default(),
+                    })))),
+                    field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "y".into(),
-                        metadata: Metadata::default()
-                    })),
+                        from_field: Cell::new(false),
+                        metadata: Metadata::default(),
+                    })))),
                     metadata: Metadata::default()
-                })),
+                }),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))
