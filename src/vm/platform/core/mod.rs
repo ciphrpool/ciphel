@@ -42,11 +42,11 @@ pub enum CoreCasm {
     Cursor(CursorCasm),
 }
 
-impl CasmMetadata for CoreCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CoreCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            CoreCasm::Alloc(value) => value.name(stdio, program),
-            CoreCasm::Thread(value) => value.name(stdio, program),
+            CoreCasm::Alloc(value) => value.name(stdio, program,engine),
+            CoreCasm::Thread(value) => value.name(stdio, program,engine),
             CoreCasm::Chan(value) => {}
             CoreCasm::Cursor(value) => {}
         }
@@ -119,17 +119,18 @@ impl GenerateCode for CoreFn {
     }
 }
 
-impl Executable for CoreCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CoreCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
-            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio),
-            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio),
+            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine),
+            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine),
             CoreCasm::Chan(_value) => todo!(),
             CoreCasm::Cursor(_value) => todo!(),
         }

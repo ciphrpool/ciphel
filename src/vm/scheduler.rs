@@ -1,11 +1,13 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
+    marker::PhantomData,
 };
 
 use num_traits::ToBytes;
 
 use crate::vm::{
+    casm::Casm,
     platform::{
         core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
         utils::lexem::SPAWN,
@@ -17,22 +19,24 @@ use super::{
     allocator::{heap::Heap, stack::Stack, Memory},
     casm::CasmProgram,
     stdio::StdIO,
-    vm::{CasmMetadata, Executable, Runtime, RuntimeError, Tid},
+    vm::{CasmMetadata, Executable, GameEngineStaticFn, Runtime, RuntimeError, Tid},
 };
 
 const INSTRUCTION_MAX_COUNT: usize = 20;
 
 #[derive(Debug, Clone)]
-pub struct Scheduler {
+pub struct Scheduler<G: GameEngineStaticFn + Clone> {
     join_waiting_list: RefCell<Vec<(Tid, Tid)>>,
     minor_frame_max_count: Cell<usize>,
+    _phantom: PhantomData<G>,
 }
 
-impl Scheduler {
+impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
     pub fn new() -> Self {
         Self {
             join_waiting_list: RefCell::default(),
             minor_frame_max_count: Cell::new(INSTRUCTION_MAX_COUNT),
+            _phantom: PhantomData::default(),
         }
     }
 
@@ -46,20 +50,12 @@ impl Scheduler {
 
     pub fn run_major_frame(
         &self,
-        runtime: &mut Runtime,
+        runtime: &mut Runtime<G>,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
-        let info = {
-            let mut buf = String::new();
-            for Thread {
-                ref tid, ref state, ..
-            } in runtime.iter_mut()
-            {
-                buf.push_str(&format!(" Tid {tid} = {:?},", state));
-            }
-            buf
-        };
+        let info = runtime.tid_info();
         let mut availaible_tids: Vec<usize> =
             runtime.threads.iter().map(|thread| thread.tid).collect();
         let mut spawned_tid = Vec::new();
@@ -68,7 +64,7 @@ impl Scheduler {
 
         let mut requested_spawn_count = runtime.tid_count.get();
 
-        println!("MAJOR FRAME START : {info}");
+        stdio.push_casm_info(engine, "MAJOR FRAME START : {info}".into());
         let minor_frame_max_count = self.minor_frame_max_count.get();
 
         let mut total_instruction_count = 0;
@@ -108,17 +104,17 @@ impl Scheduler {
                     continue;
                 }
 
-                println!("MINOR FRAME ::tid {tid}\n");
+                stdio.push_casm_info(engine, "MINOR FRAME ::tid {tid}\n".into());
                 while thread_instruction_count < minor_frame_max_count {
                     if program.cursor_is_at_end() {
                         let _ = state.to(ThreadState::IDLE);
                         break;
                     }
                     let return_status = program.evaluate(|instruction| {
-                        instruction.name(stdio, program);
-                        thread_instruction_count += instruction.weight();
-                        total_instruction_count += instruction.weight();
-                        match instruction.execute(program, stack, heap, stdio) {
+                        instruction.name(stdio, program, engine);
+                        thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
+                        total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
+                        match instruction.execute(program, stack, heap, stdio, engine) {
                             Ok(_) => Ok(()),
                             Err(RuntimeError::Signal(signal)) => match signal {
                                 Signal::SPAWN => sig_spawn(
@@ -162,7 +158,10 @@ impl Scheduler {
                                 ),
                             },
                             Err(err) => {
-                                println!("RUNTIME ERROR :: {:?} in {:?}", err, instruction);
+                                stdio.push_casm_info(
+                                    engine,
+                                    &format!("RUNTIME ERROR :: {:?} in {:?}", err, instruction),
+                                );
                                 Err(err)
                             }
                         }
@@ -205,7 +204,7 @@ impl Scheduler {
                 break;
             }
         }
-        println!("MAJOR FRAME END");
+        stdio.push_casm_info(engine, "MAJOR FRAME END".into());
         // Waking up needed thread
         for Thread { ref tid, state, .. } in runtime.iter_mut() {
             if wakingup_tid.contains(&tid) {

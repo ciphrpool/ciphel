@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::marker::PhantomData;
 
 use ulid::Ulid;
 
@@ -53,6 +54,135 @@ pub enum RuntimeError {
     Signal(Signal),
     AssertError,
     Default,
+}
+
+pub trait GenerateCode {
+    fn gencode(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError>;
+}
+
+pub trait Locatable {
+    fn locate(
+        &self,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
+    ) -> Result<(), CodeGenerationError>;
+
+    fn is_assignable(&self) -> bool;
+
+    fn most_left_id(&self) -> Option<ID>;
+}
+
+pub trait GameEngineStaticFn {
+    fn stdout_print(&mut self, content: String);
+    fn stdout_println(&mut self, content: String);
+    fn stderr_print(&mut self, content: String);
+    fn stdin_scan(&mut self) -> String;
+    fn stdcasm_print(&mut self, content: String);
+}
+
+#[derive(Debug, Clone)]
+pub struct NoopGameEngine {}
+
+impl GameEngineStaticFn for NoopGameEngine {
+    fn stdout_print(&mut self, content: String) {}
+    fn stdout_println(&mut self, content: String) {}
+
+    fn stderr_print(&mut self, content: String) {}
+
+    fn stdin_scan(&mut self) -> String {
+        "".to_string()
+    }
+
+    fn stdcasm_print(&mut self, content: String) {}
+}
+
+#[derive(Debug, Clone)]
+pub struct StdouTestGameEngine {
+    pub out: String,
+}
+
+impl GameEngineStaticFn for StdouTestGameEngine {
+    fn stdout_print(&mut self, content: String) {
+        self.out = content;
+    }
+    fn stdout_println(&mut self, content: String) {
+        self.out = format!("{}\n", content);
+    }
+    fn stderr_print(&mut self, content: String) {}
+
+    fn stdin_scan(&mut self) -> String {
+        "".to_string()
+    }
+
+    fn stdcasm_print(&mut self, content: String) {}
+}
+#[derive(Debug, Clone)]
+pub struct DbgGameEngine {}
+
+impl GameEngineStaticFn for DbgGameEngine {
+    fn stdout_print(&mut self, content: String) {
+        print!("{}", content);
+    }
+    fn stdout_println(&mut self, content: String) {
+        println!("{}", content);
+    }
+
+    fn stderr_print(&mut self, content: String) {
+        eprintln!("{}", content);
+    }
+
+    fn stdin_scan(&mut self) -> String {
+        "Hello World".to_string()
+    }
+
+    fn stdcasm_print(&mut self, content: String) {
+        println!("{}", content);
+    }
+}
+
+pub trait Executable<G: GameEngineStaticFn + Clone> {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError>;
+}
+
+pub trait CasmMetadata<G: GameEngineStaticFn + Clone> {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G);
+    fn weight(&self) -> usize {
+        1
+    }
+}
+
+pub trait DeserializeFrom {
+    type Output;
+    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;
+}
+
+pub trait Printer {
+    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+}
+
+pub trait NextItem {
+    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+
+    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+
+    fn build_item(
+        &self,
+        instructions: &CasmProgram,
+        end_label: Ulid,
+    ) -> Result<(), CodeGenerationError>;
+
+    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
 }
 
 pub const MAX_THREAD_COUNT: usize = 4;
@@ -167,21 +297,37 @@ pub struct Thread {
 }
 
 #[derive(Debug, Clone)]
-pub struct Runtime {
+pub struct Runtime<G: GameEngineStaticFn + Clone> {
     pub tid_count: Cell<usize>,
     pub threads: Vec<Thread>,
+    _phantom: PhantomData<G>,
 }
 
-impl Runtime {
-    pub fn new() -> (Self, Heap, StdIO) {
+impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
+    pub fn new() -> (Self, Heap, StdIO<G>) {
         (
             Self {
                 tid_count: Cell::new(0),
                 threads: Vec::with_capacity(MAX_THREAD_COUNT),
+                _phantom: PhantomData::default(),
             },
             Heap::new(),
             StdIO::default(),
         )
+    }
+
+    pub fn tid_info(&self) -> String {
+        let info = {
+            let mut buf = String::new();
+            for Thread {
+                ref tid, ref state, ..
+            } in self.threads.iter()
+            {
+                buf.push_str(&format!(" Tid {tid} = {:?},", state));
+            }
+            buf
+        };
+        info
     }
 
     pub fn all_noop(&self) -> bool {
@@ -283,63 +429,4 @@ impl Runtime {
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Thread> {
         self.threads.iter_mut()
     }
-}
-
-pub trait GenerateCode {
-    fn gencode(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError>;
-}
-
-pub trait Locatable {
-    fn locate(
-        &self,
-        scope: &MutRc<Scope>,
-        instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError>;
-
-    fn is_assignable(&self) -> bool;
-
-    fn most_left_id(&self) -> Option<ID>;
-}
-pub trait Executable {
-    fn execute(
-        &self,
-        program: &CasmProgram,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-    ) -> Result<(), RuntimeError>;
-}
-
-pub trait CasmMetadata {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram);
-    fn weight(&self) -> usize {
-        1
-    }
-}
-
-pub trait DeserializeFrom {
-    type Output;
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;
-}
-
-pub trait Printer {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
-}
-
-pub trait NextItem {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
-
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
-
-    fn build_item(
-        &self,
-        instructions: &CasmProgram,
-        end_label: Ulid,
-    ) -> Result<(), CodeGenerationError>;
-
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
 }

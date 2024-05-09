@@ -91,12 +91,12 @@ pub mod vm {
                 program: &CasmProgram,
                 stack: &mut Stack,
                 heap: &mut Heap,
-                stdio: &mut StdIO,
+                stdio: &mut StdIO<G>,
             ) -> Result<(), RuntimeError>;
         }
 
         pub trait CasmMetadata {
-            fn name(&self, stdio: &mut StdIO, program: &CasmProgram);
+            fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G);
             fn weight(&self) -> usize {
                 1
             }

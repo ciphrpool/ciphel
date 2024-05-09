@@ -225,57 +225,57 @@ pub enum AllocCasm {
     StringFromChar,
 }
 
-impl CasmMetadata for AllocCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            AllocCasm::AppendChar => stdio.push_casm_lib("append"),
-            AllocCasm::AppendItem(_) => stdio.push_casm_lib("append"),
-            AllocCasm::AppendStrSlice(_) => stdio.push_casm_lib("append"),
-            AllocCasm::AppendString => stdio.push_casm_lib("append"),
-            AllocCasm::ExtendItemFromSlice { size, len } => stdio.push_casm_lib("extend"),
-            AllocCasm::ExtendItemFromVec { size } => stdio.push_casm_lib("extend"),
-            AllocCasm::ExtendStringFromSlice { len } => stdio.push_casm_lib("extend"),
-            AllocCasm::ExtendStringFromVec => stdio.push_casm_lib("extend"),
+            AllocCasm::AppendChar => stdio.push_casm_lib(engine, "append"),
+            AllocCasm::AppendItem(_) => stdio.push_casm_lib(engine, "append"),
+            AllocCasm::AppendStrSlice(_) => stdio.push_casm_lib(engine, "append"),
+            AllocCasm::AppendString => stdio.push_casm_lib(engine, "append"),
+            AllocCasm::ExtendItemFromSlice { size, len } => stdio.push_casm_lib(engine, "extend"),
+            AllocCasm::ExtendItemFromVec { size } => stdio.push_casm_lib(engine, "extend"),
+            AllocCasm::ExtendStringFromSlice { len } => stdio.push_casm_lib(engine, "extend"),
+            AllocCasm::ExtendStringFromVec => stdio.push_casm_lib(engine, "extend"),
             AllocCasm::Insert {
                 ref_access,
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("insert"),
+            } => stdio.push_casm_lib(engine, "insert"),
             AllocCasm::InsertAndForward {
                 ref_access,
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("finsert"),
+            } => stdio.push_casm_lib(engine, "finsert"),
             AllocCasm::Get {
                 ref_access,
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("get"),
-            AllocCasm::DeleteVec(_) => stdio.push_casm_lib("delete"),
+            } => stdio.push_casm_lib(engine, "get"),
+            AllocCasm::DeleteVec(_) => stdio.push_casm_lib(engine, "delete"),
             AllocCasm::DeleteMapKey {
                 ref_access,
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("delete"),
-            AllocCasm::ClearVec(_) => stdio.push_casm_lib("clear"),
-            AllocCasm::ClearString(_) => stdio.push_casm_lib("clear"),
-            AllocCasm::ClearMap(_) => stdio.push_casm_lib("clear"),
-            AllocCasm::Len => stdio.push_casm_lib("len"),
-            AllocCasm::Cap => stdio.push_casm_lib("cap"),
-            AllocCasm::CapMap => stdio.push_casm_lib("cap"),
-            AllocCasm::Vec { item_size } => stdio.push_casm_lib("vec"),
-            AllocCasm::VecWithCapacity { item_size } => stdio.push_casm_lib("vec"),
+            } => stdio.push_casm_lib(engine, "delete"),
+            AllocCasm::ClearVec(_) => stdio.push_casm_lib(engine, "clear"),
+            AllocCasm::ClearString(_) => stdio.push_casm_lib(engine, "clear"),
+            AllocCasm::ClearMap(_) => stdio.push_casm_lib(engine, "clear"),
+            AllocCasm::Len => stdio.push_casm_lib(engine, "len"),
+            AllocCasm::Cap => stdio.push_casm_lib(engine, "cap"),
+            AllocCasm::CapMap => stdio.push_casm_lib(engine, "cap"),
+            AllocCasm::Vec { item_size } => stdio.push_casm_lib(engine, "vec"),
+            AllocCasm::VecWithCapacity { item_size } => stdio.push_casm_lib(engine, "vec"),
             AllocCasm::Map {
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("map"),
+            } => stdio.push_casm_lib(engine, "map"),
             AllocCasm::MapWithCapacity {
                 key_size,
                 value_size,
-            } => stdio.push_casm_lib("map"),
-            AllocCasm::Chan => stdio.push_casm_lib("chan"),
-            AllocCasm::StringFromSlice => stdio.push_casm_lib("string"),
-            AllocCasm::StringFromChar => stdio.push_casm_lib("string"),
+            } => stdio.push_casm_lib(engine, "map"),
+            AllocCasm::Chan => stdio.push_casm_lib(engine, "chan"),
+            AllocCasm::StringFromSlice => stdio.push_casm_lib(engine, "string"),
+            AllocCasm::StringFromChar => stdio.push_casm_lib(engine, "string"),
         }
     }
 }
@@ -1864,13 +1864,14 @@ mod map_impl {
     }
 }
 
-impl Executable for AllocCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
             AllocCasm::AppendChar => {
@@ -3290,15 +3291,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3345,15 +3347,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3391,15 +3394,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3458,15 +3462,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3695,15 +3700,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 0);
@@ -3736,15 +3742,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 16);
@@ -3792,15 +3799,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3859,15 +3867,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3949,15 +3958,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3992,15 +4002,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4040,15 +4051,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4108,15 +4120,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4160,15 +4173,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4227,15 +4241,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4301,15 +4316,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4355,15 +4371,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4403,15 +4420,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4476,15 +4494,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4539,15 +4558,16 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);

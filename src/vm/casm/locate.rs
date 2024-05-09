@@ -20,19 +20,20 @@ pub struct Locate {
     pub address: MemoryAddress,
 }
 
-impl CasmMetadata for Locate {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
-        stdio.push_casm(&format!("addr {}", self.address.name()));
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Locate {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine,&format!("addr {}", self.address.name()));
     }
 }
 
-impl Executable for Locate {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Locate {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match &self.address {
             MemoryAddress::Heap { offset } => {
@@ -73,21 +74,22 @@ pub enum LocateNextUTF8Char {
     RuntimeAtIdx,
 }
 
-impl CasmMetadata for LocateNextUTF8Char {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LocateNextUTF8Char {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            LocateNextUTF8Char::RuntimeNext => stdio.push_casm("addr_utf8 "),
-            LocateNextUTF8Char::RuntimeAtIdx => stdio.push_casm("addr_utf8_at"),
+            LocateNextUTF8Char::RuntimeNext => stdio.push_casm(engine,"addr_utf8 "),
+            LocateNextUTF8Char::RuntimeAtIdx => stdio.push_casm(engine,"addr_utf8_at"),
         }
     }
 }
-impl Executable for LocateNextUTF8Char {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         program.incr();
         match self {

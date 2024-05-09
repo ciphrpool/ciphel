@@ -97,40 +97,40 @@ pub enum MathCasm {
     IsInf,
 }
 
-impl CasmMetadata for MathCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for MathCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            MathCasm::Ceil => stdio.push_casm_lib("ceil"),
-            MathCasm::Floor => stdio.push_casm_lib("floor"),
-            MathCasm::Abs => stdio.push_casm_lib("abs"),
-            MathCasm::Exp => stdio.push_casm_lib("exp"),
-            MathCasm::Ln => stdio.push_casm_lib("ln"),
-            MathCasm::Log => stdio.push_casm_lib("log"),
-            MathCasm::Log10 => stdio.push_casm_lib("log10"),
-            MathCasm::Pow => stdio.push_casm_lib("pow"),
-            MathCasm::Sqrt => stdio.push_casm_lib("sqrt"),
-            MathCasm::Acos => stdio.push_casm_lib("acos"),
-            MathCasm::Asin => stdio.push_casm_lib("asin"),
-            MathCasm::Atan => stdio.push_casm_lib("atan"),
-            MathCasm::Atan2 => stdio.push_casm_lib("atan2"),
-            MathCasm::Cos => stdio.push_casm_lib("cos"),
-            MathCasm::Sin => stdio.push_casm_lib("sin"),
-            MathCasm::Tan => stdio.push_casm_lib("tan"),
-            MathCasm::Hypot => stdio.push_casm_lib("hypot"),
-            MathCasm::Deg => stdio.push_casm_lib("deg"),
-            MathCasm::Rad => stdio.push_casm_lib("rad"),
-            MathCasm::CosH => stdio.push_casm_lib("cosh"),
-            MathCasm::SinH => stdio.push_casm_lib("sinh"),
-            MathCasm::TanH => stdio.push_casm_lib("tanh"),
-            MathCasm::ACosH => stdio.push_casm_lib("acosh"),
-            MathCasm::ASinH => stdio.push_casm_lib("asinh"),
-            MathCasm::ATanH => stdio.push_casm_lib("atanh"),
-            MathCasm::Pi => stdio.push_casm_lib("pi"),
-            MathCasm::E => stdio.push_casm_lib("e"),
-            MathCasm::Inf => stdio.push_casm_lib("inf"),
-            MathCasm::NInf => stdio.push_casm_lib("ninf"),
-            MathCasm::IsNaN => stdio.push_casm_lib("isnan"),
-            MathCasm::IsInf => stdio.push_casm_lib("isinf"),
+            MathCasm::Ceil => stdio.push_casm_lib(engine, "ceil"),
+            MathCasm::Floor => stdio.push_casm_lib(engine, "floor"),
+            MathCasm::Abs => stdio.push_casm_lib(engine, "abs"),
+            MathCasm::Exp => stdio.push_casm_lib(engine, "exp"),
+            MathCasm::Ln => stdio.push_casm_lib(engine, "ln"),
+            MathCasm::Log => stdio.push_casm_lib(engine, "log"),
+            MathCasm::Log10 => stdio.push_casm_lib(engine, "log10"),
+            MathCasm::Pow => stdio.push_casm_lib(engine, "pow"),
+            MathCasm::Sqrt => stdio.push_casm_lib(engine, "sqrt"),
+            MathCasm::Acos => stdio.push_casm_lib(engine, "acos"),
+            MathCasm::Asin => stdio.push_casm_lib(engine, "asin"),
+            MathCasm::Atan => stdio.push_casm_lib(engine, "atan"),
+            MathCasm::Atan2 => stdio.push_casm_lib(engine, "atan2"),
+            MathCasm::Cos => stdio.push_casm_lib(engine, "cos"),
+            MathCasm::Sin => stdio.push_casm_lib(engine, "sin"),
+            MathCasm::Tan => stdio.push_casm_lib(engine, "tan"),
+            MathCasm::Hypot => stdio.push_casm_lib(engine, "hypot"),
+            MathCasm::Deg => stdio.push_casm_lib(engine, "deg"),
+            MathCasm::Rad => stdio.push_casm_lib(engine, "rad"),
+            MathCasm::CosH => stdio.push_casm_lib(engine, "cosh"),
+            MathCasm::SinH => stdio.push_casm_lib(engine, "sinh"),
+            MathCasm::TanH => stdio.push_casm_lib(engine, "tanh"),
+            MathCasm::ACosH => stdio.push_casm_lib(engine, "acosh"),
+            MathCasm::ASinH => stdio.push_casm_lib(engine, "asinh"),
+            MathCasm::ATanH => stdio.push_casm_lib(engine, "atanh"),
+            MathCasm::Pi => stdio.push_casm_lib(engine, "pi"),
+            MathCasm::E => stdio.push_casm_lib(engine, "e"),
+            MathCasm::Inf => stdio.push_casm_lib(engine, "inf"),
+            MathCasm::NInf => stdio.push_casm_lib(engine, "ninf"),
+            MathCasm::IsNaN => stdio.push_casm_lib(engine, "isnan"),
+            MathCasm::IsInf => stdio.push_casm_lib(engine, "isinf"),
         }
     }
 }
@@ -394,13 +394,14 @@ impl GenerateCode for MathFn {
     }
 }
 
-impl Executable for MathCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
             MathCasm::Pi => {

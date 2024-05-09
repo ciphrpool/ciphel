@@ -1,39 +1,46 @@
+use std::marker::PhantomData;
+
 use crate::semantic::MutRc;
 
+use super::vm::GameEngineStaticFn;
+
 #[derive(Debug, Clone)]
-pub struct StdIO {
-    pub stdout: StdOut,
-    pub casm_out: String,
-    pub stdin: StdIn,
+pub struct StdIO<G: GameEngineStaticFn + Clone> {
+    pub stdout: StdOut<G>,
+    // pub casm_out: String,
+    pub stdin: StdIn<G>,
 }
 
-impl Default for StdIO {
+impl<G: crate::GameEngineStaticFn + Clone> Default for StdIO<G> {
     fn default() -> Self {
         Self {
             stdin: StdIn::default(),
             stdout: StdOut::default(),
-            casm_out: String::new(),
+            // casm_out: String::new(),
         }
     }
 }
 
-impl StdIO {
-    pub fn push_casm(&mut self, content: &str) {
-        self.casm_out.push('\t');
-        self.casm_out.push_str(content);
-        self.casm_out.push('\n');
-        println!("\t{content}")
+impl<G: crate::GameEngineStaticFn + Clone> StdIO<G> {
+    pub fn push_casm_info(&mut self, engine: &mut G, content: &str) {
+        engine.stdcasm_print(format!("INFO :: {content}\n"));
     }
-    pub fn push_casm_lib(&mut self, content: &str) {
-        self.casm_out.push_str("\tsyscall ");
-        self.casm_out.push_str(content);
-        self.casm_out.push('\n');
-        println!("\tsyscall {content}")
+    pub fn push_casm(&mut self, engine: &mut G, content: &str) {
+        // self.casm_out.push('\t');
+        // self.casm_out.push_str(content);
+        // self.casm_out.push('\n');
+        engine.stdcasm_print(format!("\t{content}"));
     }
-    pub fn push_casm_label(&mut self, content: &str) {
-        self.casm_out.push_str(content);
-        self.casm_out.push_str(" :\n");
-        println!("{content} :")
+    pub fn push_casm_lib(&mut self, engine: &mut G, content: &str) {
+        // self.casm_out.push_str("\tsyscall ");
+        // self.casm_out.push_str(content);
+        // self.casm_out.push('\n');
+        engine.stdcasm_print(format!("\tsyscall {content}"));
+    }
+    pub fn push_casm_label(&mut self, engine: &mut G, content: &str) {
+        // self.casm_out.push_str(content);
+        // self.casm_out.push_str(" :\n");
+        engine.stdcasm_print(format!("{content} :"));
     }
 }
 
@@ -107,56 +114,71 @@ impl OutBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub struct StdOut {
-    data: MutRc<String>,
-    buffer: MutRc<OutBuffer>,
+pub struct StdOut<G: GameEngineStaticFn + Clone> {
+    data: String,
+    buffer: OutBuffer,
+    _phantom: PhantomData<G>,
 }
-impl Default for StdOut {
+impl<G: GameEngineStaticFn + Clone> Default for StdOut<G> {
     fn default() -> Self {
         Self {
             buffer: Default::default(),
             data: Default::default(),
+            _phantom: PhantomData::default(),
         }
     }
 }
 
-impl StdOut {
-    pub fn push(&self, content: &str) {
-        let mut buffer = self.buffer.borrow_mut();
-        buffer.push(content, &mut self.data.borrow_mut());
+impl<G: GameEngineStaticFn + Clone> StdOut<G> {
+    pub fn push(&mut self, content: &str) {
+        self.buffer.push(content, &mut self.data);
     }
 
-    pub fn spawn_buffer(&self) {
-        self.buffer.borrow_mut().spawn();
+    pub fn spawn_buffer(&mut self) {
+        self.buffer.spawn();
     }
-    pub fn flush_buffer(&self) {
-        match self.buffer.borrow_mut().flush() {
-            Some(content) => self.data.borrow_mut().push_str(&content),
+    pub fn flush_buffer(&mut self) {
+        match self.buffer.flush() {
+            Some(content) => self.data.push_str(&content),
             None => {}
         }
     }
-    pub fn rev_flush_buffer(&self) {
-        match self.buffer.borrow_mut().rev_flush() {
-            Some(content) => self.data.borrow_mut().push_str(&content),
+    pub fn rev_flush_buffer(&mut self) {
+        match self.buffer.rev_flush() {
+            Some(content) => self.data.push_str(&content),
             None => {}
         }
     }
 
-    pub fn take(&self) -> String {
-        std::mem::replace(&mut *self.data.borrow_mut(), String::new())
+    fn take(&mut self) -> String {
+        std::mem::replace(&mut self.data, String::new())
+    }
+
+    pub fn flush(&mut self, engine: &mut G) {
+        let binding = self.take();
+        let content = binding.trim_matches('\"');
+        engine.stdout_print(content.into());
+    }
+
+    pub fn flushln(&mut self, engine: &mut G) {
+        let binding = self.take();
+        let content = binding.trim_matches('\"');
+        engine.stdout_println(content.into());
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct StdIn {
+pub struct StdIn<G: GameEngineStaticFn + Clone> {
     data: MutRc<String>,
     buffer: MutRc<Option<Vec<String>>>,
+    _phantom: PhantomData<G>,
 }
-impl Default for StdIn {
+impl<G: GameEngineStaticFn + Clone> Default for StdIn<G> {
     fn default() -> Self {
         Self {
             buffer: Default::default(),
             data: Default::default(),
+            _phantom: PhantomData::default(),
         }
     }
 }

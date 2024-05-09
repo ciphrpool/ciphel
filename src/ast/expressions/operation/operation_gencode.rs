@@ -1830,15 +1830,16 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);

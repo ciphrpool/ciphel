@@ -60,11 +60,11 @@ pub enum ToStrCasm {
     ToStrString,
 }
 
-impl CasmMetadata for StringsCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StringsCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            StringsCasm::ToStr(_) => stdio.push_casm_lib("to_str"),
-            StringsCasm::Join(_) => stdio.push_casm_lib("str_join"),
+            StringsCasm::ToStr(_) => stdio.push_casm_lib(engine, "to_str"),
+            StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
         }
     }
 }
@@ -197,13 +197,14 @@ impl GenerateCode for StringsFn {
     }
 }
 
-impl Executable for StringsCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
             StringsCasm::ToStr(value) => {

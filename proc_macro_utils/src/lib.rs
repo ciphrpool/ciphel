@@ -50,7 +50,7 @@ fn process_shared_fn(item: &Item) -> proc_macro2::TokenStream {
             impl crate::vm::vm::CasmMetadata for #fnstruct_name {
                 fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &crate::vm::casm::CasmProgram) {
                     let name = stringify!(#fn_name);
-                    stdio.push_casm_lib(name);
+                    stdio.push_casm_lib(engine,name);
                 }
             }
         };

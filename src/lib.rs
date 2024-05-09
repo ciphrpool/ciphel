@@ -3,7 +3,7 @@ use vm::{
     allocator::heap::Heap,
     scheduler::Scheduler,
     stdio::StdIO,
-    vm::{CodeGenerationError, Runtime, RuntimeError},
+    vm::{CodeGenerationError, GameEngineStaticFn, Runtime, RuntimeError},
 };
 
 use crate::{ast::statements::parse_statements, semantic::Resolve, vm::vm::GenerateCode};
@@ -20,14 +20,14 @@ pub enum CompilationError {
     InvalidTID(usize),
 }
 
-pub struct Ciphel {
-    runtime: Runtime,
+pub struct Ciphel<G: GameEngineStaticFn + Clone> {
+    runtime: Runtime<G>,
     heap: Heap,
-    stdio: StdIO,
-    scheduler: Scheduler,
+    stdio: StdIO<G>,
+    scheduler: Scheduler<G>,
 }
 
-impl Ciphel {
+impl<G: crate::GameEngineStaticFn + Clone> Ciphel<G> {
     pub fn new() -> Self {
         let (runtime, heap, stdio) = Runtime::new();
         Self {
@@ -75,30 +75,35 @@ impl Ciphel {
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<(), RuntimeError> {
+    pub fn run(&mut self, engine: &mut G) -> Result<(), RuntimeError> {
         self.scheduler.prepare(self.runtime.threads.len());
 
-        self.scheduler
-            .run_major_frame(&mut self.runtime, &mut self.heap, &mut self.stdio)?;
-        let stdout_buffer = self.stdio.stdout.take();
-        println!("{}", stdout_buffer);
+        self.scheduler.run_major_frame(
+            &mut self.runtime,
+            &mut self.heap,
+            &mut self.stdio,
+            engine,
+        )?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use self::vm::vm::{DbgGameEngine, NoopGameEngine};
+
     use super::*;
 
     #[test]
     fn valid_hello_world() {
+        let mut engine = DbgGameEngine {};
         let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
         
         fn main() -> Unit {
-            print("Hello World");
+            println("Hello World");
         }
 
         main();
@@ -109,12 +114,13 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run().expect("no error should arise");
+        ciphel.run(&mut engine).expect("no error should arise");
     }
 
     #[test]
     fn valid_multiple_program() {
-        let mut ciphel = Ciphel::new();
+        let mut engine = NoopGameEngine {};
+        let mut ciphel = Ciphel::<NoopGameEngine>::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -147,13 +153,14 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run().expect("no error should arise");
-        ciphel.run().expect("no error should arise");
+        ciphel.run(&mut engine).expect("no error should arise");
+        ciphel.run(&mut engine).expect("no error should arise");
     }
 
     #[test]
     fn valid_multiple_thread() {
-        let mut ciphel = Ciphel::new();
+        let mut engine = NoopGameEngine {};
+        let mut ciphel = Ciphel::<NoopGameEngine>::new();
         let main_tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -188,6 +195,6 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
-        ciphel.run().expect("no error should arise");
+        ciphel.run(&mut engine).expect("no error should arise");
     }
 }

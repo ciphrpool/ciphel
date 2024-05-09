@@ -16,6 +16,7 @@ use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 
+use crate::vm::platform::LibCasm;
 use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
@@ -30,17 +31,21 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
     Print(RefCell<Option<EType>>),
+    Println(RefCell<Option<EType>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOCasm {
     Print(PrintCasm),
+    Flush(bool),
 }
 
-impl CasmMetadata for IOCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IOCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            IOCasm::Print(_) => stdio.push_casm_lib("print"),
+            IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
+            IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
+            IOCasm::Flush(false) => stdio.push_casm_lib(engine, "flush"),
         }
     }
 }
@@ -86,6 +91,7 @@ impl IOFn {
         }
         match id.as_str() {
             lexem::PRINT => Some(IOFn::Print(RefCell::default())),
+            lexem::PRINTLN => Some(IOFn::Println(RefCell::default())),
             _ => None,
         }
     }
@@ -110,6 +116,15 @@ impl Resolve for IOFn {
                 *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
                 Ok(())
             }
+            IOFn::Println(param_type) => {
+                if extra.len() != 1 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                let param = extra.first().unwrap();
+                let _ = param.resolve(scope, &None, &None)?;
+                *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
+                Ok(())
+            }
         }
     }
 }
@@ -120,6 +135,7 @@ impl TypeOf for IOFn {
     {
         match self {
             IOFn::Print(_) => Ok(e_static!(StaticType::Unit)),
+            IOFn::Println(_) => Ok(e_static!(StaticType::Unit)),
         }
     }
 }
@@ -138,34 +154,61 @@ impl GenerateCode for IOFn {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
                 let _ = param_type.build_printer(instructions)?;
+                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
+                    IOCasm::Flush(false),
+                ))));
 
+                Ok(())
+            }
+            IOFn::Println(inner) => {
+                let binding = inner.borrow();
+
+                let Some(param_type) = binding.as_ref() else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                let _ = param_type.build_printer(instructions)?;
+
+                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
+                    IOCasm::Flush(true),
+                ))));
                 Ok(())
             }
         }
     }
 }
 
-impl Executable for IOCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::Print(print) => print.execute(program, stack, heap, stdio),
+            IOCasm::Print(print) => print.execute(program, stack, heap, stdio, engine),
+            IOCasm::Flush(ln) => {
+                if *ln {
+                    stdio.stdout.flushln(engine);
+                } else {
+                    stdio.stdout.flush(engine);
+                }
+                program.incr();
+                Ok(())
+            }
         }
     }
 }
 
-impl Executable for PrintCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
             PrintCasm::PrintID(id) => {
@@ -279,7 +322,8 @@ impl Executable for PrintCasm {
                                     }
                                 }
                                 _ => {
-                                    let _ = instruction.execute(program, stack, heap, stdio)?;
+                                    let _ =
+                                        instruction.execute(program, stack, heap, stdio, engine)?;
                                 }
                             }
                         }
@@ -363,7 +407,7 @@ mod tests {
                 .1;
 
             let output = compile_statement_for_stdout!(statement);
-            assert_eq!(&output, text);
+            assert_eq!(&output, text.trim_matches('\"'));
         }
     }
 
@@ -381,7 +425,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let output = compile_statement_for_stdout!(statement);
-        assert_eq!(&output, "\"Hello World\"");
+        assert_eq!(&output, "Hello World");
     }
     #[test]
     fn valid_print_strslice() {
@@ -397,7 +441,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let output = compile_statement_for_stdout!(statement);
-        assert_eq!(&output, "\"Hello World\"");
+        assert_eq!(&output, "Hello World");
     }
     #[test]
     fn valid_print_string() {
@@ -413,7 +457,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let output = compile_statement_for_stdout!(statement);
-        assert_eq!(&output, "\"Hello World\"");
+        assert_eq!(&output, "Hello World");
     }
 
     #[test]

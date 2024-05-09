@@ -48,14 +48,14 @@ pub enum StdCasm {
     AssertErr,
 }
 
-impl CasmMetadata for StdCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StdCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            StdCasm::IO(value) => value.name(stdio, program),
-            StdCasm::Math(value) => value.name(stdio, program),
-            StdCasm::Strings(value) => value.name(stdio, program),
-            StdCasm::AssertBool => stdio.push_casm_lib("assert"),
-            StdCasm::AssertErr => stdio.push_casm_lib("assert"),
+            StdCasm::IO(value) => value.name(stdio, program, engine),
+            StdCasm::Math(value) => value.name(stdio, program, engine),
+            StdCasm::Strings(value) => value.name(stdio, program, engine),
+            StdCasm::AssertBool => stdio.push_casm_lib(engine, "assert"),
+            StdCasm::AssertErr => stdio.push_casm_lib(engine, "assert"),
         }
     }
 }
@@ -162,18 +162,19 @@ impl GenerateCode for StdFn {
     }
 }
 
-impl Executable for StdCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
-            StdCasm::IO(value) => value.execute(program, stack, heap, stdio),
-            StdCasm::Math(value) => value.execute(program, stack, heap, stdio),
-            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio),
+            StdCasm::IO(value) => value.execute(program, stack, heap, stdio, engine),
+            StdCasm::Math(value) => value.execute(program, stack, heap, stdio, engine),
+            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine),
             StdCasm::AssertBool => {
                 let condition = OpPrimitive::get_bool(stack)?;
                 program.incr();

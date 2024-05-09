@@ -135,11 +135,12 @@ impl CasmProgram {
             }
         }
     }
-    pub fn execute<'runtime>(
+    pub fn execute<'runtime, G: crate::GameEngineStaticFn + Clone>(
         &self,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), vm::RuntimeError> {
         let borrowed_main = self.main.as_ref().borrow();
         loop {
@@ -150,7 +151,7 @@ impl CasmProgram {
                     // let mut buffer = String::new();
                     // io::stdin().read_line(&mut buffer);
                     // instruction.name(stdio, self);
-                    match instruction.execute(self, stack, heap, stdio) {
+                    match instruction.execute(self, stack, heap, stdio, engine) {
                         Ok(_) => {}
                         Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
                         Err(RuntimeError::AssertError) => return Ok(()),
@@ -189,62 +190,63 @@ pub enum Casm {
     Pop(usize),
 }
 
-impl Executable for Casm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
-            Casm::Operation(value) => value.execute(program, stack, heap, stdio),
-            Casm::StackFrame(value) => value.execute(program, stack, heap, stdio),
-            Casm::Data(value) => value.execute(program, stack, heap, stdio),
-            Casm::Access(value) => value.execute(program, stack, heap, stdio),
-            Casm::If(value) => value.execute(program, stack, heap, stdio),
-            // Casm::Assign(value) => value.execute(program, stack, heap, stdio),
-            Casm::Label(value) => value.execute(program, stack, heap, stdio),
-            Casm::Call(value) => value.execute(program, stack, heap, stdio),
-            Casm::Goto(value) => value.execute(program, stack, heap, stdio),
-            Casm::Alloc(value) => value.execute(program, stack, heap, stdio),
-            Casm::Mem(value) => value.execute(program, stack, heap, stdio),
-            Casm::Switch(value) => value.execute(program, stack, heap, stdio),
-            Casm::Locate(value) => value.execute(program, stack, heap, stdio),
-            Casm::LocateNextUTF8Char(value) => value.execute(program, stack, heap, stdio),
-            Casm::Platform(value) => value.execute(program, stack, heap, stdio),
+            Casm::Operation(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::StackFrame(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Data(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Access(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::If(value) => value.execute(program, stack, heap, stdio, engine),
+            // Casm::Assign(value) => value.execute(program, stack, heap, stdio,engine),
+            Casm::Label(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Call(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Goto(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Alloc(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Mem(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Switch(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Locate(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::LocateNextUTF8Char(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Platform(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Pop(size) => {
                 stack.pop(*size).map_err(|e| e.into())?;
                 program.incr();
                 Ok(())
             }
-            Casm::Realloc(value) => value.execute(program, stack, heap, stdio),
-            Casm::Free(value) => value.execute(program, stack, heap, stdio),
+            Casm::Realloc(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Free(value) => value.execute(program, stack, heap, stdio, engine),
         }
     }
 }
 
-impl CasmMetadata for Casm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Casm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            Casm::Platform(value) => value.name(stdio, program),
-            Casm::StackFrame(value) => value.name(stdio, program),
-            Casm::Alloc(value) => value.name(stdio, program),
-            Casm::Realloc(value) => value.name(stdio, program),
-            Casm::Free(value) => value.name(stdio, program),
-            Casm::Mem(value) => value.name(stdio, program),
-            Casm::Operation(value) => value.name(stdio, program),
-            Casm::Data(value) => value.name(stdio, program),
-            Casm::Access(value) => value.name(stdio, program),
-            Casm::Locate(value) => value.name(stdio, program),
-            Casm::If(value) => value.name(stdio, program),
-            // Casm::Assign(value) => value.name(stdio, program),
-            Casm::LocateNextUTF8Char(value) => value.name(stdio, program),
-            Casm::Label(value) => value.name(stdio, program),
-            Casm::Call(value) => value.name(stdio, program),
-            Casm::Goto(value) => value.name(stdio, program),
-            Casm::Switch(value) => value.name(stdio, program),
-            Casm::Pop(n) => stdio.push_casm(&format!("pop {n}")),
+            Casm::Platform(value) => value.name(stdio, program, engine),
+            Casm::StackFrame(value) => value.name(stdio, program, engine),
+            Casm::Alloc(value) => value.name(stdio, program, engine),
+            Casm::Realloc(value) => value.name(stdio, program, engine),
+            Casm::Free(value) => value.name(stdio, program, engine),
+            Casm::Mem(value) => value.name(stdio, program, engine),
+            Casm::Operation(value) => value.name(stdio, program, engine),
+            Casm::Data(value) => value.name(stdio, program, engine),
+            Casm::Access(value) => value.name(stdio, program, engine),
+            Casm::Locate(value) => value.name(stdio, program, engine),
+            Casm::If(value) => value.name(stdio, program, engine),
+            // Casm::Assign(value) => value.name(stdio, program,engine),
+            Casm::LocateNextUTF8Char(value) => value.name(stdio, program, engine),
+            Casm::Label(value) => value.name(stdio, program, engine),
+            Casm::Call(value) => value.name(stdio, program, engine),
+            Casm::Goto(value) => value.name(stdio, program, engine),
+            Casm::Switch(value) => value.name(stdio, program, engine),
+            Casm::Pop(n) => stdio.push_casm(engine, &format!("pop {n}")),
         }
     }
 }

@@ -34,11 +34,11 @@ pub enum LibCasm {
     Std(StdCasm),
 }
 
-impl CasmMetadata for LibCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram) {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LibCasm {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            LibCasm::Core(value) => value.name(stdio, program),
-            LibCasm::Std(value) => value.name(stdio, program),
+            LibCasm::Core(value) => value.name(stdio, program, engine),
+            LibCasm::Std(value) => value.name(stdio, program, engine),
         }
     }
 }
@@ -96,17 +96,18 @@ impl GenerateCode for Lib {
         }
     }
 }
-impl Executable for LibCasm {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
-            LibCasm::Core(value) => value.execute(program, stack, heap, stdio),
-            LibCasm::Std(value) => value.execute(program, stack, heap, stdio),
+            LibCasm::Core(value) => value.execute(program, stack, heap, stdio, engine),
+            LibCasm::Std(value) => value.execute(program, stack, heap, stdio, engine),
         }
     }
 }
