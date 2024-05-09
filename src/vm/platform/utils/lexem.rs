@@ -46,6 +46,7 @@ pub const JOIN: &str = "join";
 // STD
 pub const PRINT: &str = "print";
 pub const PRINTLN: &str = "println";
+pub const SCAN: &str = "scan";
 pub const TOSTR: &str = "to_str";
 // pub const JOIN: &str = "join";
 pub const CEIL: &str = "ceil";

@@ -209,14 +209,14 @@ macro_rules! compile_statement_for_stdout {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) =
-            Runtime::<crate::vm::vm::StdouTestGameEngine>::new();
+            Runtime::<crate::vm::vm::StdoutTestGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
 
-        let mut engine = crate::vm::vm::StdouTestGameEngine { out: String::new() };
+        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");

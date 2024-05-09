@@ -9,6 +9,7 @@ use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
+use crate::vm::scheduler::WaitingStatus;
 use crate::vm::vm::{
     CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid, MAX_THREAD_COUNT,
 };
@@ -287,7 +288,7 @@ pub fn sig_join(
     own_tid: Tid,
     join_tid: Tid,
     state: &mut ThreadState,
-    join_waiting_list: &mut Vec<(Tid, Tid)>,
+    waiting_list: &mut Vec<WaitingStatus>,
     availaible_tids: &mut Vec<Tid>,
     program: &CasmProgram,
     stack: &mut Stack,
@@ -295,7 +296,10 @@ pub fn sig_join(
     dbg!((own_tid, join_tid));
     if availaible_tids.contains(&join_tid) {
         let _ = state.to(ThreadState::WAITING)?;
-        join_waiting_list.push((own_tid, join_tid));
+        waiting_list.push(WaitingStatus::Join {
+            join_tid: own_tid,
+            to_be_completed_tid: join_tid,
+        });
         let _ = stack.push_with(&[true as u8]).map_err(|e| e.into())?;
 
         // TODO : NO_ERROR value
@@ -313,24 +317,51 @@ pub fn sig_exit(
     tid: Tid,
     state: &mut ThreadState,
     closed_tid: &mut Vec<Tid>,
-    join_waiting_list: &mut Vec<(Tid, Tid)>,
+    waiting_list: &mut Vec<WaitingStatus>,
     wakingup_tid: &mut HashSet<Tid>,
 ) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::COMPLETED);
     closed_tid.push(tid);
-    let idx_tid_list: Vec<(usize, usize)> = join_waiting_list
+    let idx_tid_list: Vec<(usize, usize)> = waiting_list
         .iter()
         .enumerate()
-        .filter(|(_, (_, otid))| *otid == tid)
-        .map(|(idx, (tid, _))| (idx, *tid))
+        .filter(|(_, status)| match status {
+            WaitingStatus::Join {
+                join_tid,
+                to_be_completed_tid,
+            } => *to_be_completed_tid == tid,
+            WaitingStatus::ForStdin(_) => false,
+        })
+        .map(|(idx, status)| {
+            (
+                idx,
+                match status {
+                    WaitingStatus::Join {
+                        join_tid,
+                        to_be_completed_tid,
+                    } => *join_tid,
+                    WaitingStatus::ForStdin(id) => *id, // unreachable,
+                },
+            )
+        })
         .collect();
 
     for (idx, tid) in idx_tid_list {
-        join_waiting_list.remove(idx);
+        waiting_list.remove(idx);
         wakingup_tid.insert(tid);
     }
 
     Err(RuntimeError::Signal(Signal::EXIT))
+}
+
+pub fn sig_wait_stdin(
+    tid: Tid,
+    state: &mut ThreadState,
+    waiting_list: &mut Vec<WaitingStatus>,
+) -> Result<(), RuntimeError> {
+    let _ = state.to(ThreadState::WAITING)?;
+    waiting_list.push(WaitingStatus::ForStdin(tid));
+    Err(RuntimeError::Signal(Signal::WAIT_STDIN))
 }
 
 impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for ThreadCasm {

@@ -31,6 +31,7 @@ pub enum Signal {
     EXIT,
     CLOSE(Tid),
     WAIT,
+    WAIT_STDIN,
     WAKE(Tid),
     SLEEP(usize),
     JOIN(Tid),
@@ -80,7 +81,8 @@ pub trait GameEngineStaticFn {
     fn stdout_print(&mut self, content: String);
     fn stdout_println(&mut self, content: String);
     fn stderr_print(&mut self, content: String);
-    fn stdin_scan(&mut self) -> String;
+    fn stdin_scan(&mut self) -> Option<String>;
+    fn stdin_request(&mut self);
     fn stdcasm_print(&mut self, content: String);
 }
 
@@ -93,19 +95,20 @@ impl GameEngineStaticFn for NoopGameEngine {
 
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> String {
-        "".to_string()
+    fn stdin_scan(&mut self) -> Option<String> {
+        None
     }
+    fn stdin_request(&mut self) {}
 
     fn stdcasm_print(&mut self, content: String) {}
 }
 
 #[derive(Debug, Clone)]
-pub struct StdouTestGameEngine {
+pub struct StdoutTestGameEngine {
     pub out: String,
 }
 
-impl GameEngineStaticFn for StdouTestGameEngine {
+impl GameEngineStaticFn for StdoutTestGameEngine {
     fn stdout_print(&mut self, content: String) {
         self.out = content;
     }
@@ -114,12 +117,43 @@ impl GameEngineStaticFn for StdouTestGameEngine {
     }
     fn stderr_print(&mut self, content: String) {}
 
-    fn stdin_scan(&mut self) -> String {
-        "".to_string()
+    fn stdin_scan(&mut self) -> Option<String> {
+        None
     }
+    fn stdin_request(&mut self) {}
 
     fn stdcasm_print(&mut self, content: String) {}
 }
+
+#[derive(Debug, Clone)]
+pub struct StdinTestGameEngine {
+    pub out: String,
+    pub in_buf: String,
+}
+
+impl GameEngineStaticFn for StdinTestGameEngine {
+    fn stdout_print(&mut self, content: String) {
+        self.out = content;
+    }
+    fn stdout_println(&mut self, content: String) {
+        self.out = format!("{}\n", content);
+    }
+    fn stderr_print(&mut self, content: String) {}
+
+    fn stdin_scan(&mut self) -> Option<String> {
+        if self.in_buf.is_empty() {
+            None
+        } else {
+            Some(self.in_buf.clone())
+        }
+    }
+    fn stdin_request(&mut self) {}
+
+    fn stdcasm_print(&mut self, content: String) {
+        println!("{}", content);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DbgGameEngine {}
 
@@ -135,9 +169,10 @@ impl GameEngineStaticFn for DbgGameEngine {
         eprintln!("{}", content);
     }
 
-    fn stdin_scan(&mut self) -> String {
-        "Hello World".to_string()
+    fn stdin_scan(&mut self) -> Option<String> {
+        Some("Hello World".to_string())
     }
+    fn stdin_request(&mut self) {}
 
     fn stdcasm_print(&mut self, content: String) {
         println!("{}", content);

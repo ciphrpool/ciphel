@@ -6,9 +6,10 @@ use ulid::Ulid;
 use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::static_types::{StaticType, StringType};
 use crate::semantic::{Either, TypeOf};
 
+use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::branch::Label;
@@ -30,6 +31,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
+    Scan,
     Print(RefCell<Option<EType>>),
     Println(RefCell<Option<EType>>),
 }
@@ -38,6 +40,8 @@ pub enum IOFn {
 pub enum IOCasm {
     Print(PrintCasm),
     Flush(bool),
+    Scan,
+    RequestScan,
 }
 
 impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IOCasm {
@@ -46,6 +50,8 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IOCasm {
             IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
             IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
             IOCasm::Flush(false) => stdio.push_casm_lib(engine, "flush"),
+            IOCasm::Scan => stdio.push_casm_lib(engine, "scan"),
+            IOCasm::RequestScan => stdio.push_casm_lib(engine, "rscan"),
         }
     }
 }
@@ -92,6 +98,7 @@ impl IOFn {
         match id.as_str() {
             lexem::PRINT => Some(IOFn::Print(RefCell::default())),
             lexem::PRINTLN => Some(IOFn::Println(RefCell::default())),
+            lexem::SCAN => Some(IOFn::Scan),
             _ => None,
         }
     }
@@ -125,6 +132,12 @@ impl Resolve for IOFn {
                 *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
                 Ok(())
             }
+            IOFn::Scan => {
+                if extra.len() != 0 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -136,6 +149,7 @@ impl TypeOf for IOFn {
         match self {
             IOFn::Print(_) => Ok(e_static!(StaticType::Unit)),
             IOFn::Println(_) => Ok(e_static!(StaticType::Unit)),
+            IOFn::Scan => Ok(e_static!(StaticType::String(StringType()))),
         }
     }
 }
@@ -173,6 +187,15 @@ impl GenerateCode for IOFn {
                 ))));
                 Ok(())
             }
+            IOFn::Scan => {
+                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
+                    IOCasm::RequestScan,
+                ))));
+                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
+                    IOCasm::Scan,
+                ))));
+                Ok(())
+            }
         }
     }
 }
@@ -196,6 +219,46 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
                 }
                 program.incr();
                 Ok(())
+            }
+            IOCasm::Scan => {
+                let res = stdio.stdin.read(engine);
+                if let Some(content) = res {
+                    // Alloc and fill the string with the content, then ^push the address onto the stack
+                    let len = content.len();
+                    let cap = align(len as usize) as u64;
+                    let alloc_size = cap + 16;
+
+                    let len_bytes = len.to_le_bytes().as_slice().to_vec();
+                    let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
+
+                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+
+                    let data = content.as_bytes();
+                    /* Write len */
+                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                    /* Write capacity */
+                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                    /* Write slice */
+                    let _ = heap
+                        .write(address + 16, &data.to_vec())
+                        .map_err(|e| e.into())?;
+
+                    let _ = stack
+                        .push_with(&address.to_le_bytes())
+                        .map_err(|e| e.into())?;
+                    program.incr();
+                    Ok(())
+                } else {
+                    // the program instruction cursor is not increment, therefore when content will be available in the stdin
+                    // the instruction will be run again and only then the program cursor will get incremented
+                    Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
+                }
+            }
+            IOCasm::RequestScan => {
+                stdio.stdin.request(engine);
+                program.incr();
+                Err(RuntimeError::Signal(crate::vm::vm::Signal::WAIT_STDIN))
             }
         }
     }
@@ -355,7 +418,8 @@ mod tests {
         ast::{statements::Statement, TryParse},
         compile_statement_for_stdout,
         semantic::scope::scope::Scope,
-        vm::vm::Runtime,
+        vm::vm::{Runtime, StdinTestGameEngine},
+        Ciphel,
     };
 
     use super::*;
@@ -659,5 +723,33 @@ mod tests {
         let output = compile_statement_for_stdout!(statement);
         assert_eq!(&output, "Geo::Point{x:420,y:69}");
         // assert_eq!(&output, "\"Hello World\"");
+    }
+
+    #[test]
+    fn valid_scan() {
+        let mut engine = StdinTestGameEngine {
+            out: String::new(),
+            in_buf: String::new(),
+        };
+        let mut ciphel = Ciphel::<crate::vm::vm::StdinTestGameEngine>::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        
+        let res = scan();
+        println(res);
+        
+        "##;
+
+        ciphel
+            .compile(tid, src)
+            .expect("Compilation should have succeeded");
+        ciphel.run(&mut engine).expect("no error should arise");
+        ciphel.run(&mut engine).expect("no error should arise");
+        engine.in_buf = "Hello World".into();
+        ciphel.run(&mut engine).expect("no error should arise");
+
+        let output = engine.out;
+        assert_eq!(&output, "Hello World\n")
     }
 }

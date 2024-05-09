@@ -169,16 +169,36 @@ impl<G: GameEngineStaticFn + Clone> StdOut<G> {
 
 #[derive(Debug, Clone)]
 pub struct StdIn<G: GameEngineStaticFn + Clone> {
-    data: MutRc<String>,
-    buffer: MutRc<Option<Vec<String>>>,
+    data: String,
+    valid: bool,
     _phantom: PhantomData<G>,
 }
 impl<G: GameEngineStaticFn + Clone> Default for StdIn<G> {
     fn default() -> Self {
         Self {
-            buffer: Default::default(),
-            data: Default::default(),
+            data: String::new(),
+            valid: false,
             _phantom: PhantomData::default(),
+        }
+    }
+}
+
+impl<G: GameEngineStaticFn + Clone> StdIn<G> {
+    pub fn write(&mut self, content: String) {
+        self.data.clear();
+        self.valid = true;
+        self.data.push_str(&content);
+    }
+    pub fn request(&mut self, engine: &mut G) {
+        self.data.clear();
+        self.valid = false;
+        engine.stdin_request();
+    }
+    pub fn read(&mut self, engine: &mut G) -> Option<String> {
+        if !self.valid {
+            None
+        } else {
+            Some(self.data.clone())
         }
     }
 }
