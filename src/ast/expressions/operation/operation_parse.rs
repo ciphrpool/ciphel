@@ -304,7 +304,24 @@ impl TryParseOperation for FnCall {
                     }),
                 ))
             } else {
-                Ok((remainder, left))
+                let (remainder, index) = opt(delimited(
+                    wst(lexem::SQ_BRA_O),
+                    Expression::parse,
+                    wst(lexem::SQ_BRA_C),
+                ))(remainder)?;
+
+                if let Some(index) = index {
+                    Ok((
+                        remainder,
+                        Expression::ListAccess(ListAccess {
+                            var: Box::new(left),
+                            index: Box::new(index),
+                            metadata: Metadata::default(),
+                        }),
+                    ))
+                } else {
+                    Ok((remainder, left))
+                }
             }
         } else {
             Ok((remainder, *fn_var))
