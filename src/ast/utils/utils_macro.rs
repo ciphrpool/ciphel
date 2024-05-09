@@ -22,7 +22,9 @@ macro_rules! p_num {
 #[macro_export]
 macro_rules! v_num {
     ($type_def:ident,$num:expr) => {
-        Primitive::Number(Cell::new(Number::$type_def($num)))
+        crate::ast::expressions::data::Primitive::Number(Cell::new(
+            crate::ast::expressions::data::Number::$type_def($num),
+        ))
     };
 }
 
@@ -178,7 +180,8 @@ macro_rules! compile_statement {
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
         assert!(instructions.len() > 0);
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) =
+            crate::vm::vm::Runtime::<crate::vm::vm::NoopGameEngine>::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -189,7 +192,7 @@ macro_rules! compile_statement {
             .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
-        let data = clear_stack!(memory);
+        let data = crate::clear_stack!(memory);
         data.to_owned()
     }};
 }

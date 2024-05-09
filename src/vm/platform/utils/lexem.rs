@@ -48,6 +48,10 @@ pub const PRINT: &str = "print";
 pub const PRINTLN: &str = "println";
 pub const SCAN: &str = "scan";
 pub const TOSTR: &str = "to_str";
+pub const ITEMS: &str = "items";
+pub const KEYS: &str = "keys";
+pub const VALUES: &str = "values";
+
 // pub const JOIN: &str = "join";
 pub const CEIL: &str = "ceil";
 pub const FLOOR: &str = "floor";

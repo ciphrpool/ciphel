@@ -417,7 +417,6 @@ impl Resolve for Addition {
 
         let right_type = self.right.type_of(&scope.borrow())?;
         let _ = <EType as OperandMerging>::can_add(&right_type)?;
-
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
         resolve_metadata!(self.metadata, self, scope, context);
         Ok(())

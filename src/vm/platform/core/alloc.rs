@@ -1226,7 +1226,7 @@ impl GenerateCode for AllocFn {
     }
 }
 
-mod map_impl {
+pub mod map_impl {
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -1757,6 +1757,88 @@ mod map_impl {
             let _ = self.update_buckets_ptr(new_buckets_ptr as u64, heap)?;
 
             Ok(())
+        }
+
+        pub fn retrieve_vec_values(&self, heap: &mut Heap) -> Result<Vec<u64>, RuntimeError> {
+            // get all buckets
+            let bytes_buckets = heap
+                .read(
+                    self.ptr_buckets as usize,
+                    (1 << self.log_cap) * self.bucket_size,
+                )
+                .map_err(|e| e.into())?;
+
+            let mut items_ptr = Vec::with_capacity(self.len as usize);
+
+            for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
+                for idx_top_hash in 0..MAP_BUCKET_SIZE {
+                    if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
+                        items_ptr.push(
+                            self.ptr_buckets
+                                + idx as u64 * self.bucket_size as u64
+                                + MAP_BUCKET_SIZE as u64
+                                + MAP_BUCKET_SIZE as u64 * self.key_size as u64
+                                + idx_top_hash as u64 * self.value_size as u64,
+                        )
+                    }
+                }
+            }
+            Ok(items_ptr)
+        }
+        pub fn retrieve_vec_keys(&self, heap: &mut Heap) -> Result<Vec<u64>, RuntimeError> {
+            // get all buckets
+            let bytes_buckets = heap
+                .read(
+                    self.ptr_buckets as usize,
+                    (1 << self.log_cap) * self.bucket_size,
+                )
+                .map_err(|e| e.into())?;
+
+            let mut items_ptr = Vec::with_capacity(self.len as usize);
+
+            for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
+                for idx_top_hash in 0..MAP_BUCKET_SIZE {
+                    if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
+                        items_ptr.push(
+                            self.ptr_buckets
+                                + idx as u64 * self.bucket_size as u64
+                                + MAP_BUCKET_SIZE as u64
+                                + idx_top_hash as u64 * self.key_size as u64,
+                        )
+                    }
+                }
+            }
+            Ok(items_ptr)
+        }
+        pub fn retrieve_vec_items(&self, heap: &mut Heap) -> Result<Vec<(u64, u64)>, RuntimeError> {
+            // get all buckets
+            let bytes_buckets = heap
+                .read(
+                    self.ptr_buckets as usize,
+                    (1 << self.log_cap) * self.bucket_size,
+                )
+                .map_err(|e| e.into())?;
+
+            let mut items_ptr = Vec::with_capacity(self.len as usize);
+
+            for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
+                for idx_top_hash in 0..MAP_BUCKET_SIZE {
+                    if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
+                        items_ptr.push((
+                            self.ptr_buckets
+                                + idx as u64 * self.bucket_size as u64
+                                + MAP_BUCKET_SIZE as u64
+                                + idx_top_hash as u64 * self.key_size as u64,
+                            self.ptr_buckets
+                                + idx as u64 * self.bucket_size as u64
+                                + MAP_BUCKET_SIZE as u64
+                                + MAP_BUCKET_SIZE as u64 * self.key_size as u64
+                                + idx_top_hash as u64 * self.value_size as u64,
+                        ))
+                    }
+                }
+            }
+            Ok(items_ptr)
         }
     }
 
