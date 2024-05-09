@@ -894,7 +894,7 @@ mod tests {
         semantic::scope::{
             scope::Scope,
             static_types::{
-                AddrType, ChanType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
+                AddrType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
                 StrSliceType, StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},

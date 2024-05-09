@@ -16,7 +16,6 @@ impl CompatibleWith for StaticType {
             StaticType::Vec(value) => value.compatible_with(other, scope),
             StaticType::StaticFn(value) => value.compatible_with(other, scope),
             StaticType::Closure(value) => value.compatible_with(other, scope),
-            StaticType::Chan(value) => value.compatible_with(other, scope),
             StaticType::Tuple(value) => value.compatible_with(other, scope),
             StaticType::Range(value) => value.compatible_with(other, scope),
             StaticType::Unit => {

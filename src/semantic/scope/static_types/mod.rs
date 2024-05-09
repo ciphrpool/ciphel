@@ -28,7 +28,6 @@ pub enum StaticType {
     Closure(ClosureType),
     StaticFn(FnType),
     Range(RangeType),
-    Chan(ChanType),
     Tuple(TupleType),
     Unit,
     Any,
@@ -90,9 +89,6 @@ pub struct ClosureType {
 }
 
 pub type Types = Vec<EType>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChanType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RangeType {

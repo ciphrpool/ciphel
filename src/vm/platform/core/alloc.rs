@@ -122,7 +122,6 @@ pub enum AllocFn {
         key_size: Cell<usize>,
         metadata: Metadata,
     },
-    Chan,
     String {
         len: Cell<usize>,
         from_char: Cell<bool>,
@@ -220,7 +219,6 @@ pub enum AllocCasm {
         key_size: usize,
         value_size: usize,
     },
-    Chan,
     StringFromSlice,
     StringFromChar,
 }
@@ -273,7 +271,6 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
                 key_size,
                 value_size,
             } => stdio.push_casm_lib(engine, "map"),
-            AllocCasm::Chan => stdio.push_casm_lib(engine, "chan"),
             AllocCasm::StringFromSlice => stdio.push_casm_lib(engine, "string"),
             AllocCasm::StringFromChar => stdio.push_casm_lib(engine, "string"),
         }
@@ -333,7 +330,6 @@ impl AllocFn {
                 value_size: Cell::new(0),
                 metadata: Metadata::default(),
             }),
-            lexem::CHAN => Some(AllocFn::Chan),
             lexem::STRING => Some(AllocFn::String {
                 len: Cell::new(0),
                 from_char: Cell::new(false),
@@ -811,7 +807,6 @@ impl Resolve for AllocFn {
                 };
                 Ok(())
             }
-            AllocFn::Chan => todo!(),
             AllocFn::String { len, from_char } => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -1029,7 +1024,6 @@ impl TypeOf for AllocFn {
             AllocFn::Map { metadata, .. } => {
                 metadata.signature().ok_or(SemanticError::NotResolvedYet)
             }
-            AllocFn::Chan => todo!(),
             AllocFn::String { .. } => Ok(e_static!(StaticType::String(StringType()))),
             AllocFn::Alloc => Ok(e_static!(StaticType::Any)),
             AllocFn::Len => Ok(p_num!(U64)),
@@ -1178,7 +1172,6 @@ impl GenerateCode for AllocFn {
                     ))))
                 }
             }
-            AllocFn::Chan => todo!(),
             AllocFn::String { from_char, .. } => {
                 if from_char.get() {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
@@ -2700,7 +2693,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     .push_with(&(map_ptr as u64).to_le_bytes())
                     .map_err(|e| e.into())?;
             }
-            AllocCasm::Chan => todo!(),
             AllocCasm::StringFromSlice => {
                 let len = OpPrimitive::get_num8::<u64>(stack)?;
                 let cap = align(len as usize) as u64;

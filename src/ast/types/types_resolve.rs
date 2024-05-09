@@ -1,6 +1,6 @@
 use super::{
-    AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
-    StringType, TupleType, Type, Types, VecType,
+    AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
+    TupleType, Type, Types, VecType,
 };
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope::type_traits::IsEnum, MutRc, Resolve, SemanticError};
@@ -29,7 +29,6 @@ impl Resolve for Type {
             }
             Type::Vec(value) => value.resolve(scope, context, extra),
             Type::Closure(value) => value.resolve(scope, context, extra),
-            Type::Chan(value) => value.resolve(scope, context, extra),
             Type::Tuple(value) => value.resolve(scope, context, extra),
             Type::Unit => Ok(()),
             Type::Any => Ok(()),
@@ -168,24 +167,6 @@ impl Resolve for Types {
             let _ = item.resolve(scope, context, extra)?;
         }
         Ok(())
-    }
-}
-
-impl Resolve for ChanType {
-    type Output = ();
-    type Context = ();
-
-    type Extra = ();
-    fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
-        context: &Self::Context,
-        extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        self.0.resolve(scope, context, extra)
     }
 }
 

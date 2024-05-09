@@ -1,15 +1,8 @@
-use std::{
-    cell::{Ref},
-    fmt::Debug,
-};
+use std::{cell::Ref, fmt::Debug};
 
-use crate::{
-    ast::{statements::definition, types, utils::strings::ID},
-};
+use crate::ast::{statements::definition, types, utils::strings::ID};
 
 use self::{
-    chan_impl::Chan,
-    event_impl::Event,
     static_types::{NumberType, StaticType},
     user_type_impl::UserType,
     var_impl::Var,
@@ -17,8 +10,6 @@ use self::{
 use crate::semantic::scope::scope::Scope;
 
 use super::{EType, SemanticError};
-pub mod chan_impl;
-pub mod event_impl;
 pub mod scope;
 pub mod static_types;
 pub mod type_traits;
@@ -93,12 +84,6 @@ pub trait BuildStaticType {
         scope: &Ref<Scope>,
     ) -> Result<StaticType, SemanticError>;
 
-    fn build_chan(
-        type_sig: &types::ChanType,
-        scope: &Ref<Scope>,
-    ) -> Result<StaticType, SemanticError>;
-    fn build_chan_from(type_sig: &EType, scope: &Ref<Scope>) -> Result<StaticType, SemanticError>;
-
     fn build_unit() -> StaticType;
 
     fn build_any() -> StaticType;
@@ -129,12 +114,6 @@ pub trait BuildUserType {
 
 pub trait BuildVar {
     fn build_var(id: &ID, type_sig: &EType) -> Var;
-}
-pub trait BuildChan {
-    fn build_chan(id: &ID, type_sig: &EType) -> Chan;
-}
-pub trait BuildEvent {
-    fn build_event(scope: &Ref<Scope>, event: &definition::EventDef) -> Event;
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]

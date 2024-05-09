@@ -16,39 +16,29 @@ use crate::{
 
 use self::{
     alloc::{AllocCasm, AllocFn},
-    chan::{ChanCasm, ChanFn},
-    cursor::{CursorCasm, CursorFn},
     thread::{ThreadCasm, ThreadFn},
 };
 
 pub mod alloc;
-pub mod chan;
-pub mod cursor;
 pub mod thread;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreFn {
     Alloc(AllocFn),
     Thread(ThreadFn),
-    Chan(ChanFn),
-    Cursor(CursorFn),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreCasm {
     Alloc(AllocCasm),
     Thread(ThreadCasm),
-    Chan(ChanCasm),
-    Cursor(CursorCasm),
 }
 
 impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CoreCasm {
     fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            CoreCasm::Alloc(value) => value.name(stdio, program,engine),
-            CoreCasm::Thread(value) => value.name(stdio, program,engine),
-            CoreCasm::Chan(value) => {}
-            CoreCasm::Cursor(value) => {}
+            CoreCasm::Alloc(value) => value.name(stdio, program, engine),
+            CoreCasm::Thread(value) => value.name(stdio, program, engine),
         }
     }
 }
@@ -58,14 +48,8 @@ impl CoreFn {
         if let Some(value) = AllocFn::from(suffixe, id) {
             return Some(CoreFn::Alloc(value));
         }
-        if let Some(value) = ChanFn::from(suffixe, id) {
-            return Some(CoreFn::Chan(value));
-        }
         if let Some(value) = ThreadFn::from(suffixe, id) {
             return Some(CoreFn::Thread(value));
-        }
-        if let Some(value) = CursorFn::from(suffixe, id) {
-            return Some(CoreFn::Cursor(value));
         }
         None
     }
@@ -84,8 +68,6 @@ impl Resolve for CoreFn {
         match self {
             CoreFn::Alloc(value) => value.resolve(scope, context, extra),
             CoreFn::Thread(value) => value.resolve(scope, context, extra),
-            CoreFn::Chan(value) => value.resolve(scope, context, extra),
-            CoreFn::Cursor(value) => value.resolve(scope, context, extra),
         }
     }
 }
@@ -98,8 +80,6 @@ impl TypeOf for CoreFn {
         match self {
             CoreFn::Alloc(value) => value.type_of(scope),
             CoreFn::Thread(value) => value.type_of(scope),
-            CoreFn::Chan(value) => value.type_of(scope),
-            CoreFn::Cursor(value) => value.type_of(scope),
         }
     }
 }
@@ -113,8 +93,6 @@ impl GenerateCode for CoreFn {
         match self {
             CoreFn::Alloc(value) => value.gencode(scope, instructions),
             CoreFn::Thread(value) => value.gencode(scope, instructions),
-            CoreFn::Chan(value) => value.gencode(scope, instructions),
-            CoreFn::Cursor(value) => value.gencode(scope, instructions),
         }
     }
 }
@@ -131,8 +109,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CoreCasm {
         match self {
             CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine),
             CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine),
-            CoreCasm::Chan(_value) => todo!(),
-            CoreCasm::Cursor(_value) => todo!(),
         }
     }
 }

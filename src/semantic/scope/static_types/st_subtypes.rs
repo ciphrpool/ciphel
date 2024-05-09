@@ -18,7 +18,6 @@ impl GetSubTypes for StaticType {
             StaticType::Vec(_) => None,
             StaticType::StaticFn(value) => value.params.get(*n).map(|v| v.clone()),
             StaticType::Closure(value) => value.params.get(*n).map(|v| v.clone()),
-            StaticType::Chan(_) => None,
             StaticType::Tuple(value) => value.0.get(*n).map(|v| v.clone()),
             StaticType::Unit => None,
             StaticType::Any => None,
@@ -38,7 +37,6 @@ impl GetSubTypes for StaticType {
             StaticType::Vec(value) => Some(value.0.as_ref().clone()),
             StaticType::StaticFn(_) => None,
             StaticType::Closure(_) => None,
-            StaticType::Chan(value) => Some(value.0.as_ref().clone()),
             StaticType::Tuple(_) => None,
             StaticType::Unit => None,
             StaticType::Any => None,
@@ -69,7 +67,6 @@ impl GetSubTypes for StaticType {
         match self {
             StaticType::StaticFn(value) => Some(value.ret.as_ref().clone()),
             StaticType::Closure(value) => Some(value.ret.as_ref().clone()),
-            StaticType::Chan(value) => Some(value.0.as_ref().clone()),
             StaticType::Address(AddrType(value)) => <EType as GetSubTypes>::get_return(value),
             _ => None,
         }
@@ -95,7 +92,6 @@ impl GetSubTypes for StaticType {
                     .map(|param| (None, param))
                     .collect(),
             ),
-            StaticType::Chan(_) => None,
             StaticType::Tuple(value) => Some(
                 value
                     .0
@@ -122,7 +118,6 @@ impl GetSubTypes for StaticType {
             StaticType::Vec(_) => None,
             StaticType::StaticFn(_) => None,
             StaticType::Closure(_) => None,
-            StaticType::Chan(_) => None,
             StaticType::Tuple(value) => Some(value.0.len()),
             StaticType::Unit => None,
             StaticType::Any => None,
@@ -142,7 +137,6 @@ impl GetSubTypes for StaticType {
             StaticType::Vec(_) => None,
             StaticType::StaticFn(_) => None,
             StaticType::Closure(_) => None,
-            StaticType::Chan(_) => None,
             StaticType::Tuple(TupleType(fields)) => {
                 Some(fields.iter().take(index).map(|field| field.size_of()).sum())
             }

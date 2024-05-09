@@ -6,8 +6,8 @@ use crate::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, MapType, PrimitiveType, RangeType, SliceType,
-    StaticType, StrSliceType, StringType, TupleType, VecType,
+    AddrType, ClosureType, FnType, MapType, PrimitiveType, RangeType, SliceType, StaticType,
+    StrSliceType, StringType, TupleType, VecType,
 };
 use crate::semantic::scope::scope::Scope;
 
@@ -39,7 +39,6 @@ impl MergeType for StaticType {
             StaticType::Vec(value) => value.merge(other, scope),
             StaticType::StaticFn(value) => value.merge(other, scope),
             StaticType::Closure(value) => value.merge(other, scope),
-            StaticType::Chan(value) => value.merge(other, scope),
             StaticType::Tuple(value) => value.merge(other, scope),
             StaticType::Unit => Ok(other_type),
             StaticType::Any => Ok(other_type),
@@ -270,25 +269,6 @@ impl MergeType for ClosureType {
                 scope_params_size,
             })
             .into(),
-        ))
-    }
-}
-
-impl MergeType for ChanType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::Static(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let StaticType::Chan(other_type) = other_type.as_ref() else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let merged = self.0.merge(other_type.0.as_ref(), scope)?;
-        Ok(Either::Static(
-            StaticType::Chan(ChanType(Box::new(merged))).into(),
         ))
     }
 }

@@ -1,8 +1,8 @@
 use std::cell::Ref;
 
 use super::{
-    AddrType, ChanType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType,
-    StringType, TupleType, Type, VecType,
+    AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
+    TupleType, Type, VecType,
 };
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{self, StaticType};
@@ -31,7 +31,6 @@ impl TypeOf for Type {
             }
             Type::Vec(value) => value.type_of(&scope),
             Type::Closure(value) => value.type_of(&scope),
-            Type::Chan(value) => value.type_of(&scope),
             Type::Tuple(value) => value.type_of(&scope),
             Type::Unit => {
                 let static_type: StaticType = <StaticType as BuildStaticType>::build_unit();
@@ -317,36 +316,6 @@ impl CompatibleWith for static_types::ClosureType {
     }
 }
 
-impl TypeOf for ChanType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        let static_type: StaticType = StaticType::build_chan(&self, scope)?;
-        let static_type = e_static!(static_type);
-        Ok(static_type)
-    }
-}
-
-impl CompatibleWith for static_types::ChanType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        if let Either::Static(other_type) = other_type {
-            if let StaticType::Chan(static_types::ChanType(other_subtype)) = other_type.as_ref() {
-                let subtype = self.0.type_of(&scope)?;
-                let other_subtype = other_subtype.type_of(&scope)?;
-                return subtype.compatible_with(&other_subtype, scope);
-            } else {
-                return Err(SemanticError::IncompatibleTypes);
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
-    }
-}
 
 impl TypeOf for TupleType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>

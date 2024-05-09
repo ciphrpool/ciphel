@@ -10,7 +10,6 @@ impl TypeChecking for StaticType {
             StaticType::Vec(_) => true,
             StaticType::StaticFn(_) => false,
             StaticType::Closure(_) => false,
-            StaticType::Chan(_) => true,
             StaticType::Tuple(_) => false,
             StaticType::Unit => false,
             StaticType::Any => false,
@@ -29,7 +28,6 @@ impl TypeChecking for StaticType {
             StaticType::Vec(_) => true,
             StaticType::StaticFn(_) => false,
             StaticType::Closure(_) => false,
-            StaticType::Chan(_) => false,
             StaticType::Tuple(_) => false,
             StaticType::Unit => false,
             StaticType::Any => false,
@@ -48,7 +46,6 @@ impl TypeChecking for StaticType {
             StaticType::Vec(_) => false,
             StaticType::StaticFn(_) => false,
             StaticType::Closure(_) => false,
-            StaticType::Chan(_) => false,
             StaticType::Tuple(_) => true,
             StaticType::Unit => false,
             StaticType::Any => false,
@@ -60,13 +57,6 @@ impl TypeChecking for StaticType {
             StaticType::String(_) => false,
             StaticType::StrSlice(_) => false,
             StaticType::Range(_) => true,
-        }
-    }
-    fn is_channel(&self) -> bool {
-        match self {
-            StaticType::Chan(_) => true,
-            StaticType::Address(AddrType(value)) => <EType as TypeChecking>::is_channel(value),
-            _ => false,
         }
     }
     fn is_boolean(&self) -> bool {

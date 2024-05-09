@@ -31,7 +31,6 @@ pub enum SemanticError {
     ExpectedCallable,
     ExpectedEnum,
     ExpectedStruct,
-    ExpectedChannel,
     ExpectedLoop,
     ExpectedMovedClosure,
     ExpectedLeftExpression,

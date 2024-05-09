@@ -1,4 +1,4 @@
-use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
+use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
@@ -31,7 +31,6 @@ impl Resolve for Definition {
         match self {
             Definition::Type(value) => value.resolve(scope, &(), &()),
             Definition::Fn(value) => value.resolve(scope, &(), &()),
-            Definition::Event(value) => value.resolve(scope, &(), &()),
         }
     }
 }
@@ -188,40 +187,6 @@ impl Resolve for FnDef {
         let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
-    }
-}
-
-impl Resolve for EventDef {
-    type Output = ();
-    type Context = ();
-    type Extra = ();
-    fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
-        _context: &Self::Context,
-        _extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
-}
-
-impl Resolve for EventCondition {
-    type Output = ();
-    type Context = ();
-    type Extra = ();
-    fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
-        _context: &Self::Context,
-        _extra: &Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        todo!()
     }
 }
 

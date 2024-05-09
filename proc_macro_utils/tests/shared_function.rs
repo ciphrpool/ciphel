@@ -14,43 +14,43 @@ pub mod vm {
                 pub fn get_num16<N: FromBytes<Bytes = [u8; 16]>>(
                     memory: &mut Stack,
                 ) -> Result<N, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_num8<N: FromBytes<Bytes = [u8; 8]>>(
                     memory: &mut Stack,
                 ) -> Result<N, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_num4<N: FromBytes<Bytes = [u8; 4]>>(
                     memory: &mut Stack,
                 ) -> Result<N, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_num2<N: FromBytes<Bytes = [u8; 2]>>(
                     memory: &mut Stack,
                 ) -> Result<N, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_num1<N: FromBytes<Bytes = [u8; 1]>>(
                     memory: &mut Stack,
                 ) -> Result<N, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
 
                 pub fn get_bool(memory: &mut Stack) -> Result<bool, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_char(memory: &mut Stack) -> Result<char, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_str_slice(memory: &mut Stack) -> Result<String, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
                 pub fn get_string(
                     stack: &mut Stack,
                     heap: &mut Heap,
                 ) -> Result<String, RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
             }
         }
@@ -62,7 +62,7 @@ pub mod vm {
 
             impl Stack {
                 pub fn push_with(&mut self, data: &[u8]) -> Result<(), RuntimeError> {
-                    todo!()
+                    unimplemented!()
                 }
             }
         }
@@ -74,7 +74,7 @@ pub mod vm {
         pub struct StdIO {}
         impl StdIO {
             pub fn push_casm_lib(&self, data: &str) {
-                todo!()
+                unimplemented!()
             }
         }
     }

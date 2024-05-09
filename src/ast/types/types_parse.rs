@@ -17,8 +17,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ChanType, ClosureType, MapType, NumberType, PrimitiveType, RangeType, SliceType,
-    StrSliceType, StringType, TupleType, Type, Types, VecType,
+    AddrType, ClosureType, MapType, NumberType, PrimitiveType, RangeType, SliceType, StrSliceType,
+    StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -26,7 +26,7 @@ impl TryParse for Type {
      * @desc Parse Type
      *
      * @grammar
-     * Type :=  Primitive | ID | Vec |  Fn | Chan | Slice | Tuple | Unit | Address | Map | Gen
+     * Type :=  Primitive | ID | Vec |  Fn  | Slice | Tuple | Unit | Address | Map | Gen
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
@@ -39,7 +39,6 @@ impl TryParse for Type {
             map(VecType::parse, |value| Type::Vec(value)),
             map(ClosureType::parse, |value| Type::Closure(value)),
             map(RangeType::parse, |value| Type::Range(value)),
-            map(ChanType::parse, |value| Type::Chan(value)),
             map(TupleType::parse, |value| Type::Tuple(value)),
             map(AddrType::parse, |value| Type::Address(value)),
             map(MapType::parse, |value| Type::Map(value)),
@@ -194,24 +193,6 @@ impl TryParse for Types {
      */
     fn parse(input: Span) -> PResult<Self> {
         separated_list1(wst(lexem::COMA), Type::parse)(input)
-    }
-}
-
-impl TryParse for ChanType {
-    /*
-     * @desc Parse Chan Type
-     *
-     * @grammar
-     * Chan := Chan< Type >
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            preceded(
-                wst(lexem::UCHAN),
-                delimited(wst(lexem::LESSER), Type::parse, wst(lexem::GREATER)),
-            ),
-            |value| ChanType(Box::new(value)),
-        )(input)
     }
 }
 
@@ -416,20 +397,6 @@ mod tests {
                 closed: true,
                 scope_params_size: Cell::new(0),
             },
-            value
-        );
-    }
-
-    #[test]
-    fn valid_chan_type() {
-        let res = ChanType::parse("Chan<[8]i128>".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            ChanType(Box::new(Type::Slice(SliceType {
-                size: 8,
-                item_type: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::I128)))
-            }))),
             value
         );
     }

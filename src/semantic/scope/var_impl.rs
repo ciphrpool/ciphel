@@ -1,6 +1,4 @@
-use std::{
-    cell::{Cell, Ref},
-};
+use std::cell::{Cell, Ref};
 
 use crate::{
     ast::utils::strings::ID,
@@ -103,9 +101,7 @@ impl TypeChecking for Var {
     fn is_iterable(&self) -> bool {
         <EType as TypeChecking>::is_iterable(&self.type_sig)
     }
-    fn is_channel(&self) -> bool {
-        <EType as TypeChecking>::is_channel(&self.type_sig)
-    }
+
     fn is_boolean(&self) -> bool {
         <EType as TypeChecking>::is_boolean(&self.type_sig)
     }

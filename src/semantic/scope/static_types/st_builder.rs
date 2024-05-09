@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    AddrType, ChanType, ClosureType, FnType, MapType, NumberType, PrimitiveType, RangeType,
-    SliceType, StaticType, TupleType, VecType,
+    AddrType, ClosureType, FnType, MapType, NumberType, PrimitiveType, RangeType, SliceType,
+    StaticType, TupleType, VecType,
 };
 use crate::semantic::scope::scope::Scope;
 
@@ -166,22 +166,6 @@ impl BuildStaticType for StaticType {
             closed,
             scope_params_size,
         }))
-    }
-
-    fn build_chan(
-        type_sig: &ast::types::ChanType,
-        scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
-        let subtype = type_sig.0.type_of(&scope)?;
-        Ok(Self::Chan(ChanType(Box::new(subtype))))
-    }
-
-    fn build_chan_from(
-        type_sig: &Either<UserType, Self>,
-        scope: &Ref<Scope>,
-    ) -> Result<Self, SemanticError> {
-        let subtype = type_sig.type_of(&scope)?;
-        Ok(Self::Chan(ChanType(Box::new(subtype))))
     }
 
     fn build_unit() -> Self {

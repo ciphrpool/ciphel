@@ -32,12 +32,12 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
     fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
             Data::Serialized { data } => {
-                stdio.push_casm(engine,&format!("dmp 0x{}", HexSlice(data.as_ref())))
+                stdio.push_casm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
             }
             Data::Dump { data } => {
                 let arr: Vec<String> = data.iter().map(|e| format!("0x{}", HexSlice(e))).collect();
                 let arr = arr.join(", ");
-                stdio.push_casm(engine,&format!("data {}", arr))
+                stdio.push_casm(engine, &format!("data {}", arr))
             }
             Data::Table { data } => {
                 let arr: Vec<String> = data
@@ -48,7 +48,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
                     })
                     .collect();
                 let arr = arr.join(", ");
-                stdio.push_casm(engine,&format!("labels {}", arr))
+                stdio.push_casm(engine, &format!("labels {}", arr))
             }
         }
     }
@@ -69,7 +69,6 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Data {
             }
             Data::Dump { data } => program.incr(),
             Data::Table { data } => program.incr(),
-            // Data::Get { label, idx } => todo!(),
         }
         Ok(())
     }

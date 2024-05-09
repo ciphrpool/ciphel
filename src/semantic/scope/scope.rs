@@ -14,8 +14,6 @@ use crate::{
 };
 
 use super::{
-    chan_impl::Chan,
-    event_impl::Event,
     static_types::{NumberType, PrimitiveType, StaticType},
     user_type_impl::UserType,
     var_impl::{Var, VarState},
@@ -40,8 +38,6 @@ pub enum Scope {
     },
     General {
         data: ScopeData,
-        events: HashMap<ID, Event>,
-        channels: HashMap<ID, Chan>,
         stack_top: Cell<usize>,
     },
 }
@@ -72,8 +68,6 @@ impl Scope {
     pub fn new() -> MutRc<Self> {
         Rc::new(RefCell::new(Self::General {
             data: ScopeData::new(),
-            events: HashMap::new(),
-            channels: HashMap::new(),
             stack_top: Cell::new(0),
         }))
     }
@@ -122,10 +116,6 @@ impl Scope {
         }
     }
 
-    pub fn register_chan(&mut self, _reg: &ID) -> Result<(), SemanticError> {
-        todo!()
-    }
-
     pub fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
@@ -138,10 +128,6 @@ impl Scope {
                 Ok(())
             }
         }
-    }
-
-    pub fn register_event(&mut self, _reg: Event) -> Result<(), SemanticError> {
-        todo!()
     }
 
     pub fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
@@ -318,10 +304,6 @@ impl Scope {
         }
     }
 
-    pub fn find_chan(&self) -> Result<&Chan, SemanticError> {
-        todo!()
-    }
-
     pub fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError> {
         match self {
             Scope::Inner {
@@ -354,9 +336,6 @@ impl Scope {
                 .cloned()
                 .ok_or(SemanticError::UnknownType(id.clone())),
         }
-    }
-    pub fn find_event(&self) -> Result<&Event, SemanticError> {
-        todo!()
     }
 
     pub fn state(&self) -> ScopeState {
@@ -422,10 +401,6 @@ impl Scope {
                 .collect(),
         }
     }
-
-    // fn access_level_of(&self, id: &ID) -> Result<AccessLevel, crate::vm::vm::CodeGenerationError> {
-    //     todo!()
-    // }
 
     pub fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
         match self {

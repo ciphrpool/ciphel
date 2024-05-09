@@ -29,7 +29,6 @@ pub const FREE: &str = "free";
 pub const ALLOC: &str = "alloc";
 pub const VEC: &str = "vec";
 pub const MAP: &str = "map";
-pub const CHAN: &str = "chan";
 pub const STRING: &str = "string";
 pub const MEMCPY: &str = "memcpy";
 pub const CLEAR: &str = "clear";
@@ -43,10 +42,6 @@ pub const WAIT: &str = "wait";
 pub const WAKE: &str = "wake";
 pub const SLEEP: &str = "sleep";
 pub const JOIN: &str = "join";
-
-// CHANNEL
-pub const RECEIVE: &str = "receive";
-pub const SEND: &str = "send";
 
 // STD
 pub const PRINT: &str = "print";

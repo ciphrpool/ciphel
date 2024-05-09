@@ -41,7 +41,6 @@ impl DeserializeFrom for StaticType {
             StaticType::Vec(value) => Ok(Data::Vec(value.deserialize_from(bytes)?)),
             StaticType::StaticFn(_value) => unimplemented!(),
             StaticType::Closure(_value) => unimplemented!(),
-            StaticType::Chan(_value) => unimplemented!(),
             StaticType::Tuple(value) => Ok(Data::Tuple(value.deserialize_from(bytes)?)),
             StaticType::Unit => Ok(Data::Unit),
             StaticType::Any => Err(RuntimeError::Deserialization),
@@ -84,7 +83,6 @@ impl Printer for StaticType {
                 ))));
                 Ok(())
             }
-            StaticType::Chan(_value) => todo!(),
             StaticType::Tuple(value) => value.build_printer(instructions),
             StaticType::Range(value) => value.build_printer(instructions),
             StaticType::Unit => {

@@ -56,9 +56,7 @@ pub trait TypeChecking {
     fn is_dotnum_indexable(&self) -> bool {
         false
     }
-    fn is_channel(&self) -> bool {
-        false
-    }
+
     fn is_boolean(&self) -> bool {
         false
     }

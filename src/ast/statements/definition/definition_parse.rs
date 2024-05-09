@@ -16,14 +16,13 @@ use crate::ast::{
     TryParse,
 };
 
-use super::{Definition, EnumDef, EventCondition, EventDef, FnDef, StructDef, TypeDef, UnionDef};
+use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
 impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(TypeDef::parse, |value| Definition::Type(value)),
             map(FnDef::parse, |value| Definition::Fn(value)),
-            map(EventDef::parse, |value| Definition::Event(value)),
         ))(input)
     }
 }
@@ -152,36 +151,6 @@ impl TryParse for FnDef {
                 scope,
             },
         )(input)
-    }
-}
-
-impl TryParse for EventDef {
-    /*
-     * @desc Parse event definition
-     *
-     * @grammar
-     * EventDef := event ID \(  EventCondition \) Scope
-     * EventCondition := TODO
-     */
-    fn parse(input: Span) -> PResult<Self> {
-        map(
-            tuple((
-                preceded(wst(lexem::EVENT), parse_id),
-                EventCondition::parse,
-                Block::parse,
-            )),
-            |(id, condition, scope)| EventDef {
-                id,
-                condition,
-                scope,
-            },
-        )(input)
-    }
-}
-
-impl TryParse for EventCondition {
-    fn parse(_input: Span) -> PResult<Self> {
-        todo!()
     }
 }
 
@@ -336,32 +305,4 @@ mod tests {
             value
         );
     }
-
-    // #[test]
-    // fn valid_event_def() {
-    //     unimplemented!("Events condition are not implemented ");
-    //     // let res = EventDef::parse(
-    //     //     r#"
-    //     // event Event( TODO ) {
-    //     //     f(10);
-    //     // }
-    //     // "#
-    //     //     .into(),
-    //     // );
-    //     // assert!(res.is_ok(), "{:?}", res);
-    //     // let value = res.unwrap().1;
-    //     // assert_eq!(
-    //     //     EventDef {
-    //     //         id: "Event".into(),
-    //     //         condition: todo!(),
-    //     //         block: Scope {
-    //     //             instructions: vec![Statement::Flow(Flow::Call(CallStat {
-    //     //                 fn_id: "f".into(),
-    //     //                 params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(I64, 10)))]
-    //     //             }))]
-    //     //         }
-    //     //     },
-    //     //     value
-    //     // );
-    // }
 }

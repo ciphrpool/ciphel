@@ -1,4 +1,4 @@
-use super::{Definition, EventDef, FnDef, TypeDef};
+use super::{Definition, FnDef, TypeDef};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::SizeOf;
 
@@ -29,7 +29,6 @@ impl GenerateCode for Definition {
         match self {
             Definition::Type(value) => value.gencode(scope, instructions),
             Definition::Fn(value) => value.gencode(scope, instructions),
-            Definition::Event(value) => value.gencode(scope, instructions),
         }
     }
 }
@@ -94,16 +93,6 @@ impl GenerateCode for FnDef {
         }));
         instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }));
         Ok(())
-    }
-}
-
-impl GenerateCode for EventDef {
-    fn gencode(
-        &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        todo!()
     }
 }
 

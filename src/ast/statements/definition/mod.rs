@@ -15,7 +15,6 @@ pub mod definition_typeof;
 pub enum Definition {
     Type(TypeDef),
     Fn(FnDef),
-    Event(EventDef),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,13 +49,3 @@ pub struct FnDef {
     ret: Box<Type>,
     scope: Block,
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct EventDef {
-    id: ID,
-    condition: EventCondition,
-    scope: Block,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum EventCondition {}

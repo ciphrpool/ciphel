@@ -18,7 +18,6 @@ pub enum Type {
     UserType(ID),
     Vec(VecType),
     Closure(ClosureType),
-    Chan(ChanType),
     Tuple(TupleType),
     Unit,
     Any,
@@ -72,9 +71,6 @@ pub struct ClosureType {
     pub closed: bool,
 }
 pub type Types = Vec<Type>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChanType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleType(pub Types);

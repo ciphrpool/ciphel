@@ -109,13 +109,6 @@ impl TypeChecking for EType {
         }
     }
 
-    fn is_channel(&self) -> bool {
-        match self {
-            Either::Static(static_type) => static_type.is_channel(),
-            Either::User(_user_type) => false,
-        }
-    }
-
     fn is_any(&self) -> bool {
         match self {
             Either::Static(static_type) => static_type.is_any(),
