@@ -221,10 +221,11 @@ impl Scope {
                                         }
                                         idx
                                     };
-                                    let env_offset = match self.access_var(&"$ENV".into()).ok() {
-                                        Some((_, Offset::FP(o), _)) => o,
-                                        _ => return None,
-                                    };
+                                    let env_offset =
+                                        match self.access_var(&"$ENV".to_string().into()).ok() {
+                                            Some((_, Offset::FP(o), _)) => o,
+                                            _ => return None,
+                                        };
                                     Some((var, Offset::FE(env_offset, offset), level))
                                 } else {
                                     Some((var, offset, level))
@@ -358,7 +359,7 @@ impl Scope {
                     }
                     data.vars.push((
                         Rc::new(Var {
-                            id: "$ENV".into(),
+                            id: "$ENV".to_string().into(),
                             type_sig: p_num!(U64),
                             state: VarState::Parameter.into(),
                             is_declared: Cell::new(true),

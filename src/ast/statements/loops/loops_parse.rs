@@ -135,10 +135,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             ForLoop {
-                item: ForItem::Id("i".into()),
+                item: ForItem::Id("i".to_string().into()),
                 iterator: ForIterator {
                     expr: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         from_field: Cell::new(false),
                         metadata: Metadata::default(),
                     })))
@@ -150,7 +150,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -197,7 +197,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -240,7 +240,7 @@ mod tests {
                         lib: None,
                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "f".into(),
+                                id: "f".to_string().into(),
                                 from_field: Cell::new(false),
                                 metadata: Metadata::default(),
                             }

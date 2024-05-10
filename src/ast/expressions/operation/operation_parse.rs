@@ -1182,13 +1182,13 @@ mod tests {
             Expression::FnCall(FnCall {
                 lib: None,
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".into(),
+                    id: "f".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: Cell::new(false),
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: Cell::new(false),
                     }))),
@@ -1210,15 +1210,15 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::FnCall(FnCall {
-                lib: Some("core".into()),
+                lib: Some("core".to_string().into()),
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".into(),
+                    id: "f".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: Cell::new(false),
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: Cell::new(false),
                     }))),

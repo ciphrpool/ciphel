@@ -1,13 +1,13 @@
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::ClosureType;
+use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
 use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::AccessLevel;
 use crate::vm::allocator::stack::Offset;
 use crate::vm::allocator::MemoryAddress;
-use crate::vm::casm::alloc::Access;
+use crate::vm::casm::alloc::{Access, CheckIndex};
 use crate::vm::casm::branch::Call;
 use crate::vm::casm::data;
-use crate::vm::casm::locate::{Locate, LocateNextUTF8Char};
+use crate::vm::casm::locate::{Locate, LocateUTF8Char};
 use crate::vm::casm::mem::Mem;
 use crate::vm::vm::Locatable;
 use crate::{
@@ -143,21 +143,11 @@ impl Locatable for ListAccess {
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
-
         if let Some(signature) = self.var.signature() {
             match signature {
                 Either::Static(signature) => match signature.as_ref() {
                     StaticType::String(_) | StaticType::Vec(_) => {
                         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        instructions.push(Casm::Data(data::Data::Serialized {
-                            data: (16u64).to_le_bytes().into(),
-                        }));
-                        instructions.push(Casm::Operation(Operation {
-                            kind: OperationKind::Addition(Addition {
-                                left: OpPrimitive::Number(NumberType::U64),
-                                right: OpPrimitive::Number(NumberType::U64),
-                            }),
-                        }));
                     }
                     _ => {}
                 },
@@ -179,8 +169,21 @@ impl Locatable for ListAccess {
             _ => false,
         };
 
+        let len = match self
+            .var
+            .signature()
+            .ok_or(CodeGenerationError::UnresolvedError)?
+        {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Slice(SliceType { size, .. }) => Some(*size),
+                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
+                _ => None,
+            },
+            _ => None,
+        };
+
         if is_utf8_access {
-            instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeAtIdx));
+            instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeAtIdx { len }));
         } else {
             let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
                 return Err(CodeGenerationError::UnresolvedError);
@@ -189,20 +192,9 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::Pop(8)); //Pop index
                 return Ok(());
             }
-            instructions.push(Casm::Data(data::Data::Serialized {
-                data: (size as u64).to_le_bytes().into(),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Mult(Mult {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Addition(Addition {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
+            instructions.push(Casm::AccessIdx(CheckIndex {
+                item_size: size,
+                len,
             }));
         }
 
@@ -225,21 +217,11 @@ impl GenerateCode for ListAccess {
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
-
         if let Some(signature) = self.var.signature() {
             match signature {
                 Either::Static(signature) => match signature.as_ref() {
                     StaticType::String(_) | StaticType::Vec(_) => {
                         instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        instructions.push(Casm::Data(data::Data::Serialized {
-                            data: (16u64).to_le_bytes().into(),
-                        }));
-                        instructions.push(Casm::Operation(Operation {
-                            kind: OperationKind::Addition(Addition {
-                                left: OpPrimitive::Number(NumberType::U64),
-                                right: OpPrimitive::Number(NumberType::U64),
-                            }),
-                        }));
                     }
                     _ => {}
                 },
@@ -261,8 +243,21 @@ impl GenerateCode for ListAccess {
             _ => false,
         };
 
+        let len = match self
+            .var
+            .signature()
+            .ok_or(CodeGenerationError::UnresolvedError)?
+        {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Slice(SliceType { size, .. }) => Some(*size),
+                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
+                _ => None,
+            },
+            _ => None,
+        };
+
         if is_utf8_access {
-            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx));
+            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx { len }));
         } else {
             let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
                 return Err(CodeGenerationError::UnresolvedError);
@@ -271,20 +266,9 @@ impl GenerateCode for ListAccess {
                 instructions.push(Casm::Pop(8)); //Pop index
                 return Ok(());
             }
-            instructions.push(Casm::Data(data::Data::Serialized {
-                data: (size as u64).to_le_bytes().into(),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Mult(Mult {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
-            }));
-            instructions.push(Casm::Operation(Operation {
-                kind: OperationKind::Addition(Addition {
-                    left: OpPrimitive::Number(NumberType::U64),
-                    right: OpPrimitive::Number(NumberType::U64),
-                }),
+            instructions.push(Casm::AccessIdx(CheckIndex {
+                item_size: size,
+                len,
             }));
             instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
         }
@@ -301,6 +285,7 @@ impl Locatable for FieldAccess {
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
+
         // Access the field
         let Some(from_type) = self.var.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -554,7 +539,6 @@ impl GenerateCode for super::FnCall {
                     // Call function
 
                     // Load param size
-                    // instructions.push(Casm::Mem(MemCopy::GetReg(UReg::R3))); // env size
                     instructions.push(Casm::Data(Data::Serialized {
                         data: (sig_params_size).to_le_bytes().into(),
                     }));

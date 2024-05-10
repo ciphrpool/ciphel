@@ -2,8 +2,8 @@ use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 use crate::ast::expressions::data::{Data, StrSlice, Variable};
 use crate::ast::expressions::flows::FormatItem;
 use crate::ast::expressions::{Atomic, Expression};
-use crate::resolve_metadata;
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::static_types::TupleType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::user_type_impl::{Enum, Union};
 use crate::semantic::scope::var_impl::VarState;
@@ -13,9 +13,10 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, Metadata, MutRc};
+use crate::semantic::{EType, Info, MergeType, Metadata, MutRc};
 use crate::vm::platform::stdlib::StdFn;
 use crate::vm::platform::Lib;
+use crate::{e_static, resolve_metadata};
 use std::collections::HashMap;
 
 impl Resolve for ExprFlow {
@@ -350,12 +351,126 @@ impl Resolve for TryExpr {
         Self: Sized,
     {
         let _ = self.try_branch.resolve(scope, context, &Vec::default())?;
-        let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
+        match &self.else_branch {
+            Some(else_branch) => else_branch.resolve(scope, context, &Vec::default())?,
+            None => {}
+        }
 
         let try_branch_type = self.try_branch.type_of(&scope.borrow())?;
-        let _ = try_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
-        resolve_metadata!(self.metadata, self, scope, context);
-        Ok(())
+        let else_branch_type = match &self.else_branch {
+            Some(else_branch) => else_branch.type_of(&scope.borrow())?,
+            None => e_static!(StaticType::Unit),
+        };
+        match &try_branch_type {
+            Either::Static(value) => match value.as_ref() {
+                StaticType::Tuple(TupleType(types)) => {
+                    if else_branch_type.is_unit() {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
+                    if let Some(maybe_err_type) = types.last() {
+                        if maybe_err_type.is_err() {
+                            let ty = if types.len() == 2 {
+                                types[0].clone()
+                            } else {
+                                let reconstructed_tuple = e_static!(StaticType::Tuple(TupleType(
+                                    types[0..types.len() - 1].to_vec()
+                                )));
+                                reconstructed_tuple
+                            };
+                            let _ = ty.compatible_with(&else_branch_type, &scope.borrow())?;
+                            let res_type = ty.merge(&else_branch_type, &scope.borrow())?;
+
+                            self.pop_last_err.set(true);
+
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(res_type),
+                            };
+                            return Ok(());
+                        } else {
+                            let _ = try_branch_type
+                                .compatible_with(&else_branch_type, &scope.borrow())?;
+                            let res_type =
+                                try_branch_type.merge(&else_branch_type, &scope.borrow())?;
+                            let mut borrowed_metadata = self
+                                .metadata
+                                .info
+                                .as_ref()
+                                .try_borrow_mut()
+                                .map_err(|_| SemanticError::Default)?;
+                            *borrowed_metadata = Info::Resolved {
+                                context: context.clone(),
+                                signature: Some(res_type),
+                            };
+                            return Ok(());
+                        }
+                    } else {
+                        return Err(SemanticError::CantInferType);
+                    }
+                }
+                StaticType::Error => {
+                    if else_branch_type.is_unit() {
+                        self.pop_last_err.set(true);
+
+                        let mut borrowed_metadata = self
+                            .metadata
+                            .info
+                            .as_ref()
+                            .try_borrow_mut()
+                            .map_err(|_| SemanticError::Default)?;
+                        *borrowed_metadata = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(e_static!(StaticType::Unit)),
+                        };
+                        return Ok(());
+                    } else {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
+                }
+                _ => {
+                    if else_branch_type.is_unit() {
+                        return Err(SemanticError::IncompatibleTypes);
+                    }
+                    let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
+                    let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
+                    let mut borrowed_metadata = self
+                        .metadata
+                        .info
+                        .as_ref()
+                        .try_borrow_mut()
+                        .map_err(|_| SemanticError::Default)?;
+                    *borrowed_metadata = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(res_type),
+                    };
+                    return Ok(());
+                }
+            },
+            Either::User(_) => {
+                if else_branch_type.is_unit() {
+                    return Err(SemanticError::IncompatibleTypes);
+                }
+                let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
+                let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
+                let mut borrowed_metadata = self
+                    .metadata
+                    .info
+                    .as_ref()
+                    .try_borrow_mut()
+                    .map_err(|_| SemanticError::Default)?;
+                *borrowed_metadata = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(res_type),
+                };
+                return Ok(());
+            }
+        }
     }
 }
 
@@ -452,7 +567,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -478,13 +593,13 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Color".into(),
+                &"Color".to_string().into(),
                 UserType::Enum(Enum {
-                    id: "Color".into(),
+                    id: "Color".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("RED".into());
-                        res.push("GREEN".into());
+                        res.push("RED".to_string().into());
+                        res.push("GREEN".to_string().into());
                         res
                     },
                 }),
@@ -494,14 +609,14 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::User(
                     UserType::Enum(Enum {
-                        id: "Color".into(),
+                        id: "Color".to_string().into(),
                         values: {
                             let mut res = Vec::new();
-                            res.push("RED".into());
-                            res.push("GREEN".into());
+                            res.push("RED".to_string().into());
+                            res.push("GREEN".to_string().into());
                             res
                         },
                     })
@@ -531,14 +646,14 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Color".into(),
+                &"Color".to_string().into(),
                 UserType::Enum(Enum {
-                    id: "Color".into(),
+                    id: "Color".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("RED".into());
-                        res.push("GREEN".into());
-                        res.push("YELLOW".into());
+                        res.push("RED".to_string().into());
+                        res.push("GREEN".to_string().into());
+                        res.push("YELLOW".to_string().into());
                         res
                     },
                 }),
@@ -548,7 +663,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: e_static!(StaticType::String(StringType())),
                 is_declared: Cell::new(false),
             })
@@ -560,12 +675,12 @@ mod tests {
         assert_eq!(
             Either::User(
                 UserType::Enum(Enum {
-                    id: "Color".into(),
+                    id: "Color".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("RED".into());
-                        res.push("GREEN".into());
-                        res.push("YELLOW".into());
+                        res.push("RED".to_string().into());
+                        res.push("GREEN".to_string().into());
+                        res.push("YELLOW".to_string().into());
                         res
                     },
                 })
@@ -594,7 +709,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -619,7 +734,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -645,25 +760,28 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Geo".into(),
+                &"Geo".to_string().into(),
                 UserType::Union(Union {
-                    id: "Geo".into(),
+                    id: "Geo".to_string().into(),
                     variants: {
                         let mut res = Vec::new();
                         res.push((
-                            "Point".into(),
+                            "Point".to_string().into(),
                             Struct {
-                                id: "Point".into(),
-                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
+                                id: "Point".to_string().into(),
+                                fields: vec![
+                                    ("x".to_string().into(), p_num!(U64)),
+                                    ("y".to_string().into(), p_num!(U64)),
+                                ],
                             },
                         ));
                         res.push((
-                            "Axe".into(),
+                            "Axe".to_string().into(),
                             Struct {
-                                id: "Axe".into(),
+                                id: "Axe".to_string().into(),
                                 fields: {
                                     let mut res = Vec::new();
-                                    res.push(("x".into(), p_num!(U64)));
+                                    res.push(("x".to_string().into(), p_num!(U64)));
                                     res
                                 },
                             },
@@ -677,31 +795,31 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::User(
                     UserType::Union(Union {
-                        id: "Geo".into(),
+                        id: "Geo".to_string().into(),
                         variants: {
                             let mut res = Vec::new();
                             res.push((
-                                "Point".into(),
+                                "Point".to_string().into(),
                                 Struct {
-                                    id: "Point".into(),
+                                    id: "Point".to_string().into(),
                                     fields: {
                                         let mut res = Vec::new();
-                                        res.push(("x".into(), p_num!(U64)));
-                                        res.push(("y".into(), p_num!(U64)));
+                                        res.push(("x".to_string().into(), p_num!(U64)));
+                                        res.push(("y".to_string().into(), p_num!(U64)));
                                         res
                                     },
                                 },
                             ));
                             res.push((
-                                "Axe".into(),
+                                "Axe".to_string().into(),
                                 Struct {
-                                    id: "Axe".into(),
+                                    id: "Axe".to_string().into(),
                                     fields: {
                                         let mut res = Vec::new();
-                                        res.push(("x".into(), p_num!(U64)));
+                                        res.push(("x".to_string().into(), p_num!(U64)));
                                         res
                                     },
                                 },
@@ -728,5 +846,56 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
+    fn valid_try_no_else() {
+        let expr = TryExpr::parse("try Ok()".into())
+            .expect("Parsing should have succeeded")
+            .1;
+        let scope = Scope::new();
+        let res = expr.resolve(&scope, &None, &());
+        assert!(res.is_ok(), "{:?}", res);
+    }
+    #[test]
+    fn valid_try_tuple_err() {
+        let expr = TryExpr::parse("try (10,Err()) else 20".into())
+            .expect("Parsing should have succeeded")
+            .1;
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect("Resolutionb should have succeeded");
+    }
+
+    #[test]
+    fn valid_try_tuple_multi_err() {
+        let expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
+            .expect("Parsing should have succeeded")
+            .1;
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect("Resolutionb should have succeeded");
+    }
+    #[test]
+    fn robustness_try_tuple_err() {
+        let expr = TryExpr::parse("try (10,20,Err()) else 20".into())
+            .expect("Parsing should have succeeded")
+            .1;
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect_err("Resolution shoud have failed");
+    }
+    #[test]
+    fn robustness_try_tuple_err_no_else() {
+        let expr = TryExpr::parse("try (10,Err())".into())
+            .expect("Parsing should have succeeded")
+            .1;
+        let scope = Scope::new();
+        let _ = expr
+            .resolve(&scope, &None, &())
+            .expect_err("Resolution shoud have failed");
     }
 }

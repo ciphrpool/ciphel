@@ -106,7 +106,7 @@ impl GenerateCode for IfStat {
         {
             let ((cond_1, scope_1), label_1) = &pair[0];
             let ((_, _), label_2) = &pair[1];
-            instructions.push_label_id(**label_1, "else_if".into());
+            instructions.push_label_id(**label_1, "else_if".to_string().into());
             let _ = cond_1.gencode(scope, &instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: **label_2,
@@ -115,7 +115,7 @@ impl GenerateCode for IfStat {
             let _ = inner_block_gencode(scope, &scope_1, None, false, instructions)?;
         }
         if let Some((cond, s)) = &self.else_if_branches.last() {
-            instructions.push_label_id(*else_if_labels.last().unwrap(), "else_if".into());
+            instructions.push_label_id(*else_if_labels.last().unwrap(), "else_if".to_string().into());
             let _ = cond.gencode(scope, &instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: else_label.unwrap_or(end_if_label),
@@ -125,11 +125,11 @@ impl GenerateCode for IfStat {
         }
 
         if let Some(s) = &self.else_branch {
-            instructions.push_label_id(else_label.unwrap(), "else".into());
+            instructions.push_label_id(else_label.unwrap(), "else".to_string().into());
             let _ = inner_block_gencode(scope, &s, None, false, instructions)?;
         }
 
-        instructions.push_label_id(end_if_label, "end_if".into());
+        instructions.push_label_id(end_if_label, "end_if".to_string().into());
         Ok(())
     }
 }
@@ -160,7 +160,7 @@ impl GenerateCode for MatchStat {
         };
 
         let end_match_label = Label::gen();
-        let _match_label = instructions.push_label("Match".into());
+        let _match_label = instructions.push_label("Match".to_string().into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
         let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.patterns.len());
@@ -294,7 +294,7 @@ impl GenerateCode for MatchStat {
         }
         match &self.else_branch {
             Some(else_branch) => {
-                instructions.push_label_id(else_label.unwrap(), "else_case".into());
+                instructions.push_label_id(else_label.unwrap(), "else_case".to_string().into());
 
                 let _ = inner_block_gencode(scope, &else_branch, None, false, instructions)?;
                 instructions.push(Casm::Goto(Goto {
@@ -304,7 +304,7 @@ impl GenerateCode for MatchStat {
             None => {}
         }
 
-        instructions.push_label_id(end_match_label, "end_match_else".into());
+        instructions.push_label_id(end_match_label, "end_match_else".to_string().into());
         Ok(())
     }
 }

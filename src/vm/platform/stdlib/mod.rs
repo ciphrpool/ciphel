@@ -1,5 +1,6 @@
 use std::cell::{Cell, Ref};
 
+use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
@@ -40,6 +41,8 @@ pub enum StdFn {
     Strings(StringsFn),
     Assert(Cell<bool>),
     Iter(IterFn),
+    Error,
+    Ok,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +52,8 @@ pub enum StdCasm {
     Strings(StringsCasm),
     AssertBool,
     AssertErr,
+    Error,
+    Ok,
     Iter(IterCasm),
 }
 
@@ -61,12 +66,14 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StdCasm {
             StdCasm::AssertBool => stdio.push_casm_lib(engine, "assert"),
             StdCasm::AssertErr => stdio.push_casm_lib(engine, "assert"),
             StdCasm::Iter(value) => value.name(stdio, program, engine),
+            StdCasm::Error => stdio.push_casm_lib(engine, "err"),
+            StdCasm::Ok => stdio.push_casm_lib(engine, "ok"),
         }
     }
 }
 
 impl StdFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         if let Some(value) = IOFn::from(suffixe, id) {
             return Some(StdFn::IO(value));
         }
@@ -81,7 +88,7 @@ impl StdFn {
         }
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::STD {
+                if **suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -89,6 +96,8 @@ impl StdFn {
         }
         match id.as_str() {
             lexem::ASSERT => Some(StdFn::Assert(false.into())),
+            lexem::ERROR => Some(StdFn::Error),
+            lexem::OK => Some(StdFn::Ok),
             _ => None,
         }
     }
@@ -132,6 +141,18 @@ impl Resolve for StdFn {
                 }
                 Ok(())
             }
+            StdFn::Error => {
+                if extra.len() != 0 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                return Ok(());
+            }
+            StdFn::Ok => {
+                if extra.len() != 0 {
+                    return Err(SemanticError::IncorrectArguments);
+                }
+                return Ok(());
+            }
         }
     }
 }
@@ -147,6 +168,8 @@ impl TypeOf for StdFn {
             StdFn::Iter(value) => value.type_of(scope),
             StdFn::Strings(value) => value.type_of(scope),
             StdFn::Assert(_) => Ok(e_static!(StaticType::Error)),
+            StdFn::Error => Ok(e_static!(StaticType::Error)),
+            StdFn::Ok => Ok(e_static!(StaticType::Error)),
         }
     }
 }
@@ -169,9 +192,20 @@ impl GenerateCode for StdFn {
                 }
                 Ok(())
             }
+            StdFn::Error => {
+                instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::Error)));
+                Ok(())
+            }
+            StdFn::Ok => {
+                instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::Ok)));
+                Ok(())
+            }
         }
     }
 }
+
+pub const ERROR_VALUE: [u8; 1] = [1];
+pub const OK_VALUE: [u8; 1] = [0];
 
 impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
     fn execute(
@@ -192,13 +226,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    // TODO : NO_ERROR value
-                    let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
                     Ok(())
                 } else {
                     // push ERROR
-                    // TODO : ERROR value
-                    let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
                     Err(RuntimeError::AssertError)
                 }
             }
@@ -207,15 +239,23 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    // TODO : NO_ERROR value
-                    let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
                     Ok(())
                 } else {
                     // push ERROR
-                    // TODO : ERROR value
-                    let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
                     Err(RuntimeError::AssertError)
                 }
+            }
+            StdCasm::Error => {
+                let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                program.incr();
+                Ok(())
+            }
+            StdCasm::Ok => {
+                let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                program.incr();
+                Ok(())
             }
         }
     }

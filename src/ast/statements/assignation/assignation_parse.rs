@@ -83,7 +83,7 @@ mod tests {
         assert_eq!(
             Assignation {
                 left: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     from_field: Cell::new(false),
                     metadata: Metadata::default(),
                 }))),
@@ -101,7 +101,7 @@ mod tests {
             Assignation {
                 left: Expression::Atomic(Atomic::Data(Data::PtrAccess(PtrAccess {
                     value: Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         from_field: Cell::new(false),
                         metadata: Metadata::default(),
                     }))
@@ -122,12 +122,12 @@ mod tests {
             Assignation {
                 left: Expression::FieldAccess(FieldAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         from_field: Cell::new(false),
                         metadata: Metadata::default(),
                     })))),
                     field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".into(),
+                        id: "y".to_string().into(),
                         from_field: Cell::new(false),
                         metadata: Metadata::default(),
                     })))),

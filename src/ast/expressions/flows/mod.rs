@@ -3,7 +3,10 @@ pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
@@ -70,7 +73,8 @@ pub struct PatternExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TryExpr {
     try_branch: ExprScope,
-    else_branch: ExprScope,
+    else_branch: Option<ExprScope>,
+    pop_last_err: Cell<bool>,
     metadata: Metadata,
 }
 

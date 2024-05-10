@@ -747,7 +747,12 @@ impl Heap {
         Ok(res)
     }
 
-    pub fn read_utf8(&self, address: Pointer, idx: usize) -> Result<([u8; 4], usize), HeapError> {
+    pub fn read_utf8(
+        &self,
+        address: Pointer,
+        idx: usize,
+        len: usize,
+    ) -> Result<([u8; 4], usize), HeapError> {
         if address < STACK_SIZE {
             return Err(HeapError::ReadError);
         }
@@ -762,6 +767,9 @@ impl Heap {
 
         while current_idx < idx {
             byte = self.heap[address + offset];
+            if offset >= len {
+                return Err(HeapError::ReadError);
+            }
             match byte {
                 // 7-bit ASCII character (U+0000 to U+007F)
                 0x00..=0x7F => {

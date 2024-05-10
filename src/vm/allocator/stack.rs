@@ -581,6 +581,7 @@ impl Stack {
         address: Offset,
         level: AccessLevel,
         idx: usize,
+        len: usize,
     ) -> Result<([u8; 4], usize), StackError> {
         let top = self.top();
         let address = self.compute_absolute_address(address, level)?;
@@ -593,6 +594,9 @@ impl Stack {
 
         while current_idx < idx {
             byte = self.stack[address + offset];
+            if offset >= len {
+                return Err(StackError::ReadError);
+            }
             match byte {
                 // 7-bit ASCII character (U+0000 to U+007F)
                 0x00..=0x7F => {

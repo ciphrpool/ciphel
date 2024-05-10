@@ -146,7 +146,7 @@ impl GetSubTypes for UserType {
                 .map(|field| e_user!(UserType::Struct(field.clone()))),
         }
     }
-    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
         match self {
             UserType::Struct(value) => Some(
                 value
@@ -488,7 +488,7 @@ impl Printer for Struct {
                 PrintCasm::PrintLexem(lexem::COLON),
             )))));
             instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                PrintCasm::PrintID(field_name.to_string()),
+                PrintCasm::PrintID(field_name.clone()),
             )))));
         }
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
@@ -565,7 +565,7 @@ impl Printer for Union {
                 label: Some(end_label),
             }));
         }
-        instructions.push_label_id(end_label, "end_print_enum".into());
+        instructions.push_label_id(end_label, "end_print_enum".to_string().into());
         Ok(())
     }
 }
@@ -630,7 +630,7 @@ impl Printer for Enum {
             }));
         }
 
-        instructions.push_label_id(end_label, "end_print_enum".into());
+        instructions.push_label_id(end_label, "end_print_enum".to_string().into());
         Ok(())
     }
 }

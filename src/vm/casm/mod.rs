@@ -23,6 +23,7 @@ pub struct CasmProgram {
     pub main: MutRc<Vec<Casm>>,
     cursor: Cell<usize>,
     pub labels: MutRc<HashMap<Ulid, (usize, Box<str>)>>,
+    pub catch_stack: MutRc<Vec<Ulid>>,
 }
 
 impl Default for CasmProgram {
@@ -31,6 +32,7 @@ impl Default for CasmProgram {
             main: Default::default(),
             cursor: Cell::new(0),
             labels: Default::default(),
+            catch_stack: Default::default(),
         }
     }
 }
@@ -72,9 +74,31 @@ impl CasmProgram {
         let id = Ulid::new();
         let mut borrowed_labels = self.labels.as_ref().borrow_mut();
         let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, (borrowed_main.len(), "data".into()));
+        borrowed_labels.insert(id, (borrowed_main.len(), "data".to_string().into()));
         borrowed_main.push(Casm::Data(data));
         id
+    }
+
+    pub fn push_catch(&self, label: &Ulid) {
+        let mut borrowed = self.catch_stack.as_ref().borrow_mut();
+        borrowed.push(*label);
+    }
+
+    pub fn pop_catch(&self) {
+        let mut borrowed = self.catch_stack.as_ref().borrow_mut();
+        borrowed.pop();
+    }
+
+    pub fn catch(&self, err: RuntimeError) -> Result<(), RuntimeError> {
+        if let Some(label) = self.catch_stack.as_ref().borrow().last() {
+            let Some(idx) = self.get(&label) else {
+                return Err(RuntimeError::CodeSegmentation);
+            };
+            self.cursor_set(idx);
+            Ok(())
+        } else {
+            Err(err)
+        }
     }
 
     pub fn get(&self, label: &Ulid) -> Option<usize> {
@@ -150,14 +174,16 @@ impl CasmProgram {
                     // dbg!((cursor, instruction, stack.top(),));
                     // let mut buffer = String::new();
                     // io::stdin().read_line(&mut buffer);
-                    // instruction.name(stdio, self);
                     match instruction.execute(self, stack, heap, stdio, engine) {
                         Ok(_) => {}
                         Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
                         Err(RuntimeError::AssertError) => return Ok(()),
-                        Err(e) => {
-                            todo!("{:?} in {:?}", e, instruction)
-                        }
+                        Err(e) => match self.catch(e) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                panic!("{:?} in {:?}", e, instruction)
+                            }
+                        },
                     }
                 }
                 None => {
@@ -179,10 +205,12 @@ pub enum Casm {
     Operation(operation::Operation),
     Data(data::Data),
     Access(alloc::Access),
+    AccessIdx(alloc::CheckIndex),
     Locate(locate::Locate),
     If(branch::BranchIf),
+    Try(branch::BranchTry),
     // Assign(alloc::Assign),
-    LocateNextUTF8Char(locate::LocateNextUTF8Char),
+    LocateUTF8Char(locate::LocateUTF8Char),
     Label(branch::Label),
     Call(branch::Call),
     Goto(branch::Goto),
@@ -204,6 +232,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
             Casm::StackFrame(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Data(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Access(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::AccessIdx(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::If(value) => value.execute(program, stack, heap, stdio, engine),
             // Casm::Assign(value) => value.execute(program, stack, heap, stdio,engine),
             Casm::Label(value) => value.execute(program, stack, heap, stdio, engine),
@@ -213,7 +242,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
             Casm::Mem(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Switch(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Locate(value) => value.execute(program, stack, heap, stdio, engine),
-            Casm::LocateNextUTF8Char(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::LocateUTF8Char(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Platform(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Pop(size) => {
                 stack.pop(*size).map_err(|e| e.into())?;
@@ -222,6 +251,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
             }
             Casm::Realloc(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Free(value) => value.execute(program, stack, heap, stdio, engine),
+            Casm::Try(value) => value.execute(program, stack, heap, stdio, engine),
         }
     }
 }
@@ -238,14 +268,16 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Casm {
             Casm::Operation(value) => value.name(stdio, program, engine),
             Casm::Data(value) => value.name(stdio, program, engine),
             Casm::Access(value) => value.name(stdio, program, engine),
+            Casm::AccessIdx(value) => value.name(stdio, program, engine),
             Casm::Locate(value) => value.name(stdio, program, engine),
             Casm::If(value) => value.name(stdio, program, engine),
             // Casm::Assign(value) => value.name(stdio, program,engine),
-            Casm::LocateNextUTF8Char(value) => value.name(stdio, program, engine),
+            Casm::LocateUTF8Char(value) => value.name(stdio, program, engine),
             Casm::Label(value) => value.name(stdio, program, engine),
             Casm::Call(value) => value.name(stdio, program, engine),
             Casm::Goto(value) => value.name(stdio, program, engine),
             Casm::Switch(value) => value.name(stdio, program, engine),
+            Casm::Try(value) => value.name(stdio, program, engine),
             Casm::Pop(n) => stdio.push_casm(engine, &format!("pop {n}")),
         }
     }

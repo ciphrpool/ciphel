@@ -6,6 +6,7 @@ use std::f64::NEG_INFINITY;
 
 use num_traits::ToBytes;
 
+use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{Either, TypeOf};
@@ -136,10 +137,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for MathCasm {
 }
 
 impl MathFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::STD {
+                if **suffixe != lexem::STD {
                     return None;
                 }
             }

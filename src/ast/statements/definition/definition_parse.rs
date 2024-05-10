@@ -192,14 +192,14 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             StructDef {
-                id: "Point".into(),
+                id: "Point".to_string().into(),
                 fields: vec![
                     (
-                        "x".into(),
+                        "x".to_string().into(),
                         Type::Primitive(PrimitiveType::Number(NumberType::U64))
                     ),
                     (
-                        "y".into(),
+                        "y".to_string().into(),
                         Type::Primitive(PrimitiveType::Number(NumberType::U64))
                     )
                 ]
@@ -225,16 +225,16 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             UnionDef {
-                id: "Geo".into(),
+                id: "Geo".to_string().into(),
                 variants: vec![(
-                    "Point".into(),
+                    "Point".to_string().into(),
                     vec![
                         (
-                            "x".into(),
+                            "x".to_string().into(),
                             Type::Primitive(PrimitiveType::Number(NumberType::U64))
                         ),
                         (
-                            "y".into(),
+                            "y".to_string().into(),
                             Type::Primitive(PrimitiveType::Number(NumberType::U64))
                         )
                     ]
@@ -259,8 +259,8 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             EnumDef {
-                id: "Sport".into(),
-                values: vec!["Football".into(), "Basketball".into()]
+                id: "Sport".to_string().into(),
+                values: vec!["Football".to_string().into(), "Basketball".to_string().into()]
             },
             value
         );
@@ -280,9 +280,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnDef {
-                id: "f".into(),
+                id: "f".to_string().into(),
                 params: vec![TypedVar {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     rec: false,
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],

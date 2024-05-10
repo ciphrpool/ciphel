@@ -13,7 +13,8 @@ pub const WRITE: &str = "write";
 pub const CLEAR_CELL: &str = "clear_cell";
 
 // ERROR
-pub const ERROR: &str = "error";
+pub const ERROR: &str = "Err";
+pub const OK: &str = "Ok";
 pub const ASSERT: &str = "assert";
 
 // ALLOC

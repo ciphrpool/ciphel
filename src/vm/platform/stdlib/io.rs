@@ -86,10 +86,10 @@ pub enum PrintCasm {
 }
 
 impl IOFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::IO {
+                if **suffixe != lexem::IO {
                     return None;
                 }
             }
@@ -746,7 +746,7 @@ mod tests {
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
-        engine.in_buf = "Hello World".into();
+        engine.in_buf = "Hello World".to_string().into();
         ciphel.run(&mut engine).expect("no error should arise");
 
         let output = engine.out;

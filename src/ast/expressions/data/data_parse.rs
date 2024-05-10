@@ -66,62 +66,6 @@ impl TryParse for Variable {
      */
     fn parse(input: Span) -> PResult<Self> {
         let (remainder, id) = parse_id(input)?;
-        let is_in_lexem = match id.as_str() {
-            lexem::ENUM => true,
-            lexem::STRUCT => true,
-            lexem::UNION => true,
-            lexem::AS => true,
-            lexem::ELSE => true,
-            lexem::TRY => true,
-            lexem::IF => true,
-            lexem::THEN => true,
-            lexem::MATCH => true,
-            lexem::CASE => true,
-            lexem::RETURN => true,
-            lexem::LET => true,
-            lexem::WHILE => true,
-            lexem::FOR => true,
-            lexem::LOOP => true,
-            lexem::BREAK => true,
-            lexem::CONTINUE => true,
-            lexem::YIELD => true,
-            lexem::MOVE => true,
-            lexem::REC => true,
-            lexem::DYN => true,
-            lexem::U8 => true,
-            lexem::U16 => true,
-            lexem::U32 => true,
-            lexem::U64 => true,
-            lexem::U128 => true,
-            lexem::I8 => true,
-            lexem::I16 => true,
-            lexem::I32 => true,
-            lexem::I64 => true,
-            lexem::I128 => true,
-            lexem::FLOAT => true,
-            lexem::CHAR => true,
-            lexem::STRING => true,
-            lexem::STR => true,
-            lexem::BOOL => true,
-            lexem::UNIT => true,
-            lexem::ANY => true,
-            lexem::UUNIT => true,
-            lexem::UVEC => true,
-            lexem::UMAP => true,
-            lexem::RANGE_I => true,
-            lexem::RANGE_E => true,
-            lexem::GENERATOR => true,
-            lexem::FN => true,
-            lexem::TRUE => true,
-            lexem::FALSE => true,
-            _ => false,
-        };
-        if is_in_lexem {
-            return Err(nom::Err::Error(ErrorTree::Base {
-                location: remainder,
-                kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
-            }));
-        }
         Ok((
             remainder,
             Variable {
@@ -619,8 +563,8 @@ mod tests {
         assert_eq!(
             Closure {
                 params: vec![
-                    ClosureParam::Minimal("x".into()),
-                    ClosureParam::Minimal("y".into())
+                    ClosureParam::Minimal("x".to_string().into()),
+                    ClosureParam::Minimal("y".to_string().into())
                 ],
                 closed: false,
                 scope: ExprScope::Expr(ast::statements::block::Block {
@@ -628,7 +572,7 @@ mod tests {
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".into(),
+                                id: "x".to_string().into(),
                                 from_field: Cell::new(false),
                                 metadata: Metadata::default()
                             }
@@ -656,8 +600,8 @@ mod tests {
         assert_eq!(
             Closure {
                 params: vec![
-                    ClosureParam::Minimal("x".into()),
-                    ClosureParam::Minimal("y".into())
+                    ClosureParam::Minimal("x".to_string().into()),
+                    ClosureParam::Minimal("y".to_string().into())
                 ],
                 closed: true,
                 scope: ExprScope::Expr(ast::statements::block::Block {
@@ -665,7 +609,7 @@ mod tests {
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".into(),
+                                id: "x".to_string().into(),
                                 from_field: Cell::new(false),
                                 metadata: Metadata::default()
                             }
@@ -692,7 +636,7 @@ mod tests {
         assert_eq!(
             Closure {
                 params: vec![ClosureParam::Full(TypedVar {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
                         NumberType::U64
                     )),
@@ -705,7 +649,7 @@ mod tests {
                     instructions: vec![Statement::Return(Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".into(),
+                                id: "x".to_string().into(),
                                 from_field: Cell::new(false),
                                 metadata: Metadata::default()
                             }
@@ -750,7 +694,7 @@ mod tests {
         assert_eq!(
             Address {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     from_field: Cell::new(false),
                     metadata: Metadata::default()
                 }))
@@ -769,7 +713,7 @@ mod tests {
         assert_eq!(
             PtrAccess {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     from_field: Cell::new(false),
                     metadata: Metadata::default()
                 }))
@@ -790,7 +734,7 @@ mod tests {
                 fields: vec![
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
-                            value: "x".into(),
+                            value: "x".to_string().into(),
                             padding: 0.into(),
                             metadata: Metadata::default(),
                         }))),
@@ -800,7 +744,7 @@ mod tests {
                     ),
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
-                            value: "y".into(),
+                            value: "y".to_string().into(),
                             padding: 0.into(),
                             metadata: Metadata::default(),
                         }))),
@@ -822,16 +766,16 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Struct {
-                id: "Point".into(),
+                id: "Point".to_string().into(),
                 fields: vec![
                     (
-                        "x".into(),
+                        "x".to_string().into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(2).into()
                         ))))
                     ),
                     (
-                        "y".into(),
+                        "y".to_string().into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(8).into()
                         ))))
@@ -850,17 +794,17 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Union {
-                typename: "Geo".into(),
-                variant: "Point".into(),
+                typename: "Geo".to_string().into(),
+                variant: "Point".to_string().into(),
                 fields: vec![
                     (
-                        "x".into(),
+                        "x".to_string().into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(2).into()
                         ))))
                     ),
                     (
-                        "y".into(),
+                        "y".to_string().into(),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                             Number::Unresolved(8).into()
                         ))))
@@ -879,8 +823,8 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Enum {
-                typename: "Geo".into(),
-                value: "Point".into(),
+                typename: "Geo".to_string().into(),
+                value: "Point".to_string().into(),
                 metadata: Metadata::default()
             },
             value
@@ -894,7 +838,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                id: "x".into(),
+                id: "x".to_string().into(),
                 metadata: Metadata::default(),
                 from_field: false.into()
             }))),
@@ -907,7 +851,7 @@ mod tests {
         assert_eq!(
             Expression::ListAccess(ListAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
@@ -925,12 +869,12 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".into(),
+                    id: "y".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
@@ -944,18 +888,18 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
                 field: Box::new(Expression::FieldAccess(FieldAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".into(),
+                        id: "y".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: false.into()
                     })))),
                     field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "z".into(),
+                        id: "z".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: false.into()
                     })))),
@@ -971,13 +915,13 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
                 field: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".into(),
+                        id: "y".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: false.into()
                     })))),
@@ -997,7 +941,7 @@ mod tests {
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".into(),
+                        id: "x".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: false.into()
                     })))),
@@ -1007,7 +951,7 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".into(),
+                    id: "y".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: false.into()
                 })))),
@@ -1024,7 +968,7 @@ mod tests {
                 var: Expression::FnCall(FnCall {
                     lib: None,
                     fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "f".into(),
+                        id: "f".to_string().into(),
                         metadata: Metadata::default(),
                         from_field: Cell::new(false),
                     })))),

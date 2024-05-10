@@ -36,7 +36,7 @@ impl GenerateCode for Loop {
 
                 instructions.push(Casm::Mem(Mem::DumpRegisters));
                 instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
-                instructions.push_label_id(start_label, "start_loop".into());
+                instructions.push_label_id(start_label, "start_loop".to_string().into());
                 instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
                 instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
                 let _ = inner_block_gencode(scope, value, None, true, instructions)?;
@@ -44,7 +44,7 @@ impl GenerateCode for Loop {
                     label: Some(start_label),
                 }));
 
-                instructions.push_label_id(end_label, "end_loop".into());
+                instructions.push_label_id(end_label, "end_loop".to_string().into());
                 instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
                 instructions.push(Casm::Mem(Mem::RecoverRegisters));
                 Ok(())
@@ -76,7 +76,7 @@ impl GenerateCode for ForLoop {
         let _ = iterator_type.init_address(instructions)?;
         let _ = iterator_type.init_index(instructions)?;
 
-        instructions.push_label_id(start_label, "start_for".into());
+        instructions.push_label_id(start_label, "start_for".to_string().into());
 
         let _ = iterator_type.build_item(instructions, end_label)?;
         instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
@@ -93,13 +93,13 @@ impl GenerateCode for ForLoop {
 
         let _ = inner_block_gencode(scope, &self.scope, Some(params_size), true, instructions)?;
 
-        instructions.push_label_id(next_label, "next_label".into());
+        instructions.push_label_id(next_label, "next_label".to_string().into());
         let _ = iterator_type.next(instructions)?;
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
 
-        instructions.push_label_id(end_label, "end_for".into());
+        instructions.push_label_id(end_label, "end_for".to_string().into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
         instructions.push(Casm::Mem(Mem::RecoverRegisters));
         Ok(())
@@ -117,7 +117,7 @@ impl GenerateCode for WhileLoop {
 
         instructions.push(Casm::Mem(Mem::DumpRegisters));
         instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
-        instructions.push_label_id(start_label, "start_while".into());
+        instructions.push_label_id(start_label, "start_while".to_string().into());
         instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
         instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
         let _ = self.condition.gencode(scope, instructions)?;
@@ -129,7 +129,7 @@ impl GenerateCode for WhileLoop {
             label: Some(start_label),
         }));
 
-        instructions.push_label_id(end_label, "end_while".into());
+        instructions.push_label_id(end_label, "end_while".to_string().into());
         instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
         instructions.push(Casm::Mem(Mem::RecoverRegisters));
         Ok(())

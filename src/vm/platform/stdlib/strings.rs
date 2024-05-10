@@ -7,6 +7,7 @@ use nom::complete::take;
 use nom::multi::{many0, many_till};
 use nom::sequence::delimited;
 
+use crate::ast::utils::strings::ID;
 use crate::ast::{self, TryParse};
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
@@ -75,10 +76,10 @@ pub enum JoinCasm {
 }
 
 impl StringsFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::STD {
+                if **suffixe != lexem::STD {
                     return None;
                 }
             }

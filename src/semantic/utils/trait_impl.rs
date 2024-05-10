@@ -175,6 +175,12 @@ impl TypeChecking for EType {
             Either::User(_user_type) => false,
         }
     }
+    fn is_err(&self) -> bool {
+        match self {
+            Either::Static(static_type) => static_type.is_err(),
+            Either::User(_user_type) => false,
+        }
+    }
 }
 
 impl GetSubTypes for EType {
@@ -224,7 +230,7 @@ impl GetSubTypes for EType {
         }
     }
 
-    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
         match self {
             Either::Static(static_type) => static_type.get_fields(),
             Either::User(user_type) => user_type.get_fields(),

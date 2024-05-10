@@ -36,6 +36,7 @@ impl TryParse for Type {
             map(StringType::parse, |value| Type::String(value)),
             value(Type::Unit, wst(lexem::UUNIT)),
             value(Type::Any, wst(lexem::ANY)),
+            value(Type::Error, wst(lexem::ERR)),
             map(VecType::parse, |value| Type::Vec(value)),
             map(ClosureType::parse, |value| Type::Closure(value)),
             map(RangeType::parse, |value| Type::Range(value)),

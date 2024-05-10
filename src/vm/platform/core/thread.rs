@@ -1,12 +1,14 @@
 use std::cell::Ref;
 use std::collections::HashSet;
 
+use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, TupleType};
 use crate::semantic::{Either, TypeOf};
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
+use crate::vm::platform::stdlib::{ERROR_VALUE, OK_VALUE};
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 use crate::vm::scheduler::WaitingStatus;
@@ -60,10 +62,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for ThreadCasm {
     }
 }
 impl ThreadFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::CORE {
+                if **suffixe != lexem::CORE {
                     return None;
                 }
             }
@@ -201,8 +203,7 @@ pub fn sig_spawn(
             .push_with(&(tid as u64).to_le_bytes())
             .map_err(|e| e.into())?;
 
-        // TODO : NO_ERROR value
-        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Ok(())
     } else {
@@ -211,8 +212,7 @@ pub fn sig_spawn(
             .push_with(&(0u64).to_le_bytes())
             .map_err(|e| e.into())?;
 
-        // TODO : ERROR value
-        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
         Err(RuntimeError::TooManyThread)
     }
@@ -230,8 +230,7 @@ pub fn sig_close(
         availaible_tids.remove(idx);
         closed_tid.push(*tid);
 
-        // TODO : NO_ERROR value
-        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Ok(())
     } else {
@@ -240,8 +239,7 @@ pub fn sig_close(
             .push_with(&(0u64).to_le_bytes())
             .map_err(|e| e.into())?;
 
-        // TODO : ERROR value
-        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
         Err(RuntimeError::InvalidTID(*tid))
     }
@@ -262,13 +260,11 @@ pub fn sig_wake(
 ) -> Result<(), RuntimeError> {
     if availaible_tids.contains(tid) {
         wakingup_tid.insert(*tid);
-        // TODO : NO_ERROR value
-        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Ok(())
     } else {
-        // TODO : ERROR value
-        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
         Err(RuntimeError::InvalidTID(*tid))
     }
@@ -302,13 +298,11 @@ pub fn sig_join(
         });
         let _ = stack.push_with(&[true as u8]).map_err(|e| e.into())?;
 
-        // TODO : NO_ERROR value
-        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Err(RuntimeError::Signal(Signal::JOIN(join_tid)))
     } else {
-        // TODO : ERROR value
-        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
         Err(RuntimeError::InvalidTID(join_tid))
     }

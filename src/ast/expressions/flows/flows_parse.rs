@@ -216,11 +216,12 @@ impl TryParse for TryExpr {
         map(
             pair(
                 preceded(wst(lexem::TRY), ExprScope::parse),
-                preceded(wst(lexem::ELSE), ExprScope::parse),
+                opt(preceded(wst(lexem::ELSE), ExprScope::parse)),
             ),
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
                 else_branch,
+                pop_last_err: Cell::new(false),
                 metadata: Metadata::default(),
             },
         )(input)
@@ -245,10 +246,10 @@ impl TryParse for FCall {
                         }
                         crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
                             FormatItem::Expr(Expression::FnCall(FnCall {
-                                lib: Some(platform::utils::lexem::STD.into()),
+                                lib: Some(platform::utils::lexem::STD.to_string().into()),
                                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                     Variable {
-                                        id: platform::utils::lexem::TOSTR.into(),
+                                        id: platform::utils::lexem::TOSTR.to_string().into(),
                                         metadata: Metadata::default(),
                                         from_field: Cell::new(false),
                                     },
@@ -353,7 +354,7 @@ mod tests {
         assert_eq!(
             MatchExpr {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     metadata: Metadata::default(),
                     from_field: Cell::new(false),
                 })))),
@@ -405,8 +406,8 @@ mod tests {
                     },
                     PatternExpr {
                         patterns: vec![Pattern::Enum {
-                            typename: "Geo".into(),
-                            value: "Point".into()
+                            typename: "Geo".to_string().into(),
+                            value: "Point".to_string().into()
                         }],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
@@ -427,9 +428,9 @@ mod tests {
                     },
                     PatternExpr {
                         patterns: vec![Pattern::Union {
-                            typename: "Geo".into(),
-                            variant: "Point".into(),
-                            vars: vec!["y".into()]
+                            typename: "Geo".to_string().into(),
+                            variant: "Point".to_string().into(),
+                            vars: vec!["y".to_string().into()]
                         }],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
@@ -450,8 +451,8 @@ mod tests {
                     },
                     // PatternExpr {
                     //     pattern: Pattern::Struct {
-                    //         typename: "Point".into(),
-                    //         vars: vec!["y".into()]
+                    //         typename: "Point".to_string().into(),
+                    //         vars: vec!["y".to_string().into()]
                     //     },
                     //     expr: ExprScope::Expr(Scope {
                     //         metadata: Metadata::default(),
@@ -468,7 +469,7 @@ mod tests {
                     //     })
                     // },
                     // PatternExpr {
-                    //     pattern: Pattern::Tuple(vec!["y".into(), "z".into()]),
+                    //     pattern: Pattern::Tuple(vec!["y".to_string().into(), "z".to_string().into()]),
                     //     expr: ExprScope::Expr(Scope {
                     //         metadata: Metadata::default(),
                     //         instructions: vec![
@@ -528,7 +529,7 @@ mod tests {
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
                 }),
-                else_branch: ExprScope::Expr(Block {
+                else_branch: Some(ExprScope::Expr(Block {
                     metadata: Metadata::default(),
                     instructions: vec![
                         (Statement::Return(Return::Expr {
@@ -543,7 +544,8 @@ mod tests {
                     is_generator: Cell::new(false),
                     caller: Default::default(),
                     inner_scope: RefCell::new(None),
-                }),
+                })),
+                pop_last_err: Cell::new(false),
                 metadata: Metadata::default(),
             },
             value

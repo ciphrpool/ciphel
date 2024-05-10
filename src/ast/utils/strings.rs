@@ -1,15 +1,26 @@
+use std::rc::Rc;
+
 use nom::{
     branch::alt,
     character::complete::{alpha1, alphanumeric1},
-    combinator::{map, recognize, value},
+    combinator::{map, map_res, recognize, value},
     multi::many0_count,
     sequence::pair,
     Parser,
 };
 
-use nom_supreme::{tag::complete::tag, ParserExt};
+use nom_supreme::{
+    error::{ErrorTree, GenericErrorTree},
+    tag::complete::tag,
+    ParserExt,
+};
 
-use super::io::{PResult, Span};
+use crate::vm::platform;
+
+use super::{
+    io::{PResult, Span},
+    lexem,
+};
 
 /*
  * @desc Eat whitespace and comments
@@ -101,7 +112,7 @@ pub mod eater {
     }
 }
 
-pub type ID = String;
+pub type ID = Rc<String>;
 
 /*
  * @desc Parse Identifier
@@ -110,12 +121,75 @@ pub type ID = String;
  * [a-zA-Z_][a-zA-Z_0-9]*
  */
 pub fn parse_id(input: Span) -> PResult<ID> {
-    eater::ws(map(
+    eater::ws(map_res(
         eater::ws(recognize(pair(
             alt((alpha1, tag("_"))),
             many0_count(alt((alphanumeric1, tag("_")))),
         ))),
-        |_id| _id.to_string(),
+        |_id| {
+            let id = _id.to_string();
+            let is_in_lexem = match id.as_str() {
+                lexem::ENUM => true,
+                lexem::STRUCT => true,
+                lexem::UNION => true,
+                lexem::AS => true,
+                lexem::ELSE => true,
+                lexem::TRY => true,
+                // platform::utils::lexem::ERROR => true,
+                // platform::utils::lexem::OK => true,
+                lexem::IF => true,
+                lexem::THEN => true,
+                lexem::MATCH => true,
+                lexem::CASE => true,
+                lexem::RETURN => true,
+                lexem::LET => true,
+                lexem::WHILE => true,
+                lexem::FOR => true,
+                lexem::LOOP => true,
+                lexem::BREAK => true,
+                lexem::CONTINUE => true,
+                lexem::YIELD => true,
+                lexem::MOVE => true,
+                lexem::REC => true,
+                lexem::DYN => true,
+                lexem::U8 => true,
+                lexem::U16 => true,
+                lexem::U32 => true,
+                lexem::U64 => true,
+                lexem::U128 => true,
+                lexem::I8 => true,
+                lexem::I16 => true,
+                lexem::I32 => true,
+                lexem::I64 => true,
+                lexem::I128 => true,
+                lexem::FLOAT => true,
+                lexem::CHAR => true,
+                lexem::STRING => true,
+                lexem::STR => true,
+                lexem::BOOL => true,
+                lexem::UNIT => true,
+                lexem::ANY => true,
+                lexem::ERR => true,
+                lexem::UUNIT => true,
+                lexem::UVEC => true,
+                lexem::UMAP => true,
+                lexem::RANGE_I => true,
+                lexem::RANGE_E => true,
+                lexem::GENERATOR => true,
+                lexem::FN => true,
+                lexem::TRUE => true,
+                lexem::FALSE => true,
+                _ => false,
+            };
+            if is_in_lexem {
+                Err(nom::Err::Error(nom::error::Error::new(
+                    "id",
+                    nom::error::ErrorKind::AlphaNumeric,
+                )))
+            } else {
+                Ok(Rc::new(id))
+            }
+        },
     ))
     .context("expected a valid identifier")
     .parse(input)

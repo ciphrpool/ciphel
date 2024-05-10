@@ -26,7 +26,7 @@ use crate::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
             data,
-            locate::{Locate, LocateNextUTF8Char},
+            locate::{Locate, LocateUTF8Char},
             mem::Mem,
             operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             Casm, CasmProgram,
@@ -852,11 +852,11 @@ mod tests {
     #[test]
     fn valid_struct() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(U64)));
-                res.push(("y".into(), p_num!(I32)));
+                res.push(("x".to_string().into(), p_num!(U64)));
+                res.push(("y".to_string().into(), p_num!(I32)));
                 res
             },
         };
@@ -892,11 +892,11 @@ mod tests {
     #[test]
     fn valid_struct_complex() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I32)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I32)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -932,23 +932,26 @@ mod tests {
     #[test]
     fn valid_union() {
         let user_type = user_type_impl::Union {
-            id: "Geo".into(),
+            id: "Geo".to_string().into(),
             variants: {
                 let mut res = Vec::new();
                 res.push((
-                    "Point".into(),
+                    "Point".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Point".into(),
-                        fields: vec![("x".into(), p_num!(I64)), ("y".into(), p_num!(I64))],
+                        id: "Point".to_string().into(),
+                        fields: vec![
+                            ("x".to_string().into(), p_num!(I64)),
+                            ("y".to_string().into(), p_num!(I64)),
+                        ],
                     },
                 ));
                 res.push((
-                    "Axe".into(),
+                    "Axe".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Axe".into(),
+                        id: "Axe".to_string().into(),
                         fields: {
                             let mut res = Vec::new();
-                            res.push(("x".into(), p_num!(I64)));
+                            res.push(("x".to_string().into(), p_num!(I64)));
                             res
                         },
                     },
@@ -988,12 +991,12 @@ mod tests {
     #[test]
     fn valid_enum() {
         let user_type = user_type_impl::Enum {
-            id: "Geo".into(),
+            id: "Geo".to_string().into(),
             values: {
                 let mut res = Vec::new();
-                res.push("Axe".into());
-                res.push("Point".into());
-                res.push("Space".into());
+                res.push("Axe".to_string().into());
+                res.push("Point".to_string().into());
+                res.push("Space".to_string().into());
                 res
             },
         };

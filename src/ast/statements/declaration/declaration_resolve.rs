@@ -252,7 +252,7 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
 
         let decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
@@ -261,7 +261,7 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
         assert_eq!(p_num!(F64), x_type.type_sig);
     }
 
@@ -282,9 +282,9 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        let y_type = scope.borrow().find_var(&"y".to_string().into()).unwrap();
         assert_eq!(
             e_static!(StaticType::Primitive(PrimitiveType::Char)),
             y_type.type_sig
@@ -301,13 +301,13 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Point".into(),
+                &"Point".to_string().into(),
                 UserType::Struct(Struct {
-                    id: "Point".into(),
+                    id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push(("x".into(), p_num!(I64)));
-                        res.push(("y".into(), p_num!(I64)));
+                        res.push(("x".to_string().into(), p_num!(I64)));
+                        res.push(("y".to_string().into(), p_num!(I64)));
                         res
                     },
                 }),
@@ -316,9 +316,9 @@ mod tests {
         let res = decl.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".into()).unwrap();
+        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = scope.borrow().find_var(&"y".into()).unwrap();
+        let y_type = scope.borrow().find_var(&"y".to_string().into()).unwrap();
         assert_eq!(p_num!(I64), y_type.type_sig);
     }
 }

@@ -162,7 +162,7 @@ pub struct PtrAccess {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
     pub id: ID,
-    pub fields: Vec<(String, Expression)>,
+    pub fields: Vec<(ID, Expression)>,
     pub metadata: Metadata,
 }
 

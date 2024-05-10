@@ -117,7 +117,7 @@ impl GenerateCode for Declaration {
                     if var_size == 0 {
                         continue;
                     }
-                    if id != lexem::UNDERSCORE {
+                    if **id != lexem::UNDERSCORE {
                         instructions.push(Casm::Locate(Locate {
                             address: MemoryAddress::Stack {
                                 offset: address,
@@ -294,11 +294,11 @@ mod tests {
     #[test]
     fn valid_declaration_inplace_struct_in_scope() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -319,7 +319,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type))
+            .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -364,11 +364,11 @@ mod tests {
     #[test]
     fn valid_declaration_inplace_struct_general_scope() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -386,7 +386,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type))
+            .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())

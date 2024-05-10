@@ -9,7 +9,7 @@ use crate::{
             alloc::Access,
             branch::BranchIf,
             data::Data,
-            locate::{Locate, LocateNextUTF8Char},
+            locate::{Locate, LocateUTF8Char},
             mem::Mem,
             operation::{
                 Addition, Equal, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
@@ -290,7 +290,7 @@ impl NextItem for StringType {
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX */
-        instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
+        instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeNext));
 
         Ok(())
     }
@@ -364,7 +364,7 @@ impl NextItem for StrSliceType {
     }
     fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
         /* STACK : UPPER | INDEX */
-        instructions.push(Casm::LocateNextUTF8Char(LocateNextUTF8Char::RuntimeNext));
+        instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeNext));
 
         Ok(())
     }

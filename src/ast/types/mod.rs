@@ -21,6 +21,7 @@ pub enum Type {
     Tuple(TupleType),
     Unit,
     Any,
+    Error,
     Address(AddrType),
     Map(MapType),
 }

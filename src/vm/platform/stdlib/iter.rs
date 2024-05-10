@@ -3,7 +3,7 @@ use std::cell::{Cell, Ref};
 use num_traits::ToBytes;
 
 use crate::{
-    ast::expressions::Expression,
+    ast::{expressions::Expression, utils::strings::ID},
     e_static,
     semantic::{
         scope::{
@@ -62,10 +62,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IterCasm {
 }
 
 impl IterFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::STD {
+                if **suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -439,6 +439,8 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
                     map_impl::map_layout(map_heap_address, *key_size, *value_size, heap)?;
                 let keys_ptr = map_layout.retrieve_vec_keys(heap)?;
 
+                dbg!(&keys_ptr);
+
                 let len = keys_ptr.len() as u64;
                 let cap = align(len as usize) as u64;
                 let alloc_size = cap * (len * 16) + 16;
@@ -584,9 +586,9 @@ mod tests {
                 insert(&hmap,107,11);
                 insert(&hmap,108,12);
 
-                let items_vec = items(&hmap);
+                let items = std::items(&hmap);
                 let res = 0u64;
-                for (key_ptr,val_ptr) in items_vec {
+                for (key_ptr,val_ptr) in items {
                     res = res + (*key_ptr) * (*val_ptr);
                 }
 

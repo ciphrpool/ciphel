@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
 use crate::{
-    ast::expressions::Expression,
+    ast::{expressions::Expression, utils::strings::ID},
     semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
 };
 
@@ -44,7 +44,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LibCasm {
 }
 
 impl Lib {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         if let Some(value) = CoreFn::from(suffixe, id) {
             return Some(Lib::Core(value));
         }

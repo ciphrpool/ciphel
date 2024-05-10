@@ -22,7 +22,7 @@ pub struct Locate {
 
 impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Locate {
     fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine,&format!("addr {}", self.address.name()));
+        stdio.push_casm(engine, &format!("addr {}", self.address.name()));
     }
 }
 
@@ -69,20 +69,20 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Locate {
 }
 
 #[derive(Debug, Clone)]
-pub enum LocateNextUTF8Char {
+pub enum LocateUTF8Char {
     RuntimeNext,
-    RuntimeAtIdx,
+    RuntimeAtIdx { len: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LocateNextUTF8Char {
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LocateUTF8Char {
     fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         match self {
-            LocateNextUTF8Char::RuntimeNext => stdio.push_casm(engine,"addr_utf8 "),
-            LocateNextUTF8Char::RuntimeAtIdx => stdio.push_casm(engine,"addr_utf8_at"),
+            LocateUTF8Char::RuntimeNext => stdio.push_casm(engine, "addr_utf8 "),
+            LocateUTF8Char::RuntimeAtIdx { .. } => stdio.push_casm(engine, "addr_utf8_at"),
         }
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char {
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateUTF8Char {
     fn execute(
         &self,
         program: &CasmProgram,
@@ -93,7 +93,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char 
     ) -> Result<(), RuntimeError> {
         program.incr();
         match self {
-            LocateNextUTF8Char::RuntimeNext => {
+            LocateUTF8Char::RuntimeNext => {
                 let pointer = OpPrimitive::get_num8::<u64>(stack)?;
 
                 let address = {
@@ -110,12 +110,12 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char 
                 };
                 let offset = match address {
                     MemoryAddress::Heap { offset } => {
-                        let (_, offset) = heap.read_utf8(offset, 1).map_err(|err| err.into())?;
+                        let (_, offset) = heap.read_utf8(offset, 1, 1).map_err(|err| err.into())?;
                         offset
                     }
                     MemoryAddress::Stack { offset, level } => {
                         let (_, offset) = stack
-                            .read_utf8(offset, level, 1)
+                            .read_utf8(offset, level, 1, 1)
                             .map_err(|err| err.into())?;
                         offset
                     }
@@ -125,7 +125,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char 
 
                 Ok(())
             }
-            LocateNextUTF8Char::RuntimeAtIdx => {
+            LocateUTF8Char::RuntimeAtIdx { len } => {
                 /* */
                 let idx = OpPrimitive::get_num8::<u64>(stack)?;
                 let pointer = OpPrimitive::get_num8::<u64>(stack)?;
@@ -144,14 +144,22 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LocateNextUTF8Char 
 
                 let size = match address {
                     MemoryAddress::Heap { offset } => {
+                        let len_bytes = heap.read(offset, 8).map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes) as usize;
+
                         let (_, size) = heap
-                            .read_utf8(offset, idx as usize)
+                            .read_utf8(offset + 16, idx as usize, len)
                             .map_err(|err| err.into())?;
                         size
                     }
                     MemoryAddress::Stack { offset, level } => {
+                        let Some(len) = len else {
+                            return Err(RuntimeError::CodeSegmentation);
+                        };
                         let (_, size) = stack
-                            .read_utf8(offset, level, idx as usize)
+                            .read_utf8(offset, level, idx as usize, *len)
                             .map_err(|err| err.into())?;
                         size
                     }

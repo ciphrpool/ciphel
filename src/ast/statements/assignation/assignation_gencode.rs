@@ -75,11 +75,11 @@ impl GenerateCode for AssignValue {
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_scope_label),
                 }));
-                let scope_label = instructions.push_label("Scope".into());
+                let scope_label = instructions.push_label("Scope".to_string().into());
 
                 value.gencode(scope, instructions)?;
 
-                instructions.push_label_id(end_scope_label, "End_Scope".into());
+                instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
                     param_size: 0,
@@ -211,11 +211,11 @@ mod tests {
     #[test]
     fn valid_assignation_struct_in_scope() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -237,7 +237,10 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -275,9 +278,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
                         Number::I64(res) => {
-                            if r_id == "x" {
+                            if **r_id == "x" {
                                 assert_eq!(420, res);
-                            } else if r_id == "y" {
+                            } else if **r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
@@ -392,11 +395,11 @@ mod tests {
     #[test]
     fn valid_assignation_field_access_in_scope() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -416,7 +419,10 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -454,9 +460,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
                         Number::I64(res) => {
-                            if r_id == "x" {
+                            if **r_id == "x" {
                                 assert_eq!(420, res);
-                            } else if r_id == "y" {
+                            } else if **r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
@@ -471,12 +477,12 @@ mod tests {
     #[test]
     fn valid_assignation_complex_in_scope() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
                 res.push((
-                    "y".into(),
+                    "y".to_string().into(),
                     Either::Static(
                         StaticType::Slice(SliceType {
                             size: 4,
@@ -506,7 +512,10 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -576,21 +585,21 @@ mod tests {
     #[test]
     fn valid_assignation_double_field_in_scope() {
         let user_type_point3d = user_type_impl::Struct {
-            id: "Point3D".into(),
+            id: "Point3D".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
         let user_type_point = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
                 res.push((
-                    "y".into(),
+                    "y".to_string().into(),
                     Either::User(Rc::new(UserType::Struct(user_type_point3d.clone()))),
                 ));
                 res
@@ -612,12 +621,15 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type_point.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type_point.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Point3D".into(),
+                &"Point3D".to_string().into(),
                 UserType::Struct(user_type_point3d.clone()),
             )
             .expect("Registering of user type should have succeeded");
@@ -653,7 +665,7 @@ mod tests {
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for (r_id, res) in &result.fields {
-            if r_id == "y" {
+            if **r_id == "y" {
                 match res {
                     Expression::Atomic(Atomic::Data(Data::Struct(Struct {
                         id,
@@ -661,7 +673,7 @@ mod tests {
                         metadata,
                     }))) => {
                         for (r_id, res) in fields {
-                            if r_id == "y" {
+                            if **r_id == "y" {
                                 match res {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
                                         Primitive::Number(x),

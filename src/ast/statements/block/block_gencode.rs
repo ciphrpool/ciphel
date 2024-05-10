@@ -29,11 +29,11 @@ pub fn inner_block_gencode(
         label: Some(end_scope_label),
     }));
 
-    instructions.push_label_id(scope_label, "block".into());
+    instructions.push_label_id(scope_label, "block".to_string().into());
 
     let _ = block.gencode(scope, &instructions)?;
 
-    instructions.push_label_id(end_scope_label, "end_scope".into());
+    instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
     instructions.push(Casm::Call(Call::From {
         label: scope_label,
         param_size: param_size.unwrap_or(0),
@@ -87,29 +87,6 @@ impl GenerateCode for Block {
                 offset_idx += var_size;
             }
         }
-
-        // if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
-        //     for (var, _) in borrowed.vars() {
-        //         if var.id == caller.id {
-        //             let (_, offset, level) = borrowed.access_var(&var.id)?;
-        //             let (_, offset_parent, level_parent) =
-        //                 borrowed.access_var_in_parent(&var.id)?;
-        //             /* Assign the value of the caller to the caller reference inside the current block */
-        //             instructions.push(Casm::Access(Access::Static {
-        //                 address: MemoryAddress::Stack {
-        //                     offset: offset_parent,
-        //                     level: level_parent,
-        //                 },
-        //                 size: 8,
-        //             }));
-        //             instructions.push(Casm::Locate(Locate {
-        //                 address: MemoryAddress::Stack { offset, level },
-        //             }));
-        //             instructions.push(Casm::Mem(MemCopy::Take { size: 8 }));
-        //             break;
-        //         }
-        //     }
-        // }
         drop(borrowed);
 
         let inner_scope = self.inner_scope.borrow();

@@ -926,7 +926,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -965,7 +965,9 @@ mod tests {
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
+        let expr = Addition::parse("10 + (10*10)".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
@@ -975,12 +977,16 @@ mod tests {
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
+        let expr = Addition::parse("(10 * 10) + 10".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
+        let expr = Addition::parse("10 * 10 + 10".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
@@ -1001,7 +1007,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -1140,7 +1146,9 @@ mod tests {
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
+        let expr = Expression::parse("'a' != 'b'".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
@@ -1156,17 +1164,23 @@ mod tests {
 
     #[test]
     fn valid_and_or() {
-        let expr = Expression::parse("true and false".into()).unwrap().1;
+        let expr = Expression::parse("true and false".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Expression::parse("true or false".into()).unwrap().1;
+        let expr = Expression::parse("true or false".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
+        let expr = Expression::parse("true and 2 > 3".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_ok(), "{:?}", res);
@@ -1181,7 +1195,9 @@ mod tests {
 
     #[test]
     fn robustness_and_or() {
-        let expr = Expression::parse("true and 2".into()).unwrap().1;
+        let expr = Expression::parse("true and 2".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &None);
         assert!(res.is_err());
@@ -1216,7 +1232,9 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = UnaryOperation::parse("- ( 10 + 10 )".into()).unwrap().1;
+        let expr = UnaryOperation::parse("- ( 10 + 10 )".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_ok(), "{:?}", res);
@@ -1229,7 +1247,9 @@ mod tests {
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
 
-        let expr = UnaryOperation::parse("- true".into()).unwrap().1;
+        let expr = UnaryOperation::parse("- true".into())
+            .unwrap()
+            .1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &());
         assert!(res.is_err());
@@ -1246,7 +1266,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "f".into(),
+                id: "f".to_string().into(),
                 type_sig: Either::Static(
                     StaticType::StaticFn(FnType {
                         params: vec![p_num!(I64), p_num!(I64)],
@@ -1276,7 +1296,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "f".into(),
+                id: "f".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -1296,7 +1316,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "print".into(),
+                id: "print".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -1317,7 +1337,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "print".into(),
+                id: "print".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })

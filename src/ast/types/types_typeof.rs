@@ -45,6 +45,7 @@ impl TypeOf for Type {
             Type::Map(value) => value.type_of(&scope),
             Type::String(value) => value.type_of(&scope),
             Type::Range(value) => value.type_of(&scope),
+            Type::Error => Ok(e_static!(StaticType::Error)),
         }
     }
 }
@@ -315,7 +316,6 @@ impl CompatibleWith for static_types::ClosureType {
         }
     }
 }
-
 
 impl TypeOf for TupleType {
     fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>

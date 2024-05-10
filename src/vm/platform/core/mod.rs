@@ -1,5 +1,6 @@
 use std::cell::Ref;
 
+use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
@@ -44,7 +45,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CoreCasm {
 }
 
 impl CoreFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         if let Some(value) = AllocFn::from(suffixe, id) {
             return Some(CoreFn::Alloc(value));
         }

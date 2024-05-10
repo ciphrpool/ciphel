@@ -600,7 +600,6 @@ impl Resolve for Address {
             Atomic::UnaryOperation(_) => return Err(SemanticError::IncompatibleTypes),
             Atomic::Paren(_) => {}
             Atomic::ExprFlow(_) => return Err(SemanticError::IncompatibleTypes),
-            Atomic::Error(_) => {}
         }
         let _ = self.value.resolve(scope, context, &None)?;
         resolve_metadata!(self.metadata, self, scope, context);
@@ -1053,7 +1052,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -1074,7 +1073,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
@@ -1090,7 +1089,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
                 is_declared: Cell::new(false),
             })
@@ -1106,7 +1105,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
                         keys_type: Box::new(e_static!(StaticType::String(StringType()))),
@@ -1128,7 +1127,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: Either::Static(
                     StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64)])).into(),
                 ),
@@ -1151,15 +1150,15 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "point".into(),
+                id: "point".to_string().into(),
                 type_sig: Either::User(
                     UserType::Struct(
                         user_type_impl::Struct {
-                            id: "Point".into(),
+                            id: "Point".to_string().into(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push(("x".into(), p_num!(U64)));
-                                res.push(("y".into(), p_num!(U64)));
+                                res.push(("x".to_string().into(), p_num!(U64)));
+                                res.push(("y".to_string().into(), p_num!(U64)));
                                 res
                             },
                         }
@@ -1187,7 +1186,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -1319,13 +1318,13 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Point".into(),
+                &"Point".to_string().into(),
                 UserType::Struct(user_type_impl::Struct {
-                    id: "Point".into(),
+                    id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push(("x".into(), p_num!(I64)));
-                        res.push(("y".into(), p_num!(I64)));
+                        res.push(("x".to_string().into(), p_num!(I64)));
+                        res.push(("y".to_string().into(), p_num!(I64)));
                         res
                     },
                 }),
@@ -1347,14 +1346,14 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Point".into(),
+                &"Point".to_string().into(),
                 UserType::Struct(user_type_impl::Struct {
-                    id: "Point".into(),
+                    id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push(("x".into(), p_num!(I64)));
+                        res.push(("x".to_string().into(), p_num!(I64)));
                         res.push((
-                            "y".into(),
+                            "y".to_string().into(),
                             e_static!(StaticType::Primitive(PrimitiveType::Char)),
                         ));
                         res
@@ -1376,25 +1375,25 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Geo".into(),
+                &"Geo".to_string().into(),
                 UserType::Union(user_type_impl::Union {
-                    id: "Geo".into(),
+                    id: "Geo".to_string().into(),
                     variants: {
                         let mut res = Vec::new();
                         res.push((
-                            "Point".into(),
+                            "Point".to_string().into(),
                             user_type_impl::Struct {
-                                id: "Point".into(),
-                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
+                                id: "Point".to_string().into(),
+                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
                             },
                         ));
                         res.push((
-                            "Axe".into(),
+                            "Axe".to_string().into(),
                             user_type_impl::Struct {
-                                id: "Axe".into(),
+                                id: "Axe".to_string().into(),
                                 fields: {
                                     let mut res = Vec::new();
-                                    res.push(("x".into(), p_num!(U64)));
+                                    res.push(("x".to_string().into(), p_num!(U64)));
                                     res
                                 },
                             },
@@ -1422,19 +1421,19 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Geo".into(),
+                &"Geo".to_string().into(),
                 UserType::Union(user_type_impl::Union {
-                    id: "Geo".into(),
+                    id: "Geo".to_string().into(),
                     variants: {
                         let mut res = Vec::new();
                         res.push((
-                            "Point".into(),
+                            "Point".to_string().into(),
                             user_type_impl::Struct {
-                                id: "Point".into(),
+                                id: "Point".to_string().into(),
                                 fields: vec![
-                                    ("x".into(), p_num!(U64)),
+                                    ("x".to_string().into(), p_num!(U64)),
                                     (
-                                        "y".into(),
+                                        "y".to_string().into(),
                                         Either::Static(
                                             StaticType::Primitive(PrimitiveType::Char).into(),
                                         ),
@@ -1467,12 +1466,12 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Geo".into(),
+                &"Geo".to_string().into(),
                 UserType::Enum(user_type_impl::Enum {
-                    id: "Geo".into(),
+                    id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("Point".into());
+                        res.push("Point".to_string().into());
                         res
                     },
                 }),
@@ -1489,12 +1488,12 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Geo".into(),
+                &"Geo".to_string().into(),
                 UserType::Enum(user_type_impl::Enum {
-                    id: "Geo".into(),
+                    id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();
-                        res.push("Axe".into());
+                        res.push("Axe".to_string().into());
                         res
                     },
                 }),

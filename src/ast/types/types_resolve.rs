@@ -36,6 +36,7 @@ impl Resolve for Type {
             Type::Map(value) => value.resolve(scope, context, extra),
             Type::String(value) => value.resolve(scope, context, extra),
             Type::Range(value) => value.resolve(scope, context, extra),
+            Type::Error => Ok(()),
         }
     }
 }

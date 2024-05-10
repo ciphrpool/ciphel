@@ -49,6 +49,7 @@ pub enum RuntimeError {
     InvalidUTF8Char,
     CodeSegmentation,
     IncorrectVariant,
+    IndexOutOfBound,
     InvalidTID(usize),
     InvalidThreadStateTransition(ThreadState, ThreadState),
     TooManyThread,

@@ -116,8 +116,8 @@ pub enum AccessLevel {
 impl AccessLevel {
     pub fn name(&self) -> String {
         match self {
-            AccessLevel::General => ", 0".into(),
-            AccessLevel::Direct => "".into(),
+            AccessLevel::General => ", 0".to_string().into(),
+            AccessLevel::Direct => "".to_string().into(),
             AccessLevel::Backward(n) => format!(", -{n}"),
         }
     }

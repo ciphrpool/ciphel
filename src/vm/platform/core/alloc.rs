@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    ast::utils::strings::ID,
     err_tuple,
     semantic::scope::{
         scope::Scope,
@@ -13,8 +14,9 @@ use crate::{
     },
     vm::{
         allocator::{heap::Heap, stack::Stack},
-        platform::core::alloc::map_impl::{
-            bucket_idx, bucket_layout, hash_of, map_layout, top_hash,
+        platform::{
+            core::alloc::map_impl::{bucket_idx, bucket_layout, hash_of, map_layout, top_hash},
+            stdlib::{ERROR_VALUE, OK_VALUE},
         },
         stdio::StdIO,
         vm::CasmMetadata,
@@ -278,10 +280,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
 }
 
 impl AllocFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
+    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if suffixe != lexem::CORE {
+                if **suffixe != lexem::CORE {
                     return None;
                 }
             }
@@ -1797,6 +1799,7 @@ pub mod map_impl {
             let mut items_ptr = Vec::with_capacity(self.len as usize);
 
             for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
+                dbg!((idx, &bucket[0..MAP_BUCKET_SIZE]));
                 for idx_top_hash in 0..MAP_BUCKET_SIZE {
                     if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
                         items_ptr.push(
@@ -1915,7 +1918,7 @@ pub mod map_impl {
 
     pub fn top_hash(hash: u64) -> u8 {
         let mut top = (hash >> 48) as u8;
-        if top < TopHashValue::MIN as u8 {
+        if top <= TopHashValue::MIN as u8 {
             top += TopHashValue::MIN as u8;
         }
         return top;
@@ -2518,16 +2521,14 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                         let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
                         // push NO_ERROR
-                        // TODO : NO_ERROR value
-                        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
                     }
                     None => {
                         let _ = stack
                             .push_with(&vec![0u8; *value_size])
                             .map_err(|e| e.into())?;
                         // push ERROR
-                        // TODO : ERROR value
-                        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
                     }
                 }
             }
@@ -2611,16 +2612,14 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
 
                         let _ = stack.push_with(&value_data).map_err(|e| e.into())?;
                         // push NO_ERROR
-                        // TODO : NO_ERROR value
-                        let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
                     }
                     None => {
                         let _ = stack
                             .push_with(&vec![0u8; *value_size])
                             .map_err(|e| e.into())?;
                         // push ERROR
-                        // TODO : ERROR value
-                        let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
                     }
                 }
             }
@@ -2693,16 +2692,14 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     // Push deleted item and error
                     let _ = stack.push_with(&deleted_item_data).map_err(|e| e.into())?;
                     // Push no error
-                    // TODO : NO_ERROR value
-                    let _ = stack.push_with(&[0u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
                 } else {
                     // Push zeroes and error
                     let _ = stack
                         .push_with(&vec![0; item_size as usize])
                         .map_err(|e| e.into())?;
                     // Push no error
-                    // TODO : ERROR value
-                    let _ = stack.push_with(&[1u8]).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
                 }
             }
             AllocCasm::Vec { item_size } | AllocCasm::VecWithCapacity { item_size } => {

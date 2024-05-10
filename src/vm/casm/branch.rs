@@ -59,7 +59,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Call {
             Call::From { label, param_size } => {
                 let label = program
                     .get_label_name(label)
-                    .unwrap_or("".into())
+                    .unwrap_or("".to_string().into())
                     .to_string();
                 stdio.push_casm(engine, &format!("call {label} {param_size}"));
             }
@@ -129,7 +129,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Goto {
             Some(label) => {
                 let label = program
                     .get_label_name(&label)
-                    .unwrap_or("".into())
+                    .unwrap_or("".to_string().into())
                     .to_string();
                 stdio.push_casm(engine, &format!("goto {label}"));
             }
@@ -172,7 +172,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for BranchIf {
     fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
         let label = program
             .get_label_name(&self.else_label)
-            .unwrap_or("".into())
+            .unwrap_or("".to_string().into())
             .to_string();
         stdio.push_casm(engine, &format!("else {label}"));
     }
@@ -224,20 +224,20 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for BranchTable {
                 let data_label = match data_label {
                     Some(label) => program
                         .get_label_name(label)
-                        .unwrap_or("".into())
+                        .unwrap_or("".to_string().into())
                         .to_string(),
-                    None => "".into(),
+                    None => "".to_string().into(),
                 };
                 let else_label = match else_label {
                     Some(label) => program
                         .get_label_name(label)
-                        .unwrap_or("".into())
+                        .unwrap_or("".to_string().into())
                         .to_string(),
-                    None => "".into(),
+                    None => "".to_string().into(),
                 };
                 let size = match size {
                     Some(size) => format!("{size}"),
-                    None => "".into(),
+                    None => "".to_string().into(),
                 };
                 stdio.push_casm(engine, &format!("table {data_label} {else_label} {size}"));
             }
@@ -248,16 +248,16 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for BranchTable {
                 let table_label = match table_label {
                     Some(label) => program
                         .get_label_name(label)
-                        .unwrap_or("".into())
+                        .unwrap_or("".to_string().into())
                         .to_string(),
-                    None => "".into(),
+                    None => "".to_string().into(),
                 };
                 let else_label = match else_label {
                     Some(label) => program
                         .get_label_name(label)
-                        .unwrap_or("".into())
+                        .unwrap_or("".to_string().into())
                         .to_string(),
-                    None => "".into(),
+                    None => "".to_string().into(),
                 };
                 stdio.push_casm(engine, &format!("table {table_label} {else_label}"));
             }
@@ -385,5 +385,47 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for BranchTable {
                 Ok(())
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum BranchTry {
+    StartTry { else_label: Ulid },
+    EndTry,
+}
+
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for BranchTry {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+        match self {
+            BranchTry::StartTry { else_label } => {
+                let label = program
+                    .get_label_name(&else_label)
+                    .unwrap_or("".to_string().into())
+                    .to_string();
+                stdio.push_casm(engine, &format!("try_else {label}"));
+            }
+            BranchTry::EndTry => stdio.push_casm(engine, &format!("try_end")),
+        }
+    }
+}
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for BranchTry {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        match self {
+            BranchTry::StartTry { else_label } => {
+                program.push_catch(else_label);
+            }
+            BranchTry::EndTry => {
+                program.pop_catch();
+            }
+        }
+        program.incr();
+        Ok(())
     }
 }

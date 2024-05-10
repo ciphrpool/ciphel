@@ -29,7 +29,6 @@ use self::operation::{
 use super::TryParse;
 
 pub mod data;
-pub mod error;
 pub mod flows;
 pub mod operation;
 
@@ -61,7 +60,6 @@ pub enum Atomic {
     UnaryOperation(operation::UnaryOperation),
     Paren(Box<Expression>),
     ExprFlow(flows::ExprFlow),
-    Error(error::Error),
 }
 
 impl TryParse for Atomic {
@@ -82,7 +80,6 @@ impl TryParse for Atomic {
                 delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
                 |value| Atomic::Paren(Box::new(value)),
             ),
-            map(error::Error::parse, |value| Atomic::Error(value)),
             map(flows::ExprFlow::parse, |value| Atomic::ExprFlow(value)),
             map(data::Data::parse, |value| Atomic::Data(value)),
             map(operation::UnaryOperation::parse, |value| {
@@ -110,7 +107,6 @@ impl Resolve for Atomic {
             Atomic::UnaryOperation(value) => value.resolve(scope, context, &()),
             Atomic::Paren(value) => value.resolve(scope, context, extra),
             Atomic::ExprFlow(value) => value.resolve(scope, context, &()),
-            Atomic::Error(value) => value.resolve(scope, &(), &()),
         }
     }
 }
@@ -125,7 +121,6 @@ impl TypeOf for Atomic {
             Atomic::UnaryOperation(value) => value.type_of(&scope),
             Atomic::Paren(value) => value.type_of(&scope),
             Atomic::ExprFlow(value) => value.type_of(&scope),
-            Atomic::Error(value) => value.type_of(&scope),
         }
     }
 }
@@ -315,7 +310,6 @@ impl GenerateCode for Atomic {
             Atomic::UnaryOperation(value) => value.gencode(scope, instructions),
             Atomic::Paren(value) => value.gencode(scope, instructions),
             Atomic::ExprFlow(value) => value.gencode(scope, instructions),
-            Atomic::Error(_) => todo!(),
         }
     }
 }
@@ -329,7 +323,6 @@ impl Locatable for Atomic {
         match self {
             Atomic::Data(value) => value.locate(scope, instructions),
             Atomic::Paren(value) => value.locate(scope, instructions),
-            Atomic::Error(_) => todo!(),
             _ => {
                 let _ = self.gencode(scope, instructions)?;
                 let Some(value_type) = self.signature() else {
@@ -352,7 +345,6 @@ impl Locatable for Atomic {
             Atomic::UnaryOperation(_) => false,
             Atomic::Paren(value) => value.is_assignable(),
             Atomic::ExprFlow(_) => false,
-            Atomic::Error(_) => false,
         }
     }
 
@@ -362,7 +354,6 @@ impl Locatable for Atomic {
             Atomic::UnaryOperation(_) => None,
             Atomic::Paren(value) => value.most_left_id(),
             Atomic::ExprFlow(value) => None,
-            Atomic::Error(_) => None,
         }
     }
 }
@@ -441,7 +432,6 @@ impl Atomic {
             Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
             Atomic::Paren(value) => value.metadata(),
             Atomic::ExprFlow(value) => value.metadata(),
-            Atomic::Error(_value) => todo!(),
         }
     }
 
@@ -456,7 +446,6 @@ impl Atomic {
             }
             Atomic::Paren(value) => value.signature(),
             Atomic::ExprFlow(value) => value.signature(),
-            Atomic::Error(_value) => todo!(),
         }
     }
 }

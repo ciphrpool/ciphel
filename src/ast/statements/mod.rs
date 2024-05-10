@@ -152,11 +152,11 @@ impl GenerateCode for Statement {
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_scope_label),
                 }));
-                instructions.push_label_id(scope_label, "block".into());
+                instructions.push_label_id(scope_label, "block".to_string().into());
 
                 let _ = value.gencode(scope, &instructions)?;
 
-                instructions.push_label_id(end_scope_label, "end_scope".into());
+                instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
                     param_size: 0,

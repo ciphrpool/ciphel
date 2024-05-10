@@ -285,10 +285,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
 
                             let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
                             let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?;
-                        /* return flag set to BREAK */
+                        /* return flag set to CONTINUE */
                         } else {
-                            let break_link = stack.get_reg(UReg::R3);
-                            program.cursor.set(break_link as usize);
+                            let continue_link = stack.get_reg(UReg::R3);
+                            program.cursor.set(continue_link as usize);
                         }
                     }
                     FLAG_RETURN => {
@@ -320,7 +320,7 @@ pub enum Access {
     Static { address: MemoryAddress, size: usize },
     Runtime { size: Option<usize> },
     RuntimeCharUTF8,
-    RuntimeCharUTF8AtIdx,
+    RuntimeCharUTF8AtIdx { len: Option<usize> },
 }
 
 impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
@@ -334,7 +334,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
                 None => stdio.push_casm(engine, "ld"),
             },
             Access::RuntimeCharUTF8 => stdio.push_casm(engine, "ld_utf8"),
-            Access::RuntimeCharUTF8AtIdx => stdio.push_casm(engine, "ld_utf8_at"),
+            Access::RuntimeCharUTF8AtIdx { .. } => stdio.push_casm(engine, "ld_utf8_at"),
         }
     }
 }
@@ -349,12 +349,12 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let index = match self {
-            Access::RuntimeCharUTF8AtIdx => Some(OpPrimitive::get_num8::<u64>(stack)?),
+            Access::RuntimeCharUTF8AtIdx { .. } => Some(OpPrimitive::get_num8::<u64>(stack)?),
             _ => None,
         };
         let (address, size) = match self {
             Access::Static { address, size } => (*address, *size),
-            Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+            Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx { .. } => {
                 let address = OpPrimitive::get_num8::<u64>(stack)?;
                 let address = {
                     if address < STACK_SIZE as u64 {
@@ -399,9 +399,21 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
                 // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
 
                 let data = match self {
-                    Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                    Access::RuntimeCharUTF8 => {
+                        let (bytes, _) = heap.read_utf8(offset, 0, 1).map_err(|err| err.into())?;
+
+                        bytes.to_vec()
+                    }
+                    Access::RuntimeCharUTF8AtIdx { .. } => {
+                        let len_bytes = heap.read(offset, 8).map_err(|e| e.into())?;
+                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                            .map_err(|_| RuntimeError::Deserialization)?;
+                        let len = u64::from_le_bytes(*len_bytes) as usize;
+                        if index.unwrap_or(0) >= len as u64 {
+                            return Err(RuntimeError::IndexOutOfBound);
+                        }
                         let (bytes, _) = heap
-                            .read_utf8(offset, index.unwrap_or(0) as usize)
+                            .read_utf8(offset + 16, index.unwrap_or(0) as usize, len)
                             .map_err(|err| err.into())?;
 
                         bytes.to_vec()
@@ -426,11 +438,28 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
                     let heap_address = u64::from_le_bytes(*data);
 
                     let data = match self {
-                        Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                        Access::RuntimeCharUTF8 => {
+                            let (bytes, _) = heap
+                                .read_utf8(heap_address as usize + heap_udx, 0, 1)
+                                .map_err(|err| err.into())?;
+
+                            bytes.to_vec()
+                        }
+                        Access::RuntimeCharUTF8AtIdx { .. } => {
+                            let len_bytes = heap
+                                .read(heap_address as usize + heap_udx, 8)
+                                .map_err(|e| e.into())?;
+                            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                                .map_err(|_| RuntimeError::Deserialization)?;
+                            let len = u64::from_le_bytes(*len_bytes) as usize;
+                            if index.unwrap_or(0) >= len as u64 {
+                                return Err(RuntimeError::IndexOutOfBound);
+                            }
                             let (bytes, _) = heap
                                 .read_utf8(
-                                    heap_address as usize + heap_udx,
+                                    heap_address as usize + heap_udx + 16,
                                     index.unwrap_or(0) as usize,
+                                    len,
                                 )
                                 .map_err(|err| err.into())?;
 
@@ -450,9 +479,22 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
                 }
 
                 let data = match self {
-                    Access::RuntimeCharUTF8 | Access::RuntimeCharUTF8AtIdx => {
+                    Access::RuntimeCharUTF8 => {
                         let (bytes, _) = stack
-                            .read_utf8(offset, level, index.unwrap_or(0) as usize)
+                            .read_utf8(offset, level, 0, 1)
+                            .map_err(|err| err.into())?;
+
+                        bytes.to_vec()
+                    }
+                    Access::RuntimeCharUTF8AtIdx { len } => {
+                        let Some(len) = len else {
+                            return Err(RuntimeError::CodeSegmentation);
+                        };
+                        if index.unwrap_or(0) >= *len as u64 {
+                            return Err(RuntimeError::IndexOutOfBound);
+                        }
+                        let (bytes, _) = stack
+                            .read_utf8(offset, level, index.unwrap_or(0) as usize, *len)
                             .map_err(|err| err.into())?;
 
                         bytes.to_vec()
@@ -469,5 +511,61 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
                 Ok(())
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+
+pub struct CheckIndex {
+    pub item_size: usize,
+    pub len: Option<usize>,
+}
+
+impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CheckIndex {
+    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine, "chidx");
+    }
+}
+
+impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CheckIndex {
+    fn execute(
+        &self,
+        program: &CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO<G>,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        let index = OpPrimitive::get_num8::<u64>(stack)?;
+        let address = OpPrimitive::get_num8::<u64>(stack)?;
+
+        if address < STACK_SIZE as u64 {
+            if let Some(len) = self.len {
+                if index >= len as u64 {
+                    return Err(RuntimeError::IndexOutOfBound);
+                }
+                let item_addr = (address as u64 + index * self.item_size as u64) as u64;
+                let _ = stack
+                    .push_with(&item_addr.to_le_bytes())
+                    .map_err(|e| e.into())?;
+            } else {
+                return Err(RuntimeError::CodeSegmentation);
+            }
+        } else {
+            let len_bytes = heap.read(address as usize, 8).map_err(|e| e.into())?;
+            let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
+                .map_err(|_| RuntimeError::Deserialization)?;
+            let len = u64::from_le_bytes(*len_bytes);
+            if index >= len {
+                return Err(RuntimeError::IndexOutOfBound);
+            }
+            let item_addr = (address as u64 + 16 + index * self.item_size as u64) as u64;
+            let _ = stack
+                .push_with(&item_addr.to_le_bytes())
+                .map_err(|e| e.into())?;
+        }
+
+        program.incr();
+        Ok(())
     }
 }

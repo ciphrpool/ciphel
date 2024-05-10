@@ -225,15 +225,15 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Point".into()).unwrap();
+        let res_type = scope.borrow().find_type(&"Point".to_string().into()).unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
-                id: "Point".into(),
+                id: "Point".to_string().into(),
                 fields: {
                     let mut res = Vec::new();
-                    res.push(("x".into(), p_num!(I64)));
-                    res.push(("y".into(), p_num!(I64)));
+                    res.push(("x".to_string().into(), p_num!(I64)));
+                    res.push(("y".to_string().into(), p_num!(I64)));
                     res
                 },
             }),
@@ -259,13 +259,13 @@ mod tests {
         let _ = scope
             .borrow_mut()
             .register_type(
-                &"Point".into(),
+                &"Point".to_string().into(),
                 UserType::Struct(Struct {
-                    id: "Point".into(),
+                    id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push(("x".into(), p_num!(U64)));
-                        res.push(("y".into(), p_num!(U64)));
+                        res.push(("x".to_string().into(), p_num!(U64)));
+                        res.push(("y".to_string().into(), p_num!(U64)));
                         res
                     },
                 }),
@@ -274,29 +274,29 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Line".into()).unwrap();
+        let res_type = scope.borrow().find_type(&"Line".to_string().into()).unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
-                id: "Line".into(),
+                id: "Line".to_string().into(),
                 fields: {
                     let mut res = Vec::new();
                     res.push((
-                        "start".into(),
+                        "start".to_string().into(),
                         Either::User(
                             UserType::Struct(Struct {
-                                id: "Point".into(),
-                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
+                                id: "Point".to_string().into(),
+                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
                             })
                             .into(),
                         ),
                     ));
                     res.push((
-                        "end".into(),
+                        "end".to_string().into(),
                         Either::User(
                             UserType::Struct(Struct {
-                                id: "Point".into(),
-                                fields: vec![("x".into(), p_num!(U64)), ("y".into(), p_num!(U64))],
+                                id: "Point".to_string().into(),
+                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
                             })
                             .into(),
                         ),
@@ -330,32 +330,32 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
+        let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
 
         assert_eq!(
             UserType::Union(Union {
-                id: "Geo".into(),
+                id: "Geo".to_string().into(),
                 variants: {
                     let mut res = Vec::new();
                     res.push((
-                        "Point".into(),
+                        "Point".to_string().into(),
                         Struct {
-                            id: "Point".into(),
+                            id: "Point".to_string().into(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push(("x".into(), p_num!(U64)));
-                                res.push(("y".into(), p_num!(U64)));
+                                res.push(("x".to_string().into(), p_num!(U64)));
+                                res.push(("y".to_string().into(), p_num!(U64)));
                                 res
                             },
                         },
                     ));
                     res.push((
-                        "Axe".into(),
+                        "Axe".to_string().into(),
                         Struct {
-                            id: "Axe".into(),
+                            id: "Axe".to_string().into(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push(("x".into(), p_num!(U64)));
+                                res.push(("x".to_string().into(), p_num!(U64)));
                                 res
                             },
                         },
@@ -383,14 +383,14 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Geo".into()).unwrap();
+        let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
 
         assert_eq!(
             UserType::Enum(Enum {
-                id: "Geo".into(),
+                id: "Geo".to_string().into(),
                 values: {
                     let mut res = Vec::new();
-                    res.push("Point".into());
+                    res.push("Point".to_string().into());
                     res
                 },
             }),
@@ -416,7 +416,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -451,7 +451,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -474,7 +474,7 @@ mod tests {
             .clone()
             .unwrap()
             .borrow()
-            .find_var(&"x".into())
+            .find_var(&"x".to_string().into())
             .unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
         let text_type = function_scope
@@ -483,7 +483,7 @@ mod tests {
             .clone()
             .unwrap()
             .borrow()
-            .find_var(&"text".into())
+            .find_var(&"text".to_string().into())
             .unwrap();
         assert_eq!(
             e_static!(StaticType::String(StringType())),
@@ -510,7 +510,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -547,7 +547,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -568,7 +568,7 @@ mod tests {
         // assert_eq!(
         //     captured_vars,
         //     vec![Var {
-        //         id: "x".into(),
+        //         id: "x".to_string().into(),
         //         state: Cell::default(),
         //         type_sig: Either::Static(
         //             StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
@@ -598,7 +598,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(U64),
                 is_declared: Cell::new(false),
             })
@@ -607,7 +607,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "y".into(),
+                id: "y".to_string().into(),
                 type_sig: p_num!(U64),
                 is_declared: Cell::new(false),
             })
@@ -627,7 +627,7 @@ mod tests {
         // assert_eq!(
         //     captured_vars,
         //     vec![Var {
-        //         id: "x".into(),
+        //         id: "x".to_string().into(),
         //         state: Cell::default(),
         //         type_sig: Either::Static(
         //             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
@@ -655,7 +655,7 @@ mod tests {
         let res = function.resolve(&scope, &(), &());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".into()).unwrap().clone();
+        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 

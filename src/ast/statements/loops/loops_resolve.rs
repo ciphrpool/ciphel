@@ -180,7 +180,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -203,7 +203,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -229,7 +229,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -255,7 +255,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(U64),
                 is_declared: Cell::new(false),
             })
@@ -281,7 +281,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -304,7 +304,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -314,7 +314,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "y".into(),
+                id: "y".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -340,7 +340,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -366,7 +366,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })
@@ -392,7 +392,7 @@ mod tests {
             .borrow_mut()
             .register_var(Var {
                 state: Cell::default(),
-                id: "x".into(),
+                id: "x".to_string().into(),
                 type_sig: p_num!(I64),
                 is_declared: Cell::new(false),
             })

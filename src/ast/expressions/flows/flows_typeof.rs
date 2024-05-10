@@ -85,8 +85,9 @@ impl TypeOf for TryExpr {
     where
         Self: Sized + Resolve,
     {
-        let try_branch_type = self.try_branch.type_of(&scope)?;
-        try_branch_type.merge(&self.else_branch, scope)
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
 

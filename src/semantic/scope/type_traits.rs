@@ -29,7 +29,7 @@ pub trait GetSubTypes {
     fn get_return(&self) -> Option<EType> {
         None
     }
-    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
         None
     }
 
@@ -85,6 +85,9 @@ pub trait TypeChecking {
         false
     }
     fn is_string(&self) -> bool {
+        false
+    }
+    fn is_err(&self) -> bool {
         false
     }
 }

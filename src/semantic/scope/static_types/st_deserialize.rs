@@ -87,19 +87,19 @@ impl Printer for StaticType {
             StaticType::Range(value) => value.build_printer(instructions),
             StaticType::Unit => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
-                    IOCasm::Print(PrintCasm::PrintID("unit".into())),
+                    IOCasm::Print(PrintCasm::PrintID("unit".to_string().into())),
                 ))));
                 Ok(())
             }
             StaticType::Any => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
-                    IOCasm::Print(PrintCasm::PrintID("any".into())),
+                    IOCasm::Print(PrintCasm::PrintID("any".to_string().into())),
                 ))));
                 Ok(())
             }
             StaticType::Error => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
-                    IOCasm::Print(PrintCasm::PrintID("error".into())),
+                    IOCasm::Print(PrintCasm::PrintID("error".to_string().into())),
                 ))));
                 Ok(())
             }
@@ -342,8 +342,8 @@ impl Printer for VecType {
         )))));
 
         let _ = self.0.build_printer(instructions)?;
-        instructions.push_label_id(continue_label, "print_continue".into());
-        instructions.push_label_id(end_label, "print_end".into());
+        instructions.push_label_id(continue_label, "print_continue".to_string().into());
+        instructions.push_label_id(end_label, "print_end".to_string().into());
         Ok(())
     }
 }
@@ -511,8 +511,8 @@ impl Printer for SliceType {
         )))));
 
         let _ = self.item_type.build_printer(instructions)?;
-        instructions.push_label_id(continue_label, "print_continue".into());
-        instructions.push_label_id(end_label, "print_end".into());
+        instructions.push_label_id(continue_label, "print_continue".to_string().into());
+        instructions.push_label_id(end_label, "print_end".to_string().into());
         Ok(())
     }
 }

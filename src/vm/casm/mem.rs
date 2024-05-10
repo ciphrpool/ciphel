@@ -52,7 +52,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Mem {
             Mem::LabelOffset(label) => {
                 let label = program
                     .get_label_name(label)
-                    .unwrap_or("".into())
+                    .unwrap_or("".to_string().into())
                     .to_string();
                 stdio.push_casm(engine,&format!("dmp_label {label}"))
             }

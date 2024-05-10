@@ -56,7 +56,7 @@ impl GenerateCode for FnDef {
             let borrow = scope.as_ref().borrow();
             let mut size = 8;
             for (v, o) in borrow.vars() {
-                if v.id == *self.id {
+                if **v.id == *self.id {
                     o.set(Offset::SB(stack_top));
                     size = v.type_sig.size_of();
                     break;
@@ -76,7 +76,7 @@ impl GenerateCode for FnDef {
 
         let closure_label = instructions.push_label(format!("fn_{}", self.id).into());
         let _ = self.scope.gencode(scope, instructions);
-        instructions.push_label_id(end_closure, "end_closure".into());
+        instructions.push_label_id(end_closure, "end_closure".to_string().into());
 
         instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
 

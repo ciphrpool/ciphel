@@ -206,7 +206,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -232,7 +232,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -284,7 +284,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -311,7 +311,7 @@ mod tests {
                                 lib: None,
                                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                     Variable {
-                                        id: "f".into(),
+                                        id: "f".to_string().into(),
                                         from_field: Cell::new(false),
                                         metadata: Metadata::default(),
                                     }
@@ -337,7 +337,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -383,7 +383,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }
@@ -408,7 +408,7 @@ mod tests {
                             lib: None,
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
-                                    id: "f".into(),
+                                    id: "f".to_string().into(),
                                     from_field: Cell::new(false),
                                     metadata: Metadata::default(),
                                 }

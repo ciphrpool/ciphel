@@ -129,4 +129,10 @@ impl TypeChecking for StaticType {
             _ => false,
         }
     }
+    fn is_err(&self) -> bool {
+        match self {
+            StaticType::Error => true,
+            _ => false,
+        }
+    }
 }

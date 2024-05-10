@@ -227,7 +227,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
                                     engine,
                                     &format!("RUNTIME ERROR :: {:?} in {:?}", err, instruction),
                                 );
-                                Err(err)
+                                program.catch(err)
                             }
                         }
                     });

@@ -1,4 +1,5 @@
 use crate::{
+    ast::utils::strings::ID,
     e_static, e_user, p_num,
     semantic::{
         scope::{type_traits::GetSubTypes, user_type_impl::UserType},
@@ -71,7 +72,7 @@ impl GetSubTypes for StaticType {
             _ => None,
         }
     }
-    fn get_fields(&self) -> Option<Vec<(Option<String>, EType)>> {
+    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
         match self {
             StaticType::Primitive(_) => None,
             StaticType::Slice(_) => None,

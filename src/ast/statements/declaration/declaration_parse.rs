@@ -159,7 +159,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Declared(TypedVar {
-                id: "x".into(),
+                id: "x".to_string().into(),
                 signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
                 rec: false,
             }),
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(
             Declaration::Assigned {
                 left: DeclaredVar::Typed(TypedVar {
-                    id: "x".into(),
+                    id: "x".to_string().into(),
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64)),
                     rec: false,
                 }),
@@ -191,7 +191,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Id("x".into()),
+                left: DeclaredVar::Id("x".to_string().into()),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))
@@ -204,7 +204,7 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".into(), "y".into()])),
+                left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".to_string().into(), "y".to_string().into()])),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
                     Tuple {
                         value: vec![

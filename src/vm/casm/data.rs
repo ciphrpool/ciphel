@@ -43,7 +43,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
                 let arr: Vec<String> = data
                     .iter()
                     .map(|e| {
-                        let label = program.get_label_name(e).unwrap_or("".into()).to_string();
+                        let label = program.get_label_name(e).unwrap_or("".to_string().into()).to_string();
                         label.to_string()
                     })
                     .collect();

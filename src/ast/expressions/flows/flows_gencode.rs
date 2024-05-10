@@ -2,7 +2,11 @@ use num_traits::ToBytes;
 
 use ulid::Ulid;
 
+use crate::e_static;
 use crate::semantic::scope::scope::Scope;
+use crate::vm::allocator::stack::UReg;
+use crate::vm::casm::alloc::StackFrame;
+use crate::vm::casm::branch::BranchTry;
 use crate::vm::casm::data;
 use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
 use crate::vm::platform::stdlib::StdCasm;
@@ -73,7 +77,7 @@ impl GenerateCode for IfExpr {
         let end_else_scope_label = Label::gen();
         let end_ifelse_label = Label::gen();
 
-        let _if_label = instructions.push_label("If".into());
+        let _if_label = instructions.push_label("if".to_string().into());
 
         let _ = self.condition.gencode(scope, &instructions)?;
 
@@ -81,11 +85,11 @@ impl GenerateCode for IfExpr {
         instructions.push(Casm::Goto(Goto {
             label: Some(end_if_scope_label),
         }));
-        instructions.push_label_id(if_scope_label, "if_scope".into());
+        instructions.push_label_id(if_scope_label, "if_scope".to_string().into());
 
         let _ = self.then_branch.gencode(scope, &instructions)?;
 
-        instructions.push_label_id(end_if_scope_label, "end_if_scope".into());
+        instructions.push_label_id(end_if_scope_label, "end_if_scope".to_string().into());
         instructions.push(Casm::Call(Call::From {
             label: if_scope_label,
             param_size: 0,
@@ -95,15 +99,15 @@ impl GenerateCode for IfExpr {
             label: Some(end_ifelse_label),
         }));
 
-        instructions.push_label_id(else_label, "else".into());
+        instructions.push_label_id(else_label, "else".to_string().into());
         instructions.push(Casm::Goto(Goto {
             label: Some(end_else_scope_label),
         }));
-        instructions.push_label_id(else_scope_label, "else_scope".into());
+        instructions.push_label_id(else_scope_label, "else_scope".to_string().into());
 
         let _ = self.else_branch.gencode(scope, &instructions)?;
 
-        instructions.push_label_id(end_else_scope_label, "end_else_scope".into());
+        instructions.push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
         instructions.push(Casm::Call(Call::From {
             label: else_scope_label,
             param_size: 0,
@@ -113,7 +117,7 @@ impl GenerateCode for IfExpr {
             label: Some(end_ifelse_label),
         }));
 
-        instructions.push_label_id(end_ifelse_label, "end_if_else".into());
+        instructions.push_label_id(end_ifelse_label, "end_if_else".to_string().into());
 
         Ok(())
     }
@@ -149,7 +153,7 @@ impl GenerateCode for MatchExpr {
         };
 
         let end_match_label = Label::gen();
-        let _match_label = instructions.push_label("Match".into());
+        let _match_label = instructions.push_label("Match".to_string().into());
 
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.patterns.len());
 
@@ -264,7 +268,7 @@ impl GenerateCode for MatchExpr {
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_scope_label),
             }));
-            let scope_label = instructions.push_label("Scope".into());
+            let scope_label = instructions.push_label("Scope".to_string().into());
             let _ = expr.gencode(scope, instructions)?;
 
             // let param_size = expr
@@ -282,7 +286,7 @@ impl GenerateCode for MatchExpr {
                         .sum()
                 })
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            instructions.push_label_id(end_scope_label, "End_Scope".into());
+            instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
             instructions.push(Casm::Call(Call::From {
                 label: scope_label,
                 param_size,
@@ -294,15 +298,15 @@ impl GenerateCode for MatchExpr {
         }
         match &self.else_branch {
             Some(else_branch) => {
-                instructions.push_label_id(else_label.unwrap(), "else_case".into());
+                instructions.push_label_id(else_label.unwrap(), "else_case".to_string().into());
                 let end_scope_label = Label::gen();
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_scope_label),
                 }));
-                let scope_label = instructions.push_label("Scope".into());
+                let scope_label = instructions.push_label("Scope".to_string().into());
                 let _ = else_branch.gencode(scope, instructions)?;
 
-                instructions.push_label_id(end_scope_label, "End_Scope".into());
+                instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {
                     label: scope_label,
                     param_size: 0,
@@ -315,7 +319,7 @@ impl GenerateCode for MatchExpr {
             None => {}
         }
 
-        instructions.push_label_id(end_match_label, "end_match_else".into());
+        instructions.push_label_id(end_match_label, "end_match_else".to_string().into());
         Ok(())
     }
 }
@@ -323,10 +327,93 @@ impl GenerateCode for MatchExpr {
 impl GenerateCode for TryExpr {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        let else_label = Label::gen();
+        let try_scope_label = Label::gen();
+        let end_try_scope_label = Label::gen();
+        let else_scope_label = Label::gen();
+        let recover_else_label = Label::gen();
+        let end_else_scope_label = Label::gen();
+        let end_tryelse_label = Label::gen();
+        let end_try_label = Label::gen();
+
+        let try_label = instructions.push_label("try".to_string().into());
+        // instructions.push(Casm::Mem(Mem::GetReg(UReg::R2)));
+        // instructions.push(Casm::Mem(Mem::LabelOffset(else_label)));
+        instructions.push(Casm::Try(BranchTry::StartTry {
+            else_label: recover_else_label,
+        }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_try_scope_label),
+        }));
+        instructions.push_label_id(try_scope_label, "try_scope".to_string().into());
+
+        let _ = self.try_branch.gencode(scope, &instructions)?;
+
+        instructions.push_label_id(end_try_scope_label, "end_try_scope".to_string().into());
+        instructions.push(Casm::Call(Call::From {
+            label: try_scope_label,
+            param_size: 0,
+        }));
+        instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+
+        if self.pop_last_err.get() {
+            /* Pop the error */
+            instructions.push(Casm::If(BranchIf {
+                else_label: end_try_label,
+            }));
+            instructions.push(Casm::Pop(return_size)); // discard error value
+            instructions.push(Casm::Goto(Goto {
+                label: Some(else_label),
+            }))
+        }
+        instructions.push_label_id(end_try_label, "end_try".to_string().into());
+        instructions.push(Casm::Try(BranchTry::EndTry));
+
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_tryelse_label),
+        }));
+        instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
+        instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+
+        instructions.push_label_id(else_label, "else".to_string().into());
+        instructions.push(Casm::Try(BranchTry::EndTry));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_else_scope_label),
+        }));
+        instructions.push_label_id(else_scope_label, "else_scope".to_string().into());
+
+        match &self.else_branch {
+            Some(else_branch) => {
+                let _ = else_branch.gencode(scope, &instructions)?;
+                instructions
+                    .push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
+                instructions.push(Casm::Call(Call::From {
+                    label: else_scope_label,
+                    param_size: 0,
+                }));
+                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(end_tryelse_label),
+                }));
+            }
+            None => {
+                instructions
+                    .push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(end_tryelse_label),
+                }));
+            }
+        }
+
+        instructions.push_label_id(end_tryelse_label, "end_try_else".to_string().into());
+        Ok(())
     }
 }
 impl GenerateCode for FCall {
@@ -587,11 +674,11 @@ mod tests {
     #[test]
     fn valid_if_complex() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -615,7 +702,10 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = statement_then
             .resolve(&scope, &None, &())
@@ -652,9 +742,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
                         Number::I64(res) => {
-                            if r_id == "x" {
+                            if **r_id == "x" {
                                 assert_eq!(420, res);
-                            } else if r_id == "y" {
+                            } else if **r_id == "y" {
                                 assert_eq!(420, res);
                             }
                         }
@@ -669,11 +759,11 @@ mod tests {
     #[test]
     fn valid_if_complex_else() {
         let user_type = user_type_impl::Struct {
-            id: "Point".into(),
+            id: "Point".to_string().into(),
             fields: {
                 let mut res = Vec::new();
-                res.push(("x".into(), p_num!(I64)));
-                res.push(("y".into(), p_num!(I64)));
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
                 res
             },
         };
@@ -697,7 +787,10 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Point".into(), UserType::Struct(user_type.clone()))
+            .register_type(
+                &"Point".to_string().into(),
+                UserType::Struct(user_type.clone()),
+            )
             .expect("Registering of user type should have succeeded");
         let _ = statement_else
             .resolve(&scope, &None, &())
@@ -734,9 +827,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x.get() {
                         Number::I64(res) => {
-                            if r_id == "x" {
+                            if **r_id == "x" {
                                 assert_eq!(69, res);
-                            } else if r_id == "y" {
+                            } else if **r_id == "y" {
                                 assert_eq!(69, res);
                             }
                         }
@@ -801,23 +894,26 @@ mod tests {
     #[test]
     fn valid_match_union() {
         let user_type = user_type_impl::Union {
-            id: "Geo".into(),
+            id: "Geo".to_string().into(),
             variants: {
                 let mut res = Vec::new();
                 res.push((
-                    "Point".into(),
+                    "Point".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Point".into(),
-                        fields: vec![("x".into(), p_num!(I64)), ("y".into(), p_num!(I64))],
+                        id: "Point".to_string().into(),
+                        fields: vec![
+                            ("x".to_string().into(), p_num!(I64)),
+                            ("y".to_string().into(), p_num!(I64)),
+                        ],
                     },
                 ));
                 res.push((
-                    "Axe".into(),
+                    "Axe".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Axe".into(),
+                        id: "Axe".to_string().into(),
                         fields: {
                             let mut res = Vec::new();
-                            res.push(("x".into(), p_num!(I64)));
+                            res.push(("x".to_string().into(), p_num!(I64)));
                             res
                         },
                     },
@@ -847,7 +943,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Union(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -886,8 +982,12 @@ mod tests {
     #[test]
     fn valid_match_enum() {
         let user_type = user_type_impl::Enum {
-            id: "Geo".into(),
-            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+            id: "Geo".to_string().into(),
+            values: vec![
+                "Point".to_string().into(),
+                "Axe".to_string().into(),
+                "Other".to_string().into(),
+            ],
         };
         let statement = Statement::parse(
             r##"
@@ -909,7 +1009,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -948,8 +1048,12 @@ mod tests {
     #[test]
     fn valid_match_enum_else() {
         let user_type = user_type_impl::Enum {
-            id: "Geo".into(),
-            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+            id: "Geo".to_string().into(),
+            values: vec![
+                "Point".to_string().into(),
+                "Axe".to_string().into(),
+                "Other".to_string().into(),
+            ],
         };
         let statement = Statement::parse(
             r##"
@@ -971,7 +1075,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -1010,23 +1114,26 @@ mod tests {
     #[test]
     fn valid_match_union_else() {
         let user_type = user_type_impl::Union {
-            id: "Geo".into(),
+            id: "Geo".to_string().into(),
             variants: {
                 let mut res = Vec::new();
                 res.push((
-                    "Point".into(),
+                    "Point".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Point".into(),
-                        fields: vec![("x".into(), p_num!(I64)), ("y".into(), p_num!(I64))],
+                        id: "Point".to_string().into(),
+                        fields: vec![
+                            ("x".to_string().into(), p_num!(I64)),
+                            ("y".to_string().into(), p_num!(I64)),
+                        ],
                     },
                 ));
                 res.push((
-                    "Axe".into(),
+                    "Axe".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Axe".into(),
+                        id: "Axe".to_string().into(),
                         fields: {
                             let mut res = Vec::new();
-                            res.push(("x".into(), p_num!(I64)));
+                            res.push(("x".to_string().into(), p_num!(I64)));
                             res
                         },
                     },
@@ -1056,7 +1163,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Union(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -1238,28 +1345,28 @@ mod tests {
     #[test]
     fn valid_match_union_mult() {
         let user_type = user_type_impl::Union {
-            id: "Geo".into(),
+            id: "Geo".to_string().into(),
             variants: {
                 let mut res = Vec::new();
                 res.push((
-                    "Point".into(),
+                    "Point".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Point".into(),
-                        fields: vec![("x".into(), p_num!(I64))],
+                        id: "Point".to_string().into(),
+                        fields: vec![("x".to_string().into(), p_num!(I64))],
                     },
                 ));
                 res.push((
-                    "Axe".into(),
+                    "Axe".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Axe".into(),
-                        fields: vec![("x".into(), p_num!(I64))],
+                        id: "Axe".to_string().into(),
+                        fields: vec![("x".to_string().into(), p_num!(I64))],
                     },
                 ));
                 res.push((
-                    "Other".into(),
+                    "Other".to_string().into(),
                     user_type_impl::Struct {
-                        id: "Axe".into(),
-                        fields: vec![("x".into(), p_num!(I64))],
+                        id: "Axe".to_string().into(),
+                        fields: vec![("x".to_string().into(), p_num!(I64))],
                     },
                 ));
                 res
@@ -1286,7 +1393,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Union(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -1325,8 +1432,12 @@ mod tests {
     #[test]
     fn valid_match_enum_mult() {
         let user_type = user_type_impl::Enum {
-            id: "Geo".into(),
-            values: vec!["Point".into(), "Axe".into(), "Other".into()],
+            id: "Geo".to_string().into(),
+            values: vec![
+                "Point".to_string().into(),
+                "Axe".to_string().into(),
+                "Other".to_string().into(),
+            ],
         };
         let statement = Statement::parse(
             r##"
@@ -1347,7 +1458,7 @@ mod tests {
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
-            .register_type(&"Geo".into(), UserType::Enum(user_type))
+            .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
             .resolve(&scope, &None, &())
@@ -1381,5 +1492,154 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
+    }
+
+    #[test]
+    fn valid_try_tuple() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let res = try (10,Ok()) else 20;
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(U64, 10));
+    }
+    #[test]
+    fn valid_try_tuple_else() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let res = try (10,Err()) else 20;
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(U64, 20));
+    }
+
+    #[test]
+    fn valid_try_tuple_catch_err_string_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let buf = string("aaaabbbbcc");
+            let res = try buf[16] else 'a';
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('a'));
+    }
+
+    #[test]
+    fn valid_try_tuple_catch_err_strslice_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let buf = "aaaabbbbcc";
+            let res = try buf[16] else 'a';
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+                .expect("Deserialization should have succeeded");
+        assert_eq!(result, Primitive::Char('a'));
+    }
+
+    #[test]
+    fn valid_try_tuple_catch_err_slice_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let buf = [1,5,3,8];
+            let res = try buf[16] else 10;
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 10));
+    }
+
+    #[test]
+    fn valid_try_tuple_catch_err_vec_access() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+            let buf = vec[1,5,3,8];
+            let res = try buf[16] else 10;
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 10));
     }
 }
