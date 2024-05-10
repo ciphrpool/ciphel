@@ -31,9 +31,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.init_address(instructions),
             StaticType::Vec(value) => value.init_address(instructions),
             StaticType::Range(value) => value.init_address(instructions),
-            StaticType::Error => todo!(),
             StaticType::Address(value) => value.init_address(instructions),
-            StaticType::Map(_) => todo!(),
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }
@@ -44,9 +42,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.init_index(instructions),
             StaticType::Vec(value) => value.init_index(instructions),
             StaticType::Range(value) => value.init_index(instructions),
-            StaticType::Error => todo!(),
             StaticType::Address(value) => value.init_index(instructions),
-            StaticType::Map(_) => todo!(),
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }
@@ -61,9 +57,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.build_item(instructions, end_label),
             StaticType::Vec(value) => value.build_item(instructions, end_label),
             StaticType::Range(value) => value.build_item(instructions, end_label),
-            StaticType::Error => todo!(),
             StaticType::Address(value) => value.build_item(instructions, end_label),
-            StaticType::Map(_) => todo!(),
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }
@@ -74,9 +68,7 @@ impl NextItem for StaticType {
             StaticType::StrSlice(value) => value.next(instructions),
             StaticType::Vec(value) => value.next(instructions),
             StaticType::Range(value) => value.next(instructions),
-            StaticType::Error => todo!(),
             StaticType::Address(value) => value.next(instructions),
-            StaticType::Map(_) => todo!(),
             _ => Err(CodeGenerationError::UnresolvedError),
         }
     }

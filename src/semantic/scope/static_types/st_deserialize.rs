@@ -109,7 +109,7 @@ impl Printer for StaticType {
                 ))));
                 Ok(())
             }
-            StaticType::Map(_value) => todo!(),
+            StaticType::Map(_value) => Err(CodeGenerationError::Default),
         }
     }
 }

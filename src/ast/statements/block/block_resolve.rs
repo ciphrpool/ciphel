@@ -26,9 +26,6 @@ impl Resolve for Block {
             if self.is_loop.get() {
                 inner_scope.as_ref().borrow_mut().to_loop();
             }
-            if self.is_generator.get() {
-                inner_scope.as_ref().borrow_mut().to_generator();
-            }
             if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
                 let caller = caller.clone();
                 caller.state.set(VarState::Parameter);
@@ -93,9 +90,15 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
-        let var_x = res_scope.borrow().find_var(&"x".to_string().into()).unwrap();
+        let var_x = res_scope
+            .borrow()
+            .find_var(&"x".to_string().into())
+            .unwrap();
         let x_type = var_x.type_of(&res_scope.borrow()).unwrap();
-        let var_y = res_scope.borrow().find_var(&"y".to_string().into()).unwrap();
+        let var_y = res_scope
+            .borrow()
+            .find_var(&"y".to_string().into())
+            .unwrap();
         let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
 
         assert_eq!(p_num!(I64), x_type);

@@ -372,13 +372,6 @@ impl Scope {
         }
     }
 
-    pub fn to_generator(&mut self) {
-        match self {
-            Scope::Inner { data, .. } => data.state.get_mut().is_generator = true,
-            _ => {}
-        }
-    }
-
     pub fn to_loop(&mut self) {
         match self {
             Scope::Inner { data, .. } => data.state.get_mut().is_loop = true,

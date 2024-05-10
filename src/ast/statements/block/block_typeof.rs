@@ -35,14 +35,6 @@ impl TypeOf for Block {
                     return_type = return_type.merge(&value_type, &inner_scope)?;
                 }
                 Statement::Return(value) => {
-                    if self.is_generator.get() {
-                        match value {
-                            Return::Expr { .. } | Return::Unit => {
-                                return Err(SemanticError::CantReturn)
-                            }
-                            _ => {}
-                        }
-                    }
                     let value_type = value.type_of(&inner_scope)?;
                     return_type = return_type.merge(&value_type, &inner_scope)?;
                 }

@@ -1,11 +1,8 @@
-use std::{
-    cell::{Cell, RefCell},
-};
+use std::cell::{Cell, RefCell};
 
-use crate::{
-    semantic::{
-        scope::{var_impl::Var, ClosureState}, Metadata, MutRc, SemanticError,
-    },
+use crate::semantic::{
+    scope::{var_impl::Var, ClosureState},
+    Metadata, MutRc, SemanticError,
 };
 
 use super::Statement;
@@ -22,7 +19,6 @@ pub struct Block {
     pub inner_scope: RefCell<Option<MutRc<Scope>>>,
     pub can_capture: Cell<ClosureState>,
     pub is_loop: Cell<bool>,
-    pub is_generator: Cell<bool>,
     pub caller: MutRc<Option<Var>>,
     pub metadata: Metadata,
 }
@@ -32,7 +28,6 @@ impl PartialEq for Block {
         self.instructions == other.instructions
             && self.can_capture == other.can_capture
             && self.is_loop == other.is_loop
-            && self.is_generator == other.is_generator
             && self.caller == other.caller
             && self.metadata == other.metadata
     }
@@ -69,8 +64,5 @@ impl Block {
 
     pub fn to_loop(&self) {
         self.is_loop.set(true);
-    }
-    pub fn to_generator(&self) {
-        self.is_generator.set(true);
     }
 }

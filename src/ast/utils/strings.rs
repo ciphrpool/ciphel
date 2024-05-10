@@ -148,7 +148,6 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                 lexem::LOOP => true,
                 lexem::BREAK => true,
                 lexem::CONTINUE => true,
-                lexem::YIELD => true,
                 lexem::MOVE => true,
                 lexem::REC => true,
                 lexem::DYN => true,

@@ -17,7 +17,6 @@ pub const FOR: &str = "for";
 pub const LOOP: &str = "loop";
 pub const BREAK: &str = "break";
 pub const CONTINUE: &str = "continue";
-pub const YIELD: &str = "yield";
 pub const MOVE: &str = "move";
 pub const REC: &str = "rec";
 pub const DYN: &str = "dyn";

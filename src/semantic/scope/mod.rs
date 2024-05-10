@@ -126,7 +126,6 @@ pub enum ClosureState {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct ScopeState {
     pub is_closure: ClosureState,
-    pub is_generator: bool,
     pub is_loop: bool,
 }
 
@@ -134,7 +133,6 @@ impl Default for ScopeState {
     fn default() -> Self {
         Self {
             is_closure: ClosureState::DEFAULT,
-            is_generator: false,
             is_loop: false,
         }
     }

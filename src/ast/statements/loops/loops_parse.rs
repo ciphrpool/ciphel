@@ -164,7 +164,7 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_generator: Cell::new(false),
+
                     caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 })
@@ -211,7 +211,7 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    is_generator: Cell::new(false),
+
                     caller: Default::default(),
                     inner_scope: RefCell::new(None)
                 })
@@ -254,7 +254,7 @@ mod tests {
                 }))],
                 can_capture: Cell::new(ClosureState::DEFAULT),
                 is_loop: Cell::new(false),
-                is_generator: Cell::new(false),
+
                 caller: Default::default(),
                 inner_scope: RefCell::new(None)
             })),
