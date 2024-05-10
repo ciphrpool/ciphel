@@ -39,7 +39,7 @@ impl GenerateCode for Loop {
                 instructions.push_label_id(start_label, "start_loop".to_string().into());
                 instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
                 instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
-                let _ = inner_block_gencode(scope, value, None, true, instructions)?;
+                let _ = inner_block_gencode(scope, value, None, true, false, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
                 }));
@@ -91,7 +91,14 @@ impl GenerateCode for ForLoop {
 
         let params_size = item_type.size_of();
 
-        let _ = inner_block_gencode(scope, &self.scope, Some(params_size), true, instructions)?;
+        let _ = inner_block_gencode(
+            scope,
+            &self.scope,
+            Some(params_size),
+            true,
+            false,
+            instructions,
+        )?;
 
         instructions.push_label_id(next_label, "next_label".to_string().into());
         let _ = iterator_type.next(instructions)?;
@@ -124,7 +131,7 @@ impl GenerateCode for WhileLoop {
         instructions.push(Casm::If(BranchIf {
             else_label: end_label,
         }));
-        let _ = inner_block_gencode(scope, &self.scope, None, true, instructions)?;
+        let _ = inner_block_gencode(scope, &self.scope, None, true, false, instructions)?;
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));

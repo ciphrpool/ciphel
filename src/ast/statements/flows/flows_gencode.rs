@@ -1,4 +1,7 @@
-use crate::{semantic::scope::scope::Scope, vm::casm::data::Data};
+use crate::{
+    semantic::scope::scope::Scope,
+    vm::casm::{alloc::StackFrame, branch::BranchTry, data::Data},
+};
 use ulid::Ulid;
 
 use crate::{
@@ -95,7 +98,7 @@ impl GenerateCode for IfStat {
             }
         }
         // let _ = self.then_branch.gencode(block, &instructions)?;
-        let _ = inner_block_gencode(scope, &self.then_branch, None, false, instructions)?;
+        let _ = inner_block_gencode(scope, &self.then_branch, None, false, false, instructions)?;
 
         for pair in self
             .else_if_branches
@@ -112,21 +115,24 @@ impl GenerateCode for IfStat {
                 else_label: **label_2,
             }));
             // let _ = scope_1.gencode(block, instructions)?;
-            let _ = inner_block_gencode(scope, &scope_1, None, false, instructions)?;
+            let _ = inner_block_gencode(scope, &scope_1, None, false, false, instructions)?;
         }
         if let Some((cond, s)) = &self.else_if_branches.last() {
-            instructions.push_label_id(*else_if_labels.last().unwrap(), "else_if".to_string().into());
+            instructions.push_label_id(
+                *else_if_labels.last().unwrap(),
+                "else_if".to_string().into(),
+            );
             let _ = cond.gencode(scope, &instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: else_label.unwrap_or(end_if_label),
             }));
             // let _ = s.gencode(block, instructions)?;
-            let _ = inner_block_gencode(scope, &s, None, false, instructions)?;
+            let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
         }
 
         if let Some(s) = &self.else_branch {
             instructions.push_label_id(else_label.unwrap(), "else".to_string().into());
-            let _ = inner_block_gencode(scope, &s, None, false, instructions)?;
+            let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
         }
 
         instructions.push_label_id(end_if_label, "end_if".to_string().into());
@@ -287,7 +293,7 @@ impl GenerateCode for MatchStat {
                 })
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-            let _ = inner_block_gencode(scope, &s, Some(param_size), false, instructions)?;
+            let _ = inner_block_gencode(scope, &s, Some(param_size), false, false, instructions)?;
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_match_label),
             }));
@@ -296,7 +302,7 @@ impl GenerateCode for MatchStat {
             Some(else_branch) => {
                 instructions.push_label_id(else_label.unwrap(), "else_case".to_string().into());
 
-                let _ = inner_block_gencode(scope, &else_branch, None, false, instructions)?;
+                let _ = inner_block_gencode(scope, &else_branch, None, false, false, instructions)?;
                 instructions.push(Casm::Goto(Goto {
                     label: Some(end_match_label),
                 }));
@@ -312,10 +318,30 @@ impl GenerateCode for MatchStat {
 impl GenerateCode for TryStat {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
-        _instructions: &CasmProgram,
+        scope: &MutRc<Scope>,
+        instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        let else_label = Label::gen();
+        let end_try_label = Label::gen();
+        let recover_else_label = Label::gen();
+
+        instructions.push(Casm::Try(BranchTry::StartTry {
+            else_label: recover_else_label,
+        }));
+        let _ = inner_block_gencode(scope, &self.try_branch, None, false, true, instructions)?;
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_try_label),
+        }));
+        instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
+        instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        instructions.push_label_id(else_label, "else".to_string().into());
+        instructions.push(Casm::Try(BranchTry::EndTry));
+        if let Some(s) = &self.else_branch {
+            let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
+        }
+
+        instructions.push_label_id(end_try_label, "end_try".to_string().into());
+        Ok(())
     }
 }
 
@@ -794,5 +820,365 @@ mod tests {
         )
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 420));
+    }
+
+    #[test]
+    fn valid_try_catch_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            try {
+                let x = arr[7];
+            }
+
+            return 1;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 1));
+    }
+
+    #[test]
+    fn valid_try_catch_err_with_else() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = arr[7];
+            } else {
+                res = 2;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
+    }
+
+    #[test]
+    fn valid_try_catch_no_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = arr[2];
+                res = 2;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
+    }
+
+    #[test]
+    fn valid_try_catch_no_err_with_else() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = arr[2];
+                res = 2;
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
+    }
+
+    #[test]
+    fn valid_try_with_inner_try_catch_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = try arr[7] else 2;
+                res = x;
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
+    }
+
+    #[test]
+    fn valid_try_with_inner_try_catch_no_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = try arr[3] else 2;
+                res = x;
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 4));
+    }
+
+    #[test]
+    fn valid_try_catch_err_with_inner_try_catch_no_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                let x = try arr[3] else 2;
+                res = arr[7];
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 3));
+    }
+
+    #[test]
+    fn valid_try_early_return() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                return 7;
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 7));
+    }
+
+    #[test]
+    fn valid_try_early_return_with_inner_try_catch_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                try {
+                    if arr[7] == 2 {
+                        return 8;
+                    }
+                } else {
+                    return 7;
+                }
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 7));
+    }
+    #[test]
+    fn valid_try_early_return_with_inner_try_catch_no_err() {
+        let statement = Statement::parse(
+            r##"
+        let x = {
+
+            let arr = vec[1,2,3,4];
+
+            let res = 1;
+
+            try {
+                try {
+                    res = 2;
+                } else {
+                    if arr[7] == 2 {
+                        return 8;
+                    }
+                }
+            } else {
+                res = 3;
+            }
+
+            return res;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 2));
     }
 }

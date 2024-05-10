@@ -1,5 +1,6 @@
 use crate::semantic::scope::scope::Scope;
 
+use crate::vm::casm::branch::BranchTry;
 use crate::{
     semantic::{scope::var_impl::VarState, MutRc, SizeOf},
     vm::{
@@ -20,6 +21,7 @@ pub fn inner_block_gencode(
     block: &Block,
     param_size: Option<usize>,
     is_direct_loop: bool,
+    is_try_block: bool,
     instructions: &CasmProgram,
 ) -> Result<(), CodeGenerationError> {
     let scope_label = Label::gen();
@@ -38,6 +40,9 @@ pub fn inner_block_gencode(
         label: scope_label,
         param_size: param_size.unwrap_or(0),
     }));
+    if is_try_block {
+        instructions.push(Casm::Try(BranchTry::EndTry));
+    }
     instructions.push(Casm::StackFrame(StackFrame::Transfer { is_direct_loop }));
 
     Ok(())
