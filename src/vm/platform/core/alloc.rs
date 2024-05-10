@@ -136,6 +136,7 @@ pub enum AllocFn {
     MemCopy,
     Clear {
         item_size: Cell<usize>,
+        key_size: Cell<usize>,
         clear_kind: Cell<ClearKind>,
     },
 }
@@ -202,7 +203,10 @@ pub enum AllocCasm {
 
     ClearVec(usize),
     ClearString(usize),
-    ClearMap(usize),
+    ClearMap {
+        key_size: usize,
+        value_size: usize,
+    },
 
     Len,
     Cap,
@@ -259,7 +263,7 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
             } => stdio.push_casm_lib(engine, "delete"),
             AllocCasm::ClearVec(_) => stdio.push_casm_lib(engine, "clear"),
             AllocCasm::ClearString(_) => stdio.push_casm_lib(engine, "clear"),
-            AllocCasm::ClearMap(_) => stdio.push_casm_lib(engine, "clear"),
+            AllocCasm::ClearMap { .. } => stdio.push_casm_lib(engine, "clear"),
             AllocCasm::Len => stdio.push_casm_lib(engine, "len"),
             AllocCasm::Cap => stdio.push_casm_lib(engine, "cap"),
             AllocCasm::CapMap => stdio.push_casm_lib(engine, "cap"),
@@ -340,6 +344,7 @@ impl AllocFn {
             lexem::MEMCPY => Some(AllocFn::MemCopy),
             lexem::CLEAR => Some(AllocFn::Clear {
                 item_size: Cell::new(0),
+                key_size: Cell::new(0),
                 clear_kind: Cell::new(ClearKind::Vec),
             }),
             lexem::SIZEOF => Some(AllocFn::SizeOf { size: Cell::new(0) }),
@@ -954,6 +959,7 @@ impl Resolve for AllocFn {
             AllocFn::Clear {
                 clear_kind,
                 item_size,
+                key_size,
             } => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -980,13 +986,14 @@ impl Resolve for AllocFn {
                                     };
                                     item_size.set(item_type.size_of());
                                 }
-                                StaticType::Map(_) => {
+                                StaticType::Map(MapType {
+                                    keys_type,
+                                    values_type,
+                                }) => {
                                     clear_kind.set(ClearKind::Map);
-                                    let item_type = src_type.get_item();
-                                    let Some(item_type) = item_type else {
-                                        return Err(SemanticError::IncorrectArguments);
-                                    };
-                                    item_size.set(item_type.size_of());
+
+                                    item_size.set(values_type.as_ref().size_of());
+                                    key_size.set(keys_type.as_ref().size_of());
                                 }
                                 _ => return Err(SemanticError::IncorrectArguments),
                             },
@@ -1212,6 +1219,7 @@ impl GenerateCode for AllocFn {
             AllocFn::Clear {
                 clear_kind,
                 item_size,
+                key_size,
             } => match clear_kind.get() {
                 ClearKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ClearVec(item_size.get())),
@@ -1220,7 +1228,10 @@ impl GenerateCode for AllocFn {
                     super::CoreCasm::Alloc(AllocCasm::ClearString(1)),
                 ))),
                 ClearKind::Map => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::ClearMap(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::ClearMap {
+                        key_size: key_size.get(),
+                        value_size: item_size.get(),
+                    }),
                 ))),
             },
         }
@@ -1761,6 +1772,15 @@ pub mod map_impl {
             Ok(())
         }
 
+        pub fn clear_buckets(&self, heap: &mut Heap) -> Result<(), RuntimeError> {
+            let _ = heap
+                .write(
+                    self.ptr_buckets as usize,
+                    &vec![0; (1 << self.log_cap) * self.bucket_size],
+                )
+                .map_err(|e| e.into())?;
+            Ok(())
+        }
         pub fn retrieve_vec_values(&self, heap: &mut Heap) -> Result<Vec<u64>, RuntimeError> {
             // get all buckets
             let bytes_buckets = heap
@@ -2904,7 +2924,30 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
                     .write(vec_heap_address as usize, &len_bytes)
                     .map_err(|e| e.into())?;
             }
-            AllocCasm::ClearMap(_) => todo!(),
+            AllocCasm::ClearMap {
+                key_size,
+                value_size,
+            } => {
+                let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
+
+                let map_heap_address_bytes = stack
+                    .read(
+                        Offset::SB(map_stack_address as usize),
+                        AccessLevel::Direct,
+                        8,
+                    )
+                    .map_err(|err| err.into())?;
+
+                let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
+                    .map_err(|_| RuntimeError::Deserialization)?;
+                let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
+                let map_layout = map_layout(map_heap_address, *key_size, *value_size, heap)?;
+                let _ = map_layout.clear_buckets(heap)?;
+                // update len
+                let _ = heap
+                    .write(map_heap_address as usize, &(0u64).to_le_bytes().to_vec())
+                    .map_err(|e| e.into())?;
+            }
             AllocCasm::ExtendItemFromSlice { size, len } => {
                 let item_size = *size;
                 let slice_len = *len;
@@ -5082,6 +5125,41 @@ mod tests {
         assert_eq!(len, 1);
     }
 
+    #[test]
+    fn valid_map_clear() {
+        let statement = Statement::parse(
+            r##"
+            let res = {
+                let hmap : Map<u64,u64> = map();
+                insert(&hmap,101,5);
+                insert(&hmap,102,6);
+                insert(&hmap,103,7);
+                insert(&hmap,104,8);
+                insert(&hmap,105,9);
+                insert(&hmap,106,10);
+                insert(&hmap,107,11);
+                insert(&hmap,108,12);
+                clear(&hmap);
+                return len(hmap);
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let data = compile_statement!(statement);
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::U64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+
+        assert_eq!(
+            result,
+            v_num!(U64, 0),
+            "Result does not match the expected value"
+        );
+    }
     #[test]
     fn valid_map_delete_cant_read_after() {
         let statement = Statement::parse(
