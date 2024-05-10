@@ -129,7 +129,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Free {
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::get_num8::<u64>(stack)? - 8;
         if address < STACK_SIZE as u64 {
-            todo!("Decide wether runtime error or noop");
+            return Err(RuntimeError::CodeSegmentation);
         } else {
             heap.free(address as usize).map_err(|e| e.into())?;
         }
