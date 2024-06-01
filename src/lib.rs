@@ -20,6 +20,7 @@ pub enum CompilationError {
     InvalidTID(usize),
 }
 
+#[derive(Debug, Clone)]
 pub struct Ciphel<G: GameEngineStaticFn + Clone> {
     runtime: Runtime<G>,
     heap: Heap,
