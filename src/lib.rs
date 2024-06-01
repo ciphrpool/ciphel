@@ -8,9 +8,9 @@ use vm::{
 
 use crate::{ast::statements::parse_statements, semantic::Resolve, vm::vm::GenerateCode};
 
-mod ast;
-mod semantic;
-mod vm;
+pub mod ast;
+pub mod semantic;
+pub mod vm;
 
 #[derive(Debug)]
 pub enum CompilationError {
