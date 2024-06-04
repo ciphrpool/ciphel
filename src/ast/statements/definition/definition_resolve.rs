@@ -6,9 +6,9 @@ use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
+use crate::semantic::ArcMutex;
 use crate::semantic::EType;
 use crate::semantic::Either;
-use crate::semantic::MutRc;
 use crate::semantic::SizeOf;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
@@ -20,17 +20,17 @@ impl Resolve for Definition {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            Definition::Type(value) => value.resolve(scope, &(), &()),
-            Definition::Fn(value) => value.resolve(scope, &(), &()),
+            Definition::Type(value) => value.resolve(scope, &(), &mut ()),
+            Definition::Fn(value) => value.resolve(scope, &(), &mut ()),
         }
     }
 }
@@ -40,10 +40,10 @@ impl Resolve for TypeDef {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -59,7 +59,7 @@ impl Resolve for TypeDef {
             TypeDef::Enum(value) => &value.id,
         };
 
-        let type_def = UserType::build_usertype(self, &scope.borrow())?;
+        let mut type_def = UserType::build_usertype(self, &scope.borrow())?;
 
         let mut borrowed_scope = scope.borrow_mut();
         let _ = borrowed_scope.register_type(id, type_def)?;
@@ -72,15 +72,15 @@ impl Resolve for StructDef {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for (_, type_siq) in &self.fields {
+        for (_, type_siq) in &mut self.fields {
             let _ = type_siq.resolve(scope, context, extra)?;
         }
         Ok(())
@@ -92,15 +92,15 @@ impl Resolve for UnionDef {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for (_, variant) in &self.variants {
+        for (_, variant) in &mut self.variants {
             for (_, type_sig) in variant {
                 let _ = type_sig.resolve(scope, context, extra);
             }
@@ -115,10 +115,10 @@ impl Resolve for EnumDef {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
+        &mut self,
+        _scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -132,22 +132,22 @@ impl Resolve for FnDef {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for value in &self.params {
+        for value in &mut self.params {
             let _ = value.resolve(scope, context, extra)?;
         }
 
         let _ = self.ret.resolve(scope, context, extra)?;
         let return_type = self.ret.type_of(&scope.borrow())?;
 
-        let vars = self
+        let mut vars = self
             .params
             .iter()
             .filter_map(|param| {
@@ -184,7 +184,7 @@ impl Resolve for FnDef {
         var.is_declared.set(true);
         self.scope.set_caller(var.clone());
         let _ = scope.borrow_mut().register_var(var)?;
-        let _ = self.scope.resolve(scope, &Some(return_type), &vars)?;
+        let _ = self.scope.resolve(scope, &Some(return_type), &mut vars)?;
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
     }
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn valid_struct() {
-        let type_def = TypeDef::parse(
+        let mut type_def = TypeDef::parse(
             r#"
             struct Point {
                 x : i64,
@@ -222,10 +222,13 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &());
+        let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Point".to_string().into()).unwrap();
+        let res_type = scope
+            .borrow()
+            .find_type(&"Point".to_string().into())
+            .unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
@@ -244,7 +247,7 @@ mod tests {
 
     #[test]
     fn valid_advanced_struct() {
-        let type_def = TypeDef::parse(
+        let mut type_def = TypeDef::parse(
             r#"
             struct Line {
                 start : Point,
@@ -271,10 +274,13 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = type_def.resolve(&scope, &(), &());
+        let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Line".to_string().into()).unwrap();
+        let res_type = scope
+            .borrow()
+            .find_type(&"Line".to_string().into())
+            .unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
@@ -286,7 +292,10 @@ mod tests {
                         Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".to_string().into(),
-                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
+                                fields: vec![
+                                    ("x".to_string().into(), p_num!(U64)),
+                                    ("y".to_string().into(), p_num!(U64)),
+                                ],
                             })
                             .into(),
                         ),
@@ -296,7 +305,10 @@ mod tests {
                         Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".to_string().into(),
-                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
+                                fields: vec![
+                                    ("x".to_string().into(), p_num!(U64)),
+                                    ("y".to_string().into(), p_num!(U64)),
+                                ],
                             })
                             .into(),
                         ),
@@ -310,7 +322,7 @@ mod tests {
 
     #[test]
     fn valid_union() {
-        let type_def = TypeDef::parse(
+        let mut type_def = TypeDef::parse(
             r#"
             union Geo {
                 Point {
@@ -327,7 +339,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &());
+        let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
@@ -369,7 +381,7 @@ mod tests {
 
     #[test]
     fn valid_enum() {
-        let type_def = TypeDef::parse(
+        let mut type_def = TypeDef::parse(
             r#"
             enum Geo {
                 Point
@@ -380,7 +392,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &());
+        let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
@@ -400,7 +412,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_unit() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main() -> Unit {
@@ -413,10 +425,14 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
+        let function_var = scope
+            .borrow()
+            .find_var(&"main".to_string().into())
+            .unwrap()
+            .clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -435,7 +451,7 @@ mod tests {
 
     #[test]
     fn valid_function_args_unit() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main(x:u64,text:String) -> Unit {
@@ -448,10 +464,14 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
+        let function_var = scope
+            .borrow()
+            .find_var(&"main".to_string().into())
+            .unwrap()
+            .clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -493,7 +513,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_returns() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main() -> u64 {
@@ -507,10 +527,14 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
+        let function_var = scope
+            .borrow()
+            .find_var(&"main".to_string().into())
+            .unwrap()
+            .clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 
@@ -529,7 +553,7 @@ mod tests {
 
     #[test]
     fn valid_function_no_args_captures() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main() -> Unit {
@@ -553,7 +577,7 @@ mod tests {
             })
             .expect("registering vars should succeed");
 
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         // let captured_vars = function
@@ -579,7 +603,7 @@ mod tests {
 
     #[test]
     fn valid_args_captures() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main(y:u64) -> Unit {
@@ -612,7 +636,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         // let captured_vars = function
@@ -638,7 +662,7 @@ mod tests {
 
     #[test]
     fn valid_function_rec_no_args_returns() {
-        let function = FnDef::parse(
+        let mut function = FnDef::parse(
             r##"
 
         fn main() -> u64 {
@@ -652,10 +676,14 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &());
+        let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope.borrow().find_var(&"main".to_string().into()).unwrap().clone();
+        let function_var = scope
+            .borrow()
+            .find_var(&"main".to_string().into())
+            .unwrap()
+            .clone();
         let function_var = function_var.as_ref().clone();
         let function_type = function_var.type_sig;
 

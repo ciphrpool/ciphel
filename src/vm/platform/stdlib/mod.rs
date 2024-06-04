@@ -13,7 +13,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{ArcMutex, EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -57,8 +57,8 @@ pub enum StdCasm {
     Iter(IterCasm),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StdCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StdCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             StdCasm::IO(value) => value.name(stdio, program, engine),
             StdCasm::Math(value) => value.name(stdio, program, engine),
@@ -108,10 +108,10 @@ impl Resolve for StdFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             StdFn::IO(value) => value.resolve(scope, context, extra),
@@ -123,12 +123,12 @@ impl Resolve for StdFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let size = &extra[0];
+                let size = &mut extra[0];
 
                 let _ = size.resolve(
                     scope,
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
-                    &None,
+                    &mut None,
                 )?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
@@ -176,7 +176,7 @@ impl TypeOf for StdFn {
 impl GenerateCode for StdFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -207,13 +207,13 @@ impl GenerateCode for StdFn {
 pub const ERROR_VALUE: [u8; 1] = [1];
 pub const OK_VALUE: [u8; 1] = [0];
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StdCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {

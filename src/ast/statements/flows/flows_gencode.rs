@@ -19,7 +19,7 @@ use crate::{
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        Either, MutRc, SizeOf,
+        Either, ArcMutex, SizeOf,
     },
     vm::{
         casm::{
@@ -35,7 +35,7 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 impl GenerateCode for Flow {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -50,7 +50,7 @@ impl GenerateCode for Flow {
 impl GenerateCode for CallStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.call.gencode(scope, instructions)?;
@@ -69,7 +69,7 @@ impl GenerateCode for CallStat {
 impl GenerateCode for IfStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let mut else_if_labels: Vec<Ulid> = Vec::default();
@@ -143,7 +143,7 @@ impl GenerateCode for IfStat {
 impl GenerateCode for MatchStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(expr_type) = self.expr.signature() else {
@@ -318,7 +318,7 @@ impl GenerateCode for MatchStat {
 impl GenerateCode for TryStat {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 0;
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn valid_if_else_if() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn valid_if_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -452,7 +452,7 @@ mod tests {
 
     #[test]
     fn valid_match_primitive() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 1;
@@ -488,7 +488,7 @@ mod tests {
     }
     #[test]
     fn valid_match_primitive_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = 3;
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "Hello";
@@ -557,7 +557,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice_other() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "Hello";
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn valid_match_strslice_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let var = "World";
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn valid_match_enum() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             enum Sport {
@@ -670,7 +670,7 @@ mod tests {
 
     #[test]
     fn valid_match_enum_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             enum Sport {
@@ -709,7 +709,7 @@ mod tests {
 
     #[test]
     fn valid_match_union() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -747,7 +747,7 @@ mod tests {
 
     #[test]
     fn valid_match_union_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn valid_match_union_mult() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             union Sport {
@@ -824,7 +824,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err_with_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -890,7 +890,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -924,7 +924,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_no_err_with_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -960,7 +960,7 @@ mod tests {
 
     #[test]
     fn valid_try_with_inner_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -996,7 +996,7 @@ mod tests {
 
     #[test]
     fn valid_try_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1032,7 +1032,7 @@ mod tests {
 
     #[test]
     fn valid_try_catch_err_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1068,7 +1068,7 @@ mod tests {
 
     #[test]
     fn valid_try_early_return() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1103,7 +1103,7 @@ mod tests {
 
     #[test]
     fn valid_try_early_return_with_inner_try_catch_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 
@@ -1143,7 +1143,7 @@ mod tests {
     }
     #[test]
     fn valid_try_early_return_with_inner_try_catch_no_err() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
 

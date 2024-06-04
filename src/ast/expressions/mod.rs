@@ -11,7 +11,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{AccessLevel, EType, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf},
+    semantic::{AccessLevel, ArcMutex, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{locate::Locate, Casm, CasmProgram},
@@ -94,19 +94,19 @@ impl Resolve for Atomic {
     type Context = Option<EType>;
     type Extra = Option<EType>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             Atomic::Data(value) => value.resolve(scope, context, extra),
-            Atomic::UnaryOperation(value) => value.resolve(scope, context, &()),
+            Atomic::UnaryOperation(value) => value.resolve(scope, context, &mut ()),
             Atomic::Paren(value) => value.resolve(scope, context, extra),
-            Atomic::ExprFlow(value) => value.resolve(scope, context, &()),
+            Atomic::ExprFlow(value) => value.resolve(scope, context, &mut ()),
         }
     }
 }
@@ -150,29 +150,29 @@ impl Resolve for Expression {
     type Context = Option<EType>;
     type Extra = Option<EType>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            Expression::Product(value) => value.resolve(scope, context, &()),
-            Expression::Addition(value) => value.resolve(scope, context, &()),
-            Expression::Substraction(value) => value.resolve(scope, context, &()),
-            Expression::Shift(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseAnd(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseXOR(value) => value.resolve(scope, context, &()),
-            Expression::BitwiseOR(value) => value.resolve(scope, context, &()),
-            Expression::Comparaison(value) => value.resolve(scope, context, &()),
-            Expression::LogicalAnd(value) => value.resolve(scope, context, &()),
-            Expression::Equation(value) => value.resolve(scope, context, &()),
-            Expression::LogicalOr(value) => value.resolve(scope, context, &()),
+            Expression::Product(value) => value.resolve(scope, context, &mut ()),
+            Expression::Addition(value) => value.resolve(scope, context, &mut ()),
+            Expression::Substraction(value) => value.resolve(scope, context, &mut ()),
+            Expression::Shift(value) => value.resolve(scope, context, &mut ()),
+            Expression::BitwiseAnd(value) => value.resolve(scope, context, &mut ()),
+            Expression::BitwiseXOR(value) => value.resolve(scope, context, &mut ()),
+            Expression::BitwiseOR(value) => value.resolve(scope, context, &mut ()),
+            Expression::Comparaison(value) => value.resolve(scope, context, &mut ()),
+            Expression::LogicalAnd(value) => value.resolve(scope, context, &mut ()),
+            Expression::Equation(value) => value.resolve(scope, context, &mut ()),
+            Expression::LogicalOr(value) => value.resolve(scope, context, &mut ()),
             Expression::Atomic(value) => value.resolve(scope, context, extra),
-            Expression::Cast(value) => value.resolve(scope, context, &()),
-            Expression::Range(value) => value.resolve(scope, context, &()),
+            Expression::Cast(value) => value.resolve(scope, context, &mut ()),
+            Expression::Range(value) => value.resolve(scope, context, &mut ()),
             Expression::FieldAccess(value) => value.resolve(scope, context, extra),
             Expression::ListAccess(value) => value.resolve(scope, context, extra),
             Expression::TupleAccess(value) => value.resolve(scope, context, extra),
@@ -212,7 +212,7 @@ impl TypeOf for Expression {
 impl GenerateCode for Expression {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -241,7 +241,7 @@ impl GenerateCode for Expression {
 impl Locatable for Expression {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -302,7 +302,7 @@ impl Locatable for Expression {
 impl GenerateCode for Atomic {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -317,7 +317,7 @@ impl GenerateCode for Atomic {
 impl Locatable for Atomic {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -389,6 +389,36 @@ impl Expression {
         }
     }
 
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            Expression::Product(Product::Div { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mod { metadata, .. }) => Some(metadata),
+            Expression::Product(Product::Mult { metadata, .. }) => Some(metadata),
+            Expression::Addition(Addition { metadata, .. }) => Some(metadata),
+            Expression::Substraction(Substraction { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Left { metadata, .. }) => Some(metadata),
+            Expression::Shift(Shift::Right { metadata, .. }) => Some(metadata),
+            Expression::BitwiseAnd(BitwiseAnd { metadata, .. }) => Some(metadata),
+            Expression::BitwiseXOR(BitwiseXOR { metadata, .. }) => Some(metadata),
+            Expression::BitwiseOR(BitwiseOR { metadata, .. }) => Some(metadata),
+            Expression::Cast(Cast { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Greater { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::GreaterEqual { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::Less { metadata, .. }) => Some(metadata),
+            Expression::Comparaison(Comparaison::LessEqual { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::Equal { metadata, .. }) => Some(metadata),
+            Expression::Equation(Equation::NotEqual { metadata, .. }) => Some(metadata),
+            Expression::LogicalAnd(LogicalAnd { metadata, .. }) => Some(metadata),
+            Expression::LogicalOr(LogicalOr { metadata, .. }) => Some(metadata),
+            Expression::Range(Range { metadata, .. }) => Some(metadata),
+            Expression::Atomic(value) => value.metadata_mut(),
+            Expression::FieldAccess(FieldAccess { metadata, .. }) => Some(metadata),
+            Expression::ListAccess(ListAccess { metadata, .. }) => Some(metadata),
+            Expression::TupleAccess(TupleAccess { metadata, .. }) => Some(metadata),
+            Expression::FnCall(FnCall { metadata, .. }) => Some(metadata),
+        }
+    }
+
     pub fn signature(&self) -> Option<EType> {
         match self {
             Expression::Product(Product::Div { metadata, .. }) => metadata.signature(),
@@ -432,6 +462,15 @@ impl Atomic {
             Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
             Atomic::Paren(value) => value.metadata(),
             Atomic::ExprFlow(value) => value.metadata(),
+        }
+    }
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            Atomic::Data(value) => value.metadata_mut(),
+            Atomic::UnaryOperation(UnaryOperation::Minus { value: _, metadata }) => Some(metadata),
+            Atomic::UnaryOperation(UnaryOperation::Not { value: _, metadata }) => Some(metadata),
+            Atomic::Paren(value) => value.metadata_mut(),
+            Atomic::ExprFlow(value) => value.metadata_mut(),
         }
     }
 

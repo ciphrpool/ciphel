@@ -6,7 +6,7 @@ use crate::vm::casm::branch::BranchIf;
 
 use crate::vm::vm::NextItem;
 use crate::{
-    semantic::MutRc,
+    semantic::ArcMutex,
     vm::{
         allocator::stack::UReg,
         casm::{
@@ -24,7 +24,7 @@ use super::{ForLoop, Loop, WhileLoop};
 impl GenerateCode for Loop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -56,7 +56,7 @@ impl GenerateCode for Loop {
 impl GenerateCode for ForLoop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(iterator_type) = self.iterator.expr.signature() else {
@@ -116,7 +116,7 @@ impl GenerateCode for ForLoop {
 impl GenerateCode for WhileLoop {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn valid_loop() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let i:u64 = 0;
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn valid_while() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let i:u64 = 0;
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn valid_for_range_inclusive() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn valid_for_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn valid_for_slice_assigned() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn valid_for_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn valid_for_str_slice_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn valid_for_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 0;
@@ -382,7 +382,7 @@ mod tests {
 
     #[test]
     fn valid_for_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res = 'a';
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn valid_for_double() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn valid_for_early_returns() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn valid_for_early_returns_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn valid_for_break() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn valid_for_break_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn valid_for_continue() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -577,7 +577,7 @@ mod tests {
 
     #[test]
     fn valid_for_continue_conditional() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn valid_for_double_continue() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
@@ -638,7 +638,7 @@ mod tests {
     }
     #[test]
     fn valid_for_str_slice_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr:str<10> = "abc";
@@ -663,7 +663,7 @@ mod tests {
     }
     #[test]
     fn valid_for_addr_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = "abc";
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = string("abc");
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = vec[1,2,3,4];
@@ -743,7 +743,7 @@ mod tests {
 
     #[test]
     fn valid_for_addr_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let arr = [1,2,3,4];
@@ -771,7 +771,7 @@ mod tests {
 
     // #[test]
     // fn valid_for_double_addr_slice() {
-    //     let statement = Statement::parse(
+    //     let mut statement = Statement::parse(
     //         r##"
     //         let x = {
     //             let arr = &[1,2,3,4];

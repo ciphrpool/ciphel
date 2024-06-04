@@ -21,14 +21,14 @@ pub enum CompilationError {
 }
 
 #[derive(Debug, Clone)]
-pub struct Ciphel<G: GameEngineStaticFn + Clone> {
-    runtime: Runtime<G>,
+pub struct Ciphel {
+    runtime: Runtime,
     heap: Heap,
-    stdio: StdIO<G>,
-    scheduler: Scheduler<G>,
+    stdio: StdIO,
+    scheduler: Scheduler,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Ciphel<G> {
+impl Ciphel {
     pub fn new() -> Self {
         let (runtime, heap, stdio) = Runtime::new();
         Self {
@@ -54,11 +54,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Ciphel<G> {
             .get_mut(tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
-        let statements = parse_statements(src_code.into())?;
+        let mut statements = parse_statements(src_code.into())?;
 
-        for statement in &statements {
+        for statement in &mut statements {
             let _ = statement
-                .resolve(scope, &None, &())
+                .resolve(scope, &None, &mut ())
                 .map_err(|e| CompilationError::SemanticError(e))?;
         }
 
@@ -76,7 +76,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Ciphel<G> {
         Ok(())
     }
 
-    pub fn run(&mut self, engine: &mut G) -> Result<(), RuntimeError> {
+    pub fn run<G: crate::GameEngineStaticFn>(
+        &mut self,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
         self.scheduler.prepare(self.runtime.threads.len());
 
         self.scheduler.run_major_frame(
@@ -121,7 +124,7 @@ mod tests {
     #[test]
     fn valid_multiple_program() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -161,7 +164,7 @@ mod tests {
     #[test]
     fn valid_multiple_thread() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let main_tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"

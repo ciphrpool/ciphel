@@ -9,7 +9,7 @@ use crate::{
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+        ArcMutex, EType, Either, Resolve, SemanticError, TypeOf,
     },
 };
 use std::collections::HashMap;
@@ -19,10 +19,10 @@ impl Resolve for Flow {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -31,7 +31,7 @@ impl Resolve for Flow {
             Flow::If(value) => value.resolve(scope, context, extra),
             Flow::Match(value) => value.resolve(scope, context, extra),
             Flow::Try(value) => value.resolve(scope, context, extra),
-            Flow::Call(value) => value.resolve(scope, &(), &()),
+            Flow::Call(value) => value.resolve(scope, &(), &mut ()),
         }
     }
 }
@@ -40,34 +40,36 @@ impl Resolve for IfStat {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, &None, &None)?;
+        let _ = self.condition.resolve(scope, &None, &mut None)?;
         // check that condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
-        let _ = self.then_branch.resolve(scope, &context, &Vec::default())?;
+        let _ = self
+            .then_branch
+            .resolve(scope, &context, &mut Vec::default())?;
 
-        for (else_if_cond, else_if_scope) in &self.else_if_branches {
-            let _ = else_if_cond.resolve(scope, &None, &None)?;
+        for (else_if_cond, else_if_scope) in &mut self.else_if_branches {
+            let _ = else_if_cond.resolve(scope, &None, &mut None)?;
             let condition_type = else_if_cond.type_of(&scope.borrow())?;
             if !<EType as TypeChecking>::is_boolean(&condition_type) {
                 return Err(SemanticError::ExpectedBoolean);
             }
-            let _ = else_if_scope.resolve(scope, &context, &Vec::default())?;
+            let _ = else_if_scope.resolve(scope, &context, &mut Vec::default())?;
         }
 
-        if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+        if let Some(else_branch) = &mut self.else_branch {
+            let _ = else_branch.resolve(scope, &context, &mut Vec::default())?;
         }
         Ok(())
     }
@@ -77,15 +79,15 @@ impl Resolve for MatchStat {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &None)?;
+        let _ = self.expr.resolve(scope, &None, &mut None)?;
         let expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
@@ -104,12 +106,13 @@ impl Resolve for MatchStat {
             },
         };
 
-        match &self.else_branch {
+        match &mut self.else_branch {
             Some(else_branch) => {
-                for value in &self.patterns {
-                    let previous_vars = value.patterns[0].resolve(scope, &expr_type, &())?;
-                    for pattern in &value.patterns[1..] {
-                        let vars = pattern.resolve(scope, &expr_type, &())?;
+                for value in &mut self.patterns {
+                    let mut previous_vars =
+                        value.patterns[0].resolve(scope, &expr_type, &mut ())?;
+                    for pattern in &mut value.patterns[1..] {
+                        let vars = pattern.resolve(scope, &expr_type, &mut ())?;
                         if previous_vars != vars {
                             return Err(SemanticError::IncorrectVariant);
                         }
@@ -120,9 +123,9 @@ impl Resolve for MatchStat {
                         var.is_declared.set(true);
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve(scope, &context, &previous_vars)?;
+                    let _ = value.scope.resolve(scope, &context, &mut previous_vars)?;
                 }
-                let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+                let _ = else_branch.resolve(scope, &context, &mut Vec::default())?;
                 if let Some(exhaustive_cases) = exhaustive_cases {
                     let mut map = HashMap::new();
                     for case in exhaustive_cases {
@@ -153,10 +156,11 @@ impl Resolve for MatchStat {
                 }
             }
             None => {
-                for value in &self.patterns {
-                    let previous_vars = value.patterns[0].resolve(scope, &expr_type, &())?;
-                    for pattern in &value.patterns[1..] {
-                        let vars = pattern.resolve(scope, &expr_type, &())?;
+                for value in &mut self.patterns {
+                    let mut previous_vars =
+                        value.patterns[0].resolve(scope, &expr_type, &mut ())?;
+                    for pattern in &mut value.patterns[1..] {
+                        let vars = pattern.resolve(scope, &expr_type, &mut ())?;
                         if previous_vars != vars {
                             return Err(SemanticError::IncorrectVariant);
                         }
@@ -166,7 +170,7 @@ impl Resolve for MatchStat {
                         var.is_declared.set(true);
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve(scope, &context, &previous_vars)?;
+                    let _ = value.scope.resolve(scope, &context, &mut previous_vars)?;
                 }
             }
         }
@@ -179,17 +183,19 @@ impl Resolve for TryStat {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.try_branch.resolve(scope, &context, &Vec::default())?;
-        if let Some(else_branch) = &self.else_branch {
-            let _ = else_branch.resolve(scope, &context, &Vec::default())?;
+        let _ = self
+            .try_branch
+            .resolve(scope, &context, &mut Vec::default())?;
+        if let Some(else_branch) = &mut self.else_branch {
+            let _ = else_branch.resolve(scope, &context, &mut Vec::default())?;
         }
         Ok(())
     }
@@ -199,15 +205,15 @@ impl Resolve for CallStat {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.call.resolve(scope, &None, &None)
+        self.call.resolve(scope, &None, &mut None)
     }
 }
 
@@ -223,7 +229,7 @@ mod tests {
     use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {
-        let expr = IfStat::parse(
+        let mut expr = IfStat::parse(
             r##"
             if true {
                 let x = 1;
@@ -234,10 +240,10 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr = IfStat::parse(
+        let mut expr = IfStat::parse(
             r##"
             if 1 as bool {
                 let x = 1;
@@ -248,13 +254,13 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_if_else_if() {
-        let expr = IfStat::parse(
+        let mut expr = IfStat::parse(
             r##"
             if true {
                 let x = 1;
@@ -267,13 +273,13 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_if_else() {
-        let expr = IfStat::parse(
+        let mut expr = IfStat::parse(
             r##"
             if true {
                 let x = 1;
@@ -286,13 +292,13 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_match() {
-        let expr = MatchStat::parse(
+        let mut expr = MatchStat::parse(
             r##"
             match x {
                 case 20 => {
@@ -317,13 +323,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_try() {
-        let expr = TryStat::parse(
+        let mut expr = TryStat::parse(
             r##"
             try {
                 let x = 1;
@@ -334,7 +340,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 }

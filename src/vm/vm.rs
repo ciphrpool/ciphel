@@ -1,9 +1,11 @@
 use std::cell::Cell;
 use std::marker::PhantomData;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use ulid::Ulid;
 
-use crate::semantic::MutRc;
+use crate::semantic::ArcMutex;
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
 use super::{
@@ -55,13 +57,14 @@ pub enum RuntimeError {
     TooManyThread,
     Signal(Signal),
     AssertError,
+    ConcurrencyError,
     Default,
 }
 
 pub trait GenerateCode {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 }
@@ -69,7 +72,7 @@ pub trait GenerateCode {
 pub trait Locatable {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 
@@ -180,19 +183,19 @@ impl GameEngineStaticFn for DbgGameEngine {
     }
 }
 
-pub trait Executable<G: GameEngineStaticFn + Clone> {
+pub trait Executable<G: GameEngineStaticFn> {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError>;
 }
 
-pub trait CasmMetadata<G: GameEngineStaticFn + Clone> {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G);
+pub trait CasmMetadata<G: GameEngineStaticFn> {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G);
     fn weight(&self) -> usize {
         1
     }
@@ -326,26 +329,24 @@ impl ThreadState {
 #[derive(Debug, Clone)]
 pub struct Thread {
     pub state: ThreadState,
-    pub scope: MutRc<Scope>,
+    pub scope: ArcMutex<Scope>,
     pub stack: Stack,
     pub program: CasmProgram,
     pub tid: Tid,
 }
 
 #[derive(Debug, Clone)]
-pub struct Runtime<G: GameEngineStaticFn + Clone> {
-    pub tid_count: Cell<usize>,
+pub struct Runtime {
+    pub tid_count: Arc<AtomicUsize>,
     pub threads: Vec<Thread>,
-    _phantom: PhantomData<G>,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
-    pub fn new() -> (Self, Heap, StdIO<G>) {
+impl Runtime {
+    pub fn new() -> (Self, Heap, StdIO) {
         (
             Self {
-                tid_count: Cell::new(0),
+                tid_count: Default::default(),
                 threads: Vec::with_capacity(MAX_THREAD_COUNT),
-                _phantom: PhantomData::default(),
             },
             Heap::new(),
             StdIO::default(),
@@ -383,8 +384,8 @@ impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
         let scope = Scope::new();
         let program = CasmProgram::default();
         let stack = Stack::new();
-        let tid = self.tid_count.get() + 1;
-        self.tid_count.set(tid);
+        let tid = self.tid_count.as_ref().load(Ordering::Acquire) + 1;
+        self.tid_count.as_ref().store(tid, Ordering::Release);
         self.threads.push(Thread {
             scope,
             stack,
@@ -402,7 +403,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
         let scope = Scope::new();
         let program = CasmProgram::default();
         let stack = Stack::new();
-        self.tid_count.set(tid + 1);
+        self.tid_count.as_ref().store(tid + 1, Ordering::Release);
         self.threads.push(Thread {
             scope,
             stack,
@@ -422,11 +423,11 @@ impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
         }
     }
 
-    pub fn spawn_with_scope(&mut self, scope: MutRc<Scope>) -> Result<usize, RuntimeError> {
+    pub fn spawn_with_scope(&mut self, scope: ArcMutex<Scope>) -> Result<usize, RuntimeError> {
         let program = CasmProgram::default();
         let stack = Stack::new();
-        let tid = self.tid_count.get() + 1;
-        self.tid_count.set(tid);
+        let tid = self.tid_count.as_ref().load(Ordering::Acquire) + 1;
+        self.tid_count.as_ref().store(tid, Ordering::Release);
         self.threads.push(Thread {
             scope,
             stack,
@@ -442,7 +443,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Runtime<G> {
         tid: Tid,
     ) -> Result<
         (
-            &'runtime mut MutRc<Scope>,
+            &'runtime mut ArcMutex<Scope>,
             &'runtime mut Stack,
             &mut CasmProgram,
         ),

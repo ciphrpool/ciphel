@@ -1,3 +1,4 @@
+use std::arch::x86_64;
 use std::cell::Ref;
 use std::f64::consts::E;
 use std::f64::consts::PI;
@@ -22,7 +23,7 @@ use crate::vm::vm::CasmMetadata;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{ArcMutex, EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -98,8 +99,8 @@ pub enum MathCasm {
     IsInf,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for MathCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             MathCasm::Ceil => stdio.push_casm_lib(engine, "ceil"),
             MathCasm::Floor => stdio.push_casm_lib(engine, "floor"),
@@ -187,10 +188,10 @@ impl Resolve for MathFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             MathFn::Pi | MathFn::E | MathFn::Inf | MathFn::NInf => {
@@ -226,8 +227,8 @@ impl Resolve for MathFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let n = &extra[0];
-                let _ = n.resolve(scope, &Some(p_num!(F64)), &None)?;
+                let n = &mut extra[0];
+                let _ = n.resolve(scope, &Some(p_num!(F64)), &mut None)?;
                 let n_type = n.type_of(&scope.borrow())?;
 
                 match &n_type {
@@ -245,11 +246,12 @@ impl Resolve for MathFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let x = &extra[0];
-                let y = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let x = &mut first_part[0];
+                let y = &mut second_part[0];
 
-                let _ = x.resolve(scope, &Some(p_num!(F64)), &None)?;
-                let _ = y.resolve(scope, &Some(p_num!(F64)), &None)?;
+                let _ = x.resolve(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = y.resolve(scope, &Some(p_num!(F64)), &mut None)?;
 
                 let x_type = x.type_of(&scope.borrow())?;
                 let y_type = y.type_of(&scope.borrow())?;
@@ -292,7 +294,7 @@ impl TypeOf for MathFn {
 impl GenerateCode for MathFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -395,13 +397,13 @@ impl GenerateCode for MathFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for MathCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -648,7 +650,7 @@ mod tests {
 
     #[test]
     fn valid_nan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_nan(acos(2.0));
         "##
@@ -665,7 +667,7 @@ mod tests {
 
     #[test]
     fn robustness_nan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_nan(2.0);
         "##
@@ -681,7 +683,7 @@ mod tests {
     }
     #[test]
     fn valid_ceil() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = ceil(2.0);
         "##
@@ -699,7 +701,7 @@ mod tests {
     }
     #[test]
     fn valid_floor() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = floor(2.0);
         "##
@@ -717,7 +719,7 @@ mod tests {
     }
     #[test]
     fn valid_abs() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = abs(2.0);
         "##
@@ -735,7 +737,7 @@ mod tests {
     }
     #[test]
     fn valid_exp() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = exp(2.0);
         "##
@@ -753,7 +755,7 @@ mod tests {
     }
     #[test]
     fn valid_ln() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = ln(2.0);
         "##
@@ -771,7 +773,7 @@ mod tests {
     }
     #[test]
     fn valid_log() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = log(2.0,5.0);
         "##
@@ -789,7 +791,7 @@ mod tests {
     }
     #[test]
     fn valid_log10() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = log10(2.0);
         "##
@@ -807,7 +809,7 @@ mod tests {
     }
     #[test]
     fn valid_pow() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = pow(2.0,2.0);
         "##
@@ -825,7 +827,7 @@ mod tests {
     }
     #[test]
     fn valid_sqrt() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sqrt(2.0);
         "##
@@ -843,7 +845,7 @@ mod tests {
     }
     #[test]
     fn valid_acos() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = acos(0.5);
         "##
@@ -861,7 +863,7 @@ mod tests {
     }
     #[test]
     fn valid_asin() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = asin(0.5);
         "##
@@ -879,7 +881,7 @@ mod tests {
     }
     #[test]
     fn valid_atan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atan(0.5);
         "##
@@ -897,7 +899,7 @@ mod tests {
     }
     #[test]
     fn valid_atan2() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atan2(2.0,2.0);
         "##
@@ -915,7 +917,7 @@ mod tests {
     }
     #[test]
     fn valid_cos() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = cos(2.0);
         "##
@@ -933,7 +935,7 @@ mod tests {
     }
     #[test]
     fn valid_sin() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sin(2.0);
         "##
@@ -951,7 +953,7 @@ mod tests {
     }
     #[test]
     fn valid_tan() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = tan(2.0);
         "##
@@ -969,7 +971,7 @@ mod tests {
     }
     #[test]
     fn valid_hypot() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = hypot(2.0,2.0);
         "##
@@ -987,7 +989,7 @@ mod tests {
     }
     #[test]
     fn valid_deg() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = deg(2.0);
         "##
@@ -1005,7 +1007,7 @@ mod tests {
     }
     #[test]
     fn valid_rad() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = rad(2.0);
         "##
@@ -1023,7 +1025,7 @@ mod tests {
     }
     #[test]
     fn valid_cosh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = cosh(2.0);
         "##
@@ -1041,7 +1043,7 @@ mod tests {
     }
     #[test]
     fn valid_sinh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = sinh(2.0);
         "##
@@ -1059,7 +1061,7 @@ mod tests {
     }
     #[test]
     fn valid_tanh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = tanh(2.0);
         "##
@@ -1077,7 +1079,7 @@ mod tests {
     }
     #[test]
     fn valid_acosh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = acosh(2.0);
         "##
@@ -1095,7 +1097,7 @@ mod tests {
     }
     #[test]
     fn valid_asinh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = asinh(2.0);
         "##
@@ -1113,7 +1115,7 @@ mod tests {
     }
     #[test]
     fn valid_atanh() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = atanh(0.5);
         "##
@@ -1131,7 +1133,7 @@ mod tests {
     }
     #[test]
     fn valid_pi() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = pi();
         "##
@@ -1149,7 +1151,7 @@ mod tests {
     }
     #[test]
     fn valid_e() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = e();
         "##
@@ -1168,7 +1170,7 @@ mod tests {
 
     #[test]
     fn valid_inf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = inf();
         "##
@@ -1188,7 +1190,7 @@ mod tests {
 
     #[test]
     fn valid_ninf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = neg_inf();
         "##
@@ -1208,7 +1210,7 @@ mod tests {
 
     #[test]
     fn valid_is_inf() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = is_inf(inf());
         "##

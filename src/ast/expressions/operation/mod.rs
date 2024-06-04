@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{Metadata, MutRc},
+    semantic::{Metadata, ArcMutex},
     vm::platform::Lib,
 };
 
@@ -50,7 +50,7 @@ pub struct FnCall {
     pub fn_var: Box<Expression>,
     pub params: Vec<Expression>,
     pub metadata: Metadata,
-    pub platform: MutRc<Option<Lib>>,
+    pub platform: ArcMutex<Option<Lib>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

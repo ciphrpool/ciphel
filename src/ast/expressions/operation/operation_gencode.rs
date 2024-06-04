@@ -13,7 +13,7 @@ use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
-        Either, MutRc, SizeOf, TypeOf,
+        ArcMutex, Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -35,7 +35,7 @@ use super::{FieldAccess, ListAccess, Range, TupleAccess};
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -69,7 +69,7 @@ impl GenerateCode for super::UnaryOperation {
 impl Locatable for TupleAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
@@ -105,7 +105,7 @@ impl Locatable for TupleAccess {
 impl GenerateCode for TupleAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
@@ -138,7 +138,7 @@ impl GenerateCode for TupleAccess {
 impl Locatable for ListAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -212,7 +212,7 @@ impl Locatable for ListAccess {
 impl GenerateCode for ListAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -280,7 +280,7 @@ impl GenerateCode for ListAccess {
 impl Locatable for FieldAccess {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -322,7 +322,7 @@ impl Locatable for FieldAccess {
 impl GenerateCode for FieldAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -356,7 +356,7 @@ impl GenerateCode for FieldAccess {
 impl GenerateCode for Range {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -396,7 +396,7 @@ impl GenerateCode for Range {
 impl Locatable for super::FnCall {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.gencode(scope, instructions)?;
@@ -424,7 +424,7 @@ impl Locatable for super::FnCall {
 impl GenerateCode for super::FnCall {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let params_size: usize = self
@@ -557,7 +557,7 @@ impl GenerateCode for super::FnCall {
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -637,7 +637,7 @@ impl GenerateCode for super::Product {
 impl GenerateCode for super::Addition {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -663,7 +663,7 @@ impl GenerateCode for super::Addition {
 impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -689,7 +689,7 @@ impl GenerateCode for super::Substraction {
 impl GenerateCode for super::Shift {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -746,7 +746,7 @@ impl GenerateCode for super::Shift {
 impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -772,7 +772,7 @@ impl GenerateCode for super::BitwiseAnd {
 impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -798,7 +798,7 @@ impl GenerateCode for super::BitwiseXOR {
 impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -824,7 +824,7 @@ impl GenerateCode for super::BitwiseOR {
 impl GenerateCode for super::Cast {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -833,7 +833,6 @@ impl GenerateCode for super::Cast {
         let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-
         let _ = self.left.gencode(scope, instructions)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
@@ -856,7 +855,7 @@ impl GenerateCode for super::Cast {
 impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -959,7 +958,7 @@ impl GenerateCode for super::Comparaison {
 impl GenerateCode for super::Equation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -1016,7 +1015,7 @@ impl GenerateCode for super::Equation {
 impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
@@ -1033,7 +1032,7 @@ impl GenerateCode for super::LogicalAnd {
 impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
@@ -1792,7 +1791,7 @@ mod tests {
     }
     #[test]
     fn valid_addition_string() {
-        let expr = Expression::parse(
+        let mut expr = Expression::parse(
             r##"
            "Hello " + "World"
         "##
@@ -1803,7 +1802,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &None)
+            .resolve(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1814,7 +1813,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1841,7 +1840,7 @@ mod tests {
 
     #[test]
     fn valid_addition_string_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hello : str<10> = "Hello ";

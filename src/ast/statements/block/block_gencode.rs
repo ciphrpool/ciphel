@@ -2,7 +2,7 @@ use crate::semantic::scope::scope::Scope;
 
 use crate::vm::casm::branch::BranchTry;
 use crate::{
-    semantic::{scope::var_impl::VarState, MutRc, SizeOf},
+    semantic::{scope::var_impl::VarState, ArcMutex, SizeOf},
     vm::{
         allocator::stack::Offset,
         casm::{
@@ -17,7 +17,7 @@ use crate::{
 use super::Block;
 
 pub fn inner_block_gencode(
-    scope: &MutRc<Scope>,
+    scope: &ArcMutex<Scope>,
     block: &Block,
     param_size: Option<usize>,
     is_direct_loop: bool,
@@ -51,7 +51,7 @@ pub fn inner_block_gencode(
 impl GenerateCode for Block {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let borrowed = self.inner_scope.borrow();

@@ -100,6 +100,15 @@ impl ExprFlow {
             ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
         }
     }
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
+        match self {
+            ExprFlow::If(IfExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Match(MatchExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::Try(TryExpr { metadata, .. }) => Some(metadata),
+            ExprFlow::SizeOf(_, metadata) => Some(metadata),
+            ExprFlow::FCall(FCall { metadata, .. }) => Some(metadata),
+        }
+    }
     pub fn signature(&self) -> Option<EType> {
         match self {
             ExprFlow::If(IfExpr { metadata, .. }) => metadata.signature(),

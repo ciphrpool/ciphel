@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 
 use crate::semantic::{
     scope::{var_impl::Var, ClosureState},
-    Metadata, MutRc, SemanticError,
+    Metadata, ArcMutex, SemanticError,
 };
 
 use super::Statement;
@@ -16,10 +16,10 @@ pub mod block_typeof;
 #[derive(Debug, Clone)]
 pub struct Block {
     pub instructions: Vec<Statement>,
-    pub inner_scope: RefCell<Option<MutRc<Scope>>>,
+    pub inner_scope: RefCell<Option<ArcMutex<Scope>>>,
     pub can_capture: Cell<ClosureState>,
     pub is_loop: Cell<bool>,
-    pub caller: MutRc<Option<Var>>,
+    pub caller: ArcMutex<Option<Var>>,
     pub metadata: Metadata,
 }
 
@@ -34,7 +34,7 @@ impl PartialEq for Block {
 }
 
 impl Block {
-    pub fn scope(&self) -> Result<MutRc<Scope>, SemanticError> {
+    pub fn scope(&self) -> Result<ArcMutex<Scope>, SemanticError> {
         match self.inner_scope.borrow().as_ref() {
             Some(inner) => Ok(inner.clone()),
             None => Err(SemanticError::NotResolvedYet),

@@ -8,7 +8,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{ArcMutex, EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -35,8 +35,8 @@ pub enum CoreCasm {
     Thread(ThreadCasm),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CoreCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             CoreCasm::Alloc(value) => value.name(stdio, program, engine),
             CoreCasm::Thread(value) => value.name(stdio, program, engine),
@@ -61,10 +61,10 @@ impl Resolve for CoreFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             CoreFn::Alloc(value) => value.resolve(scope, context, extra),
@@ -88,7 +88,7 @@ impl TypeOf for CoreFn {
 impl GenerateCode for CoreFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -98,13 +98,13 @@ impl GenerateCode for CoreFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CoreCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {

@@ -1,21 +1,28 @@
 #[macro_export]
 macro_rules! e_static {
     ($type_def:expr) => {
-        Either::Static($type_def.into())
+        crate::semantic::Either::Static($type_def.into())
     };
 }
 
 #[macro_export]
 macro_rules! e_user {
     ($type_def:expr) => {
-        Either::User($type_def.into())
+        crate::semantic::Either::User($type_def.into())
     };
 }
 
 #[macro_export]
 macro_rules! p_num {
     ($num:ident) => {
-        Either::Static(StaticType::Primitive(PrimitiveType::Number(NumberType::$num)).into())
+        crate::semantic::Either::Static(
+            crate::semantic::scope::static_types::StaticType::Primitive(
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::$num,
+                ),
+            )
+            .into(),
+        )
     };
 }
 
@@ -31,22 +38,19 @@ macro_rules! v_num {
 #[macro_export]
 macro_rules! err_tuple {
     ($value:expr) => {
-        e_static!(StaticType::Tuple(TupleType(vec![
-            $value,
-            e_static!(StaticType::Error)
-        ])))
+        e_static!(crate::semantic::scope::static_types::StaticType::Tuple(
+            crate::semantic::scope::static_types::TupleType(vec![
+                $value,
+                e_static!(StaticType::Error)
+            ])
+        ))
     };
 }
 
 #[macro_export]
 macro_rules! resolve_metadata {
-    ($metadata:expr,$self:expr,$scope:expr,$context:expr) => {{
-        let mut borrowed_metadata = $metadata
-            .info
-            .as_ref()
-            .try_borrow_mut()
-            .map_err(|_| SemanticError::Default)?;
-        *borrowed_metadata = Info::Resolved {
+    ($info:expr,$self:expr,$scope:expr,$context:expr) => {{
+        $info = crate::semantic::Info::Resolved {
             context: $context.clone(),
             signature: Some($self.type_of(&$scope.borrow())?),
         };
@@ -84,14 +88,14 @@ macro_rules! assert_number {
 macro_rules! compile_expression {
     ($expr_type:ident,$expr_str:expr) => {{
         // Parse the expression.
-        let expr = $expr_type::parse($expr_str.into())
+        let mut expr = $expr_type::parse($expr_str.into())
             .expect("Parsing should have succeeded")
             .1;
 
         // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
-        expr.resolve(&scope, &None, &())
+        expr.resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -102,7 +106,7 @@ macro_rules! compile_expression {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -123,7 +127,7 @@ macro_rules! compile_expression {
 macro_rules! compile_expression_with_type {
     ($expr_type:ident,$expr_str:expr,$user_type:ident) => {{
         // Parse the expression.
-        let expr = $expr_type::parse($expr_str.into())
+        let mut expr = $expr_type::parse($expr_str.into())
             .expect("Parsing should have succeeded")
             .1;
 
@@ -138,7 +142,7 @@ macro_rules! compile_expression_with_type {
             )
             .expect("Type registering should have succeeded");
         // Perform semantic check.
-        expr.resolve(&scope, &None, &())
+        expr.resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -149,7 +153,7 @@ macro_rules! compile_expression_with_type {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -171,7 +175,7 @@ macro_rules! compile_statement {
     ($statement:ident) => {{
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -180,8 +184,7 @@ macro_rules! compile_statement {
             .gencode(&scope, &instructions)
             .expect("Code generation should have succeeded");
         assert!(instructions.len() > 0);
-        let (mut runtime, mut heap, mut stdio) =
-            crate::vm::vm::Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -201,7 +204,7 @@ macro_rules! compile_statement_for_stdout {
     ($statement:ident) => {{
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -211,8 +214,7 @@ macro_rules! compile_statement_for_stdout {
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) =
-            Runtime::<crate::vm::vm::StdoutTestGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -232,7 +234,7 @@ macro_rules! compile_statement_for_string {
     ($statement:ident) => {{
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -242,7 +244,7 @@ macro_rules! compile_statement_for_string {
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -282,11 +284,11 @@ macro_rules! compile_statement_for_string {
 macro_rules! eval_and_compare {
     ($expr:expr, $expected:expr,$size:ident) => {{
         // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
-        let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+        let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &None)
+            .resolve(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -297,7 +299,7 @@ macro_rules! eval_and_compare {
         assert!(instructions.len() > 0, "No instructions generated");
 
         // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -325,11 +327,11 @@ macro_rules! eval_and_compare {
 macro_rules! eval_and_compare_bool {
     ($expr:expr, $expected:expr) => {{
         // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
-        let expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+        let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &None)
+            .resolve(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -340,7 +342,7 @@ macro_rules! eval_and_compare_bool {
         assert!(instructions.len() > 0, "No instructions generated");
 
         // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");

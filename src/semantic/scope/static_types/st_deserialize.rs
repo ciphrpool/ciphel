@@ -316,10 +316,10 @@ impl DeserializeFrom for VecType {
                 .map(|e| e.ok().flatten().unwrap())
                 .collect(),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::Vec(self.clone())))),
-                })),
+                },
             },
             length: length as usize,
             capacity: capacity as usize,
@@ -363,10 +363,10 @@ impl DeserializeFrom for StringType {
             value: str_slice.to_string(),
             padding: Cell::new(0),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::String(self.clone())))),
-                })),
+                },
             },
         })
     }
@@ -392,10 +392,10 @@ impl DeserializeFrom for StrSliceType {
             value: str_slice.to_string(),
             padding: Cell::new(0),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::StrSlice(self.clone())))),
-                })),
+                },
             },
         })
     }
@@ -430,10 +430,10 @@ impl DeserializeFrom for TupleType {
         Ok(Tuple {
             value,
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::Tuple(self.clone())))),
-                })),
+                },
             },
         })
     }
@@ -489,10 +489,10 @@ impl DeserializeFrom for SliceType {
                 .map(|e| e.ok().flatten().unwrap())
                 .collect(),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::Static(Rc::new(StaticType::Slice(self.clone())))),
-                })),
+                },
             },
         })
     }

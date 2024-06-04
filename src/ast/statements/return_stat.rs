@@ -16,7 +16,7 @@ use crate::{
     resolve_metadata,
     semantic::{
         scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType},
-        CompatibleWith, EType, Either, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        ArcMutex, CompatibleWith, EType, Either, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         casm::{alloc::StackFrame, Casm, CasmProgram},
@@ -83,10 +83,10 @@ impl Resolve for Return {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -104,16 +104,22 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve(scope, &context, &None)?;
+                let _ = expr.resolve(scope, &context, &mut None)?;
                 match context {
                     Some(c) => {
                         let return_type = expr.type_of(&scope.borrow())?;
                         let _ = c.compatible_with(&return_type, &scope.borrow())?;
-                        resolve_metadata!(metadata, self, scope, context);
+                        metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(expr.type_of(&scope.borrow())?),
+                        };
                         Ok(())
                     }
                     None => {
-                        resolve_metadata!(metadata, self, scope, None);
+                        metadata.info = Info::Resolved {
+                            context: None,
+                            signature: Some(expr.type_of(&scope.borrow())?),
+                        };
                         Ok(())
                     }
                 }
@@ -159,7 +165,7 @@ impl TypeOf for Return {
 impl GenerateCode for Return {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -241,7 +247,7 @@ mod tests {
 
     #[test]
     fn valid_resolved_return() {
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return ;
         "#
@@ -251,10 +257,10 @@ mod tests {
         .1;
         let scope = scope::Scope::new();
 
-        let res = return_statement.resolve(&scope, &None, &());
+        let res = return_statement.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return 10;
         "#
@@ -262,13 +268,13 @@ mod tests {
         )
         .unwrap()
         .1;
-        let res = return_statement.resolve(&scope, &None, &());
+        let res = return_statement.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), return_type);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             break ;
         "#
@@ -281,13 +287,13 @@ mod tests {
             .expect("Scope should be able to have child block");
         inner_scope.as_ref().borrow_mut().to_loop();
 
-        let res = return_statement.resolve(&inner_scope, &None, &());
+        let res = return_statement.resolve(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
 
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             continue ;
         "#
@@ -296,7 +302,7 @@ mod tests {
         .unwrap()
         .1;
 
-        let res = return_statement.resolve(&inner_scope, &None, &());
+        let res = return_statement.resolve(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement.type_of(&scope.borrow()).unwrap();
@@ -305,7 +311,7 @@ mod tests {
 
     #[test]
     fn robustness_return() {
-        let return_statement = Return::parse(
+        let mut return_statement = Return::parse(
             r#"
             return 10;
         "#
@@ -319,7 +325,7 @@ mod tests {
             &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Char).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }

@@ -1,5 +1,14 @@
-use crate::semantic::MutRc;
-use std::{cell::Cell, collections::HashMap, io, slice::Iter};
+use crate::semantic::ArcMutex;
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    io,
+    slice::Iter,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 use ulid::Ulid;
 
 use self::{branch::Label, data::Data};
@@ -20,17 +29,17 @@ pub mod operation;
 
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
-    pub main: MutRc<Vec<Casm>>,
-    cursor: Cell<usize>,
-    pub labels: MutRc<HashMap<Ulid, (usize, Box<str>)>>,
-    pub catch_stack: MutRc<Vec<Ulid>>,
+    pub main: ArcMutex<Vec<Casm>>,
+    cursor: Arc<AtomicUsize>,
+    pub labels: ArcMutex<HashMap<Ulid, (usize, Box<str>)>>,
+    pub catch_stack: ArcMutex<Vec<Ulid>>,
 }
 
 impl Default for CasmProgram {
     fn default() -> Self {
         Self {
             main: Default::default(),
-            cursor: Cell::new(0),
+            cursor: Default::default(),
             labels: Default::default(),
             catch_stack: Default::default(),
         }
@@ -43,16 +52,16 @@ impl CasmProgram {
         borrowed.push(value);
     }
     pub fn cursor_is_at_end(&self) -> bool {
-        self.cursor.get() == self.main.as_ref().borrow().len()
+        self.cursor.as_ref().load(Ordering::Acquire) == self.main.as_ref().borrow().len()
     }
     pub fn incr(&self) {
-        self.cursor.set(self.cursor.get() + 1)
+        self.cursor.as_ref().fetch_add(1, Ordering::AcqRel);
     }
     pub fn cursor_set(&self, offset: usize) {
-        self.cursor.set(offset);
+        self.cursor.as_ref().store(offset, Ordering::Release);
     }
     pub fn cursor_get(&self) -> usize {
-        self.cursor.get()
+        self.cursor.as_ref().load(Ordering::Acquire)
     }
     pub fn push_label(&self, label: String) -> Ulid {
         let id = Ulid::new();
@@ -151,7 +160,7 @@ impl CasmProgram {
         callback: impl FnOnce(&Casm) -> Result<(), vm::RuntimeError>,
     ) -> Result<(), vm::RuntimeError> {
         let borrowed_main = self.main.as_ref().borrow();
-        let cursor = self.cursor.get();
+        let cursor = self.cursor.as_ref().load(Ordering::Acquire);
         match borrowed_main.get(cursor) {
             Some(instruction) => callback(instruction),
             None => {
@@ -163,12 +172,12 @@ impl CasmProgram {
         &self,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), vm::RuntimeError> {
         let borrowed_main = self.main.as_ref().borrow();
         loop {
-            let cursor = self.cursor.get();
+            let cursor = self.cursor.as_ref().load(Ordering::Acquire);
             match borrowed_main.get(cursor) {
                 Some(instruction) => {
                     // dbg!((cursor, instruction, stack.top(),));
@@ -218,13 +227,13 @@ pub enum Casm {
     Pop(usize),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -256,8 +265,8 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Casm {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Casm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             Casm::Platform(value) => value.name(stdio, program, engine),
             Casm::StackFrame(value) => value.name(stdio, program, engine),

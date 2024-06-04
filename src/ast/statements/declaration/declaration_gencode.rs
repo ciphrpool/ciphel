@@ -2,7 +2,7 @@ use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
-    semantic::{MutRc, SizeOf},
+    semantic::{ArcMutex, SizeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
@@ -15,7 +15,7 @@ use super::{Declaration, TypedVar};
 impl GenerateCode for Declaration {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:u64 = 420;
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_underscore() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let _ = 420;
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_tuple_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let (x,y) = (420,69);
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_tuple_underscore() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let (x,_) = (420,69);
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_inplace_tuple_general_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let (x,y) = (420,69);
         "##
@@ -302,7 +302,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let (x,y) = {
             let Point {x,y} = Point {
@@ -322,7 +322,7 @@ mod tests {
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -334,7 +334,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -372,7 +372,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let Point {x,y} = Point {
                 x : 420,
@@ -389,7 +389,7 @@ mod tests {
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -401,7 +401,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_same_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5;
@@ -446,7 +446,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -458,7 +458,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_different_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5u8;
@@ -498,7 +498,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -510,7 +510,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn valid_shadowing_outer_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let var = 5u8;
@@ -553,7 +553,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -565,7 +565,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");

@@ -18,7 +18,7 @@ use crate::{
             type_traits::GetSubTypes,
             user_type_impl::UserType,
         },
-        EType, Either, Metadata, MutRc, SizeOf,
+        ArcMutex, EType, Either, Metadata, SizeOf,
     },
     vm::{
         allocator::{align, MemoryAddress},
@@ -43,7 +43,7 @@ use super::{
 impl GenerateCode for Data {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -68,7 +68,7 @@ impl GenerateCode for Data {
 impl Locatable for Data {
     fn locate(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -144,7 +144,7 @@ impl Locatable for Data {
 impl GenerateCode for Number {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
@@ -191,7 +191,7 @@ impl GenerateCode for Number {
 impl GenerateCode for Primitive {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
@@ -250,7 +250,7 @@ impl GenerateCode for Primitive {
 impl GenerateCode for Variable {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         if self.from_field.get() {
@@ -289,7 +289,7 @@ impl GenerateCode for Variable {
 impl GenerateCode for Slice {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -318,7 +318,7 @@ impl GenerateCode for Slice {
 impl GenerateCode for StrSlice {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
@@ -340,7 +340,7 @@ impl GenerateCode for StrSlice {
 impl GenerateCode for Vector {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -386,7 +386,7 @@ impl GenerateCode for Vector {
 impl GenerateCode for Tuple {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -411,7 +411,7 @@ impl GenerateCode for Tuple {
 impl GenerateCode for ExprScope {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -424,7 +424,7 @@ impl GenerateCode for ExprScope {
 impl GenerateCode for Closure {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
@@ -488,7 +488,7 @@ impl GenerateCode for Closure {
 impl GenerateCode for Address {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
@@ -500,7 +500,7 @@ impl GenerateCode for Address {
 impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.gencode(scope, instructions)?;
@@ -525,7 +525,7 @@ impl GenerateCode for PtrAccess {
 impl GenerateCode for Struct {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -565,7 +565,7 @@ impl GenerateCode for Struct {
 impl GenerateCode for Union {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -635,7 +635,7 @@ impl GenerateCode for Union {
 impl GenerateCode for Enum {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -668,7 +668,7 @@ impl GenerateCode for Enum {
 impl GenerateCode for Map {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());
@@ -1042,14 +1042,14 @@ mod tests {
     #[test]
     fn valid_vector() {
         // Parse the expression.
-        let expr = Vector::parse("vec[1,2,3,4]".into())
+        let mut expr = Vector::parse("vec[1,2,3,4]".into())
             .expect("Parsing should have succeeded")
             .1;
 
         // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
-        expr.resolve(&scope, &None, &())
+        expr.resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1061,7 +1061,7 @@ mod tests {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1133,7 +1133,7 @@ mod tests {
 
     #[test]
     fn valid_array_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = [1,2,3,4];
@@ -1158,7 +1158,7 @@ mod tests {
 
     #[test]
     fn valid_vec_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1183,7 +1183,7 @@ mod tests {
 
     #[test]
     fn valid_str_slice_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = "Hello World";
@@ -1206,7 +1206,7 @@ mod tests {
 
     #[test]
     fn valid_string_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = string("Hello World");
@@ -1229,7 +1229,7 @@ mod tests {
 
     #[test]
     fn valid_tuple_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let tuple = (420,69);
@@ -1254,7 +1254,7 @@ mod tests {
 
     #[test]
     fn valid_field_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             struct Point {
@@ -1286,7 +1286,7 @@ mod tests {
 
     #[test]
     fn valid_empty_struct() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             struct Phantom {}
@@ -1307,7 +1307,7 @@ mod tests {
     }
     #[test]
     fn valid_closure() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let f = (x:u64) -> x+1;
@@ -1331,7 +1331,7 @@ mod tests {
     }
     #[test]
     fn valid_closure_with_stack_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env:u64 = 31;
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn valid_closure_with_heap_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env : Vec<u64> = vec[2,5];
@@ -1390,7 +1390,7 @@ mod tests {
 
     #[test]
     fn valid_closure_rec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let blob = 5;
@@ -1421,7 +1421,7 @@ mod tests {
 
     #[test]
     fn valid_closure_rec_with_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env = 1u64;
@@ -1452,7 +1452,7 @@ mod tests {
 
     #[test]
     fn valid_addr_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1478,7 +1478,7 @@ mod tests {
 
     #[test]
     fn valid_ptr_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];
@@ -1504,7 +1504,7 @@ mod tests {
 
     #[test]
     fn valid_map_init() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let hmap : Map<u64,u64> = map {
@@ -1537,7 +1537,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_no_typedef() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let hmap = map {

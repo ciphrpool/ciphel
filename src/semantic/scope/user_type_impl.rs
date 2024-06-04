@@ -457,10 +457,10 @@ impl DeserializeFrom for Struct {
             id: self.id.clone(),
             fields: value,
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::User(Rc::new(UserType::Struct(self.clone())))),
-                })),
+                },
             },
         })
     }
@@ -517,10 +517,10 @@ impl DeserializeFrom for Union {
             variant: variant.clone(),
             fields: data.fields,
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::User(Rc::new(UserType::Union(self.clone())))),
-                })),
+                },
             },
         })
     }
@@ -583,10 +583,10 @@ impl DeserializeFrom for Enum {
             typename: self.id.clone(),
             value: value.clone(),
             metadata: Metadata {
-                info: Rc::new(RefCell::new(Info::Resolved {
+                info: Info::Resolved {
                     context: None,
                     signature: Some(Either::User(Rc::new(UserType::Enum(self.clone())))),
-                })),
+                },
             },
         })
     }

@@ -3,7 +3,7 @@ use super::{
     TupleType, Type, Types, VecType,
 };
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{scope::type_traits::IsEnum, MutRc, Resolve, SemanticError};
+use crate::semantic::{scope::type_traits::IsEnum, ArcMutex, Resolve, SemanticError};
 
 impl Resolve for Type {
     type Output = ();
@@ -11,10 +11,10 @@ impl Resolve for Type {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -46,10 +46,10 @@ impl Resolve for PrimitiveType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
+        &mut self,
+        _scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -63,10 +63,10 @@ impl Resolve for SliceType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -81,10 +81,10 @@ impl Resolve for StrSliceType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
+        &mut self,
+        _scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -99,10 +99,10 @@ impl Resolve for StringType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
+        &mut self,
+        _scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -117,10 +117,10 @@ impl Resolve for VecType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -135,15 +135,15 @@ impl Resolve for ClosureType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for param in &self.params {
+        for param in &mut self.params {
             let _ = param.resolve(scope, context, extra)?;
         }
         self.ret.resolve(scope, context, extra)
@@ -156,10 +156,10 @@ impl Resolve for Types {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -177,10 +177,10 @@ impl Resolve for TupleType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -195,10 +195,10 @@ impl Resolve for AddrType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -212,10 +212,10 @@ impl Resolve for RangeType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        _scope: &MutRc<Scope>,
+        &mut self,
+        _scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -230,10 +230,10 @@ impl Resolve for MapType {
 
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,

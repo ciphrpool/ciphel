@@ -28,8 +28,8 @@ pub enum Data {
     // Get { label: Ulid, idx: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             Data::Serialized { data } => {
                 stdio.push_casm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
@@ -43,7 +43,10 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
                 let arr: Vec<String> = data
                     .iter()
                     .map(|e| {
-                        let label = program.get_label_name(e).unwrap_or("".to_string().into()).to_string();
+                        let label = program
+                            .get_label_name(e)
+                            .unwrap_or("".to_string().into())
+                            .to_string();
                         label.to_string()
                     })
                     .collect();
@@ -53,13 +56,13 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Data {
         }
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Data {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {

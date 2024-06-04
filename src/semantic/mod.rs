@@ -13,7 +13,7 @@ use self::scope::{static_types::StaticType, user_type_impl::UserType};
 pub mod scope;
 pub mod utils;
 
-pub type MutRc<T> = Rc<RefCell<T>>;
+pub type ArcMutex<T> = Rc<RefCell<T>>;
 
 #[derive(Debug, Clone)]
 pub enum SemanticError {
@@ -55,13 +55,12 @@ pub enum SemanticError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
-    pub info: MutRc<Info>,
+    pub info: Info,
 }
 
 impl Metadata {
     pub fn context(&self) -> Option<EType> {
-        let borrowed = self.info.as_ref().borrow();
-        match borrowed.deref() {
+        match &self.info {
             Info::Unresolved => None,
             Info::Resolved {
                 context,
@@ -70,8 +69,7 @@ impl Metadata {
         }
     }
     pub fn signature(&self) -> Option<EType> {
-        let borrowed = self.info.as_ref().borrow();
-        match borrowed.deref() {
+        match &self.info {
             Info::Unresolved => None,
             Info::Resolved {
                 context: _,
@@ -93,7 +91,7 @@ pub enum Info {
 impl Default for Metadata {
     fn default() -> Self {
         Self {
-            info: Rc::new(RefCell::new(Info::Unresolved)),
+            info: Info::Unresolved,
         }
     }
 }
@@ -127,10 +125,10 @@ pub trait Resolve {
     type Context: Default;
     type Extra: Default;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized;

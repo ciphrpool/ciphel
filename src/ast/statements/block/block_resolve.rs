@@ -4,19 +4,19 @@ use crate::resolve_metadata;
 use crate::semantic::scope::scope::Scope;
 
 use crate::semantic::scope::var_impl::{Var, VarState};
-use crate::semantic::{CompatibleWith, EType, Info, MutRc, TypeOf};
+use crate::semantic::{ArcMutex, CompatibleWith, EType, Info, TypeOf};
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Block {
-    //type Output = MutRc;
+    //type Output = ArcMutex;
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Var>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -37,8 +37,8 @@ impl Resolve for Block {
                 .to_closure(self.can_capture.get());
         }
 
-        for instruction in &self.instructions {
-            let _ = instruction.resolve(&mut inner_scope, context, &())?;
+        for instruction in &mut self.instructions {
+            let _ = instruction.resolve(&mut inner_scope, context, &mut ())?;
         }
         // {
         //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
@@ -50,7 +50,7 @@ impl Resolve for Block {
 
         let return_type = self.type_of(&scope.borrow())?;
         let _ = context.compatible_with(&return_type, &scope.borrow())?;
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
 
         Ok(())
     }
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn valid_no_return_scope() {
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -86,7 +86,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &None, &Vec::default());
+        let res = expr_scope.resolve(&scope, &None, &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn valid_basic_scope() {
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -124,7 +124,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn valid_if_scope() {
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -152,14 +152,14 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
         let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), res);
 
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -177,7 +177,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop() {
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = [10,20];
@@ -201,7 +201,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
 
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn robustness_scope() {
-        let expr_scope = Block::parse(
+        let mut expr_scope = Block::parse(
             r##"
         {
             let x = 10;
@@ -227,7 +227,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &Vec::default());
+        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_err());
     }
 }

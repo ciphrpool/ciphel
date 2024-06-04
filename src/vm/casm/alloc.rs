@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use num_traits::ToBytes;
 use ulid::Ulid;
 
@@ -23,8 +25,8 @@ pub enum Alloc {
     Stack { size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Alloc {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             Alloc::Heap { size } => match size {
                 None => stdio.push_casm(engine, "halloc"),
@@ -34,13 +36,13 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Alloc {
         }
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Alloc {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -73,21 +75,21 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Alloc {
 pub struct Realloc {
     pub size: Option<usize>,
 }
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Realloc {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self.size {
             Some(n) => stdio.push_casm(engine, &format!("realloc {n}")),
             None => stdio.push_casm(engine, "realloc"),
         }
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Realloc {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
@@ -113,18 +115,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Realloc {
 
 #[derive(Debug, Clone)]
 pub struct Free();
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Free {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Free {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "free");
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Free {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::get_num8::<u64>(stack)? - 8;
@@ -149,8 +151,8 @@ pub enum StackFrame {
     Return { return_size: Option<usize> },
     Transfer { is_direct_loop: bool },
 }
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StackFrame {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StackFrame {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "free");
         match self {
             StackFrame::Clean => stdio.push_casm(engine, "clean"),
@@ -175,13 +177,13 @@ pub const FLAG_RETURN: u8 = 1u8;
 pub const FLAG_BREAK: u8 = 2u8;
 pub const FLAG_CONTINUE: u8 = 3u8;
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
+impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -189,7 +191,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
                 // program.cursor_set(idx);
 
-                program.cursor.set(stack.registers.link.get());
+                program.cursor.as_ref().store(
+                    stack.registers.link.as_ref().load(Ordering::Acquire),
+                    Ordering::Release,
+                );
 
                 let _ = stack.clean().map_err(|e| e.into())?;
 
@@ -202,7 +207,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 // let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
                 // program.cursor_set(idx);
 
-                program.cursor.set(stack.registers.link.get());
+                program.cursor.as_ref().store(
+                    stack.registers.link.as_ref().load(Ordering::Acquire),
+                    Ordering::Release,
+                );
 
                 let _ = stack.clean().map_err(|e| e.into())?;
 
@@ -220,7 +228,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 Ok(())
             }
             StackFrame::Clean => {
-                program.cursor.set(stack.registers.link.get());
+                program.cursor.as_ref().store(
+                    stack.registers.link.as_ref().load(Ordering::Acquire),
+                    Ordering::Release,
+                );
                 let _ = stack.clean().map_err(|e| e.into())?;
 
                 let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
@@ -238,7 +249,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 Ok(())
             }
             StackFrame::Return { return_size } => {
-                let link = stack.registers.link.get();
+                let link = stack.registers.link.as_ref().load(Ordering::Acquire);
                 let return_size = match return_size {
                     Some(size) => *size,
                     None => {
@@ -248,7 +259,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 };
                 let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
 
-                program.cursor.set(link);
+                program.cursor.as_ref().store(link, Ordering::Release);
                 let _ = stack.clean().map_err(|e| e.into())?;
 
                 let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
@@ -265,7 +276,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                 match flag {
                     FLAG_BREAK => {
                         if !*is_direct_loop {
-                            program.cursor.set(stack.registers.link.get());
+                            program.cursor.as_ref().store(
+                                stack.registers.link.as_ref().load(Ordering::Acquire),
+                                Ordering::Release,
+                            );
 
                             let _ = stack.clean().map_err(|e| e.into())?;
 
@@ -274,12 +288,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                         /* return flag set to BREAK */
                         } else {
                             let break_link = stack.get_reg(UReg::R4);
-                            program.cursor.set(break_link as usize);
+                            program
+                                .cursor
+                                .as_ref()
+                                .store(break_link as usize, Ordering::Release);
                         }
                     }
                     FLAG_CONTINUE => {
                         if !*is_direct_loop {
-                            program.cursor.set(stack.registers.link.get());
+                            program.cursor.as_ref().store(
+                                stack.registers.link.as_ref().load(Ordering::Acquire),
+                                Ordering::Release,
+                            );
 
                             let _ = stack.clean().map_err(|e| e.into())?;
 
@@ -288,13 +308,19 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StackFrame {
                         /* return flag set to CONTINUE */
                         } else {
                             let continue_link = stack.get_reg(UReg::R3);
-                            program.cursor.set(continue_link as usize);
+                            program
+                                .cursor
+                                .as_ref()
+                                .store(continue_link as usize, Ordering::Release);
                         }
                     }
                     FLAG_RETURN => {
                         let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
 
-                        program.cursor.set(stack.registers.link.get());
+                        program.cursor.as_ref().store(
+                            stack.registers.link.as_ref().load(Ordering::Acquire),
+                            Ordering::Release,
+                        );
                         let _ = stack.clean().map_err(|e| e.into())?;
 
                         let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
@@ -323,8 +349,8 @@ pub enum Access {
     RuntimeCharUTF8AtIdx { len: Option<usize> },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             Access::Static { address, size } => {
                 stdio.push_casm(engine, &format!("ld {} {size}", address.name()))
@@ -339,13 +365,13 @@ impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Access {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Access {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let index = match self {
@@ -521,19 +547,19 @@ pub struct CheckIndex {
     pub len: Option<usize>,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for CheckIndex {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CheckIndex {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "chidx");
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for CheckIndex {
+impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let index = OpPrimitive::get_num8::<u64>(stack)?;

@@ -25,7 +25,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{ArcMutex, EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -61,8 +61,8 @@ pub enum ToStrCasm {
     ToStrString,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for StringsCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringsCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             StringsCasm::ToStr(_) => stdio.push_casm_lib(engine, "to_str"),
             StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
@@ -99,10 +99,10 @@ impl Resolve for StringsFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             StringsFn::ToStr(casm) => {
@@ -110,9 +110,9 @@ impl Resolve for StringsFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let src = &extra[0];
+                let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &None)?;
+                let _ = src.resolve(scope, &None, &mut None)?;
                 let src_type = src.type_of(&scope.borrow())?;
 
                 match &src_type {
@@ -186,7 +186,7 @@ impl TypeOf for StringsFn {
 impl GenerateCode for StringsFn {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -198,13 +198,13 @@ impl GenerateCode for StringsFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for StringsCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -362,7 +362,7 @@ mod tests {
     use crate::{clear_stack, compile_statement_for_string};
     #[test]
     fn valid_format_i64() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {10}";
         "##
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn valid_format_u64() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {10u64}";
         "##
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn valid_format_float() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {20.5}";
         "##
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn valid_format_bool() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {true}";
         "##
@@ -419,7 +419,7 @@ mod tests {
         let result = compile_statement_for_string!(statement);
         assert_eq!(result, "Hello true");
 
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {false}";
         "##
@@ -431,7 +431,7 @@ mod tests {
         let result = compile_statement_for_string!(statement);
         assert_eq!(result, "Hello false");
 
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {false} {true}";
         "##
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn valid_format_char() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = f"Hello {'a'}";
         "##

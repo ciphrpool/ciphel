@@ -1,6 +1,6 @@
 use super::{AssignValue, Assignation};
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{CompatibleWith, EType, MutRc, Resolve, SemanticError, TypeOf};
+use crate::semantic::{ArcMutex, CompatibleWith, EType, Resolve, SemanticError, TypeOf};
 use crate::vm::vm::Locatable;
 
 impl Resolve for Assignation {
@@ -8,18 +8,18 @@ impl Resolve for Assignation {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.left.resolve(scope, &None, &None)?;
+        let _ = self.left.resolve(scope, &None, &mut None)?;
         if self.left.is_assignable() {
             let left_type = Some(self.left.type_of(&scope.borrow())?);
-            let _ = self.right.resolve(scope, &left_type, &())?;
+            let _ = self.right.resolve(scope, &left_type, &mut ())?;
             Ok(())
         } else {
             Err(SemanticError::ExpectedLeftExpression)
@@ -31,17 +31,17 @@ impl Resolve for AssignValue {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             AssignValue::Scope(value) => {
-                let _ = value.resolve(scope, context, &Vec::default())?;
+                let _ = value.resolve(scope, context, &mut Vec::default())?;
                 let scope_type = value.type_of(&scope.borrow())?;
 
                 match context {
@@ -53,7 +53,7 @@ impl Resolve for AssignValue {
                 Ok(())
             }
             AssignValue::Expr(value) => {
-                let _ = value.resolve(scope, context, &None)?;
+                let _ = value.resolve(scope, context, &mut None)?;
                 let scope_type = value.type_of(&scope.borrow())?;
                 match context {
                     Some(context) => {
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn valid_assignation() {
-        let assignation = Assignation::parse("x = 1;".into()).unwrap().1;
+        let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
         let _ = scope
@@ -100,10 +100,10 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = assignation.resolve(&scope, &None, &());
+        let res = assignation.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let assignation = Assignation::parse(
+        let mut assignation = Assignation::parse(
             r##"
             x = { 
                 let y = 10;
@@ -125,16 +125,16 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = assignation.resolve(&scope, &None, &());
+        let res = assignation.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_assignation() {
-        let assignation = Assignation::parse("x = 1;".into()).unwrap().1;
+        let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = assignation.resolve(&scope, &None, &());
+        let res = assignation.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 }

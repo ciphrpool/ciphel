@@ -17,7 +17,7 @@ use crate::vm::vm::{
 };
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{ArcMutex, EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -48,8 +48,8 @@ pub enum ThreadCasm {
     Join,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for ThreadCasm {
-    fn name(&self, stdio: &mut crate::vm::stdio::StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for ThreadCasm {
+    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             ThreadCasm::Spawn => stdio.push_casm_lib(engine, "spawn"),
             ThreadCasm::Close => stdio.push_casm_lib(engine, "close"),
@@ -83,14 +83,17 @@ impl ThreadFn {
         }
     }
 }
-fn expect_one_u64(params: &Vec<Expression>, scope: &MutRc<Scope>) -> Result<(), SemanticError> {
+fn expect_one_u64(
+    params: &mut Vec<Expression>,
+    scope: &ArcMutex<Scope>,
+) -> Result<(), SemanticError> {
     if params.len() != 1 {
         return Err(SemanticError::IncorrectArguments);
     }
 
-    let size = &params[0];
+    let size = &mut params[0];
 
-    let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
+    let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
     let size_type = size.type_of(&scope.borrow())?;
     match &size_type {
         Either::Static(value) => match value.as_ref() {
@@ -106,10 +109,10 @@ impl Resolve for ThreadFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             ThreadFn::Spawn => {
@@ -157,7 +160,7 @@ impl TypeOf for ThreadFn {
 impl GenerateCode for ThreadFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -358,13 +361,13 @@ pub fn sig_wait_stdin(
     Err(RuntimeError::Signal(Signal::WAIT_STDIN))
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for ThreadCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
-        stdio: &mut crate::vm::stdio::StdIO<G>,
+        stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -400,7 +403,7 @@ mod tests {
     #[test]
     fn valid_spawn() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -427,7 +430,7 @@ mod tests {
     #[test]
     fn valid_close() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -501,7 +504,7 @@ mod tests {
     #[test]
     fn valid_sleep() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -530,7 +533,7 @@ mod tests {
     #[test]
     fn valid_wait_wake() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -576,7 +579,7 @@ mod tests {
     #[test]
     fn valid_join() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -621,7 +624,7 @@ mod tests {
     #[test]
     fn valid_exit() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"
@@ -645,7 +648,7 @@ mod tests {
     #[test]
     fn valid_join_exit() {
         let mut engine = NoopGameEngine {};
-        let mut ciphel = Ciphel::<crate::vm::vm::NoopGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"

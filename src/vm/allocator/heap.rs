@@ -3,11 +3,15 @@ use std::{
     cell::{Cell, RefCell},
     fmt::Debug,
     rc::Rc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use num_traits::ToBytes;
 
-use crate::{semantic::MutRc, vm::vm::RuntimeError};
+use crate::{semantic::ArcMutex, vm::vm::RuntimeError};
 
 use super::{align, stack::STACK_SIZE};
 
@@ -36,8 +40,8 @@ impl Into<RuntimeError> for HeapError {
 #[derive(Clone)]
 pub struct Heap {
     heap: [u8; HEAP_SIZE],
-    first_freed_block_offset: Cell<usize>,
-    allocated_size: Cell<usize>,
+    first_freed_block_offset: Arc<AtomicUsize>,
+    allocated_size: Arc<AtomicUsize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -345,8 +349,8 @@ impl Heap {
 
         let mut res = Self {
             heap: [0; HEAP_SIZE],
-            first_freed_block_offset: Cell::new(0),
-            allocated_size: Cell::new(0),
+            first_freed_block_offset: Default::default(),
+            allocated_size: Default::default(),
         };
 
         // Store the header and the footer of the heap as freed
@@ -362,7 +366,7 @@ impl Heap {
     }
 
     pub fn allocated_size(&self) -> usize {
-        self.allocated_size.get()
+        self.allocated_size.as_ref().load(Ordering::Acquire)
     }
 
     fn best_fit(&self, aligned_size: usize) -> Result<Option<Block>, HeapError> {
@@ -370,7 +374,10 @@ impl Heap {
         let mut min_fitting_size = HEAP_SIZE as u64 + 1;
         // Iterating over free block;
 
-        let mut offset: usize = self.first_freed_block_offset.get();
+        let mut offset: usize = self
+            .first_freed_block_offset
+            .as_ref()
+            .load(Ordering::Acquire);
         while offset < HEAP_SIZE {
             let block = Block::read(&self.heap, offset)?;
             if block.header.allocated {
@@ -427,7 +434,8 @@ impl Heap {
                     }
                 } else {
                     self.first_freed_block_offset
-                        .set(remaining_block.pointer as usize);
+                        .as_ref()
+                        .store(remaining_block.pointer as usize, Ordering::Release);
                 }
                 // update next free block to account the change of previous free block
                 if let Some(next_free_block) = next_free_block {
@@ -455,7 +463,9 @@ impl Heap {
                 } else {
                     if let Some(next_free_block) = next_free_block {
                         let next_free_block = Block::read(&self.heap, next_free_block)?;
-                        self.first_freed_block_offset.set(next_free_block.pointer);
+                        self.first_freed_block_offset
+                            .as_ref()
+                            .store(next_free_block.pointer, Ordering::Release);
                     }
                 }
                 // update next free block to account the change of previous free block
@@ -476,7 +486,8 @@ impl Heap {
 
         let address = block.pointer + STACK_SIZE;
         self.allocated_size
-            .set(self.allocated_size.get() + aligned_size);
+            .as_ref()
+            .fetch_add(aligned_size, Ordering::AcqRel);
         Ok(address)
     }
 
@@ -511,7 +522,10 @@ impl Heap {
         let freed_size = block.data_size();
 
         let block = {
-            let borrowed_first_freed_block_offset = self.first_freed_block_offset.get();
+            let borrowed_first_freed_block_offset = self
+                .first_freed_block_offset
+                .as_ref()
+                .load(Ordering::Acquire);
             let left_block = match block.peak_left() {
                 Some(range) => Block::from_footer(&self.heap, range).ok(),
                 None => None,
@@ -673,13 +687,27 @@ impl Heap {
                 if !previous_free_block.header.allocated {
                     self.heap[previous_free_block.range_next().unwrap()]
                         .copy_from_slice(&block.pointer.to_be_bytes());
-                    if previous_free_block.pointer < self.first_freed_block_offset.get() {
-                        self.first_freed_block_offset.set(block.pointer);
+                    if previous_free_block.pointer
+                        < self
+                            .first_freed_block_offset
+                            .as_ref()
+                            .load(Ordering::Acquire)
+                    {
+                        self.first_freed_block_offset
+                            .as_ref()
+                            .store(block.pointer, Ordering::Release);
                     }
                 }
             } else {
-                if block.pointer < self.first_freed_block_offset.get() {
-                    self.first_freed_block_offset.set(block.pointer);
+                if block.pointer
+                    < self
+                        .first_freed_block_offset
+                        .as_ref()
+                        .load(Ordering::Acquire)
+                {
+                    self.first_freed_block_offset
+                        .as_ref()
+                        .store(block.pointer, Ordering::Release);
                 }
             }
             // update next free block to account the change of previous free block
@@ -693,7 +721,8 @@ impl Heap {
         }
 
         self.allocated_size
-            .set(self.allocated_size.get() - freed_size);
+            .as_ref()
+            .fetch_sub(freed_size, Ordering::AcqRel);
 
         Ok(())
     }

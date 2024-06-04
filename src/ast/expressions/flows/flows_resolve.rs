@@ -13,10 +13,10 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MergeType, Metadata, MutRc};
+use crate::semantic::{ArcMutex, EType, Info, MergeType, Metadata};
 use crate::vm::platform::stdlib::StdFn;
 use crate::vm::platform::Lib;
-use crate::{e_static, resolve_metadata};
+use crate::{e_static, p_num, resolve_metadata};
 use std::collections::HashMap;
 
 impl Resolve for ExprFlow {
@@ -24,10 +24,10 @@ impl Resolve for ExprFlow {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -38,7 +38,10 @@ impl Resolve for ExprFlow {
             ExprFlow::Try(value) => value.resolve(scope, context, extra),
             ExprFlow::SizeOf(value, metadata) => {
                 let _ = value.resolve(scope, &(), extra);
-                resolve_metadata!(metadata, self, scope, context);
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(p_num!(U64)),
+                };
                 Ok(())
             }
             ExprFlow::FCall(value) => value.resolve(scope, context, extra),
@@ -50,27 +53,31 @@ impl Resolve for IfExpr {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, context, &None)?;
+        let _ = self.condition.resolve(scope, context, &mut None)?;
         // Check if condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
 
-        let _ = self.then_branch.resolve(scope, context, &Vec::default())?;
-        let _ = self.else_branch.resolve(scope, context, &Vec::default())?;
+        let _ = self
+            .then_branch
+            .resolve(scope, context, &mut Vec::default())?;
+        let _ = self
+            .else_branch
+            .resolve(scope, context, &mut Vec::default())?;
 
         let then_branch_type = self.then_branch.type_of(&scope.borrow())?;
         let _ = then_branch_type.compatible_with(&self.else_branch, &scope.borrow())?;
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -79,10 +86,10 @@ impl Resolve for Pattern {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -206,17 +213,17 @@ impl Resolve for PatternExpr {
     type Context = Option<EType>;
     type Extra = Option<EType>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let previous_vars = self.patterns[0].resolve(scope, &extra, &())?;
-        for pattern in &self.patterns[1..] {
-            let vars = pattern.resolve(scope, &extra, &())?;
+        let mut previous_vars = self.patterns[0].resolve(scope, &extra, &mut ())?;
+        for pattern in &mut self.patterns[1..] {
+            let vars = pattern.resolve(scope, &extra, &mut ())?;
             if previous_vars != vars {
                 return Err(SemanticError::IncorrectVariant);
             }
@@ -226,7 +233,7 @@ impl Resolve for PatternExpr {
             var.is_declared.set(true);
         }
         // create a block and assign the pattern variable to it before resolving the expression
-        let _ = self.expr.resolve(scope, context, &previous_vars)?;
+        let _ = self.expr.resolve(scope, context, &mut previous_vars)?;
         Ok(())
     }
 }
@@ -235,16 +242,16 @@ impl Resolve for MatchExpr {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &None)?;
-        let expr_type = Some(self.expr.type_of(&scope.borrow())?);
+        let _ = self.expr.resolve(scope, &None, &mut None)?;
+        let mut expr_type = Some(self.expr.type_of(&scope.borrow())?);
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
             Either::Static(value) => match value.as_ref() {
@@ -262,11 +269,11 @@ impl Resolve for MatchExpr {
             },
         };
 
-        match &self.else_branch {
+        match &mut self.else_branch {
             Some(else_branch) => {
-                let _ = else_branch.resolve(scope, &context, &Vec::default())?;
-                for pattern in &self.patterns {
-                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                let _ = else_branch.resolve(scope, &context, &mut Vec::default())?;
+                for pattern in &mut self.patterns {
+                    let _ = pattern.resolve(scope, &context, &mut expr_type)?;
                 }
 
                 if let Some(exhaustive_cases) = exhaustive_cases {
@@ -327,13 +334,13 @@ impl Resolve for MatchExpr {
                 let Some(_exhaustive_cases) = exhaustive_cases else {
                     return Err(SemanticError::InvalidPattern);
                 };
-                for pattern in &self.patterns {
-                    let _ = pattern.resolve(scope, &context, &expr_type)?;
+                for pattern in &mut self.patterns {
+                    let _ = pattern.resolve(scope, &context, &mut expr_type)?;
                 }
             }
         }
 
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -342,17 +349,19 @@ impl Resolve for TryExpr {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.try_branch.resolve(scope, context, &Vec::default())?;
-        match &self.else_branch {
-            Some(else_branch) => else_branch.resolve(scope, context, &Vec::default())?,
+        let _ = self
+            .try_branch
+            .resolve(scope, context, &mut Vec::default())?;
+        match &mut self.else_branch {
+            Some(else_branch) => else_branch.resolve(scope, context, &mut Vec::default())?,
             None => {}
         }
 
@@ -381,14 +390,7 @@ impl Resolve for TryExpr {
                             let res_type = ty.merge(&else_branch_type, &scope.borrow())?;
 
                             self.pop_last_err.set(true);
-
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(res_type),
                             };
@@ -398,13 +400,7 @@ impl Resolve for TryExpr {
                                 .compatible_with(&else_branch_type, &scope.borrow())?;
                             let res_type =
                                 try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(res_type),
                             };
@@ -418,13 +414,7 @@ impl Resolve for TryExpr {
                     if else_branch_type.is_unit() {
                         self.pop_last_err.set(true);
 
-                        let mut borrowed_metadata = self
-                            .metadata
-                            .info
-                            .as_ref()
-                            .try_borrow_mut()
-                            .map_err(|_| SemanticError::Default)?;
-                        *borrowed_metadata = Info::Resolved {
+                        self.metadata.info = Info::Resolved {
                             context: context.clone(),
                             signature: Some(e_static!(StaticType::Unit)),
                         };
@@ -439,13 +429,8 @@ impl Resolve for TryExpr {
                     }
                     let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
                     let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(res_type),
                     };
@@ -458,13 +443,8 @@ impl Resolve for TryExpr {
                 }
                 let _ = try_branch_type.compatible_with(&else_branch_type, &scope.borrow())?;
                 let res_type = try_branch_type.merge(&else_branch_type, &scope.borrow())?;
-                let mut borrowed_metadata = self
-                    .metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+
+                self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(res_type),
                 };
@@ -479,23 +459,23 @@ impl Resolve for FCall {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        for item in &self.value {
+        for item in &mut self.value {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    let _ = expr.resolve(scope, &None, &None)?;
+                    let _ = expr.resolve(scope, &None, &mut None)?;
                 }
             }
         }
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -523,34 +503,34 @@ mod tests {
 
     #[test]
     fn valid_if() {
-        let expr = IfExpr::parse("if true then 10 else 20".into())
+        let mut expr = IfExpr::parse("if true then 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_if() {
-        let expr = IfExpr::parse("if 10 then 10 else 20".into())
+        let mut expr = IfExpr::parse("if 10 then 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let expr = IfExpr::parse("if true then 10 else 'a'".into())
+        let mut expr = IfExpr::parse("if true then 10 else 'a'".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_match_basic() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x {
                 case 20 => 1,
@@ -572,13 +552,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), match_type);
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x {
                 case Color::RED => 1,
@@ -625,12 +605,12 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(I64), match_type);
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case "red" => Color::RED,
@@ -668,7 +648,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr.type_of(&scope.borrow()).unwrap();
@@ -692,7 +672,7 @@ mod tests {
 
     #[test]
     fn robustness_match_basic() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case 20 => true,
@@ -714,10 +694,10 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case 20 => true,
@@ -739,13 +719,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_match_complex() {
-        let expr = MatchExpr::parse(
+        let mut expr = MatchExpr::parse(
             r##"
             match x { 
                 case Geo::Point {x,y} => x + y,
@@ -832,7 +812,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr.type_of(&scope.borrow()).unwrap();
         assert_eq!(p_num!(U64), match_type);
@@ -840,62 +820,62 @@ mod tests {
 
     #[test]
     fn valid_try() {
-        let expr = TryExpr::parse("try 10 else 20".into())
+        let mut expr = TryExpr::parse("try 10 else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_try_no_else() {
-        let expr = TryExpr::parse("try Ok()".into())
+        let mut expr = TryExpr::parse("try Ok()".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &());
+        let res = expr.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn valid_try_tuple_err() {
-        let expr = TryExpr::parse("try (10,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try (10,Err()) else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
 
     #[test]
     fn valid_try_tuple_multi_err() {
-        let expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
+        let mut expr = TryExpr::parse("try (10,20,Err()) else (20,30)".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
     #[test]
     fn robustness_try_tuple_err() {
-        let expr = TryExpr::parse("try (10,20,Err()) else 20".into())
+        let mut expr = TryExpr::parse("try (10,20,Err()) else 20".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
     #[test]
     fn robustness_try_tuple_err_no_else() {
-        let expr = TryExpr::parse("try (10,Err())".into())
+        let mut expr = TryExpr::parse("try (10,Err())".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
 }

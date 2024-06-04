@@ -3,7 +3,7 @@ use crate::{
         expressions::{data::PtrAccess, operation::ListAccess},
         statements::assignation::AssignValue,
     },
-    semantic::{MutRc, SizeOf},
+    semantic::{ArcMutex, SizeOf},
     vm::{
         casm::{
             branch::{Call, Goto, Label},
@@ -20,7 +20,7 @@ use crate::semantic::scope::scope::Scope;
 impl GenerateCode for Assignation {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
@@ -66,7 +66,7 @@ impl GenerateCode for Assignation {
 impl GenerateCode for AssignValue {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let y:u64;
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_general_scope() {
-        let declaration = Statement::parse(
+        let mut declaration = Statement::parse(
             r##"
             let x:u64;
         "##
@@ -158,7 +158,7 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         x = 420;
     "##
@@ -168,10 +168,10 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = declaration
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -186,7 +186,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -219,7 +219,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -243,7 +243,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -256,7 +256,7 @@ mod tests {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_tuple_access_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:(u64,u64);
@@ -308,7 +308,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -321,7 +321,7 @@ mod tests {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_slice_access_in_scope() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let x:[4]u64;
@@ -403,7 +403,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -425,7 +425,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -437,7 +437,7 @@ mod tests {
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -496,7 +496,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -518,7 +518,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -531,7 +531,7 @@ mod tests {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -605,7 +605,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let point:Point;
@@ -634,7 +634,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -647,7 +647,7 @@ mod tests {
 
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -694,7 +694,7 @@ mod tests {
 
     #[test]
     fn valid_assignation_ptr_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let arr = vec[1,2,3,4];

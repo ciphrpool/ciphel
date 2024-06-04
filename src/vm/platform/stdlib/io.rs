@@ -22,7 +22,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, MutRc, Resolve, SemanticError},
+    semantic::{ArcMutex, EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -44,8 +44,8 @@ pub enum IOCasm {
     RequestScan,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IOCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
             IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
@@ -108,18 +108,18 @@ impl Resolve for IOFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             IOFn::Print(param_type) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve(scope, &None, &mut None)?;
                 *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
                 Ok(())
             }
@@ -127,8 +127,8 @@ impl Resolve for IOFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve(scope, &None, &mut None)?;
                 *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
                 Ok(())
             }
@@ -157,7 +157,7 @@ impl TypeOf for IOFn {
 impl GenerateCode for IOFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -200,13 +200,13 @@ impl GenerateCode for IOFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -264,13 +264,13 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IOCasm {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for PrintCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -435,7 +435,7 @@ mod tests {
         for text in vec![
             "u128", "u64", "u32", "u16", "u8", "i128", "i64", "i32", "i16", "i8", "f64", "",
         ] {
-            let statement = Statement::parse(format!("print(64{});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print(64{});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn valid_print_char() {
-        let statement = Statement::parse("print('a');".into())
+        let mut statement = Statement::parse("print('a');".into())
             .expect("Parsing should have succeeded")
             .1;
         let output = compile_statement_for_stdout!(statement);
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn valid_print_bool() {
         for text in vec!["true", "false"] {
-            let statement = Statement::parse(format!("print({});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn valid_print_strslice_complex() {
         for text in vec!["\"Hello World\"", "\"你好世界\""] {
-            let statement = Statement::parse(format!("print({});", text).as_str().into())
+            let mut statement = Statement::parse(format!("print({});", text).as_str().into())
                 .expect("Parsing should have succeeded")
                 .1;
 
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn valid_print_strslice_with_padding() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x:str<20> = "Hello World";
@@ -493,7 +493,7 @@ mod tests {
     }
     #[test]
     fn valid_print_strslice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x = "Hello World";
@@ -509,7 +509,7 @@ mod tests {
     }
     #[test]
     fn valid_print_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         {
             let x = string("Hello World");
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn valid_print_tuple() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print((420,true));
         "##
@@ -541,7 +541,7 @@ mod tests {
 
     #[test]
     fn valid_print_rec_tuple() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print((420,(69,27),true));
         "##
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn valid_print_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([5,7,8,9,10]);
         "##
@@ -570,7 +570,7 @@ mod tests {
     }
     #[test]
     fn valid_print_rec_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([[2,4],[1,3]]);
         "##
@@ -584,7 +584,7 @@ mod tests {
     }
     #[test]
     fn valid_print_rec_slice_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print([[[1,2],[3,4]],[[5,6],[7,8]],[[9,10],[11,12]]]);
         "##
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn valid_print_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print(vec[1,2,3,4]);
         "##
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn valid_print_vec_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             print(vec[string("Hello"),string(" "),string("world")]);
         "##
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn valid_print_addr() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 let x = 420; // 0x20
@@ -649,7 +649,7 @@ mod tests {
 
     #[test]
     fn valid_print_struct() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 struct Point {
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn valid_print_enum() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 enum Color {
@@ -697,7 +697,7 @@ mod tests {
 
     #[test]
     fn valid_print_union() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             {
                 union Geo {
@@ -731,7 +731,7 @@ mod tests {
             out: String::new(),
             in_buf: String::new(),
         };
-        let mut ciphel = Ciphel::<crate::vm::vm::StdinTestGameEngine>::new();
+        let mut ciphel = Ciphel::new();
         let tid = ciphel.start().expect("starting should not fail");
 
         let src = r##"

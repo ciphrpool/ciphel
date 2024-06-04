@@ -1,9 +1,6 @@
 use crate::{
-    semantic::MutRc,
-    vm::{
-        casm::{Casm},
-        vm::RuntimeError,
-    },
+    semantic::ArcMutex,
+    vm::{casm::Casm, vm::RuntimeError},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -16,7 +13,7 @@ pub enum VTableError {
 
 #[derive(Debug, Clone)]
 pub struct VTable {
-    functions: MutRc<Vec<Option<Vec<Casm>>>>,
+    functions: ArcMutex<Vec<Option<Vec<Casm>>>>,
 }
 impl Into<RuntimeError> for VTableError {
     fn into(self) -> RuntimeError {

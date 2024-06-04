@@ -10,24 +10,24 @@ use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{CompatibleWith, EType, Either, MutRc};
+use crate::semantic::{ArcMutex, CompatibleWith, EType, Either};
 
 impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve(scope, &(), &())?;
+                let _ = value.resolve(scope, &(), &mut ())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
 
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
@@ -38,7 +38,7 @@ impl Resolve for Declaration {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve(scope, &(), &())?;
+                let _ = value.resolve(scope, &(), &mut ())?;
                 let var_type = value.signature.type_of(&scope.borrow())?;
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
                 if var_type.is_any() {
@@ -89,10 +89,10 @@ impl Resolve for Declaration {
                         }
                     }
                     let _ = scope.borrow_mut().register_var(var)?;
-                    let _ = right.resolve(scope, &Some(var_type.clone()), &())?;
+                    let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
                     let _ = var_type.compatible_with(right, &scope.borrow())?;
                 } else {
-                    let _ = right.resolve(scope, &Some(var_type.clone()), &())?;
+                    let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
                     let _ = scope.borrow_mut().register_var(var)?;
                     let _ = var_type.compatible_with(right, &scope.borrow())?;
                 }
@@ -102,7 +102,7 @@ impl Resolve for Declaration {
             Declaration::Assigned { left, right } => {
                 let _ = right.resolve(scope, &None, extra)?;
                 let right_type = right.type_of(&scope.borrow())?;
-                let vars = left.resolve(scope, &Some(right_type), &())?;
+                let vars = left.resolve(scope, &Some(right_type), &mut ())?;
                 for var in vars {
                     let _ = scope.borrow_mut().register_var(var)?;
                 }
@@ -116,10 +116,10 @@ impl Resolve for TypedVar {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -132,10 +132,10 @@ impl Resolve for DeclaredVar {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -166,10 +166,10 @@ impl Resolve for PatternVar {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -246,19 +246,19 @@ mod tests {
 
     #[test]
     fn valid_declaration() {
-        let decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
+        let mut decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &());
+        let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
 
-        let decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
+        let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &());
+        let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
@@ -267,19 +267,19 @@ mod tests {
 
     #[test]
     fn robustness_declaration() {
-        let decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
+        let mut decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &());
+        let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_declaration_pattern() {
-        let decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
+        let mut decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &());
+        let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn valid_declaration_pattern_struct() {
-        let decl = Declaration::parse("let Point {x,y} = Point { x : 1 , y:2};".into())
+        let mut decl = Declaration::parse("let Point {x,y} = Point { x : 1 , y:2};".into())
             .unwrap()
             .1;
 
@@ -313,7 +313,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = decl.resolve(&scope, &None, &());
+        let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();

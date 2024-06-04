@@ -4,17 +4,17 @@ use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{scope::var_impl::Var, Resolve, SemanticError, TypeOf};
-use crate::semantic::{EType, MutRc};
+use crate::semantic::{ArcMutex, EType};
 
 impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -24,7 +24,7 @@ impl Resolve for Loop {
             Loop::While(value) => value.resolve(scope, context, extra),
             Loop::Loop(value) => {
                 value.to_loop();
-                let _ = value.resolve(scope, &context, &Vec::default())?;
+                let _ = value.resolve(scope, &context, &mut Vec::default())?;
                 Ok(())
             }
         }
@@ -35,15 +35,15 @@ impl Resolve for ForIterator {
     type Context = ();
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         _context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &None)?;
+        let _ = self.expr.resolve(scope, &None, &mut None)?;
         let expr_type = self.expr.type_of(&scope.borrow())?;
         if !expr_type.is_iterable() {
             return Err(SemanticError::ExpectedIterable);
@@ -60,9 +60,9 @@ impl Resolve for ForIterator {
         //         }
         //         Ok(())
         //     }
-        //     ForIterator::Vec(value) => value.resolve(block, &None, &()),
-        //     ForIterator::Slice(value) => value.resolve(block, &None, &()),
-        //     ForIterator::Receive { addr, .. } => addr.resolve(block, &None, &()),
+        //     ForIterator::Vec(value) => value.resolve(block, &None, &mut ()),
+        //     ForIterator::Slice(value) => value.resolve(block, &None, &mut ()),
+        //     ForIterator::Receive { addr, .. } => addr.resolve(block, &None, &mut ()),
         // }
     }
 }
@@ -72,10 +72,10 @@ impl Resolve for ForItem {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -96,26 +96,26 @@ impl Resolve for ForLoop {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.iterator.resolve(scope, &(), &())?;
+        let _ = self.iterator.resolve(scope, &(), &mut ())?;
         let item_type = self.iterator.type_of(&scope.borrow())?;
         let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
-        let item_vars = self.item.resolve(scope, &item_type, &())?;
+        let mut item_vars = self.item.resolve(scope, &item_type, &mut ())?;
         for var in &item_vars {
             var.state.set(VarState::Parameter);
             var.is_declared.set(true);
         }
         // attach the item to the block
         self.scope.to_loop();
-        let _ = self.scope.resolve(scope, context, &item_vars)?;
+        let _ = self.scope.resolve(scope, context, &mut item_vars)?;
         Ok(())
     }
 }
@@ -124,22 +124,22 @@ impl Resolve for WhileLoop {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, &None, &None)?;
+        let _ = self.condition.resolve(scope, &None, &mut None)?;
         // check that the condition is a boolean
         let condition_type = self.condition.type_of(&scope.borrow())?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
         self.scope.to_loop();
-        let _ = self.scope.resolve(scope, context, &Vec::default())?;
+        let _ = self.scope.resolve(scope, context, &mut Vec::default())?;
         Ok(())
     }
 }
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn valid_for_loop() {
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for i in [1,2,3] {
             x = i;
@@ -185,10 +185,10 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for (i,j) in [(1,1),(2,2),(3,3)] {
             x = j;
@@ -208,13 +208,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_for_loop_range() {
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for i in 0..10 {
             x = i;
@@ -234,13 +234,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn valid_for_loop_range_u64() {
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for i in 0u64..10u64 {
             x = i;
@@ -260,13 +260,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_for_loop() {
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for i in y {
             x = i;
@@ -286,10 +286,10 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let expr_loop = ForLoop::parse(
+        let mut expr_loop = ForLoop::parse(
             r##"
         for i in y {
             x = i;
@@ -319,13 +319,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_while_loop() {
-        let expr_loop = WhileLoop::parse(
+        let mut expr_loop = WhileLoop::parse(
             r##"
         while x > 10 {
             x = x + 1;
@@ -345,13 +345,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_while() {
-        let expr_loop = WhileLoop::parse(
+        let mut expr_loop = WhileLoop::parse(
             r##"
         while x {
             x = x + 1;
@@ -371,13 +371,13 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_loop() {
-        let expr_loop = Loop::parse(
+        let mut expr_loop = Loop::parse(
             r##"
         loop {
             x = x + 1;
@@ -397,7 +397,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &());
+        let res = expr_loop.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 }

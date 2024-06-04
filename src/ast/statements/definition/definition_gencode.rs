@@ -9,7 +9,7 @@ use crate::vm::casm::alloc::Alloc;
 use crate::vm::casm::locate::Locate;
 
 use crate::{
-    semantic::MutRc,
+    semantic::ArcMutex,
     vm::{
         casm::{
             branch::{Goto, Label},
@@ -23,7 +23,7 @@ use crate::{
 impl GenerateCode for Definition {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -36,7 +36,7 @@ impl GenerateCode for Definition {
 impl GenerateCode for TypeDef {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         Ok(())
@@ -46,7 +46,7 @@ impl GenerateCode for TypeDef {
 impl GenerateCode for FnDef {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn valid_function() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             fn f(x:u64) -> u64 {
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn valid_function_general() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             fn f(x:u64) -> u64 {
                 return x+1;
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn valid_function_with_stack_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env:u64 = 31;
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn valid_function_with_heap_env() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let env : Vec<u64> = vec[2,5];
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn valid_function_rec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             fn recursive(x:u64) -> u64 {
@@ -240,7 +240,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -252,7 +252,7 @@ mod tests {
         // dbg!(&instructions);
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn valid_function_fibonacci() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             fn fibonacci(x:u64) -> u64 {
@@ -298,7 +298,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -310,7 +310,7 @@ mod tests {
         // dbg!(&instructions);
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");

@@ -19,7 +19,7 @@ use crate::{
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        Either, MutRc, SizeOf, TypeOf,
+        ArcMutex, Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -39,7 +39,7 @@ use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 impl GenerateCode for ExprFlow {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -64,7 +64,7 @@ impl GenerateCode for ExprFlow {
 impl GenerateCode for IfExpr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -126,7 +126,7 @@ impl GenerateCode for IfExpr {
 impl GenerateCode for MatchExpr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -327,7 +327,7 @@ impl GenerateCode for MatchExpr {
 impl GenerateCode for TryExpr {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -419,7 +419,7 @@ impl GenerateCode for TryExpr {
 impl GenerateCode for FCall {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         for item in &self.value {
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn valid_if_basic() {
-        let statement_then = IfExpr::parse(
+        let mut statement_then = IfExpr::parse(
             r##"
            if true then 420 else 69 
         "##
@@ -491,7 +491,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement_then
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
         // Code generation.
         let instructions_then = CasmProgram::default();
@@ -502,7 +502,7 @@ mod tests {
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn valid_if_basic_else() {
-        let statement_else = IfExpr::parse(
+        let mut statement_else = IfExpr::parse(
             r##"
            if false then 420 else 69 
         "##
@@ -537,7 +537,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement_else
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -548,7 +548,7 @@ mod tests {
 
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -572,7 +572,7 @@ mod tests {
 
     #[test]
     fn valid_if_basic_scope() {
-        let statement_then = IfExpr::parse(
+        let mut statement_then = IfExpr::parse(
             r##"
            if true then { 
                let x = 420;
@@ -586,7 +586,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement_then
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -598,7 +598,7 @@ mod tests {
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     fn valid_if_basic_scope_else() {
-        let statement_else = IfExpr::parse(
+        let mut statement_else = IfExpr::parse(
             r##"
            if false then 420 else { 
             let x = 69;
@@ -637,7 +637,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement_else
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -649,7 +649,7 @@ mod tests {
 
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -682,7 +682,7 @@ mod tests {
                 res
             },
         };
-        let statement_then = IfExpr::parse(
+        let mut statement_then = IfExpr::parse(
             r##"
         if true then {
             let point:Point;
@@ -708,7 +708,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement_then
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -719,7 +719,7 @@ mod tests {
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -767,7 +767,7 @@ mod tests {
                 res
             },
         };
-        let statement_else = IfExpr::parse(
+        let mut statement_else = IfExpr::parse(
             r##"
         if false then {
             let point:Point;
@@ -793,7 +793,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement_else
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -804,7 +804,7 @@ mod tests {
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -843,7 +843,7 @@ mod tests {
 
     #[test]
     fn valid_if_complex_outvar() {
-        let statement_then = Statement::parse(
+        let mut statement_then = Statement::parse(
             r##"
         let x = {
             let y = true;
@@ -857,7 +857,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement_then
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -869,7 +869,7 @@ mod tests {
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -921,7 +921,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Point {
@@ -946,7 +946,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -957,7 +957,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -989,7 +989,7 @@ mod tests {
                 "Other".to_string().into(),
             ],
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Point;
@@ -1012,7 +1012,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1023,7 +1023,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1055,7 +1055,7 @@ mod tests {
                 "Other".to_string().into(),
             ],
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Other;
@@ -1078,7 +1078,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1089,7 +1089,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1141,7 +1141,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Point {
@@ -1166,7 +1166,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1177,7 +1177,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1201,7 +1201,7 @@ mod tests {
 
     #[test]
     fn valid_match_number() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match 69 {
                 case 69 => 420,
@@ -1225,7 +1225,7 @@ mod tests {
 
     #[test]
     fn valid_match_number_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match 420 {
                 case 69 => 420,
@@ -1249,7 +1249,7 @@ mod tests {
 
     #[test]
     fn valid_match_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match "Hello world" {
                 case "Hello world" => 420,
@@ -1273,7 +1273,7 @@ mod tests {
 
     #[test]
     fn valid_match_string_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match "CipherPool" {
                 case "Hello world" => 420,
@@ -1297,7 +1297,7 @@ mod tests {
 
     #[test]
     fn valid_match_multiple_case_strslice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match "CipherPool" {
                 case "Hello world" | "CipherPool" => 420,
@@ -1320,7 +1320,7 @@ mod tests {
     }
     #[test]
     fn valid_match_multiple_case_num() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = match 500 {
                 case 86 | 500 => 420,
@@ -1372,7 +1372,7 @@ mod tests {
                 res
             },
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Point {
@@ -1396,7 +1396,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1407,7 +1407,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1439,7 +1439,7 @@ mod tests {
                 "Other".to_string().into(),
             ],
         };
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let x = {
                 let geo = Geo::Axe;
@@ -1461,7 +1461,7 @@ mod tests {
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -1472,7 +1472,7 @@ mod tests {
 
         assert!(instructions.len() > 0);
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -1496,7 +1496,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let res = try (10,Ok()) else 20;
@@ -1520,7 +1520,7 @@ mod tests {
     }
     #[test]
     fn valid_try_tuple_else() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let res = try (10,Err()) else 20;
@@ -1545,7 +1545,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple_catch_err_string_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let buf = string("aaaabbbbcc");
@@ -1569,7 +1569,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple_catch_err_strslice_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let buf = "aaaabbbbcc";
@@ -1593,7 +1593,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple_catch_err_slice_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let buf = [1,5,3,8];
@@ -1619,7 +1619,7 @@ mod tests {
 
     #[test]
     fn valid_try_tuple_catch_err_vec_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = {
             let buf = vec[1,5,3,8];

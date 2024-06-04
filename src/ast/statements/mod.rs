@@ -15,7 +15,7 @@ use super::{utils::strings::eater, TryParse};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
-        scope::static_types::StaticType, EType, Either, MutRc, Resolve, SemanticError, TypeOf,
+        scope::static_types::StaticType, ArcMutex, EType, Either, Resolve, SemanticError, TypeOf,
     },
     vm::{
         casm::{
@@ -82,17 +82,17 @@ impl Resolve for Statement {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve(scope, context, &Vec::default())?;
+                let _ = value.resolve(scope, context, &mut Vec::default())?;
                 Ok(())
             }
             Statement::Flow(value) => value.resolve(scope, context, extra),
@@ -127,7 +127,7 @@ impl TypeOf for Statement {
 impl GenerateCode for Statement {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

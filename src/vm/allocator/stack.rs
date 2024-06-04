@@ -1,12 +1,16 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use num_traits::ToBytes;
 
 use crate::{
-    semantic::{AccessLevel, MutRc},
+    semantic::{AccessLevel, ArcMutex},
     vm::vm::RuntimeError,
 };
 
@@ -60,23 +64,20 @@ impl Default for Offset {
 pub struct Stack {
     stack: [u8; STACK_SIZE],
     pub registers: Registers,
-    // top: Cell<usize>,
-    // registers.bottom: Cell<usize>,
-    // registers.zero: Cell<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Registers {
-    pub top: Cell<usize>,
-    pub bottom: Cell<usize>,
-    pub zero: Cell<usize>,
-    pub params_start: Cell<usize>,
-    pub link: Cell<usize>,
-    pub window: Cell<usize>,
-    pub r1: Cell<u64>,
-    pub r2: Cell<u64>,
-    pub r3: Cell<u64>,
-    pub r4: Cell<u64>,
+    pub top: Arc<AtomicUsize>,
+    pub bottom: Arc<AtomicUsize>,
+    pub zero: Arc<AtomicUsize>,
+    pub params_start: Arc<AtomicUsize>,
+    pub link: Arc<AtomicUsize>,
+    pub window: Arc<AtomicUsize>,
+    pub r1: Arc<AtomicU64>,
+    pub r2: Arc<AtomicU64>,
+    pub r3: Arc<AtomicU64>,
+    pub r4: Arc<AtomicU64>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -108,10 +109,10 @@ struct Frame {
 impl Into<Frame> for &Registers {
     fn into(self) -> Frame {
         Frame {
-            bottom: self.bottom.get(),
-            zero: self.zero.get(),
-            params_start: self.params_start.get(),
-            link: self.link.get(),
+            bottom: self.bottom.as_ref().load(Ordering::Acquire),
+            zero: self.zero.as_ref().load(Ordering::Acquire),
+            params_start: self.params_start.as_ref().load(Ordering::Acquire),
+            link: self.link.as_ref().load(Ordering::Acquire),
         }
     }
 }
@@ -169,16 +170,16 @@ impl Frame {
 impl Default for Registers {
     fn default() -> Self {
         Self {
-            top: Cell::new(0),
-            bottom: Cell::new(0),
-            zero: Cell::new(0),
-            params_start: Cell::new(0),
-            link: Cell::new(0),
-            window: Cell::new(0),
-            r1: Cell::new(0),
-            r2: Cell::new(0),
-            r3: Cell::new(0),
-            r4: Cell::new(0),
+            top: Default::default(),
+            bottom: Default::default(),
+            zero: Default::default(),
+            params_start: Default::default(),
+            link: Default::default(),
+            window: Default::default(),
+            r1: Default::default(),
+            r2: Default::default(),
+            r3: Default::default(),
+            r4: Default::default(),
         }
     }
 }
@@ -217,26 +218,34 @@ impl Stack {
     }
 
     pub fn open_window(&mut self) -> Result<(), StackError> {
-        let bottom = self.registers.top.get();
-        let _ = self.push_with(&(self.registers.window.get() as u64).to_le_bytes())?;
-        self.registers.window.set(bottom);
+        let bottom = self.registers.top.as_ref().load(Ordering::Acquire);
+        let _ = self.push_with(
+            &(self.registers.window.as_ref().load(Ordering::Acquire) as u64).to_le_bytes(),
+        )?;
+        self.registers
+            .window
+            .as_ref()
+            .store(bottom, Ordering::Release);
         Ok(())
     }
 
     pub fn close_window(&mut self) -> Result<(), StackError> {
-        let bottom = self.registers.window.get();
+        let bottom = self.registers.window.as_ref().load(Ordering::Acquire);
 
         let previous_windows = u64::from_le_bytes(
             TryInto::<[u8; 8]>::try_into(&self.stack[bottom..bottom + 8])
                 .map_err(|_| StackError::ReadError)?,
         );
-        self.registers.window.set(previous_windows as usize);
-        self.registers.top.set(bottom);
+        self.registers
+            .window
+            .as_ref()
+            .store(previous_windows as usize, Ordering::Release);
+        self.registers.top.as_ref().store(bottom, Ordering::Release);
         Ok(())
     }
 
     pub fn frame(&mut self, params_size: usize, link: usize) -> Result<(), StackError> {
-        let bottom = self.registers.top.get();
+        let bottom = self.registers.top.as_ref().load(Ordering::Acquire);
 
         let frame_meta_size = Registers::link_size()
             + Registers::bottom_size()
@@ -246,19 +255,25 @@ impl Stack {
         let _ = self.push_with_zero(frame_meta_size)?;
 
         // Copy past link
-        self.stack[bottom..bottom + Registers::link_size()]
-            .copy_from_slice(&(self.registers.link.get() as u64).to_le_bytes());
+        self.stack[bottom..bottom + Registers::link_size()].copy_from_slice(
+            &(self.registers.link.as_ref().load(Ordering::Acquire) as u64).to_le_bytes(),
+        );
         // Copy past FB
         self.stack[bottom + Registers::link_size()
             ..bottom + Registers::link_size() + Registers::bottom_size()]
-            .copy_from_slice(&(self.registers.bottom.get() as u64).to_le_bytes());
+            .copy_from_slice(
+                &(self.registers.bottom.as_ref().load(Ordering::Acquire) as u64).to_le_bytes(),
+            );
         // Copy past FParamStart
         self.stack[bottom + Registers::link_size() + Registers::bottom_size()
             ..bottom
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()]
-            .copy_from_slice(&(self.registers.params_start.get() as u64).to_le_bytes());
+            .copy_from_slice(
+                &(self.registers.params_start.as_ref().load(Ordering::Acquire) as u64)
+                    .to_le_bytes(),
+            );
         // Copy past FZ
         self.stack[bottom
             + Registers::link_size()
@@ -269,38 +284,46 @@ impl Stack {
                 + Registers::bottom_size()
                 + Registers::params_start_size()
                 + Registers::zero_size()]
-            .copy_from_slice(&(self.registers.zero.get() as u64).to_le_bytes());
+            .copy_from_slice(
+                &(self.registers.zero.as_ref().load(Ordering::Acquire) as u64).to_le_bytes(),
+            );
 
         // Update FB
-        self.registers.bottom.set(bottom);
+        self.registers
+            .bottom
+            .as_ref()
+            .store(bottom, Ordering::Release);
         // Update FZ
-        self.registers.zero.set(
+        self.registers.zero.as_ref().store(
             bottom
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()
                 + Registers::zero_size()
                 + params_size,
+            Ordering::Release,
         );
         // Update FP
-        self.registers.params_start.set(
+        self.registers.params_start.as_ref().store(
             bottom
                 + Registers::link_size()
                 + Registers::bottom_size()
                 + Registers::params_start_size()
                 + Registers::zero_size(),
+            Ordering::Release,
         );
         // Update Link
-        self.registers.link.set(link);
+        self.registers.link.as_ref().store(link, Ordering::Release);
         Ok(())
     }
 
     pub fn clean(&mut self) -> Result<(), StackError> {
         let _top = self.top();
 
-        if self.registers.bottom.get() != self.registers.params_start.get()
-            && self.registers.params_start.get()
-                >= self.registers.bottom.get()
+        if self.registers.bottom.as_ref().load(Ordering::Acquire)
+            != self.registers.params_start.as_ref().load(Ordering::Acquire)
+            && self.registers.params_start.as_ref().load(Ordering::Acquire)
+                >= self.registers.bottom.as_ref().load(Ordering::Acquire)
                     + Registers::link_size()
                     + Registers::bottom_size()
                     + Registers::params_start_size()
@@ -313,14 +336,26 @@ impl Stack {
                 link,
             } = Frame::from((&self.registers).into(), self.stack.as_ref())?;
             // update registers
-            self.registers.top.set(self.registers.bottom.get());
+            self.registers.top.as_ref().store(
+                self.registers.bottom.as_ref().load(Ordering::Acquire),
+                Ordering::Release,
+            );
 
-            self.registers.link.set(link);
-            self.registers.bottom.set(bottom);
-            self.registers.params_start.set(params_start);
-            self.registers.zero.set(zero);
+            self.registers.link.as_ref().store(link, Ordering::Release);
+            self.registers
+                .bottom
+                .as_ref()
+                .store(bottom, Ordering::Release);
+            self.registers
+                .params_start
+                .as_ref()
+                .store(params_start, Ordering::Release);
+            self.registers.zero.as_ref().store(zero, Ordering::Release);
         } else {
-            self.registers.top.set(self.registers.bottom.get());
+            self.registers.top.as_ref().store(
+                self.registers.bottom.as_ref().load(Ordering::Acquire),
+                Ordering::Release,
+            );
         }
         Ok(())
     }
@@ -328,64 +363,88 @@ impl Stack {
     pub fn set_reg(&self, reg: UReg, idx: u64) -> u64 {
         match reg {
             UReg::R1 => {
-                let old = self.registers.r1.get();
-                self.registers.r1.set(idx);
+                let old = self.registers.r1.as_ref().load(Ordering::Acquire);
+                self.registers.r1.as_ref().store(idx, Ordering::Release);
                 old
             }
             UReg::R2 => {
-                let old = self.registers.r2.get();
-                self.registers.r2.set(idx);
+                let old = self.registers.r2.as_ref().load(Ordering::Acquire);
+                self.registers.r2.as_ref().store(idx, Ordering::Release);
                 old
             }
             UReg::R3 => {
-                let old = self.registers.r3.get();
-                self.registers.r3.set(idx);
+                let old = self.registers.r3.as_ref().load(Ordering::Acquire);
+                self.registers.r3.as_ref().store(idx, Ordering::Release);
                 old
             }
             UReg::R4 => {
-                let old = self.registers.r4.get();
-                self.registers.r4.set(idx);
+                let old = self.registers.r4.as_ref().load(Ordering::Acquire);
+                self.registers.r4.as_ref().store(idx, Ordering::Release);
                 old
             }
         }
     }
     pub fn get_reg(&self, reg: UReg) -> u64 {
         match reg {
-            UReg::R1 => self.registers.r1.get(),
-            UReg::R2 => self.registers.r2.get(),
-            UReg::R3 => self.registers.r3.get(),
-            UReg::R4 => self.registers.r4.get(),
+            UReg::R1 => self.registers.r1.as_ref().load(Ordering::Acquire),
+            UReg::R2 => self.registers.r2.as_ref().load(Ordering::Acquire),
+            UReg::R3 => self.registers.r3.as_ref().load(Ordering::Acquire),
+            UReg::R4 => self.registers.r4.as_ref().load(Ordering::Acquire),
         }
     }
     pub fn reg_add(&self, reg: UReg, x: u64) -> Result<(), StackError> {
         match reg {
             UReg::R1 => {
-                if let Some(res) = self.registers.r1.get().checked_add(x) {
-                    self.registers.r1.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r1
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_add(x)
+                {
+                    self.registers.r1.as_ref().store(res, Ordering::Release);
                     Ok(())
                 } else {
                     Err(StackError::WriteError)
                 }
             }
             UReg::R2 => {
-                if let Some(res) = self.registers.r2.get().checked_add(x) {
-                    self.registers.r2.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r2
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_add(x)
+                {
+                    self.registers.r2.as_ref().store(res, Ordering::Release);
                     Ok(())
                 } else {
                     Err(StackError::WriteError)
                 }
             }
             UReg::R3 => {
-                if let Some(res) = self.registers.r3.get().checked_add(x) {
-                    self.registers.r3.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r3
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_add(x)
+                {
+                    self.registers.r3.as_ref().store(res, Ordering::Release);
                     Ok(())
                 } else {
                     Err(StackError::WriteError)
                 }
             }
             UReg::R4 => {
-                if let Some(res) = self.registers.r4.get().checked_add(x) {
-                    self.registers.r4.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r4
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_add(x)
+                {
+                    self.registers.r4.as_ref().store(res, Ordering::Release);
                     Ok(())
                 } else {
                     Err(StackError::WriteError)
@@ -396,23 +455,47 @@ impl Stack {
     pub fn reg_sub(&self, reg: UReg, x: u64) -> Result<(), StackError> {
         match reg {
             UReg::R1 => {
-                if let Some(res) = self.registers.r1.get().checked_sub(x) {
-                    self.registers.r1.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r1
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_sub(x)
+                {
+                    self.registers.r1.as_ref().store(res, Ordering::Release);
                 }
             }
             UReg::R2 => {
-                if let Some(res) = self.registers.r2.get().checked_sub(x) {
-                    self.registers.r2.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r2
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_sub(x)
+                {
+                    self.registers.r2.as_ref().store(res, Ordering::Release);
                 }
             }
             UReg::R3 => {
-                if let Some(res) = self.registers.r3.get().checked_sub(x) {
-                    self.registers.r3.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r3
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_sub(x)
+                {
+                    self.registers.r3.as_ref().store(res, Ordering::Release);
                 }
             }
             UReg::R4 => {
-                if let Some(res) = self.registers.r4.get().checked_sub(x) {
-                    self.registers.r4.set(res);
+                if let Some(res) = self
+                    .registers
+                    .r4
+                    .as_ref()
+                    .load(Ordering::Acquire)
+                    .checked_sub(x)
+                {
+                    self.registers.r4.as_ref().store(res, Ordering::Release);
                 }
             }
         }
@@ -420,14 +503,17 @@ impl Stack {
     }
 
     pub fn top(&self) -> usize {
-        self.registers.top.get()
+        self.registers.top.as_ref().load(Ordering::Acquire)
     }
     pub fn push(&mut self, size: usize) -> Result<(), StackError> {
         let top = self.top();
         if top + size >= STACK_SIZE {
             return Err(StackError::StackOverflow);
         }
-        self.registers.top.set(top + size);
+        self.registers
+            .top
+            .as_ref()
+            .fetch_add(size, Ordering::AcqRel);
         Ok(())
     }
 
@@ -437,7 +523,10 @@ impl Stack {
             return Err(StackError::StackOverflow);
         }
         self.stack[top..top + data.len()].copy_from_slice(&data);
-        self.registers.top.set(top + data.len());
+        self.registers
+            .top
+            .as_ref()
+            .fetch_add(data.len(), Ordering::Release);
         Ok(())
     }
     pub fn push_with_zero(&mut self, size: usize) -> Result<(), StackError> {
@@ -449,7 +538,10 @@ impl Stack {
             return Err(StackError::StackUnderflow);
         }
         let res = &self.stack[top - size..top];
-        self.registers.top.set(top - size);
+        self.registers
+            .top
+            .as_ref()
+            .fetch_sub(size, Ordering::AcqRel);
         Ok(res)
     }
 
@@ -482,7 +574,7 @@ impl Stack {
             Offset::FB(idx) => {
                 let frame_bottom = match level {
                     AccessLevel::General => 0,
-                    AccessLevel::Direct => self.registers.bottom.get(),
+                    AccessLevel::Direct => self.registers.bottom.as_ref().load(Ordering::Acquire),
                     AccessLevel::Backward(backward) => {
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
@@ -506,7 +598,7 @@ impl Stack {
             Offset::FZ(idx) => {
                 let frame_zero = match level {
                     AccessLevel::General => 0,
-                    AccessLevel::Direct => self.registers.zero.get(),
+                    AccessLevel::Direct => self.registers.zero.as_ref().load(Ordering::Acquire),
                     AccessLevel::Backward(backward) => {
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
@@ -522,7 +614,7 @@ impl Stack {
                         frame.zero
                     }
                 };
-                // let frame_zero = self.registers.zero.get();
+                // let frame_zero = self.registers.zero.as_ref().load(Ordering::Acquire);
                 let start = if idx <= 0 {
                     frame_zero - (-idx) as usize
                 } else {
@@ -536,7 +628,9 @@ impl Stack {
             Offset::FP(idx) => {
                 let frame_params_start = match level {
                     AccessLevel::General => 0,
-                    AccessLevel::Direct => self.registers.params_start.get(),
+                    AccessLevel::Direct => {
+                        self.registers.params_start.as_ref().load(Ordering::Acquire)
+                    }
                     AccessLevel::Backward(backward) => {
                         let mut frame = (&self.registers).into();
                         let mut backward = backward;
@@ -817,8 +911,8 @@ mod tests {
             .frame(0, 0)
             .expect("Frame creation should have succeeded");
         let _ = stack.push(8).expect("Push should have succeeded");
-        assert_eq!(stack.registers.bottom.get(), 8);
-        assert_eq!(stack.registers.zero.get(), 40);
+        assert_eq!(stack.registers.bottom.as_ref().load(Ordering::Acquire), 8);
+        assert_eq!(stack.registers.zero.as_ref().load(Ordering::Acquire), 40);
 
         assert_eq!(stack.top(), 48);
     }

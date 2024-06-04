@@ -34,43 +34,49 @@ pub enum Mem {
     TakeUTF8Char,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for Mem {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
-            Mem::MemCopy => stdio.push_casm(engine,"memcpy"),
-            Mem::Dup(n) => stdio.push_casm(engine,&format!("dup {n}")),
-            Mem::DumpRegisters => stdio.push_casm(engine,"dmp_regs"),
-            Mem::RecoverRegisters => stdio.push_casm(engine,"set_regs"),
-            Mem::SetReg(reg, Some(n)) => stdio.push_casm(engine,&format!("set_reg {} {n}", reg.name())),
-            Mem::SetReg(reg, None) => stdio.push_casm(engine,&format!("set_reg {}", reg.name())),
-            Mem::GetReg(reg) => stdio.push_casm(engine,&format!("dmp_reg {}", reg.name())),
-            Mem::AddReg(reg, Some(n)) => stdio.push_casm(engine,&format!("reg_add {} {n}", reg.name())),
-            Mem::AddReg(reg, None) => stdio.push_casm(engine,&format!("reg_add {}", reg.name())),
-            Mem::SubReg(reg, Some(n)) => stdio.push_casm(engine,&format!("reg_sub {} {n}", reg.name())),
-            Mem::SubReg(reg, None) => stdio.push_casm(engine,&format!("reg_sub {}", reg.name())),
-            Mem::CloneFromSmartPointer(n) => stdio.push_casm(engine,&format!("clone {n}")),
+            Mem::MemCopy => stdio.push_casm(engine, "memcpy"),
+            Mem::Dup(n) => stdio.push_casm(engine, &format!("dup {n}")),
+            Mem::DumpRegisters => stdio.push_casm(engine, "dmp_regs"),
+            Mem::RecoverRegisters => stdio.push_casm(engine, "set_regs"),
+            Mem::SetReg(reg, Some(n)) => {
+                stdio.push_casm(engine, &format!("set_reg {} {n}", reg.name()))
+            }
+            Mem::SetReg(reg, None) => stdio.push_casm(engine, &format!("set_reg {}", reg.name())),
+            Mem::GetReg(reg) => stdio.push_casm(engine, &format!("dmp_reg {}", reg.name())),
+            Mem::AddReg(reg, Some(n)) => {
+                stdio.push_casm(engine, &format!("reg_add {} {n}", reg.name()))
+            }
+            Mem::AddReg(reg, None) => stdio.push_casm(engine, &format!("reg_add {}", reg.name())),
+            Mem::SubReg(reg, Some(n)) => {
+                stdio.push_casm(engine, &format!("reg_sub {} {n}", reg.name()))
+            }
+            Mem::SubReg(reg, None) => stdio.push_casm(engine, &format!("reg_sub {}", reg.name())),
+            Mem::CloneFromSmartPointer(n) => stdio.push_casm(engine, &format!("clone {n}")),
             Mem::LabelOffset(label) => {
                 let label = program
                     .get_label_name(label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_casm(engine,&format!("dmp_label {label}"))
+                stdio.push_casm(engine, &format!("dmp_label {label}"))
             }
-            Mem::TakeToHeap { size } => stdio.push_casm(engine,&format!("htake {size}")),
-            Mem::TakeToStack { size } => stdio.push_casm(engine,&format!("stake {size}")),
-            Mem::Take { size } => stdio.push_casm(engine,&format!("take {size}")),
-            Mem::TakeUTF8Char => stdio.push_casm(engine,"take_utf8_char"),
+            Mem::TakeToHeap { size } => stdio.push_casm(engine, &format!("htake {size}")),
+            Mem::TakeToStack { size } => stdio.push_casm(engine, &format!("stake {size}")),
+            Mem::Take { size } => stdio.push_casm(engine, &format!("take {size}")),
+            Mem::TakeUTF8Char => stdio.push_casm(engine, "take_utf8_char"),
         }
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for Mem {
+impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {

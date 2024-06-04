@@ -10,7 +10,8 @@ use crate::{
             scope::Scope,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, ArcMutex, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
+        TypeOf,
     },
     vm::{
         allocator::{
@@ -51,8 +52,8 @@ pub enum IterCasm {
     MapKeys { key_size: usize, value_size: usize },
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for IterCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             IterCasm::MapItems { .. } => stdio.push_casm_lib(engine, "items"),
             IterCasm::MapValues { .. } => stdio.push_casm_lib(engine, "values"),
@@ -97,10 +98,10 @@ impl Resolve for IterFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             IterFn::MapItems {
@@ -111,8 +112,8 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
+                let map = &mut extra[0];
+                let _ = map.resolve(scope, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -130,12 +131,8 @@ impl Resolve for IterFn {
                         }) => {
                             key_size.set(keys_type.as_ref().size_of());
                             value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Tuple(TupleType(vec![
@@ -163,8 +160,8 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
+                let map = &mut extra[0];
+                let _ = map.resolve(scope, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -182,12 +179,8 @@ impl Resolve for IterFn {
                         }) => {
                             key_size.set(keys_type.as_ref().size_of());
                             value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Address(AddrType(Box::new(
@@ -210,8 +203,8 @@ impl Resolve for IterFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let map = &extra[0];
-                let _ = map.resolve(scope, &None, &None)?;
+                let map = &mut extra[0];
+                let _ = map.resolve(scope, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -229,12 +222,8 @@ impl Resolve for IterFn {
                         }) => {
                             key_size.set(keys_type.as_ref().size_of());
                             value_size.set(values_type.as_ref().size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     e_static!(StaticType::Address(AddrType(Box::new(
@@ -275,7 +264,7 @@ impl TypeOf for IterFn {
 impl GenerateCode for IterFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -314,13 +303,13 @@ impl GenerateCode for IterFn {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for IterCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -487,7 +476,7 @@ mod tests {
 
     #[test]
     fn valid_values() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -530,7 +519,7 @@ mod tests {
 
     #[test]
     fn valid_keys() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -573,7 +562,7 @@ mod tests {
 
     #[test]
     fn valid_items() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();

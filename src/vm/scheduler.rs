@@ -2,6 +2,10 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
     marker::PhantomData,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use num_traits::ToBytes;
@@ -35,18 +39,16 @@ pub enum WaitingStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct Scheduler<G: GameEngineStaticFn + Clone> {
-    waiting_list: RefCell<Vec<WaitingStatus>>,
-    minor_frame_max_count: Cell<usize>,
-    _phantom: PhantomData<G>,
+pub struct Scheduler {
+    waiting_list: Arc<Mutex<Vec<WaitingStatus>>>,
+    minor_frame_max_count: Arc<AtomicUsize>,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
+impl Scheduler {
     pub fn new() -> Self {
         Self {
-            waiting_list: RefCell::default(),
-            minor_frame_max_count: Cell::new(INSTRUCTION_MAX_COUNT),
-            _phantom: PhantomData::default(),
+            waiting_list: Default::default(),
+            minor_frame_max_count: Arc::new(AtomicUsize::new(INSTRUCTION_MAX_COUNT)),
         }
     }
 
@@ -55,14 +57,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
             return;
         }
         self.minor_frame_max_count
-            .set(INSTRUCTION_MAX_COUNT / number_of_thread);
+            .as_ref()
+            .store(INSTRUCTION_MAX_COUNT / number_of_thread, Ordering::Release);
     }
 
-    pub fn run_major_frame(
+    pub fn run_major_frame<G: crate::GameEngineStaticFn>(
         &self,
-        runtime: &mut Runtime<G>,
+        runtime: &mut Runtime,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let mut availaible_tids: Vec<usize> =
@@ -71,22 +74,27 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
         let mut wakingup_tid = HashSet::new();
         let mut closed_tid = Vec::new();
 
-        let mut requested_spawn_count = runtime.tid_count.get();
+        let mut requested_spawn_count = runtime.tid_count.as_ref().load(Ordering::Acquire);
 
-        let minor_frame_max_count = self.minor_frame_max_count.get();
+        let minor_frame_max_count = self.minor_frame_max_count.as_ref().load(Ordering::Acquire);
 
         // Wake thread waiting on stdin
         let stdin_data = engine.stdin_scan();
         if let Some(data) = stdin_data {
             stdio.stdin.write(data);
-            let idx_tid_list: Vec<(usize, usize)> = self
+
+            let mut waiting_list = self
                 .waiting_list
-                .borrow()
+                .as_ref()
+                .lock()
+                .map_err(|_| RuntimeError::ConcurrencyError)?;
+
+            let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
                 .iter()
                 .enumerate()
                 .filter(|(_, status)| match status {
                     WaitingStatus::Join { .. } => false,
-                    WaitingStatus::ForStdin(id) => true,
+                    WaitingStatus::ForStdin(_) => true,
                 })
                 .map(|(idx, status)| {
                     (
@@ -98,15 +106,16 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
                     )
                 })
                 .collect();
-
-            for (idx, wtid) in &idx_tid_list {
-                self.waiting_list.borrow_mut().remove(*idx);
+            idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
+            for (idx, wtid) in idx_tid_list.iter().rev() {
+                waiting_list.remove(*idx);
                 for Thread { ref tid, state, .. } in runtime.iter_mut() {
                     if *wtid == *tid {
                         let _ = state.to(ThreadState::ACTIVE);
                     }
                 }
             }
+            drop(waiting_list);
         }
 
         let info = runtime.tid_info();
@@ -129,15 +138,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
                 if state.is_noop() {
                     if ThreadState::IDLE == *state || ThreadState::COMPLETED == *state {
                         // Wake up all threads that are waiting on tid
-                        let idx_tid_list: Vec<(usize, usize)> = self
+                        let mut waiting_list = self
                             .waiting_list
-                            .borrow()
+                            .as_ref()
+                            .lock()
+                            .map_err(|_| RuntimeError::ConcurrencyError)?;
+                        let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
                             .iter()
                             .enumerate()
                             .filter(|(_, status)| match status {
                                 WaitingStatus::Join {
-                                    join_tid,
                                     to_be_completed_tid,
+                                    ..
                                 } => *to_be_completed_tid == *tid,
                                 WaitingStatus::ForStdin(_) => false,
                             })
@@ -145,20 +157,18 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
                                 (
                                     idx,
                                     match status {
-                                        WaitingStatus::Join {
-                                            join_tid,
-                                            to_be_completed_tid,
-                                        } => *join_tid,
+                                        WaitingStatus::Join { join_tid, .. } => *join_tid,
                                         WaitingStatus::ForStdin(id) => *id, // unreachable,
                                     },
                                 )
                             })
                             .collect();
-
-                        for (idx, tid) in &idx_tid_list {
-                            self.waiting_list.borrow_mut().remove(*idx);
+                        idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
+                        for (idx, _) in idx_tid_list.iter().rev() {
+                            waiting_list.remove(*idx);
                             wakingup_tid.insert(*tid);
                         }
+                        drop(waiting_list);
                         if idx_tid_list.len() > 0 {
                             break;
                         }
@@ -202,24 +212,50 @@ impl<G: crate::GameEngineStaticFn + Clone> Scheduler<G> {
                                     stack,
                                 ),
                                 Signal::SLEEP(nb_maf) => sig_sleep(&nb_maf, state, program),
-                                Signal::JOIN(join_tid) => sig_join(
-                                    *tid,
-                                    join_tid,
-                                    state,
-                                    &mut self.waiting_list.borrow_mut(),
-                                    &mut availaible_tids,
-                                    program,
-                                    stack,
-                                ),
-                                Signal::EXIT => sig_exit(
-                                    *tid,
-                                    state,
-                                    &mut closed_tid,
-                                    &mut self.waiting_list.borrow_mut(),
-                                    &mut wakingup_tid,
-                                ),
+                                Signal::JOIN(join_tid) => {
+                                    let mut waiting_list = self
+                                        .waiting_list
+                                        .as_ref()
+                                        .lock()
+                                        .map_err(|_| RuntimeError::ConcurrencyError)?;
+
+                                    let _ = sig_join(
+                                        *tid,
+                                        join_tid,
+                                        state,
+                                        &mut waiting_list,
+                                        &mut availaible_tids,
+                                        program,
+                                        stack,
+                                    )?;
+                                    drop(waiting_list);
+                                    Ok(())
+                                }
+                                Signal::EXIT => {
+                                    let mut waiting_list = self
+                                        .waiting_list
+                                        .as_ref()
+                                        .lock()
+                                        .map_err(|_| RuntimeError::ConcurrencyError)?;
+                                    let _ = sig_exit(
+                                        *tid,
+                                        state,
+                                        &mut closed_tid,
+                                        &mut waiting_list,
+                                        &mut wakingup_tid,
+                                    )?;
+                                    drop(waiting_list);
+                                    Ok(())
+                                }
                                 Signal::WAIT_STDIN => {
-                                    sig_wait_stdin(*tid, state, &mut self.waiting_list.borrow_mut())
+                                    let mut waiting_list = self
+                                        .waiting_list
+                                        .as_ref()
+                                        .lock()
+                                        .map_err(|_| RuntimeError::ConcurrencyError)?;
+                                    let _ = sig_wait_stdin(*tid, state, &mut waiting_list)?;
+                                    drop(waiting_list);
+                                    Ok(())
                                 }
                             },
                             Err(err) => {

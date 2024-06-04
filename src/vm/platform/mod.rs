@@ -2,7 +2,7 @@ use std::cell::Ref;
 
 use crate::{
     ast::{expressions::Expression, utils::strings::ID},
-    semantic::{EType, MutRc, Resolve, SemanticError, TypeOf},
+    semantic::{ArcMutex, EType, Resolve, SemanticError, TypeOf},
 };
 
 use self::{
@@ -34,8 +34,8 @@ pub enum LibCasm {
     Std(StdCasm),
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for LibCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LibCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             LibCasm::Core(value) => value.name(stdio, program, engine),
             LibCasm::Std(value) => value.name(stdio, program, engine),
@@ -60,10 +60,10 @@ impl Resolve for Lib {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             Lib::Core(value) => value.resolve(scope, context, extra),
@@ -87,7 +87,7 @@ impl TypeOf for Lib {
 impl GenerateCode for Lib {
     fn gencode(
         &self,
-        scope: &MutRc<Scope>,
+        scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -96,13 +96,13 @@ impl GenerateCode for Lib {
         }
     }
 }
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for LibCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -163,7 +163,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //                 user_type_impl::UserType,
 //                 BuildStaticType,
 //             },
-//             CompatibleWith, EType, Either, MutRc<Scope>, Resolve, SemanticError, TypeOf,
+//             CompatibleWith, EType, Either, ArcMutex<Scope>, Resolve, SemanticError, TypeOf,
 //         },
 //     };
 
@@ -212,7 +212,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //         fn accept(
 //             &self,
 //             args: &Vec<Expression>,
-//             block: &MutRc<Scope>,
+//             block: &ArcMutex<Scope>,
 //         ) -> Result<(), SemanticError> {
 //             match self {
 //                 PlatformApi::LEFT
@@ -274,10 +274,10 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let vector = &args[0];
-//                     let _ = vector.resolve(block, &None, &())?;
+//                     let _ = vector.resolve(block, &None, &mut ())?;
 //                     let vector_type = vector.type_of(&block.borrow())?;
 //                     let element = &args[1];
-//                     let _ = element.resolve(block, &None, &())?;
+//                     let _ = element.resolve(block, &None, &mut ())?;
 //                     let element_type = element.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_vec(&vector_type) {
 //                         return Err(SemanticError::IncorrectArguments);
@@ -291,15 +291,15 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let map = &args[0];
-//                     let _ = map.resolve(block, &None, &())?;
+//                     let _ = map.resolve(block, &None, &mut ())?;
 //                     let map_type = map.type_of(&block.borrow())?;
 
 //                     let expr_key = &args[1];
-//                     let _ = expr_key.resolve(block, &None, &())?;
+//                     let _ = expr_key.resolve(block, &None, &mut ())?;
 //                     let expr_key_type = expr_key.type_of(&block.borrow())?;
 
 //                     let expr_value = &args[2];
-//                     let _ = expr_value.resolve(block, &None, &())?;
+//                     let _ = expr_value.resolve(block, &None, &mut ())?;
 //                     let expr_value_type = expr_value.type_of(&block.borrow())?;
 
 //                     if !<EType as TypeChecking>::is_map(&map_type) {
@@ -318,14 +318,14 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let iterator = &args[0];
-//                     let _ = iterator.resolve(block, &None, &())?;
+//                     let _ = iterator.resolve(block, &None, &mut ())?;
 //                     let iterator_type = iterator.type_of(&block.borrow())?;
 
 //                     if <EType as TypeChecking>::is_map(&iterator_type) {
 //                         let key_type = <EType as GetSubTypes>::get_key(&iterator_type).unwrap();
 
 //                         let expr_key = &args[1];
-//                         let _ = expr_key.resolve(block, &Some(key_type), &())?;
+//                         let _ = expr_key.resolve(block, &Some(key_type), &mut ())?;
 //                         let expr_key_type = expr_key.type_of(&block.borrow())?;
 //                         // let _ = key_type.compatible_with(&expr_key_type, &block.borrow())?;
 //                     } else if <EType as TypeChecking>::is_vec(&iterator_type) {
@@ -354,7 +354,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //                         return Err(SemanticError::IncorrectArguments);
 //                     }
 //                     let arg = args.first().unwrap();
-//                     let _ = arg.resolve(block, &None, &())?;
+//                     let _ = arg.resolve(block, &None, &mut ())?;
 //                     let arg_type = arg.type_of(&block.borrow())?;
 //                     if !<EType as TypeChecking>::is_addr(&arg_type) {
 //                         return Err(SemanticError::IncorrectArguments);
@@ -374,7 +374,7 @@ impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for LibCasm {
 //         pub fn resolve(
 //             &self,
 //             args: &Vec<Expression>,
-//             block: &MutRc<Scope>,
+//             block: &ArcMutex<Scope>,
 //         ) -> Result<(), SemanticError> {
 //             let _ = self.accept(args, block)?;
 //             Ok(())

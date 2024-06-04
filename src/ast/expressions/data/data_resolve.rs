@@ -16,7 +16,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MergeType, MutRc};
+use crate::semantic::{ArcMutex, EType, Info, MergeType};
 use crate::{e_static, p_num, resolve_metadata};
 
 impl Resolve for Data {
@@ -24,29 +24,29 @@ impl Resolve for Data {
     type Context = Option<EType>;
     type Extra = Option<EType>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            Data::Primitive(value) => value.resolve(scope, context, &()),
-            Data::Slice(value) => value.resolve(scope, context, &()),
-            Data::Vec(value) => value.resolve(scope, context, &()),
-            Data::Closure(value) => value.resolve(scope, context, &()),
-            Data::Tuple(value) => value.resolve(scope, context, &()),
-            Data::Address(value) => value.resolve(scope, context, &()),
-            Data::PtrAccess(value) => value.resolve(scope, context, &()),
+            Data::Primitive(value) => value.resolve(scope, context, &mut ()),
+            Data::Slice(value) => value.resolve(scope, context, &mut ()),
+            Data::Vec(value) => value.resolve(scope, context, &mut ()),
+            Data::Closure(value) => value.resolve(scope, context, &mut ()),
+            Data::Tuple(value) => value.resolve(scope, context, &mut ()),
+            Data::Address(value) => value.resolve(scope, context, &mut ()),
+            Data::PtrAccess(value) => value.resolve(scope, context, &mut ()),
             Data::Variable(value) => value.resolve(scope, context, extra),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve(scope, context, &()),
-            Data::Struct(value) => value.resolve(scope, context, &()),
-            Data::Union(value) => value.resolve(scope, context, &()),
-            Data::Enum(value) => value.resolve(scope, context, &()),
-            Data::StrSlice(value) => value.resolve(scope, context, &()),
+            Data::Map(value) => value.resolve(scope, context, &mut ()),
+            Data::Struct(value) => value.resolve(scope, context, &mut ()),
+            Data::Union(value) => value.resolve(scope, context, &mut ()),
+            Data::Enum(value) => value.resolve(scope, context, &mut ()),
+            Data::StrSlice(value) => value.resolve(scope, context, &mut ()),
         }
     }
 }
@@ -56,10 +56,10 @@ impl Resolve for Variable {
     type Context = Option<EType>;
     type Extra = Option<EType>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -67,13 +67,7 @@ impl Resolve for Variable {
         match extra {
             Some(extra) => {
                 self.from_field.set(true);
-                let mut borrowed_metadata = self
-                    .metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+                self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(extra.clone()),
                 };
@@ -82,13 +76,7 @@ impl Resolve for Variable {
                 let var = scope.borrow().find_var(&self.id)?;
                 let var_type = var.type_sig.clone();
 
-                let mut borrowed_metadata = self
-                    .metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+                self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(var_type),
                 };
@@ -103,10 +91,10 @@ impl Resolve for Primitive {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -199,10 +187,10 @@ impl Resolve for Slice {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -216,19 +204,13 @@ impl Resolve for Slice {
                         if self.value.len() > *size {
                             return Err(SemanticError::IncompatibleTypes);
                         }
-                        for value in &self.value {
-                            let _ = value.resolve(scope, sitem_type, &None)?;
+                        for value in &mut self.value {
+                            let _ = value.resolve(scope, sitem_type, &mut None)?;
                             let _ = item_type.compatible_with(value, &scope.borrow())?;
                         }
 
                         {
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Slice(SliceType {
                                     size: *size,
@@ -244,24 +226,18 @@ impl Resolve for Slice {
             },
             None => {
                 let mut item_type = e_static!(StaticType::Any);
-                for value in &self.value {
-                    let _ = value.resolve(scope, &None, &None)?;
+                for value in &mut self.value {
+                    let _ = value.resolve(scope, &None, &mut None)?;
                     item_type = item_type.merge(value, &scope.borrow())?;
                 }
 
                 let sitem_type = Some(item_type.clone());
-                for value in &self.value {
-                    let _ = value.resolve(scope, &sitem_type, &None)?;
+                for value in &mut self.value {
+                    let _ = value.resolve(scope, &sitem_type, &mut None)?;
                 }
 
                 {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Slice(SliceType {
                             size: self.value.len(),
@@ -280,10 +256,10 @@ impl Resolve for StrSlice {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -304,7 +280,7 @@ impl Resolve for StrSlice {
             },
             None => {}
         }
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -314,10 +290,10 @@ impl Resolve for Vector {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -329,19 +305,13 @@ impl Resolve for Vector {
                         let item_type = item_type.as_ref().clone();
                         let sitem_type = &Some(item_type.clone());
 
-                        for value in &self.value {
-                            let _ = value.resolve(scope, sitem_type, &None)?;
+                        for value in &mut self.value {
+                            let _ = value.resolve(scope, sitem_type, &mut None)?;
                             let _ = item_type.compatible_with(value, &scope.borrow())?;
                         }
 
                         {
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
                                     item_type
@@ -356,24 +326,18 @@ impl Resolve for Vector {
             },
             None => {
                 let mut item_type = e_static!(StaticType::Any);
-                for value in &self.value {
-                    let _ = value.resolve(scope, &None, &None)?;
+                for value in &mut self.value {
+                    let _ = value.resolve(scope, &None, &mut None)?;
                     item_type = item_type.merge(value, &scope.borrow())?;
                 }
 
                 let sitem_type = Some(item_type.clone());
-                for value in &self.value {
-                    let _ = value.resolve(scope, &sitem_type, &None)?;
+                for value in &mut self.value {
+                    let _ = value.resolve(scope, &sitem_type, &mut None)?;
                 }
 
                 {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Vec(VecType(Box::new(item_type),)))),
                     };
@@ -388,10 +352,10 @@ impl Resolve for Tuple {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -403,19 +367,13 @@ impl Resolve for Tuple {
                         if values_type.len() != self.value.len() {
                             return Err(SemanticError::IncompatibleTypes);
                         }
-                        for (value, value_type) in self.value.iter().zip(values_type) {
-                            let _ = value.resolve(scope, &Some(value_type.clone()), &None)?;
+                        for (value, value_type) in self.value.iter_mut().zip(values_type) {
+                            let _ = value.resolve(scope, &Some(value_type.clone()), &mut None)?;
                             let _ = value_type.compatible_with(value, &scope.borrow())?;
                         }
 
                         {
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Tuple(TupleType(
                                     values_type.clone()
@@ -430,19 +388,13 @@ impl Resolve for Tuple {
             },
             None => {
                 let mut values_type = Vec::new();
-                for value in &self.value {
-                    let _ = value.resolve(scope, &None, &None)?;
+                for value in &mut self.value {
+                    let _ = value.resolve(scope, &None, &mut None)?;
                     values_type.push(value.type_of(&scope.borrow())?);
                 }
 
                 {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Tuple(TupleType(values_type)))),
                     };
@@ -458,10 +410,10 @@ impl Resolve for Closure {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -471,19 +423,19 @@ impl Resolve for Closure {
         // };
         match context {
             Some(context) => {
-                for (index, expr) in self.params.iter().enumerate() {
+                for (index, expr) in self.params.iter_mut().enumerate() {
                     let param_context = <EType as GetSubTypes>::get_nth(context, &index);
-                    let _ = expr.resolve(scope, &param_context, &())?;
+                    let _ = expr.resolve(scope, &param_context, &mut ())?;
                 }
             }
             None => {
-                for (_index, expr) in self.params.iter().enumerate() {
-                    let _ = expr.resolve(scope, &None, &())?;
+                for (_index, expr) in self.params.iter_mut().enumerate() {
+                    let _ = expr.resolve(scope, &None, &mut ())?;
                 }
             }
         }
 
-        let vars = self
+        let mut vars = self
             .params
             .iter()
             .enumerate()
@@ -521,19 +473,12 @@ impl Resolve for Closure {
             self.scope.to_capturing(ClosureState::NOT_CAPTURING);
         }
 
-        let _ = self.scope.resolve(scope, &context_return, &vars)?;
+        let _ = self.scope.resolve(scope, &context_return, &mut vars)?;
         if !self.closed && self.scope.scope()?.borrow().env_vars().len() > 0 {
             return Err(SemanticError::ExpectedMovedClosure);
         }
         {
-            let mut borrowed_metadata = self
-                .metadata
-                .info
-                .as_ref()
-                .try_borrow_mut()
-                .map_err(|_| SemanticError::Default)?;
-
-            *borrowed_metadata = Info::Resolved {
+            self.metadata.info = Info::Resolved {
                 context: context.clone(),
                 signature: Some(self.type_of(&scope.borrow())?),
             };
@@ -546,10 +491,10 @@ impl Resolve for ExprScope {
     type Context = Option<EType>;
     type Extra = Vec<Var>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -565,16 +510,16 @@ impl Resolve for ClosureParam {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
         match self {
-            ClosureParam::Full(var) => var.resolve(scope, &(), &()),
+            ClosureParam::Full(var) => var.resolve(scope, &mut (), &mut ()),
             ClosureParam::Minimal(_value) => match context {
                 Some(_) => Ok(()),
                 None => Err(SemanticError::CantInferType),
@@ -587,10 +532,10 @@ impl Resolve for Address {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -601,8 +546,8 @@ impl Resolve for Address {
             Atomic::Paren(_) => {}
             Atomic::ExprFlow(_) => return Err(SemanticError::IncompatibleTypes),
         }
-        let _ = self.value.resolve(scope, context, &None)?;
-        resolve_metadata!(self.metadata, self, scope, context);
+        let _ = self.value.resolve(scope, context, &mut None)?;
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -611,59 +556,40 @@ impl Resolve for PtrAccess {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.value.resolve(scope, context, &None)?;
+        let _ = self.value.resolve(scope, context, &mut None)?;
 
         let address_type = self.value.type_of(&scope.borrow())?;
 
         match &address_type {
             Either::Static(value) => match value.as_ref() {
                 StaticType::Address(AddrType(sub)) => {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(sub.as_ref().clone()),
                     };
                 }
                 _ => {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Any)),
                     };
                 }
             },
             _ => {
-                let mut borrowed_metadata = self
-                    .metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+                self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(e_static!(StaticType::Any)),
                 };
             }
         }
-
         Ok(())
     }
 }
@@ -673,10 +599,10 @@ impl Resolve for Struct {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -684,10 +610,10 @@ impl Resolve for Struct {
         let borrowed_scope = scope.borrow();
         let user_type = borrowed_scope.find_type(&self.id)?;
         let user_type = user_type.type_of(&scope.borrow())?;
-        for (field_name, expr) in &self.fields {
+        for (ref field_name, expr) in &mut self.fields {
             let field_context = <EType as GetSubTypes>::get_field(&user_type, &field_name);
 
-            let _ = expr.resolve(scope, &field_context, &None)?;
+            let _ = expr.resolve(scope, &field_context, &mut None)?;
         }
 
         let Some(fields_type) = <EType as GetSubTypes>::get_fields(&user_type) else {
@@ -710,7 +636,7 @@ impl Resolve for Struct {
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -719,10 +645,10 @@ impl Resolve for Union {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -733,10 +659,10 @@ impl Resolve for Union {
         let Some(variant_type) = variant_type else {
             return Err(SemanticError::CantInferType);
         };
-        for (field_name, expr) in &self.fields {
+        for (field_name, expr) in &mut self.fields {
             let field_context = <EType as GetSubTypes>::get_field(&variant_type, &field_name);
 
-            let _ = expr.resolve(scope, &field_context, &None)?;
+            let _ = expr.resolve(scope, &field_context, &mut None)?;
         }
 
         let Some(fields_type) = <EType as GetSubTypes>::get_fields(&variant_type) else {
@@ -759,7 +685,7 @@ impl Resolve for Union {
             };
             let _ = field_type.compatible_with(expr_field, &scope.borrow())?;
         }
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
 }
@@ -769,10 +695,10 @@ impl Resolve for Enum {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -782,7 +708,7 @@ impl Resolve for Enum {
         let Some(_) = user_type.get_variant(&self.value) else {
             return Err(SemanticError::IncorrectVariant);
         };
-        resolve_metadata!(self.metadata, self, scope, context);
+        resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
         // user_type.compatible_with(&(&self.typename, &self.value), block)?;
         // Ok(())
@@ -794,10 +720,10 @@ impl Resolve for Map {
     type Context = Option<EType>;
     type Extra = ();
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        _extra: &Self::Extra,
+        _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
@@ -814,21 +740,15 @@ impl Resolve for Map {
                         let value_type = values_type.as_ref().clone();
                         let svalue_type = &Some(value_type);
 
-                        for (key, value) in &self.fields {
-                            let _ = key.resolve(scope, skey_type, &None)?;
+                        for (key, value) in &mut self.fields {
+                            let _ = key.resolve(scope, skey_type, &mut None)?;
                             let _ = keys_type.compatible_with(key, &scope.borrow())?;
-                            let _ = value.resolve(scope, svalue_type, &None)?;
+                            let _ = value.resolve(scope, svalue_type, &mut None)?;
                             let _ = values_type.compatible_with(value, &scope.borrow())?;
                         }
 
                         {
-                            let mut borrowed_metadata = self
-                                .metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            self.metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(e_static!(StaticType::Map(MapType {
                                     keys_type: keys_type.clone(),
@@ -845,28 +765,22 @@ impl Resolve for Map {
             None => {
                 let mut keys_type = e_static!(StaticType::Any);
                 let mut values_type = e_static!(StaticType::Any);
-                for (key, value) in &self.fields {
-                    let _ = key.resolve(scope, &None, &None)?;
+                for (key, value) in &mut self.fields {
+                    let _ = key.resolve(scope, &None, &mut None)?;
                     keys_type = keys_type.merge(key, &scope.borrow())?;
-                    let _ = value.resolve(scope, &None, &None)?;
+                    let _ = value.resolve(scope, &None, &mut None)?;
                     values_type = values_type.merge(value, &scope.borrow())?;
                 }
 
                 let skeys_type = Some(keys_type.clone());
                 let svalues_type = Some(values_type.clone());
-                for (key, value) in &self.fields {
-                    let _ = key.resolve(scope, &skeys_type, &None)?;
-                    let _ = value.resolve(scope, &svalues_type, &None)?;
+                for (key, value) in &mut self.fields {
+                    let _ = key.resolve(scope, &skeys_type, &mut None)?;
+                    let _ = value.resolve(scope, &svalues_type, &mut None)?;
                 }
 
                 {
-                    let mut borrowed_metadata = self
-                        .metadata
-                        .info
-                        .as_ref()
-                        .try_borrow_mut()
-                        .map_err(|_| SemanticError::Default)?;
-                    *borrowed_metadata = Info::Resolved {
+                    self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Map(MapType {
                             keys_type: Box::new(keys_type),
@@ -905,20 +819,22 @@ mod tests {
 
     #[test]
     fn valid_primitive() {
-        let primitive = Primitive::parse("1".into());
-        assert!(primitive.is_ok());
-        let primitive = primitive.unwrap().1;
+        let mut primitive = Primitive::parse("1".into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
-        let res = primitive.resolve(&scope, &None, &());
+        let res = primitive.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res = primitive.resolve(&scope, &Some(p_num!(I64)), &());
+        let res = primitive.resolve(&scope, &Some(p_num!(I64)), &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn robustness_primitive() {
-        let primitive = Primitive::parse("1".into()).unwrap().1;
+        let mut primitive = Primitive::parse("1".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
 
         let res = primitive.resolve(
@@ -926,17 +842,19 @@ mod tests {
             &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_string() {
-        let string = StrSlice::parse(r##""Hello World""##.into()).unwrap().1;
+        let mut string = StrSlice::parse(r##""Hello World""##.into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
-        let res = string.resolve(&scope, &None, &());
+        let res = string.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = string.resolve(
@@ -947,16 +865,18 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn valid_slice() {
-        let slice = Slice::parse("[1,2]".into()).unwrap().1;
+        let mut slice = Slice::parse("[1,2]".into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
-        let res = slice.resolve(&scope, &None, &());
+        let res = slice.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = slice.resolve(
@@ -968,14 +888,16 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_string() {
-        let string = StrSlice::parse(r##""Hello World""##.into()).unwrap().1;
+        let mut string = StrSlice::parse(r##""Hello World""##.into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
 
         let res = string.resolve(
@@ -983,13 +905,15 @@ mod tests {
             &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
     #[test]
     fn robustness_slice() {
-        let slice = Slice::parse("[1,2]".into()).unwrap().1;
+        let mut slice = Slice::parse("[1,2]".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
 
         let res = slice.resolve(
@@ -1003,17 +927,19 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_vector() {
-        let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
+        let mut vector = Vector::parse("vec[1,2,3]".into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
-        let res = vector.resolve(&scope, &None, &());
+        let res = vector.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = vector.resolve(
@@ -1021,14 +947,16 @@ mod tests {
             &Some(Either::Static(
                 StaticType::Vec(VecType(Box::new(p_num!(I64)))).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_vector() {
-        let vector = Vector::parse("vec[1,2,3]".into()).unwrap().1;
+        let mut vector = Vector::parse("vec[1,2,3]".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
 
         let res = vector.resolve(
@@ -1039,14 +967,16 @@ mod tests {
                 ))))
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_variable() {
-        let variable = Variable::parse("x".into()).unwrap().1;
+        let mut variable = Variable::parse("x".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1057,7 +987,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());
@@ -1067,7 +997,9 @@ mod tests {
     }
     #[test]
     fn valid_variable_array() {
-        let variable = Variable::parse("x[10]".into()).unwrap().1;
+        let mut variable = Variable::parse("x[10]".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1078,12 +1010,14 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn valid_variable_array_complex() {
-        let variable = Variable::parse("x[10 + 10]".into()).unwrap().1;
+        let mut variable = Variable::parse("x[10 + 10]".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1094,12 +1028,14 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
     fn robustness_variable_array() {
-        let variable = Expression::parse("x[\"Test\"]".into()).unwrap().1;
+        let mut variable = Expression::parse("x[\"Test\"]".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1116,12 +1052,14 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_err());
     }
     #[test]
     fn valid_variable_tuple() {
-        let variable = Expression::parse("x.0".into()).unwrap().1;
+        let mut variable = Expression::parse("x.0".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1134,7 +1072,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());
@@ -1144,7 +1082,9 @@ mod tests {
     }
     #[test]
     fn valid_variable_struct() {
-        let variable = Expression::parse("point.x".into()).unwrap().1;
+        let mut variable = Expression::parse("point.x".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1169,7 +1109,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = variable.resolve(&scope, &None, &None);
+        let res = variable.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
 
         let variable_type = variable.type_of(&scope.borrow());
@@ -1180,7 +1120,9 @@ mod tests {
 
     #[test]
     fn valid_address() {
-        let address = Address::parse("&x".into()).unwrap().1;
+        let mut address = Address::parse("&x".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1191,7 +1133,7 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .unwrap();
-        let res = address.resolve(&scope, &None, &());
+        let res = address.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let address_type = address.type_of(&scope.borrow());
@@ -1205,9 +1147,11 @@ mod tests {
 
     #[test]
     fn valid_tuple() {
-        let tuple = Tuple::parse("(1,'a')".into()).unwrap().1;
+        let mut tuple = Tuple::parse("(1,'a')".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
-        let res = tuple.resolve(&scope, &None, &());
+        let res = tuple.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = tuple.resolve(
@@ -1219,14 +1163,16 @@ mod tests {
                 ]))
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_tuple() {
-        let tuple = Tuple::parse("(1,2)".into()).unwrap().1;
+        let mut tuple = Tuple::parse("(1,2)".into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let res = tuple.resolve(
             &scope,
@@ -1237,7 +1183,7 @@ mod tests {
                 ]))
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
 
@@ -1246,19 +1192,19 @@ mod tests {
             &Some(Either::Static(
                 StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64), p_num!(I64)])).into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_map() {
-        let map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
-            .unwrap()
+        let mut map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
         dbg!(&map);
         let scope = Scope::new();
-        let res = map.resolve(&scope, &None, &());
+        let res = map.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = map.resolve(
@@ -1270,14 +1216,16 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_map() {
-        let map = Map::parse(r##"map{"x":2,"y":6}"##.into()).unwrap().1;
+        let mut map = Map::parse(r##"map{"x":2,"y":6}"##.into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
 
         let res = map.resolve(
@@ -1291,7 +1239,7 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
 
@@ -1304,15 +1252,15 @@ mod tests {
                 })
                 .into(),
             )),
-            &(),
+            &mut (),
         );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_struct() {
-        let object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = scope
@@ -1331,17 +1279,17 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_struct() {
-        let object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
         let _ = scope
             .borrow_mut()
@@ -1362,14 +1310,14 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_union() {
-        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
         let _ = scope
@@ -1384,7 +1332,10 @@ mod tests {
                             "Point".to_string().into(),
                             user_type_impl::Struct {
                                 id: "Point".to_string().into(),
-                                fields: vec![("x".to_string().into(), p_num!(U64)), ("y".to_string().into(), p_num!(U64))],
+                                fields: vec![
+                                    ("x".to_string().into(), p_num!(U64)),
+                                    ("y".to_string().into(), p_num!(U64)),
+                                ],
                             },
                         ));
                         res.push((
@@ -1404,18 +1355,18 @@ mod tests {
             )
             .unwrap();
 
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_union() {
-        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
 
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
 
         let _ = scope
@@ -1446,22 +1397,24 @@ mod tests {
                 }),
             )
             .unwrap();
-        let object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
 
-        let object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
-            .unwrap()
+        let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
+            .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_enum() {
-        let object = Enum::parse(r##"Geo::Point"##.into()).unwrap().1;
+        let mut object = Enum::parse(r##"Geo::Point"##.into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1477,13 +1430,15 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_enum() {
-        let object = Enum::parse(r##"Geo::Point"##.into()).unwrap().1;
+        let mut object = Enum::parse(r##"Geo::Point"##.into())
+            .expect("Parsing should have succeeded")
+            .1;
         let scope = Scope::new();
         let _ = scope
             .borrow_mut()
@@ -1499,7 +1454,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = object.resolve(&scope, &None, &());
+        let res = object.resolve(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 }

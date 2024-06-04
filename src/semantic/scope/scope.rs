@@ -9,7 +9,7 @@ use std::{
 use crate::{
     ast::utils::strings::ID,
     p_num,
-    semantic::{AccessLevel, Either, MutRc, SemanticError, SizeOf},
+    semantic::{AccessLevel, Either, ArcMutex, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 
@@ -23,7 +23,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScopeData {
     vars: Vec<(Rc<Var>, Cell<Offset>)>,
-    env_vars: MutRc<BTreeSet<Rc<Var>>>,
+    env_vars: ArcMutex<BTreeSet<Rc<Var>>>,
     env_vars_address: HashMap<ID, Cell<AccessLevel>>,
     types: HashMap<ID, Rc<UserType>>,
     state: Cell<ScopeState>,
@@ -33,7 +33,7 @@ pub struct ScopeData {
 pub enum Scope {
     Inner {
         parent: Option<Weak<RefCell<Scope>>>,
-        general: MutRc<Scope>,
+        general: ArcMutex<Scope>,
         data: ScopeData,
     },
     General {
@@ -65,7 +65,7 @@ impl ScopeData {
 }
 
 impl Scope {
-    pub fn new() -> MutRc<Self> {
+    pub fn new() -> ArcMutex<Self> {
         Rc::new(RefCell::new(Self::General {
             data: ScopeData::new(),
             stack_top: Cell::new(0),
@@ -74,7 +74,7 @@ impl Scope {
 }
 
 impl Scope {
-    pub fn spawn(parent: &MutRc<Self>, vars: Vec<Var>) -> Result<MutRc<Self>, SemanticError> {
+    pub fn spawn(parent: &ArcMutex<Self>, vars: Vec<Var>) -> Result<ArcMutex<Self>, SemanticError> {
         let borrowed_parent = parent.as_ref().borrow();
         match &*borrowed_parent {
             Scope::Inner { general, data, .. } => {
@@ -158,7 +158,7 @@ impl Scope {
                     }),
                     None => {
                         let borrowed_scope =
-                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.find_var(id) {
@@ -236,7 +236,7 @@ impl Scope {
                     }),
                     None => {
                         let borrowed_scope =
-                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.access_var(id) {
@@ -279,7 +279,7 @@ impl Scope {
                     }
                 }),
                 None => {
-                    let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                    let borrowed_scope = <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                     let borrowed_scope = borrowed_scope.borrow();
 
                     match borrowed_scope.access_var(id) {
@@ -318,13 +318,13 @@ impl Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
                         let borrowed_scope = borrowed_scope.borrow();
                         borrowed_scope.find_type(id).ok()
                     }),
                     None => {
                         let borrowed_scope =
-                            <MutRc<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
                         let borrowed_scope = borrowed_scope.borrow();
 
                         borrowed_scope.find_type(id).ok()

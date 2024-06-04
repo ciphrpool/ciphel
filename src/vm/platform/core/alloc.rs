@@ -33,7 +33,8 @@ use crate::{
             static_types::{AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType},
             type_traits::GetSubTypes,
         },
-        AccessLevel, EType, Either, Info, Metadata, MutRc, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, ArcMutex, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
+        TypeOf,
     },
     vm::{
         allocator::{align, stack::Offset},
@@ -229,8 +230,8 @@ pub enum AllocCasm {
     StringFromChar,
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> CasmMetadata<G> for AllocCasm {
-    fn name(&self, stdio: &mut StdIO<G>, program: &CasmProgram, engine: &mut G) {
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
+    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
         match self {
             AllocCasm::AppendChar => stdio.push_casm_lib(engine, "append"),
             AllocCasm::AppendItem(_) => stdio.push_casm_lib(engine, "append"),
@@ -358,10 +359,10 @@ impl Resolve for AllocFn {
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
     fn resolve(
-        &self,
-        scope: &MutRc<Scope>,
+        &mut self,
+        scope: &ArcMutex<Scope>,
         context: &Self::Context,
-        extra: &Self::Extra,
+        extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
             AllocFn::Append {
@@ -371,11 +372,11 @@ impl Resolve for AllocFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let item = &mut second_part[0];
 
-                let vector = &extra[0];
-                let item = &extra[1];
-
-                let _ = vector.resolve(scope, &None, &None)?;
+                let _ = vector.resolve(scope, &None, &mut None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -390,7 +391,7 @@ impl Resolve for AllocFn {
                         StaticType::Vec(_) => {
                             let item_type = vector_type.get_item();
                             append_kind.set(AppendKind::Vec);
-                            let _ = item.resolve(scope, &item_type, &None)?;
+                            let _ = item.resolve(scope, &item_type, &mut None)?;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
@@ -398,7 +399,7 @@ impl Resolve for AllocFn {
                             Ok(())
                         }
                         StaticType::String(_) => {
-                            let _ = item.resolve(scope, &None, &None)?;
+                            let _ = item.resolve(scope, &None, &mut None)?;
                             let item_type = item.type_of(&scope.borrow())?;
                             match &item_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -431,10 +432,11 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let vector = &extra[0];
-                let items = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let items = &mut second_part[0];
 
-                let _ = vector.resolve(scope, &None, &None)?;
+                let _ = vector.resolve(scope, &None, &mut None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -446,7 +448,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = items.resolve(scope, &None, &None)?;
+                            let _ = items.resolve(scope, &None, &mut None)?;
                             let items_type = items.type_of(&scope.borrow())?;
 
                             match items_type {
@@ -471,7 +473,7 @@ impl Resolve for AllocFn {
                             }
                         }
                         StaticType::String(_) => {
-                            let _ = items.resolve(scope, &None, &None)?;
+                            let _ = items.resolve(scope, &None, &mut None)?;
                             let items_type = items.type_of(&scope.borrow())?;
 
                             match items_type {
@@ -512,11 +514,14 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let map = &extra[0];
-                let key = &extra[1];
-                let item = &extra[2];
+                let (first_part, rest) = extra.split_at_mut(1);
+                let (second_part, third_part) = rest.split_at_mut(1);
 
-                let _ = map.resolve(scope, &None, &None)?;
+                let map = &mut first_part[0];
+                let key = &mut second_part[0];
+                let item = &mut third_part[0];
+
+                let _ = map.resolve(scope, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -532,9 +537,13 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
                             let _ =
-                                item.resolve(scope, &Some(values_type.as_ref().clone()), &None)?;
+                                key.resolve(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
+                            let _ = item.resolve(
+                                scope,
+                                &Some(values_type.as_ref().clone()),
+                                &mut None,
+                            )?;
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
@@ -565,10 +574,11 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let map = &extra[0];
-                let key = &extra[1];
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let map = &mut first_part[0];
+                let key = &mut second_part[0];
 
-                let _ = map.resolve(scope, &None, &None)?;
+                let _ = map.resolve(scope, &None, &mut None)?;
                 let mut map_type = map.type_of(&scope.borrow())?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
@@ -584,7 +594,8 @@ impl Resolve for AllocFn {
                             keys_type,
                             values_type,
                         }) => {
-                            let _ = key.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
+                            let _ =
+                                key.resolve(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
                             value_size.set(values_type.size_of());
                             key_size.set(keys_type.size_of());
 
@@ -598,12 +609,7 @@ impl Resolve for AllocFn {
                                 },
                                 Either::User(_) => {}
                             }
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(values_type.as_ref().clone()),
                             };
@@ -623,11 +629,11 @@ impl Resolve for AllocFn {
                 if extra.len() != 2 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, second_part) = extra.split_at_mut(1);
+                let vector = &mut first_part[0];
+                let index = &mut second_part[0];
 
-                let vector = &extra[0];
-                let index = &extra[1];
-
-                let _ = vector.resolve(scope, &None, &None)?;
+                let _ = vector.resolve(scope, &None, &mut None)?;
                 let mut vector_type = vector.type_of(&scope.borrow())?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
@@ -640,7 +646,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = index.resolve(scope, &Some(p_num!(U64)), &None)?;
+                            let _ = index.resolve(scope, &Some(p_num!(U64)), &mut None)?;
                             let index_type = index.type_of(&scope.borrow())?;
                             match &index_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -657,12 +663,7 @@ impl Resolve for AllocFn {
                                 return Err(SemanticError::IncorrectArguments);
                             };
                             value_size.set(item_type.size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(item_type),
                             };
@@ -689,16 +690,14 @@ impl Resolve for AllocFn {
                                 }
                             }
 
-                            let _ =
-                                index.resolve(scope, &Some(keys_type.as_ref().clone()), &None)?;
+                            let _ = index.resolve(
+                                scope,
+                                &Some(keys_type.as_ref().clone()),
+                                &mut None,
+                            )?;
                             value_size.set(values_type.size_of());
                             key_size.set(keys_type.size_of());
-                            let mut borrowed_metadata = metadata
-                                .info
-                                .as_ref()
-                                .try_borrow_mut()
-                                .map_err(|_| SemanticError::Default)?;
-                            *borrowed_metadata = Info::Resolved {
+                            metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(values_type.as_ref().clone()),
                             };
@@ -714,9 +713,9 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
+                let _ = address.resolve(scope, &None, &mut None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
@@ -741,7 +740,7 @@ impl Resolve for AllocFn {
                     with_capacity.set(false);
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -756,12 +755,8 @@ impl Resolve for AllocFn {
                     },
                     None => unreachable!(),
                 }
-                let mut borrowed_metadata = metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+
+                metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: context.clone(),
                 };
@@ -782,7 +777,7 @@ impl Resolve for AllocFn {
                     with_capacity.set(false);
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &None)?;
+                    let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -803,12 +798,8 @@ impl Resolve for AllocFn {
                     },
                     None => unreachable!(),
                 }
-                let mut borrowed_metadata = metadata
-                    .info
-                    .as_ref()
-                    .try_borrow_mut()
-                    .map_err(|_| SemanticError::Default)?;
-                *borrowed_metadata = Info::Resolved {
+
+                metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: context.clone(),
                 };
@@ -818,8 +809,8 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = extra.first().unwrap();
-                let _ = param.resolve(scope, &None, &None)?;
+                let param = extra.first_mut().unwrap();
+                let _ = param.resolve(scope, &None, &mut None)?;
                 let param_type = param.type_of(&scope.borrow())?;
                 match param_type {
                     Either::Static(value) => match value.as_ref() {
@@ -845,9 +836,9 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let size = &extra[0];
+                let size = &mut extra[0];
 
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -862,9 +853,9 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
+                let _ = address.resolve(scope, &None, &mut None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
@@ -881,9 +872,9 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let address = &extra[0];
+                let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &None)?;
+                let _ = address.resolve(scope, &None, &mut None)?;
                 let address_type = address.type_of(&scope.borrow())?;
                 for_map.set(false);
                 match &address_type {
@@ -903,9 +894,9 @@ impl Resolve for AllocFn {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                let param = &extra[0];
+                let param = &mut extra[0];
 
-                let _ = param.resolve(scope, &None, &None)?;
+                let _ = param.resolve(scope, &None, &mut None)?;
                 let param_type = param.type_of(&scope.borrow())?;
 
                 size.set(param_type.size_of());
@@ -916,13 +907,16 @@ impl Resolve for AllocFn {
                 if extra.len() != 3 {
                     return Err(SemanticError::IncorrectArguments);
                 }
+                let (first_part, rest) = extra.split_at_mut(1);
+                let (second_part, third_part) = rest.split_at_mut(1);
 
-                let dest = &extra[0];
-                let src = &extra[1];
-                let size = &extra[2];
+                // Get mutable references to the elements
+                let dest = &mut first_part[0];
+                let src = &mut second_part[0];
+                let size = &mut third_part[0];
 
-                let _ = dest.resolve(scope, &None, &None)?;
-                let _ = src.resolve(scope, &None, &None)?;
+                let _ = dest.resolve(scope, &None, &mut None)?;
+                let _ = src.resolve(scope, &None, &mut None)?;
                 let dest_type = dest.type_of(&scope.borrow())?;
                 let src_type = src.type_of(&scope.borrow())?;
                 match &dest_type {
@@ -945,7 +939,7 @@ impl Resolve for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &None)?;
+                let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
                 let size_type = size.type_of(&scope.borrow())?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
@@ -965,9 +959,9 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let src = &extra[0];
+                let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &None)?;
+                let _ = src.resolve(scope, &None, &mut None)?;
                 let src_type = src.type_of(&scope.borrow())?;
 
                 match &src_type {
@@ -1051,7 +1045,7 @@ impl TypeOf for AllocFn {
 impl GenerateCode for AllocFn {
     fn gencode(
         &self,
-        _scope: &MutRc<Scope>,
+        _scope: &ArcMutex<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -1962,13 +1956,13 @@ pub mod map_impl {
     }
 }
 
-impl<G: crate::GameEngineStaticFn + Clone> Executable<G> for AllocCasm {
+impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
     fn execute(
         &self,
         program: &CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
-        stdio: &mut StdIO<G>,
+        stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         match self {
@@ -3368,7 +3362,7 @@ mod tests {
 
     #[test]
     fn valid_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x = string("Hello World");
         "##
@@ -3384,7 +3378,7 @@ mod tests {
 
     #[test]
     fn valid_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
         let x:Vec<u64> = vec(8);
         "##
@@ -3394,7 +3388,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3405,7 +3399,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3434,7 +3428,7 @@ mod tests {
 
     #[test]
     fn valid_vec_modify() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let arr : Vec<u64> = vec(8);
@@ -3450,7 +3444,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3461,7 +3455,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3483,7 +3477,7 @@ mod tests {
     }
     #[test]
     fn valid_append() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3497,7 +3491,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3508,7 +3502,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3551,7 +3545,7 @@ mod tests {
 
     #[test]
     fn valid_append_no_realloc() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec(8,16);
@@ -3565,7 +3559,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3576,7 +3570,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3619,7 +3613,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3639,7 +3633,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_char() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello Worl");
@@ -3659,7 +3653,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_char_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello Worl");
@@ -3679,7 +3673,7 @@ mod tests {
 
     #[test]
     fn valid_append_str_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3700,7 +3694,7 @@ mod tests {
 
     #[test]
     fn valid_len_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello World");
@@ -3722,7 +3716,7 @@ mod tests {
 
     #[test]
     fn valid_cap_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello World");
@@ -3744,7 +3738,7 @@ mod tests {
 
     #[test]
     fn valid_len_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x : Vec<u64> = vec(11,16);
@@ -3767,7 +3761,7 @@ mod tests {
 
     #[test]
     fn valid_cap_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x : Vec<u64> = vec(11,16);
@@ -3789,7 +3783,7 @@ mod tests {
     }
     #[test]
     fn valid_free() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -3803,7 +3797,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3814,7 +3808,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3831,7 +3825,7 @@ mod tests {
 
     #[test]
     fn valid_alloc() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = alloc(8) as &u64;
@@ -3845,7 +3839,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3856,7 +3850,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3888,7 +3882,7 @@ mod tests {
 
     #[test]
     fn valid_delete_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3902,7 +3896,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3913,7 +3907,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -3956,7 +3950,7 @@ mod tests {
 
     #[test]
     fn valid_delete_vec_inner() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -3970,7 +3964,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -3981,7 +3975,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4024,7 +4018,7 @@ mod tests {
 
     #[test]
     fn robustness_delete_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4045,7 +4039,7 @@ mod tests {
 
     #[test]
     fn valid_size_of_type() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4061,7 +4055,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4072,7 +4066,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4095,7 +4089,7 @@ mod tests {
 
     #[test]
     fn valid_size_of_expr() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = size_of(420u64);
         "##
@@ -4105,7 +4099,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4116,7 +4110,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4139,7 +4133,7 @@ mod tests {
 
     #[test]
     fn valid_memcpy_heap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4154,7 +4148,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4165,7 +4159,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4208,7 +4202,7 @@ mod tests {
 
     #[test]
     fn valid_memcpy_stack() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:[8]u64 = [1,2,3,4,5,6,7,8];
@@ -4223,7 +4217,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4234,7 +4228,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4262,7 +4256,7 @@ mod tests {
 
     #[test]
     fn valid_clear_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x:Vec<u64> = vec[1,2,3,4,5,6,7,8];
@@ -4276,7 +4270,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4287,7 +4281,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4330,7 +4324,7 @@ mod tests {
 
     #[test]
     fn valid_clear_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = string("Hello ");
@@ -4344,7 +4338,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4355,7 +4349,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4392,7 +4386,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_cast() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4419,7 +4413,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4430,7 +4424,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4453,7 +4447,7 @@ mod tests {
 
     #[test]
     fn valid_alloc_modify() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 struct Point {
@@ -4474,7 +4468,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4485,7 +4479,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4508,7 +4502,7 @@ mod tests {
 
     #[test]
     fn valid_extend_vec_from_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let slice = [5,6,7,8];
@@ -4523,7 +4517,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4534,7 +4528,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4557,7 +4551,7 @@ mod tests {
 
     #[test]
     fn valid_extend_vec_from_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = vec[5,6,7,8];
@@ -4582,7 +4576,7 @@ mod tests {
 
     #[test]
     fn valid_extend_string_from_slice() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = [string("lo"),string(" Wor"),string("ld")];
@@ -4597,7 +4591,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4608,7 +4602,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4646,7 +4640,7 @@ mod tests {
 
     #[test]
     fn valid_extend_string_from_vec() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let vec1 = vec[string("lo"),string(" Wor"),string("ld")];
@@ -4661,7 +4655,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &())
+            .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let instructions = CasmProgram::default();
@@ -4672,7 +4666,7 @@ mod tests {
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::<crate::vm::vm::NoopGameEngine>::new();
+        let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
@@ -4710,7 +4704,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_no_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4726,7 +4720,7 @@ mod tests {
 
     #[test]
     fn valid_map_init_with_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4742,7 +4736,7 @@ mod tests {
 
     #[test]
     fn valid_map_len_empty() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4769,7 +4763,7 @@ mod tests {
 
     #[test]
     fn valid_map_len() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4804,7 +4798,7 @@ mod tests {
 
     #[test]
     fn valid_map_len_with_upsert() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -4838,7 +4832,7 @@ mod tests {
     }
     #[test]
     fn valid_map_cap() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(8);
@@ -4865,7 +4859,7 @@ mod tests {
 
     #[test]
     fn valid_map_cap_over_min() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(60);
@@ -4892,7 +4886,7 @@ mod tests {
 
     #[test]
     fn valid_map_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4923,7 +4917,7 @@ mod tests {
 
     #[test]
     fn valid_map_access_complex() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4951,7 +4945,7 @@ mod tests {
     }
     #[test]
     fn robustness_map_access() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -4972,7 +4966,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_resize() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5011,7 +5005,7 @@ mod tests {
 
     #[test]
     fn valid_map_upsert_resize() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5052,7 +5046,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5080,7 +5074,7 @@ mod tests {
 
     #[test]
     fn valid_map_delete() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5127,7 +5121,7 @@ mod tests {
 
     #[test]
     fn valid_map_clear() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map();
@@ -5162,7 +5156,7 @@ mod tests {
     }
     #[test]
     fn valid_map_delete_cant_read_after() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<u64,u64> = map(64);
@@ -5187,7 +5181,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_key_str() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<str<10>,u64> = map(64);
@@ -5220,7 +5214,7 @@ mod tests {
 
     #[test]
     fn valid_map_insert_key_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let hmap : Map<String,u64> = map(64);
@@ -5253,7 +5247,7 @@ mod tests {
     }
     #[test]
     fn valid_map_upsert_key_string() {
-        let statement = Statement::parse(
+        let mut statement = Statement::parse(
             r##"
             let res = {
                 let x = 1;

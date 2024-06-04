@@ -9,7 +9,7 @@ use crate::{
             static_types::{NumberType, PrimitiveType, StaticType},
             ClosureState,
         },
-        EType, Either, Metadata, MutRc, SemanticError,
+        ArcMutex, EType, Either, Metadata, SemanticError,
     },
 };
 
@@ -112,7 +112,7 @@ pub enum ExprScope {
 }
 
 impl ExprScope {
-    pub fn scope(&self) -> Result<MutRc<Scope>, SemanticError> {
+    pub fn scope(&self) -> Result<ArcMutex<Scope>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.scope(),
             ExprScope::Expr(scope) => scope.scope(),
@@ -189,6 +189,46 @@ pub struct Map {
 
 impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
+        match self {
+            Data::Primitive(_) => None,
+            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
+            Data::Vec(Vector {
+                value: _,
+                metadata,
+                length: _,
+                capacity: _,
+            }) => Some(metadata),
+            Data::Closure(Closure { metadata, .. }) => Some(metadata),
+            Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
+            Data::Address(Address { value: _, metadata }) => Some(metadata),
+            Data::PtrAccess(PtrAccess { value: _, metadata }) => Some(metadata),
+            Data::Variable(Variable { metadata, .. }) => Some(metadata),
+            Data::Unit => None,
+            Data::Map(Map {
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Struct(Struct {
+                id: _,
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Union(Union {
+                typename: _,
+                variant: _,
+                fields: _,
+                metadata,
+            }) => Some(metadata),
+            Data::Enum(Enum {
+                typename: _,
+                value: _,
+                metadata,
+            }) => Some(metadata),
+            Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+        }
+    }
+
+    pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
         match self {
             Data::Primitive(_) => None,
             Data::Slice(Slice { value: _, metadata }) => Some(metadata),
