@@ -221,7 +221,7 @@ impl TryParse for TryExpr {
             |(try_branch, else_branch)| TryExpr {
                 try_branch,
                 else_branch,
-                pop_last_err: Cell::new(false),
+                pop_last_err: false,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -251,7 +251,7 @@ impl TryParse for FCall {
                                     Variable {
                                         id: platform::utils::lexem::TOSTR.to_string().into(),
                                         metadata: Metadata::default(),
-                                        from_field: Cell::new(false),
+                                        from_field: false,
                                     },
                                 )))),
                                 params: vec![expr],
@@ -359,13 +359,13 @@ mod tests {
                 expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 metadata: Metadata::default(),
                 patterns: vec![
                     PatternExpr {
-                        patterns: vec![Pattern::Primitive(Primitive::Number(Cell::new(
-                            Number::Unresolved(10)
+                        patterns: vec![Pattern::Primitive(Primitive::Number(Number::Unresolved(
+                            10
                         )))],
                         expr: ExprScope::Expr(Block {
                             metadata: Metadata::default(),
@@ -387,7 +387,7 @@ mod tests {
                     PatternExpr {
                         patterns: vec![Pattern::String(StrSlice {
                             value: "Hello World".to_string(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default()
                         })],
                         expr: ExprScope::Expr(Block {
@@ -548,7 +548,7 @@ mod tests {
                     caller: Default::default(),
                     inner_scope: None,
                 })),
-                pop_last_err: Cell::new(false),
+                pop_last_err: false,
                 metadata: Metadata::default(),
             },
             value

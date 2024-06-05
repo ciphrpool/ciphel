@@ -166,9 +166,9 @@ impl Resolve for FnDef {
             })
             .enumerate()
             .map(|(_index, (id, param))| {
-                let var = <Var as BuildVar>::build_var(&id, &param);
-                var.state.set(VarState::Parameter);
-                var.is_declared.set(true);
+                let mut var = <Var as BuildVar>::build_var(&id, &param);
+                var.state = VarState::Parameter;
+                var.is_declared = true;
                 var
             })
             .collect::<Vec<Var>>();
@@ -190,8 +190,8 @@ impl Resolve for FnDef {
             &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
         )?;
         let fn_type_sig = e_static!(static_type);
-        let var = <Var as BuildVar>::build_var(&self.id, &fn_type_sig);
-        var.is_declared.set(true);
+        let mut var = <Var as BuildVar>::build_var(&self.id, &fn_type_sig);
+        var.is_declared = true;
         self.scope.set_caller(var.clone());
         let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
         let _ = self.scope.resolve(scope, &Some(return_type), &mut vars)?;
@@ -451,11 +451,11 @@ mod tests {
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().clone();
-        let function_type = function_var.type_sig;
+        let function_var = function_var.as_ref().read().unwrap();
+        let function_type = &function_var.type_sig;
 
         assert_eq!(
-            function_type,
+            *function_type,
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
@@ -490,11 +490,11 @@ mod tests {
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().clone();
-        let function_type = function_var.type_sig;
+        let function_var = function_var.as_ref().read().unwrap();
+        let function_type = &function_var.type_sig;
 
         assert_eq!(
-            function_type,
+            *function_type,
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![p_num!(U64), e_static!(StaticType::String(StringType()))],
@@ -506,21 +506,23 @@ mod tests {
         );
 
         let function_scope = function.scope;
-        let x_type = arw_read!(
+        let binding = arw_read!(
             function_scope.inner_scope.clone().unwrap(),
             SemanticError::ConcurrencyError
         )
         .unwrap()
         .find_var(&"x".to_string().into())
         .unwrap();
+        let x_type = binding.read().unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
-        let text_type = arw_read!(
+        let binding = arw_read!(
             function_scope.inner_scope.clone().unwrap(),
             SemanticError::ConcurrencyError
         )
         .unwrap()
         .find_var(&"text".to_string().into())
         .unwrap();
+        let text_type = binding.read().unwrap();
         assert_eq!(
             e_static!(StaticType::String(StringType())),
             text_type.type_sig
@@ -551,11 +553,11 @@ mod tests {
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().clone();
-        let function_type = function_var.type_sig;
+        let function_var = function_var.as_ref().read().unwrap();
+        let function_type = &function_var.type_sig;
 
         assert_eq!(
-            function_type,
+            *function_type,
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
@@ -586,10 +588,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .expect("registering vars should succeed");
 
@@ -609,7 +611,7 @@ mod tests {
         //     captured_vars,
         //     vec![Var {
         //         id: "x".to_string().into(),
-        //         state: Cell::default(),
+        //         state: VarState::Local,
         //         type_sig: Either::Static(
         //             StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
         //         ),
@@ -637,19 +639,19 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(U64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .expect("registering vars should succeed");
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "y".to_string().into(),
                 type_sig: p_num!(U64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .expect("registering vars should succeed");
         let res = function.resolve(&scope, &(), &mut ());
@@ -668,7 +670,7 @@ mod tests {
         //     captured_vars,
         //     vec![Var {
         //         id: "x".to_string().into(),
-        //         state: Cell::default(),
+        //         state: VarState::Local,
         //         type_sig: Either::Static(
         //             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
         //         ),
@@ -700,11 +702,11 @@ mod tests {
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().clone();
-        let function_type = function_var.type_sig;
+        let function_var = function_var.as_ref().read().unwrap();
+        let function_type = &function_var.type_sig;
 
         assert_eq!(
-            function_type,
+            *function_type,
             Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],

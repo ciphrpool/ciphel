@@ -84,61 +84,61 @@ pub enum ClearKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {
     Append {
-        item_size: Cell<usize>,
-        append_kind: Cell<AppendKind>,
+        item_size: usize,
+        append_kind: AppendKind,
     },
     Extend {
-        item_size: Cell<usize>,
-        extend_kind: Cell<ExtendKind>,
+        item_size: usize,
+        extend_kind: ExtendKind,
     },
     Insert {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        ref_access: Cell<DerefHashing>,
+        key_size: usize,
+        value_size: usize,
+        ref_access: DerefHashing,
     },
     Get {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        ref_access: Cell<DerefHashing>,
+        key_size: usize,
+        value_size: usize,
+        ref_access: DerefHashing,
         metadata: Metadata,
     },
     Delete {
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
-        delete_kind: Cell<DeleteKind>,
+        key_size: usize,
+        value_size: usize,
+        delete_kind: DeleteKind,
         metadata: Metadata,
     },
     Len,
     Cap {
-        for_map: Cell<bool>,
+        for_map: bool,
     },
     Free,
     Alloc,
     Vec {
-        with_capacity: Cell<bool>,
-        item_size: Cell<usize>,
+        with_capacity: bool,
+        item_size: usize,
         metadata: Metadata,
     },
     Map {
-        with_capacity: Cell<bool>,
-        value_size: Cell<usize>,
-        key_size: Cell<usize>,
+        with_capacity: bool,
+        value_size: usize,
+        key_size: usize,
         metadata: Metadata,
     },
     String {
-        len: Cell<usize>,
-        from_char: Cell<bool>,
+        len: usize,
+        from_char: bool,
     },
 
     SizeOf {
-        size: Cell<usize>,
+        size: usize,
     },
 
     MemCopy,
     Clear {
-        item_size: Cell<usize>,
-        key_size: Cell<usize>,
-        clear_kind: Cell<ClearKind>,
+        item_size: usize,
+        key_size: usize,
+        clear_kind: ClearKind,
     },
 }
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -148,8 +148,8 @@ pub enum DerefHashing {
     Default,
 }
 
-impl From<&Either<UserType, StaticType>> for DerefHashing {
-    fn from(value: &Either<UserType, StaticType>) -> Self {
+impl From<&Either> for DerefHashing {
+    fn from(value: &Either) -> Self {
         match value {
             Either::Static(tmp) => match tmp.as_ref() {
                 StaticType::String(_) => DerefHashing::String,
@@ -297,58 +297,56 @@ impl AllocFn {
 
         match id.as_str() {
             lexem::APPEND => Some(AllocFn::Append {
-                item_size: Cell::new(0),
-                append_kind: Cell::new(AppendKind::Vec),
+                item_size: (0),
+                append_kind: (AppendKind::Vec),
             }),
             lexem::EXTEND => Some(AllocFn::Extend {
-                item_size: Cell::new(0),
-                extend_kind: Cell::new(ExtendKind::VecFromVec),
+                item_size: 0,
+                extend_kind: ExtendKind::VecFromVec,
             }),
             lexem::INSERT => Some(AllocFn::Insert {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
-                ref_access: Cell::new(DerefHashing::Default),
+                key_size: 0,
+                value_size: 0,
+                ref_access: DerefHashing::Default,
             }),
             lexem::GET => Some(AllocFn::Get {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
-                ref_access: Cell::new(DerefHashing::Default),
+                ref_access: DerefHashing::Default,
             }),
             lexem::DELETE => Some(AllocFn::Delete {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
-                delete_kind: Cell::new(DeleteKind::Vec),
+                key_size: 0,
+                value_size: 0,
+                delete_kind: DeleteKind::Vec,
                 metadata: Metadata::default(),
             }),
             lexem::LEN => Some(AllocFn::Len),
-            lexem::CAP => Some(AllocFn::Cap {
-                for_map: Cell::new(false),
-            }),
+            lexem::CAP => Some(AllocFn::Cap { for_map: false }),
             lexem::FREE => Some(AllocFn::Free),
             lexem::VEC => Some(AllocFn::Vec {
-                with_capacity: Cell::new(false),
-                item_size: Cell::new(0),
+                with_capacity: false,
+                item_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::MAP => Some(AllocFn::Map {
-                with_capacity: Cell::new(false),
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                with_capacity: false,
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::STRING => Some(AllocFn::String {
-                len: Cell::new(0),
-                from_char: Cell::new(false),
+                len: 0,
+                from_char: false,
             }),
             lexem::ALLOC => Some(AllocFn::Alloc),
             lexem::MEMCPY => Some(AllocFn::MemCopy),
             lexem::CLEAR => Some(AllocFn::Clear {
-                item_size: Cell::new(0),
-                key_size: Cell::new(0),
-                clear_kind: Cell::new(ClearKind::Vec),
+                item_size: 0,
+                key_size: 0,
+                clear_kind: ClearKind::Vec,
             }),
-            lexem::SIZEOF => Some(AllocFn::SizeOf { size: Cell::new(0) }),
+            lexem::SIZEOF => Some(AllocFn::SizeOf { size: 0 }),
             _ => None,
         }
     }
@@ -391,12 +389,12 @@ impl Resolve for AllocFn {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
                             let item_type = vector_type.get_item();
-                            append_kind.set(AppendKind::Vec);
+                            *append_kind = AppendKind::Vec;
                             let _ = item.resolve(scope, &item_type, &mut None)?;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
-                            item_size.set(item_type.size_of());
+                            *item_size = item_type.size_of();
                             Ok(())
                         }
                         StaticType::String(_) => {
@@ -408,19 +406,19 @@ impl Resolve for AllocFn {
                             match &item_type {
                                 Either::Static(value) => match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Char) => {
-                                        append_kind.set(AppendKind::Char);
+                                        *append_kind = AppendKind::Char;
                                     }
                                     StaticType::String(_) => {
-                                        append_kind.set(AppendKind::String);
+                                        *append_kind = AppendKind::String;
                                     }
                                     StaticType::StrSlice(_) => {
-                                        append_kind.set(AppendKind::StrSlice);
+                                        *append_kind = AppendKind::StrSlice;
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
                                 },
                                 _ => return Err(SemanticError::IncorrectArguments),
                             }
-                            item_size.set(item_type.size_of());
+                            *item_size = item_type.size_of();
                             Ok(())
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -465,14 +463,14 @@ impl Resolve for AllocFn {
                                         size: len,
                                         item_type,
                                     }) => {
-                                        extend_kind.set(ExtendKind::VecFromSlice(*len));
+                                        *extend_kind = ExtendKind::VecFromSlice(*len);
 
-                                        item_size.set(item_type.size_of());
+                                        *item_size = item_type.size_of();
                                         Ok(())
                                     }
                                     StaticType::Vec(VecType(item_type)) => {
-                                        extend_kind.set(ExtendKind::VecFromVec);
-                                        item_size.set(item_type.size_of());
+                                        *extend_kind = ExtendKind::VecFromVec;
+                                        *item_size = item_type.size_of();
                                         Ok(())
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
@@ -496,14 +494,14 @@ impl Resolve for AllocFn {
                                         if !item_type.is_string() {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
-                                        extend_kind.set(ExtendKind::StringFromSlice(*len));
+                                        *extend_kind = ExtendKind::StringFromSlice(*len);
                                         Ok(())
                                     }
                                     StaticType::Vec(VecType(item_type)) => {
                                         if !item_type.is_string() {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
-                                        extend_kind.set(ExtendKind::StringFromVec);
+                                        *extend_kind = ExtendKind::StringFromVec;
                                         Ok(())
                                     }
                                     _ => return Err(SemanticError::IncorrectArguments),
@@ -559,16 +557,16 @@ impl Resolve for AllocFn {
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
-                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
-                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                        *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
                                 Either::User(_) => {}
                             }
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
                             Ok(())
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -609,14 +607,14 @@ impl Resolve for AllocFn {
                         }) => {
                             let _ =
                                 key.resolve(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
 
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
-                                    StaticType::String(_) => ref_access.set(DerefHashing::String),
+                                    StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
-                                        ref_access.set(DerefHashing::Vec(item_subtype.size_of()))
+                                        *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
@@ -675,11 +673,11 @@ impl Resolve for AllocFn {
                                 _ => return Err(SemanticError::IncorrectArguments),
                             }
                             let item_type = vector_type.get_item();
-                            delete_kind.set(DeleteKind::Vec);
+                            *delete_kind = DeleteKind::Vec;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
-                            value_size.set(item_type.size_of());
+                            *value_size = item_type.size_of();
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(item_type),
@@ -693,17 +691,19 @@ impl Resolve for AllocFn {
                             match keys_type.as_ref() {
                                 Either::Static(tmp) => match tmp.as_ref() {
                                     StaticType::String(_) => {
-                                        delete_kind.set(DeleteKind::Map(DerefHashing::String))
+                                        *delete_kind = DeleteKind::Map(DerefHashing::String)
                                     }
-                                    StaticType::Vec(VecType(item_subtype)) => delete_kind.set(
-                                        DeleteKind::Map(DerefHashing::Vec(item_subtype.size_of())),
-                                    ),
+                                    StaticType::Vec(VecType(item_subtype)) => {
+                                        *delete_kind = DeleteKind::Map(DerefHashing::Vec(
+                                            item_subtype.size_of(),
+                                        ))
+                                    }
                                     _ => {
-                                        delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                        *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                     }
                                 },
                                 Either::User(_) => {
-                                    delete_kind.set(DeleteKind::Map(DerefHashing::Default));
+                                    *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                 }
                             }
 
@@ -712,8 +712,8 @@ impl Resolve for AllocFn {
                                 &Some(keys_type.as_ref().clone()),
                                 &mut None,
                             )?;
-                            value_size.set(values_type.size_of());
-                            key_size.set(keys_type.size_of());
+                            *value_size = values_type.size_of();
+                            *key_size = keys_type.size_of();
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
                                 signature: Some(values_type.as_ref().clone()),
@@ -753,9 +753,9 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 if extra.len() == 2 {
-                    with_capacity.set(true);
+                    *with_capacity = true;
                 } else {
-                    with_capacity.set(false);
+                    *with_capacity = false;
                 }
                 for param in extra {
                     let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
@@ -766,7 +766,7 @@ impl Resolve for AllocFn {
                 match &context {
                     Some(value) => match value {
                         Either::Static(value) => match value.as_ref() {
-                            StaticType::Vec(VecType(item)) => item_size.set(item.size_of()),
+                            StaticType::Vec(VecType(item)) => *item_size = item.size_of(),
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
                         Either::User(_) => return Err(SemanticError::IncompatibleTypes),
@@ -790,9 +790,9 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 if extra.len() == 1 {
-                    with_capacity.set(true);
+                    *with_capacity = true;
                 } else {
-                    with_capacity.set(false);
+                    *with_capacity = false;
                 }
                 for param in extra {
                     let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
@@ -807,8 +807,8 @@ impl Resolve for AllocFn {
                                 keys_type,
                                 values_type,
                             }) => {
-                                value_size.set(values_type.size_of());
-                                key_size.set(keys_type.size_of());
+                                *value_size = values_type.size_of();
+                                *key_size = keys_type.size_of();
                             }
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
@@ -834,11 +834,11 @@ impl Resolve for AllocFn {
                 match param_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::StrSlice(slice) => {
-                            from_char.set(false);
-                            len.set(slice.size_of());
+                            *from_char = false;
+                            *len = slice.size_of();
                         }
                         StaticType::Primitive(PrimitiveType::Char) => {
-                            from_char.set(true);
+                            *from_char = true;
                         }
                         _ => {
                             return Err(SemanticError::IncorrectArguments);
@@ -898,13 +898,13 @@ impl Resolve for AllocFn {
                 let _ = address.resolve(scope, &None, &mut None)?;
                 let address_type =
                     address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                for_map.set(false);
+                *for_map = false;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
                         StaticType::Map(_) => {
-                            for_map.set(true);
+                            *for_map = true;
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -922,7 +922,7 @@ impl Resolve for AllocFn {
                 let param_type =
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
-                size.set(param_type.size_of());
+                *size = param_type.size_of();
 
                 Ok(())
             }
@@ -996,25 +996,25 @@ impl Resolve for AllocFn {
                         StaticType::Address(AddrType(inner)) => match inner.as_ref() {
                             Either::Static(value) => match value.as_ref() {
                                 StaticType::String(_) => {
-                                    clear_kind.set(ClearKind::String);
-                                    item_size.set(1);
+                                    *clear_kind = ClearKind::String;
+                                    *item_size = 1;
                                 }
                                 StaticType::Vec(_) => {
-                                    clear_kind.set(ClearKind::Vec);
+                                    *clear_kind = ClearKind::Vec;
                                     let item_type = src_type.get_item();
                                     let Some(item_type) = item_type else {
                                         return Err(SemanticError::IncorrectArguments);
                                     };
-                                    item_size.set(item_type.size_of());
+                                    *item_size = item_type.size_of();
                                 }
                                 StaticType::Map(MapType {
                                     keys_type,
                                     values_type,
                                 }) => {
-                                    clear_kind.set(ClearKind::Map);
+                                    *clear_kind = ClearKind::Map;
 
-                                    item_size.set(values_type.as_ref().size_of());
-                                    key_size.set(keys_type.as_ref().size_of());
+                                    *item_size = values_type.as_ref().size_of();
+                                    *key_size = keys_type.as_ref().size_of();
                                 }
                                 _ => return Err(SemanticError::IncorrectArguments),
                             },
@@ -1079,12 +1079,12 @@ impl GenerateCode for AllocFn {
             AllocFn::Append {
                 item_size,
                 append_kind,
-            } => match append_kind.get() {
+            } => match append_kind {
                 AppendKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::AppendItem(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::AppendItem(*item_size)),
                 ))),
                 AppendKind::StrSlice => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::AppendStrSlice(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::AppendStrSlice(*item_size)),
                 ))),
                 AppendKind::Char => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::AppendChar),
@@ -1096,21 +1096,19 @@ impl GenerateCode for AllocFn {
             AllocFn::Extend {
                 item_size,
                 extend_kind,
-            } => match extend_kind.get() {
+            } => match extend_kind {
                 ExtendKind::VecFromSlice(len) => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ExtendItemFromSlice {
-                        len,
-                        size: item_size.get(),
+                        len: *len,
+                        size: *item_size,
                     }),
                 ))),
                 ExtendKind::VecFromVec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec {
-                        size: item_size.get(),
-                    }),
+                    super::CoreCasm::Alloc(AllocCasm::ExtendItemFromVec { size: *item_size }),
                 ))),
                 ExtendKind::StringFromSlice(len) => {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
-                        AllocCasm::ExtendStringFromSlice { len },
+                        AllocCasm::ExtendStringFromSlice { len: *len },
                     ))))
                 }
                 ExtendKind::StringFromVec => instructions.push(Casm::Platform(LibCasm::Core(
@@ -1123,9 +1121,9 @@ impl GenerateCode for AllocFn {
                 ref_access,
             } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                 AllocCasm::Insert {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
-                    ref_access: ref_access.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
+                    ref_access: *ref_access,
                 },
             )))),
             AllocFn::Get {
@@ -1135,9 +1133,9 @@ impl GenerateCode for AllocFn {
                 ..
             } => instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                 AllocCasm::Get {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
-                    ref_access: ref_access.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
+                    ref_access: *ref_access,
                 },
             )))),
             AllocFn::Delete {
@@ -1145,15 +1143,15 @@ impl GenerateCode for AllocFn {
                 value_size,
                 key_size,
                 ..
-            } => match delete_kind.get() {
+            } => match delete_kind {
                 DeleteKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(value_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::DeleteVec(*value_size)),
                 ))),
                 DeleteKind::Map(ref_access) => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::DeleteMapKey {
-                        key_size: key_size.get(),
-                        value_size: value_size.get(),
-                        ref_access,
+                        key_size: *key_size,
+                        value_size: *value_size,
+                        ref_access: *ref_access,
                     }),
                 ))),
             },
@@ -1166,16 +1164,16 @@ impl GenerateCode for AllocFn {
                 item_size,
                 ..
             } => {
-                if with_capacity.get() {
+                if *with_capacity {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::VecWithCapacity {
-                            item_size: item_size.get(),
+                            item_size: *item_size,
                         },
                     ))))
                 } else {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::Vec {
-                            item_size: item_size.get(),
+                            item_size: *item_size,
                         },
                     ))))
                 }
@@ -1186,24 +1184,24 @@ impl GenerateCode for AllocFn {
                 key_size,
                 ..
             } => {
-                if with_capacity.get() {
+                if *with_capacity {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::MapWithCapacity {
-                            key_size: key_size.get(),
-                            value_size: value_size.get(),
+                            key_size: *key_size,
+                            value_size: *value_size,
                         },
                     ))))
                 } else {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::Map {
-                            key_size: key_size.get(),
-                            value_size: value_size.get(),
+                            key_size: *key_size,
+                            value_size: *value_size,
                         },
                     ))))
                 }
             }
             AllocFn::String { from_char, .. } => {
-                if from_char.get() {
+                if *from_char {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::StringFromChar,
                     ))))
@@ -1220,7 +1218,7 @@ impl GenerateCode for AllocFn {
                 super::CoreCasm::Alloc(AllocCasm::Len),
             ))),
             AllocFn::Cap { for_map } => {
-                if for_map.get() {
+                if *for_map {
                     instructions.push(Casm::Platform(LibCasm::Core(super::CoreCasm::Alloc(
                         AllocCasm::CapMap,
                     ))))
@@ -1231,9 +1229,9 @@ impl GenerateCode for AllocFn {
                 }
             }
             AllocFn::SizeOf { size } => {
-                instructions.push(Casm::Pop(size.get()));
+                instructions.push(Casm::Pop(*size));
                 instructions.push(Casm::Data(Data::Serialized {
-                    data: Box::new(size.get().to_le_bytes()),
+                    data: Box::new(size.to_le_bytes()),
                 }));
             }
             AllocFn::MemCopy => instructions.push(Casm::Mem(Mem::MemCopy)),
@@ -1241,17 +1239,17 @@ impl GenerateCode for AllocFn {
                 clear_kind,
                 item_size,
                 key_size,
-            } => match clear_kind.get() {
+            } => match clear_kind {
                 ClearKind::Vec => instructions.push(Casm::Platform(LibCasm::Core(
-                    super::CoreCasm::Alloc(AllocCasm::ClearVec(item_size.get())),
+                    super::CoreCasm::Alloc(AllocCasm::ClearVec(*item_size)),
                 ))),
                 ClearKind::String => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ClearString(1)),
                 ))),
                 ClearKind::Map => instructions.push(Casm::Platform(LibCasm::Core(
                     super::CoreCasm::Alloc(AllocCasm::ClearMap {
-                        key_size: key_size.get(),
-                        value_size: item_size.get(),
+                        key_size: *key_size,
+                        value_size: *item_size,
                     }),
                 ))),
             },
@@ -5124,26 +5122,22 @@ mod tests {
         .expect("Deserialization should have succeeded");
         let value = &result.value[0];
         let value = match value {
-            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
-                match v.get() {
-                    Number::U64(n) => n,
-                    _ => unreachable!("Should be a u64"),
-                }
-            }
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => match v {
+                Number::U64(n) => n,
+                _ => unreachable!("Should be a u64"),
+            },
             _ => unreachable!("Should be a u64"),
         };
         let len = &result.value[1];
         let len = match len {
-            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => {
-                match v.get() {
-                    Number::U64(n) => n,
-                    _ => unreachable!("Should be a u64"),
-                }
-            }
+            Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => match v {
+                Number::U64(n) => n,
+                _ => unreachable!("Should be a u64"),
+            },
             _ => unreachable!("Should be a u64"),
         };
-        assert_eq!(value, 69);
-        assert_eq!(len, 1);
+        assert_eq!(*value, 69);
+        assert_eq!(*len, 1);
     }
 
     #[test]

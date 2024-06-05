@@ -1,6 +1,7 @@
 use std::{
     cell::{Ref, RefCell},
     rc::Rc,
+    sync::Arc,
 };
 
 use crate::{arw_read, semantic::scope::scope::Scope, vm::casm};
@@ -70,7 +71,7 @@ pub struct Union {
     pub variants: Vec<(ID, Struct)>,
 }
 
-impl TypeOf for Rc<UserType> {
+impl TypeOf for Arc<UserType> {
     fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
@@ -80,10 +81,7 @@ impl TypeOf for Rc<UserType> {
 }
 
 impl TypeOf for UserType {
-    fn type_of(
-        &self,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<Either<Self, StaticType>, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<Either, SemanticError>
     where
         Self: Sized,
     {
@@ -491,7 +489,7 @@ impl DeserializeFrom for Struct {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Struct(self.clone())))),
+                    signature: Some(Either::User(Arc::new(UserType::Struct(self.clone())))),
                 },
             },
         })
@@ -551,7 +549,7 @@ impl DeserializeFrom for Union {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Union(self.clone())))),
+                    signature: Some(Either::User(Arc::new(UserType::Union(self.clone())))),
                 },
             },
         })
@@ -617,7 +615,7 @@ impl DeserializeFrom for Enum {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Rc::new(UserType::Enum(self.clone())))),
+                    signature: Some(Either::User(Arc::new(UserType::Enum(self.clone())))),
                 },
             },
         })

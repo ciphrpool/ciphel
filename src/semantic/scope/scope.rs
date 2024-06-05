@@ -5,15 +5,18 @@ use crate::{
     semantic::{AccessLevel, ArcMutex, ArcRwLock, Either, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, Mutex, RwLock, Weak,
-};
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap},
     slice::Iter,
+};
+use std::{
+    slice::IterMut,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock, Weak,
+    },
 };
 
 use super::{
@@ -25,7 +28,7 @@ use super::{
 
 #[derive(Debug, Clone)]
 pub struct ScopeData {
-    vars: Vec<(Arc<Var>, ArcRwLock<Offset>)>,
+    vars: Vec<(ArcRwLock<Var>, ArcRwLock<Offset>)>,
     env_vars: ArcRwLock<BTreeSet<Arc<Var>>>,
     env_vars_address: HashMap<ID, ArcMutex<AccessLevel>>,
     types: HashMap<ID, Arc<UserType>>,
@@ -122,21 +125,23 @@ impl Scope {
         }
     }
 
-    pub fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
+    pub fn register_var(&mut self, mut reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.vars.push((reg.into(), Default::default()));
+                data.vars
+                    .push((Arc::new(RwLock::new(reg)), Default::default()));
                 Ok(())
             }
             Scope::General { data, .. } => {
-                reg.state.set(VarState::Global);
-                data.vars.push((reg.into(), Default::default()));
+                reg.state = VarState::Global;
+                data.vars
+                    .push((Arc::new(RwLock::new(reg)), Default::default()));
                 Ok(())
             }
         }
     }
 
-    pub fn find_var(&self, id: &ID) -> Result<Arc<Var>, SemanticError> {
+    pub fn find_var(&self, id: &ID) -> Result<ArcRwLock<Var>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -147,7 +152,14 @@ impl Scope {
                 .vars
                 .iter()
                 .rev()
-                .find(|(var, _)| &var.as_ref().id == id)
+                .find(|(var, _)| {
+                    let borrowed_var = &arw_read!(var, CodeGenerationError::ConcurrencyError);
+                    if let Ok(v) = borrowed_var {
+                        v.id == *id
+                    } else {
+                        false
+                    }
+                })
                 .map(|(v, _)| v)
                 .cloned()
                 .or_else(|| match parent {
@@ -177,7 +189,14 @@ impl Scope {
             Scope::General { data, .. } => data
                 .vars
                 .iter()
-                .find(|(var, _)| &var.as_ref().id == id)
+                .find(|(var, _)| {
+                    let borrowed_var = &arw_read!(var, CodeGenerationError::ConcurrencyError);
+                    if let Ok(v) = borrowed_var {
+                        v.id == *id
+                    } else {
+                        false
+                    }
+                })
                 .map(|(v, _)| v)
                 .cloned()
                 .ok_or(SemanticError::UnknownVar(id.clone())),
@@ -187,7 +206,7 @@ impl Scope {
     pub fn access_var(
         &self,
         id: &ID,
-    ) -> Result<(Arc<Var>, Offset, AccessLevel), CodeGenerationError> {
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
         let is_closure = self
             .state()
             .map_err(|_| CodeGenerationError::ConcurrencyError)?
@@ -200,7 +219,8 @@ impl Scope {
                 ..
             } => {
                 for (var, offset) in data.vars.iter().rev() {
-                    if &var.as_ref().id == id && var.is_declared.get() {
+                    let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
+                    if &borrowed_var.id == id && borrowed_var.is_declared {
                         return Ok((
                             var.clone(),
                             arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
@@ -221,6 +241,8 @@ impl Scope {
 
                         match borrowed_scope.access_var(id) {
                             Ok((var, offset, level)) => {
+                                let borrowed_var =
+                                    arw_read!(var, CodeGenerationError::ConcurrencyError)?;
                                 let level = match level {
                                     AccessLevel::General => AccessLevel::General,
                                     AccessLevel::Direct => AccessLevel::Backward(1),
@@ -238,7 +260,7 @@ impl Scope {
                                             .env_vars()
                                             .map_err(|_| CodeGenerationError::ConcurrencyError)?
                                         {
-                                            if env_var.id == var.id {
+                                            if env_var.id == borrowed_var.id {
                                                 break;
                                             }
                                             idx += env_var.as_ref().type_sig.size_of();
@@ -250,8 +272,10 @@ impl Scope {
                                             Some((_, Offset::FP(o), _)) => o,
                                             _ => return Err(CodeGenerationError::UnresolvedError),
                                         };
+                                    drop(borrowed_var);
                                     return Ok((var, Offset::FE(env_offset, offset), level));
                                 } else {
+                                    drop(borrowed_var);
                                     return Ok((var, offset, level));
                                 }
                             }
@@ -273,7 +297,8 @@ impl Scope {
             }
             Scope::General { data, .. } => {
                 for (var, offset) in data.vars.iter().rev() {
-                    if &var.as_ref().id == id {
+                    let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
+                    if &borrowed_var.id == id {
                         return Ok((
                             var.clone(),
                             arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
@@ -289,7 +314,7 @@ impl Scope {
     pub fn access_var_in_parent(
         &self,
         id: &ID,
-    ) -> Result<(Arc<Var>, Offset, AccessLevel), CodeGenerationError> {
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
         let _is_closure = self
             .state()
             .map_err(|_| CodeGenerationError::ConcurrencyError)?
@@ -329,7 +354,7 @@ impl Scope {
             Scope::General { .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    pub fn capture(&self, var: Arc<Var>) -> Result<bool, SemanticError> {
+    pub fn capture(&self, var: ArcRwLock<Var>) -> Result<bool, SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
@@ -339,7 +364,8 @@ impl Scope {
                     else {
                         return Ok(false);
                     };
-                    env_vars.insert(var);
+                    let var = arw_read!(var, SemanticError::ConcurrencyError)?.clone();
+                    env_vars.insert(Arc::new(var));
                     return Ok(true);
                 }
                 return Ok(false);
@@ -403,17 +429,18 @@ impl Scope {
                 if state == ClosureState::CAPTURING {
                     let mut offset = 0;
                     for (var, _o) in &data.vars {
-                        if var.state.get() == VarState::Parameter {
-                            offset += var.type_sig.size_of();
+                        let borrowed_var = arw_read!(var, SemanticError::ConcurrencyError)?;
+                        if borrowed_var.state == VarState::Parameter {
+                            offset += borrowed_var.type_sig.size_of();
                         }
                     }
                     data.vars.push((
-                        Arc::new(Var {
+                        Arc::new(RwLock::new(Var {
                             id: "$ENV".to_string().into(),
                             type_sig: p_num!(U64),
                             state: VarState::Parameter.into(),
-                            is_declared: Cell::new(true),
-                        }),
+                            is_declared: true,
+                        })),
                         Arc::new(RwLock::new(Offset::FP(offset))),
                     ));
                     Ok(())
@@ -453,7 +480,7 @@ impl Scope {
         }
     }
 
-    pub fn vars(&self) -> Iter<(Arc<Var>, ArcRwLock<Offset>)> {
+    pub fn vars(&self) -> Iter<(ArcRwLock<Var>, ArcRwLock<Offset>)> {
         match self {
             Scope::Inner {
                 parent: _,
@@ -468,10 +495,17 @@ impl Scope {
         &self,
         id: &ID,
         offset: Offset,
-    ) -> Result<Arc<Var>, CodeGenerationError> {
+    ) -> Result<ArcRwLock<Var>, CodeGenerationError> {
         match self {
             Scope::Inner { data, .. } => {
-                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
+                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| {
+                    let borrowed_var = &arw_read!(v, CodeGenerationError::ConcurrencyError);
+                    if let Ok(v) = borrowed_var {
+                        v.id == *id
+                    } else {
+                        false
+                    }
+                }) {
                     let mut var_offset =
                         arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
                     *var_offset = offset;
@@ -481,7 +515,14 @@ impl Scope {
                 }
             }
             Scope::General { data, .. } => {
-                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
+                if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| {
+                    let borrowed_var = &arw_read!(v, CodeGenerationError::ConcurrencyError);
+                    if let Ok(v) = borrowed_var {
+                        v.id == *id
+                    } else {
+                        false
+                    }
+                }) {
                     let mut var_offset =
                         arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
                     *var_offset = offset;

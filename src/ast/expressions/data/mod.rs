@@ -42,13 +42,13 @@ pub enum Data {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     pub id: ID,
-    pub from_field: Cell<bool>,
+    pub from_field: bool,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Primitive {
-    Number(Cell<Number>),
+    Number(Number),
     Bool(bool),
     Char(char),
 }
@@ -78,7 +78,7 @@ pub struct Slice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
-    pub padding: Cell<usize>,
+    pub padding: usize,
     pub metadata: Metadata,
 }
 
@@ -272,7 +272,7 @@ impl Data {
     pub fn signature(&self) -> Option<EType> {
         match self {
             Data::Primitive(value) => match value {
-                Primitive::Number(value) => match value.get() {
+                Primitive::Number(value) => match value {
                     Number::U8(_) => Some(p_num!(U8)),
                     Number::U16(_) => Some(p_num!(U16)),
                     Number::U32(_) => Some(p_num!(U32)),

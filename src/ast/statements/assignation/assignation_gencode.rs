@@ -93,7 +93,7 @@ impl GenerateCode for AssignValue {
 }
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, rc::Rc};
+    use std::{cell::Cell, rc::Rc, sync::Arc};
 
     use num_traits::Zero;
 
@@ -278,12 +278,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),
@@ -345,7 +345,7 @@ mod tests {
             .into_iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::U64(n) => Some(n),
                         _ => None,
                     }
@@ -383,7 +383,7 @@ mod tests {
             .into_iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::U64(n) => Some(n),
                         _ => None,
                     }
@@ -460,12 +460,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),
@@ -563,15 +563,15 @@ mod tests {
                         }))) => match &value[1] {
                             Expression::Atomic(Atomic::Data(Data::Primitive(
                                 Primitive::Number(x),
-                            ))) => match x.get() {
-                                Number::U64(n) => Some(n),
+                            ))) => match x {
+                                Number::U64(n) => Some(*n),
                                 _ => None,
                             },
                             _ => None,
                         },
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                            match x.get() {
-                                Number::U64(n) => Some(n),
+                            match x {
+                                Number::U64(n) => Some(*n),
                                 _ => None,
                             }
                         }
@@ -602,7 +602,7 @@ mod tests {
                 res.push(("x".to_string().into(), p_num!(I64)));
                 res.push((
                     "y".to_string().into(),
-                    Either::User(Rc::new(UserType::Struct(user_type_point3d.clone()))),
+                    Either::User(Arc::new(UserType::Struct(user_type_point3d.clone()))),
                 ));
                 res
             },
@@ -679,8 +679,8 @@ mod tests {
                                 match res {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
                                         Primitive::Number(x),
-                                    ))) => match x.get() {
-                                        Number::I64(n) => assert_eq!(n, 69),
+                                    ))) => match x {
+                                        Number::I64(n) => assert_eq!(*n, 69),
                                         _ => assert!(false, "Expected i64"),
                                     },
                                     _ => assert!(false, "Expected i64"),

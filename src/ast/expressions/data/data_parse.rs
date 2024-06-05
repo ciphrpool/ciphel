@@ -73,7 +73,7 @@ impl TryParse for Variable {
             remainder,
             Variable {
                 id,
-                from_field: Cell::new(false),
+                from_field: false,
                 metadata: Metadata::default(),
             },
         ))
@@ -164,7 +164,7 @@ impl TryParse for StrSlice {
     fn parse(input: Span) -> PResult<Self> {
         map(parse_string, |value| StrSlice {
             value,
-            padding: 0.into(),
+            padding: 0,
             metadata: Metadata::default(),
         })(input)
     }
@@ -483,7 +483,7 @@ mod tests {
         let res = Primitive::parse("42.5".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(Primitive::Number(Cell::new(Number::F64(42.5))), value);
+        assert_eq!(Primitive::Number(Number::F64(42.5)), value);
 
         let res = Primitive::parse("'a'".into());
         assert!(res.is_ok(), "{:?}", res);
@@ -529,7 +529,7 @@ mod tests {
             StrSlice {
                 value: "Hello World".to_string(),
                 metadata: Metadata::default(),
-                padding: 0.into(),
+                padding: 0,
             },
             value
         );
@@ -580,7 +580,7 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
@@ -617,7 +617,7 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
@@ -657,7 +657,7 @@ mod tests {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "x".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default()
                             }
                         )))),
@@ -702,7 +702,7 @@ mod tests {
             Address {
                 value: Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                     metadata: Metadata::default()
                 }))
                 .into(),
@@ -721,7 +721,7 @@ mod tests {
             PtrAccess {
                 value: Atomic::Data(Data::Variable(Variable {
                     id: "x".to_string().into(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                     metadata: Metadata::default()
                 }))
                 .into(),
@@ -742,7 +742,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".to_string().into(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -752,7 +752,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".to_string().into(),
-                            padding: 0.into(),
+                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -977,7 +977,7 @@ mod tests {
                     fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "f".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                     })))),
                     params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::Unresolved(10).into())

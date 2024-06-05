@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
+    sync::Arc,
 };
 
 use crate::{
@@ -318,7 +319,7 @@ impl DeserializeFrom for VecType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Rc::new(StaticType::Vec(self.clone())))),
+                    signature: Some(Either::Static(Arc::new(StaticType::Vec(self.clone())))),
                 },
             },
             length: length as usize,
@@ -361,11 +362,11 @@ impl DeserializeFrom for StringType {
 
         Ok(StrSlice {
             value: str_slice.to_string(),
-            padding: Cell::new(0),
+            padding: 0,
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Rc::new(StaticType::String(self.clone())))),
+                    signature: Some(Either::Static(Arc::new(StaticType::String(self.clone())))),
                 },
             },
         })
@@ -390,11 +391,11 @@ impl DeserializeFrom for StrSliceType {
 
         Ok(StrSlice {
             value: str_slice.to_string(),
-            padding: Cell::new(0),
+            padding: 0,
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Rc::new(StaticType::StrSlice(self.clone())))),
+                    signature: Some(Either::Static(Arc::new(StaticType::StrSlice(self.clone())))),
                 },
             },
         })
@@ -432,7 +433,7 @@ impl DeserializeFrom for TupleType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Rc::new(StaticType::Tuple(self.clone())))),
+                    signature: Some(Either::Static(Arc::new(StaticType::Tuple(self.clone())))),
                 },
             },
         })
@@ -491,7 +492,7 @@ impl DeserializeFrom for SliceType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Rc::new(StaticType::Slice(self.clone())))),
+                    signature: Some(Either::Static(Arc::new(StaticType::Slice(self.clone())))),
                 },
             },
         })

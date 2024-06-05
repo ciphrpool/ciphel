@@ -1093,47 +1093,47 @@ mod tests {
         eval_and_compare!(r##"400u128 + 20u128"##, v_num!(U128, 420), U128);
         eval_and_compare!(
             r##"400u128 - 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 - 20))),
+            Primitive::Number(Number::U128(400 - 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 * 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 * 20))),
+            Primitive::Number(Number::U128(400 * 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 / 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 / 20))),
+            Primitive::Number(Number::U128(400 / 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 % 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400 % 20))),
+            Primitive::Number(Number::U128(400 % 20)),
             U128
         );
         eval_and_compare!(
             r##"400u128 << 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 << 20u128))),
+            Primitive::Number(Number::U128(400u128 << 20u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 >> 20u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 >> 20u128))),
+            Primitive::Number(Number::U128(400u128 >> 20u128)),
             U128
         );
         eval_and_compare!(
             r##"428u128 & 428u128"##,
-            Primitive::Number(Cell::new(Number::U128(428u128 & 428u128))),
+            Primitive::Number(Number::U128(428u128 & 428u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 | 420u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 | 420u128))),
+            Primitive::Number(Number::U128(400u128 | 420u128)),
             U128
         );
         eval_and_compare!(
             r##"400u128 ^ 420u128"##,
-            Primitive::Number(Cell::new(Number::U128(400u128 ^ 420u128))),
+            Primitive::Number(Number::U128(400u128 ^ 420u128)),
             U128
         );
         eval_and_compare!(r##"400u128 as u64"##, v_num!(U64, 400), U64);
@@ -1181,47 +1181,47 @@ mod tests {
         eval_and_compare!(r##"400 + 20"##, v_num!(U64, 420), U64);
         eval_and_compare!(
             r##"400 - 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 - 20))),
+            Primitive::Number(Number::U64(400 - 20)),
             U64
         );
         eval_and_compare!(
             r##"400 * 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 * 20))),
+            Primitive::Number(Number::U64(400 * 20)),
             U64
         );
         eval_and_compare!(
             r##"400 / 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 / 20))),
+            Primitive::Number(Number::U64(400 / 20)),
             U64
         );
         eval_and_compare!(
             r##"400 % 20"##,
-            Primitive::Number(Cell::new(Number::U64(400 % 20))),
+            Primitive::Number(Number::U64(400 % 20)),
             U64
         );
         eval_and_compare!(
             r##"400u64 << 20u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 << 20u64))),
+            Primitive::Number(Number::U64(400u64 << 20u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 >> 20u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 >> 20u64))),
+            Primitive::Number(Number::U64(400u64 >> 20u64)),
             U64
         );
         eval_and_compare!(
             r##"428u64 & 428u64"##,
-            Primitive::Number(Cell::new(Number::U64(428u64 & 428u64))),
+            Primitive::Number(Number::U64(428u64 & 428u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 | 420u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 | 420u64))),
+            Primitive::Number(Number::U64(400u64 | 420u64)),
             U64
         );
         eval_and_compare!(
             r##"400u64 ^ 420u64"##,
-            Primitive::Number(Cell::new(Number::U64(400u64 ^ 420u64))),
+            Primitive::Number(Number::U64(400u64 ^ 420u64)),
             U64
         );
         eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
@@ -1243,47 +1243,47 @@ mod tests {
         eval_and_compare!(r##"400u32 + 20u32"##, v_num!(U32, 420), U32);
         eval_and_compare!(
             r##"400u32 - 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 - 20))),
+            Primitive::Number(Number::U32(400 - 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 * 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 * 20))),
+            Primitive::Number(Number::U32(400 * 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 / 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 / 20))),
+            Primitive::Number(Number::U32(400 / 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 % 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400 % 20))),
+            Primitive::Number(Number::U32(400 % 20)),
             U32
         );
         eval_and_compare!(
             r##"400u32 << 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 << 20u32))),
+            Primitive::Number(Number::U32(400u32 << 20u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 >> 20u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 >> 20u32))),
+            Primitive::Number(Number::U32(400u32 >> 20u32)),
             U32
         );
         eval_and_compare!(
             r##"428u32 & 428u32"##,
-            Primitive::Number(Cell::new(Number::U32(428u32 & 428u32))),
+            Primitive::Number(Number::U32(428u32 & 428u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 | 420u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 | 420u32))),
+            Primitive::Number(Number::U32(400u32 | 420u32)),
             U32
         );
         eval_and_compare!(
             r##"400u32 ^ 420u32"##,
-            Primitive::Number(Cell::new(Number::U32(400u32 ^ 420u32))),
+            Primitive::Number(Number::U32(400u32 ^ 420u32)),
             U32
         );
         eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
@@ -1304,47 +1304,47 @@ mod tests {
         eval_and_compare!(r##"400u16 + 20u16"##, v_num!(U16, 420), U16);
         eval_and_compare!(
             r##"400u16 - 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 - 20))),
+            Primitive::Number(Number::U16(400 - 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 * 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 * 20))),
+            Primitive::Number(Number::U16(400 * 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 / 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 / 20))),
+            Primitive::Number(Number::U16(400 / 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 % 20u16"##,
-            Primitive::Number(Cell::new(Number::U16(400 % 20))),
+            Primitive::Number(Number::U16(400 % 20)),
             U16
         );
         eval_and_compare!(
             r##"400u16 << 2u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 << 2u16))),
+            Primitive::Number(Number::U16(400u16 << 2u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 >> 2u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 >> 2u16))),
+            Primitive::Number(Number::U16(400u16 >> 2u16)),
             U16
         );
         eval_and_compare!(
             r##"428u16 & 428u16"##,
-            Primitive::Number(Cell::new(Number::U16(428u16 & 428u16))),
+            Primitive::Number(Number::U16(428u16 & 428u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 | 420u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 | 420u16))),
+            Primitive::Number(Number::U16(400u16 | 420u16)),
             U16
         );
         eval_and_compare!(
             r##"400u16 ^ 420u16"##,
-            Primitive::Number(Cell::new(Number::U16(400u16 ^ 420u16))),
+            Primitive::Number(Number::U16(400u16 ^ 420u16)),
             U16
         );
         eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
@@ -1363,49 +1363,33 @@ mod tests {
     #[test]
     fn valid_operation_u8() {
         eval_and_compare!(r##"100u8 + 20u8"##, v_num!(U8, 120), U8);
-        eval_and_compare!(
-            r##"50u8 - 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 - 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 * 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 * 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 / 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 / 2))),
-            U8
-        );
-        eval_and_compare!(
-            r##"50u8 % 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(50 % 2))),
-            U8
-        );
+        eval_and_compare!(r##"50u8 - 2u8"##, Primitive::Number(Number::U8(50 - 2)), U8);
+        eval_and_compare!(r##"50u8 * 2u8"##, Primitive::Number(Number::U8(50 * 2)), U8);
+        eval_and_compare!(r##"50u8 / 2u8"##, Primitive::Number(Number::U8(50 / 2)), U8);
+        eval_and_compare!(r##"50u8 % 2u8"##, Primitive::Number(Number::U8(50 % 2)), U8);
         eval_and_compare!(
             r##"40u8 << 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 << 2u8))),
+            Primitive::Number(Number::U8(40u8 << 2u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 >> 2u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 >> 2u8))),
+            Primitive::Number(Number::U8(40u8 >> 2u8)),
             U8
         );
         eval_and_compare!(
             r##"48u8 & 48u8"##,
-            Primitive::Number(Cell::new(Number::U8(48u8 & 48u8))),
+            Primitive::Number(Number::U8(48u8 & 48u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 | 42u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 | 42u8))),
+            Primitive::Number(Number::U8(40u8 | 42u8)),
             U8
         );
         eval_and_compare!(
             r##"40u8 ^ 42u8"##,
-            Primitive::Number(Cell::new(Number::U8(40u8 ^ 42u8))),
+            Primitive::Number(Number::U8(40u8 ^ 42u8)),
             U8
         );
         eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
@@ -1427,52 +1411,48 @@ mod tests {
         eval_and_compare!(r##"400i128 + 20i128"##, v_num!(I128, 420), I128);
         eval_and_compare!(
             r##"400i128 - 800i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 - 800))),
+            Primitive::Number(Number::I128(400 - 800)),
             I128
         );
         eval_and_compare!(
             r##"400i128 * 5i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 * 5))),
+            Primitive::Number(Number::I128(400 * 5)),
             I128
         );
         eval_and_compare!(
             r##"400i128 / 2i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 / 2))),
+            Primitive::Number(Number::I128(400 / 2)),
             I128
         );
         eval_and_compare!(
             r##"400i128 % 2i128"##,
-            Primitive::Number(Cell::new(Number::I128(400 % 2))),
+            Primitive::Number(Number::I128(400 % 2)),
             I128
         );
-        eval_and_compare!(
-            r##"-20i128"##,
-            Primitive::Number(Cell::new(Number::I128(-20))),
-            I128
-        );
+        eval_and_compare!(r##"-20i128"##, Primitive::Number(Number::I128(-20)), I128);
         eval_and_compare!(
             r##"400i128 << 20i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 << 20i128))),
+            Primitive::Number(Number::I128(400i128 << 20i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 >> 20i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 >> 20i128))),
+            Primitive::Number(Number::I128(400i128 >> 20i128)),
             I128
         );
         eval_and_compare!(
             r##"428i128 & 428i128"##,
-            Primitive::Number(Cell::new(Number::I128(428i128 & 428i128))),
+            Primitive::Number(Number::I128(428i128 & 428i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 | 420i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 | 420i128))),
+            Primitive::Number(Number::I128(400i128 | 420i128)),
             I128
         );
         eval_and_compare!(
             r##"400i128 ^ 420i128"##,
-            Primitive::Number(Cell::new(Number::I128(400i128 ^ 420i128))),
+            Primitive::Number(Number::I128(400i128 ^ 420i128)),
             I128
         );
         eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
@@ -1494,57 +1474,49 @@ mod tests {
         eval_and_compare!(r##"400i64 + 20i64"##, v_num!(I64, 420), I64);
         eval_and_compare!(
             r##"400i64 - 800i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 - 800))),
+            Primitive::Number(Number::I64(400 - 800)),
             I64
         );
         eval_and_compare!(
             r##"400i64 * 5i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 * 5))),
+            Primitive::Number(Number::I64(400 * 5)),
             I64
         );
         eval_and_compare!(
             r##"400i64 / 2i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 / 2))),
+            Primitive::Number(Number::I64(400 / 2)),
             I64
         );
         eval_and_compare!(
             r##"400i64 % 2i64"##,
-            Primitive::Number(Cell::new(Number::I64(400 % 2))),
+            Primitive::Number(Number::I64(400 % 2)),
             I64
         );
-        eval_and_compare!(
-            r##"-20i64"##,
-            Primitive::Number(Cell::new(Number::I64(-20))),
-            I64
-        );
-        eval_and_compare!(
-            r##"-20"##,
-            Primitive::Number(Cell::new(Number::I64(-20))),
-            I64
-        );
+        eval_and_compare!(r##"-20i64"##, Primitive::Number(Number::I64(-20)), I64);
+        eval_and_compare!(r##"-20"##, Primitive::Number(Number::I64(-20)), I64);
         eval_and_compare!(
             r##"400i64 << 20i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 << 20i64))),
+            Primitive::Number(Number::I64(400i64 << 20i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 >> 20i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 >> 20i64))),
+            Primitive::Number(Number::I64(400i64 >> 20i64)),
             I64
         );
         eval_and_compare!(
             r##"428i64 & 428i64"##,
-            Primitive::Number(Cell::new(Number::I64(428i64 & 428i64))),
+            Primitive::Number(Number::I64(428i64 & 428i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 | 420i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 | 420i64))),
+            Primitive::Number(Number::I64(400i64 | 420i64)),
             I64
         );
         eval_and_compare!(
             r##"400i64 ^ 420i64"##,
-            Primitive::Number(Cell::new(Number::I64(400i64 ^ 420i64))),
+            Primitive::Number(Number::I64(400i64 ^ 420i64)),
             I64
         );
         eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
@@ -1565,52 +1537,48 @@ mod tests {
         eval_and_compare!(r##"400i32 + 20i32"##, v_num!(I32, 420), I32);
         eval_and_compare!(
             r##"400i32 - 800i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 - 800))),
+            Primitive::Number(Number::I32(400 - 800)),
             I32
         );
         eval_and_compare!(
             r##"400i32 * 5i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 * 5))),
+            Primitive::Number(Number::I32(400 * 5)),
             I32
         );
         eval_and_compare!(
             r##"400i32 / 2i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 / 2))),
+            Primitive::Number(Number::I32(400 / 2)),
             I32
         );
         eval_and_compare!(
             r##"400i32 % 2i32"##,
-            Primitive::Number(Cell::new(Number::I32(400 % 2))),
+            Primitive::Number(Number::I32(400 % 2)),
             I32
         );
-        eval_and_compare!(
-            r##"-20i32"##,
-            Primitive::Number(Cell::new(Number::I32(-20))),
-            I32
-        );
+        eval_and_compare!(r##"-20i32"##, Primitive::Number(Number::I32(-20)), I32);
         eval_and_compare!(
             r##"400i32 << 20i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 << 20i32))),
+            Primitive::Number(Number::I32(400i32 << 20i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 >> 20i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 >> 20i32))),
+            Primitive::Number(Number::I32(400i32 >> 20i32)),
             I32
         );
         eval_and_compare!(
             r##"428i32 & 428i32"##,
-            Primitive::Number(Cell::new(Number::I32(428i32 & 428i32))),
+            Primitive::Number(Number::I32(428i32 & 428i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 | 420i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 | 420i32))),
+            Primitive::Number(Number::I32(400i32 | 420i32)),
             I32
         );
         eval_and_compare!(
             r##"400i32 ^ 420i32"##,
-            Primitive::Number(Cell::new(Number::I32(400i32 ^ 420i32))),
+            Primitive::Number(Number::I32(400i32 ^ 420i32)),
             I32
         );
         eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
@@ -1631,52 +1599,48 @@ mod tests {
         eval_and_compare!(r##"400i16 + 20i16"##, v_num!(I16, 420), I16);
         eval_and_compare!(
             r##"400i16 - 800i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 - 800))),
+            Primitive::Number(Number::I16(400 - 800)),
             I16
         );
         eval_and_compare!(
             r##"400i16 * 5i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 * 5))),
+            Primitive::Number(Number::I16(400 * 5)),
             I16
         );
         eval_and_compare!(
             r##"400i16 / 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 / 2))),
+            Primitive::Number(Number::I16(400 / 2)),
             I16
         );
         eval_and_compare!(
             r##"400i16 % 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400 % 2))),
+            Primitive::Number(Number::I16(400 % 2)),
             I16
         );
-        eval_and_compare!(
-            r##"-20i16"##,
-            Primitive::Number(Cell::new(Number::I16(-20))),
-            I16
-        );
+        eval_and_compare!(r##"-20i16"##, Primitive::Number(Number::I16(-20)), I16);
         eval_and_compare!(
             r##"400i16 << 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 << 2i16))),
+            Primitive::Number(Number::I16(400i16 << 2i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 >> 2i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 >> 2i16))),
+            Primitive::Number(Number::I16(400i16 >> 2i16)),
             I16
         );
         eval_and_compare!(
             r##"428i16 & 428i16"##,
-            Primitive::Number(Cell::new(Number::I16(428i16 & 428i16))),
+            Primitive::Number(Number::I16(428i16 & 428i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 | 420i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 | 420i16))),
+            Primitive::Number(Number::I16(400i16 | 420i16)),
             I16
         );
         eval_and_compare!(
             r##"400i16 ^ 420i16"##,
-            Primitive::Number(Cell::new(Number::I16(400i16 ^ 420i16))),
+            Primitive::Number(Number::I16(400i16 ^ 420i16)),
             I16
         );
         eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
@@ -1697,52 +1661,36 @@ mod tests {
         eval_and_compare!(r##"100i8 + 20i8"##, v_num!(I8, 120), I8);
         eval_and_compare!(
             r##"20i8 - 10i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 - 10))),
+            Primitive::Number(Number::I8(20 - 10)),
             I8
         );
-        eval_and_compare!(
-            r##"20i8 * 5i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 * 5))),
-            I8
-        );
-        eval_and_compare!(
-            r##"20i8 / 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 / 2))),
-            I8
-        );
-        eval_and_compare!(
-            r##"20i8 % 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(20 % 2))),
-            I8
-        );
-        eval_and_compare!(
-            r##"-20i8"##,
-            Primitive::Number(Cell::new(Number::I8(-20))),
-            I8
-        );
+        eval_and_compare!(r##"20i8 * 5i8"##, Primitive::Number(Number::I8(20 * 5)), I8);
+        eval_and_compare!(r##"20i8 / 2i8"##, Primitive::Number(Number::I8(20 / 2)), I8);
+        eval_and_compare!(r##"20i8 % 2i8"##, Primitive::Number(Number::I8(20 % 2)), I8);
+        eval_and_compare!(r##"-20i8"##, Primitive::Number(Number::I8(-20)), I8);
         eval_and_compare!(
             r##"40i8 << 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 << 2i8))),
+            Primitive::Number(Number::I8(40i8 << 2i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 >> 2i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 >> 2i8))),
+            Primitive::Number(Number::I8(40i8 >> 2i8)),
             I8
         );
         eval_and_compare!(
             r##"48i8 & 48i8"##,
-            Primitive::Number(Cell::new(Number::I8(48i8 & 48i8))),
+            Primitive::Number(Number::I8(48i8 & 48i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 | 42i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 | 42i8))),
+            Primitive::Number(Number::I8(40i8 | 42i8)),
             I8
         );
         eval_and_compare!(
             r##"40i8 ^ 42i8"##,
-            Primitive::Number(Cell::new(Number::I8(40i8 ^ 42i8))),
+            Primitive::Number(Number::I8(40i8 ^ 42i8)),
             I8
         );
         eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
@@ -1762,29 +1710,25 @@ mod tests {
     fn valid_operation_f64() {
         eval_and_compare!(
             r##"10.5 + 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 + 20.2))),
+            Primitive::Number(Number::F64(10.5 + 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 - 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 - 20.2))),
+            Primitive::Number(Number::F64(10.5 - 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 * 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 * 20.2))),
+            Primitive::Number(Number::F64(10.5 * 20.2)),
             F64
         );
         eval_and_compare!(
             r##"10.5 / 20.2"##,
-            Primitive::Number(Cell::new(Number::F64(10.5 / 20.2))),
+            Primitive::Number(Number::F64(10.5 / 20.2)),
             F64
         );
-        eval_and_compare!(
-            r##"-20.0"##,
-            Primitive::Number(Cell::new(Number::F64(-20.0))),
-            F64
-        );
+        eval_and_compare!(r##"-20.0"##, Primitive::Number(Number::F64(-20.0)), F64);
         eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
         eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
         eval_and_compare_bool!(r##"20f64 >= 2f64"##, Primitive::Bool(true));

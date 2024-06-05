@@ -39,7 +39,7 @@ pub enum StdFn {
     IO(IOFn),
     Math(MathFn),
     Strings(StringsFn),
-    Assert(Cell<bool>),
+    Assert(bool),
     Iter(IterFn),
     Error,
     Ok,
@@ -134,8 +134,8 @@ impl Resolve for StdFn {
                     size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
-                        StaticType::Primitive(PrimitiveType::Bool) => expect_err.set(false),
-                        StaticType::Error => expect_err.set(true),
+                        StaticType::Primitive(PrimitiveType::Bool) => *expect_err = false,
+                        StaticType::Error => *expect_err = true,
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
@@ -186,7 +186,7 @@ impl GenerateCode for StdFn {
             StdFn::Strings(value) => value.gencode(scope, instructions),
             StdFn::Iter(value) => value.gencode(scope, instructions),
             StdFn::Assert(expect_err) => {
-                if expect_err.get() {
+                if *expect_err {
                     instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::AssertErr)));
                 } else {
                     instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::AssertBool)));

@@ -57,10 +57,11 @@ impl GenerateCode for FnDef {
         if let Some(stack_top) = borrow.stack_top() {
             let mut size = 8;
             for (v, o) in borrow.vars() {
-                if **v.id == *self.id {
+                let borrowed_var = arw_read!(v, CodeGenerationError::ConcurrencyError)?;
+                if **borrowed_var.id == *self.id {
                     let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
                     *o = Offset::SB(stack_top);
-                    size = v.type_sig.size_of();
+                    size = borrowed_var.type_sig.size_of();
                     break;
                 }
             }
@@ -83,7 +84,7 @@ impl GenerateCode for FnDef {
 
         let (var, address, level) =
             crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?.access_var(&self.id)?;
-        let var_type = &var.as_ref().type_sig;
+        let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
 
         let var_size = var_type.size_of();
 

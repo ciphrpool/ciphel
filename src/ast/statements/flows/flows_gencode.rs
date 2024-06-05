@@ -213,7 +213,7 @@ impl GenerateCode for MatchStat {
                     }
                     Pattern::Primitive(value) => {
                         let data = match value {
-                            Primitive::Number(data) => match data.get() {
+                            Primitive::Number(data) => match data {
                                 Number::U8(data) => data.to_le_bytes().into(),
                                 Number::U16(data) => data.to_le_bytes().into(),
                                 Number::U32(data) => data.to_le_bytes().into(),
@@ -289,7 +289,11 @@ impl GenerateCode for MatchStat {
             let param_size = borrowed_scope
                 .vars()
                 .filter_map(|(v, _)| {
-                    (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
+                    if let Ok(borrowed) = arw_read!(v, CodeGenerationError::ConcurrencyError) {
+                        (borrowed.state == VarState::Parameter).then(|| borrowed.type_sig.size_of())
+                    } else {
+                        None
+                    }
                 })
                 .sum::<usize>();
 

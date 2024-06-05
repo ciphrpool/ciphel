@@ -1,4 +1,7 @@
-use std::cell::{Cell, Ref};
+use std::{
+    cell::{Cell, Ref},
+    sync::RwLock,
+};
 
 use crate::{
     ast::utils::strings::ID,
@@ -29,8 +32,8 @@ impl Default for VarState {
 pub struct Var {
     pub id: ID,
     pub type_sig: EType,
-    pub state: Cell<VarState>,
-    pub is_declared: Cell<bool>,
+    pub state: VarState,
+    pub is_declared: bool,
 }
 
 impl PartialOrd for Var {
@@ -78,8 +81,8 @@ impl BuildVar for Var {
         Self {
             id: id.clone(),
             type_sig: type_sig.clone(),
-            state: Cell::new(VarState::Local),
-            is_declared: Cell::new(false),
+            state: VarState::Local,
+            is_declared: false,
         }
     }
 }

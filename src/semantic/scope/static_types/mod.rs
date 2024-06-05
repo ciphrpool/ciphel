@@ -1,5 +1,5 @@
-use std::cell::Ref;
 use std::rc::Rc;
+use std::{cell::Ref, sync::Arc};
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
 
@@ -113,6 +113,6 @@ impl TypeOf for StaticType {
     where
         Self: Sized,
     {
-        Ok(Either::Static(Rc::new(self.clone())))
+        Ok(Either::Static(Arc::new(self.clone())))
     }
 }

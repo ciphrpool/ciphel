@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::Scope;
 use crate::{arw_read, arw_write};
@@ -27,21 +29,21 @@ impl GenerateCode for Declaration {
                 let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                 let mut new_stack_top = borrow.stack_top();
                 for (v, o) in borrow.vars() {
-                    if v.id == *id && !v.is_declared.get() {
+                    let mut borrowed_var = arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                    if borrowed_var.id == *id && !borrowed_var.is_declared {
                         let var = v;
-
-                        var.is_declared.set(true);
+                        borrowed_var.is_declared = true;
 
                         if let Some(ref mut stack_top) = new_stack_top {
                             let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
                             *o = Offset::SB(*stack_top);
-                            if var.type_sig.size_of() == 0 {
+                            if borrowed_var.type_sig.size_of() == 0 {
                                 continue;
                             }
                             instructions.push(Casm::Alloc(Alloc::Stack {
-                                size: var.type_sig.size_of(),
+                                size: borrowed_var.type_sig.size_of(),
                             }));
-                            *stack_top = *stack_top + var.type_sig.size_of();
+                            *stack_top = *stack_top + borrowed_var.type_sig.size_of();
                         }
                         break;
                     }
@@ -83,9 +85,10 @@ impl GenerateCode for Declaration {
                 for id in &vars {
                     let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, o) in borrow.vars() {
-                        if v.id == *id && !v.is_declared.get() {
-                            let var = v;
-                            let var_size = var.type_sig.size_of();
+                        let mut borrowed_var =
+                            arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                        if borrowed_var.id == *id && !borrowed_var.is_declared {
+                            let var_size = borrowed_var.type_sig.size_of();
                             if var_size == 0 {
                                 continue;
                             }
@@ -109,8 +112,10 @@ impl GenerateCode for Declaration {
                 for id in &vars {
                     let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, _o) in borrow.vars() {
-                        if v.id == *id && !v.is_declared.get() {
-                            v.is_declared.set(true);
+                        let mut borrowed_var =
+                            arw_write!(v, CodeGenerationError::ConcurrencyError)?;
+                        if borrowed_var.id == *id && !borrowed_var.is_declared {
+                            borrowed_var.is_declared = true;
                             break;
                         }
                     }
@@ -125,7 +130,9 @@ impl GenerateCode for Declaration {
                         crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
                             .access_var(id)?;
 
-                    let var_size = var.type_sig.size_of();
+                    let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
+                        .type_sig
+                        .size_of();
                     if var_size == 0 {
                         continue;
                     }

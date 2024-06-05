@@ -32,8 +32,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
     Scan,
-    Print(RefCell<Option<EType>>),
-    Println(RefCell<Option<EType>>),
+    Print(Option<EType>),
+    Println(Option<EType>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,8 +96,8 @@ impl IOFn {
             None => {}
         }
         match id.as_str() {
-            lexem::PRINT => Some(IOFn::Print(RefCell::default())),
-            lexem::PRINTLN => Some(IOFn::Println(RefCell::default())),
+            lexem::PRINT => Some(IOFn::Print(None)),
+            lexem::PRINTLN => Some(IOFn::Println(None)),
             lexem::SCAN => Some(IOFn::Scan),
             _ => None,
         }
@@ -120,7 +120,7 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(
+                *param_type = Some(
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
                 );
                 Ok(())
@@ -131,7 +131,7 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(
+                *param_type = Some(
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
                 );
                 Ok(())

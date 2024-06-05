@@ -101,12 +101,12 @@ impl Default for Metadata {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Either<User, Static> {
-    Static(Rc<Static>),
-    User(Rc<User>),
+pub enum Either {
+    Static(Arc<StaticType>),
+    User(Arc<UserType>),
 }
 
-pub type EType = Either<UserType, StaticType>;
+pub type EType = Either;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccessLevel {

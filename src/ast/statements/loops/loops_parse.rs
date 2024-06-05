@@ -140,7 +140,7 @@ mod tests {
                 iterator: ForIterator {
                     expr: Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".to_string().into(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                         metadata: Metadata::default(),
                     })))
                 },
@@ -152,7 +152,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -199,7 +199,7 @@ mod tests {
                             fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                                 Variable {
                                     id: "f".to_string().into(),
-                                    from_field: Cell::new(false),
+                                    from_field: false,
                                     metadata: Metadata::default(),
                                 }
                             )))),
@@ -242,7 +242,7 @@ mod tests {
                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
                                 id: "f".to_string().into(),
-                                from_field: Cell::new(false),
+                                from_field: false,
                                 metadata: Metadata::default(),
                             }
                         )))),

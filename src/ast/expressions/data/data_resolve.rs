@@ -17,7 +17,7 @@ use crate::semantic::{
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{ArcMutex, EType, Info, MergeType};
-use crate::{e_static, p_num, resolve_metadata};
+use crate::{arw_read, e_static, p_num, resolve_metadata};
 
 impl Resolve for Data {
     type Output = ();
@@ -66,7 +66,7 @@ impl Resolve for Variable {
     {
         match extra {
             Some(extra) => {
-                self.from_field.set(true);
+                self.from_field = true;
                 self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(extra.clone()),
@@ -75,7 +75,9 @@ impl Resolve for Variable {
             None => {
                 let var =
                     crate::arw_read!(scope, SemanticError::ConcurrencyError)?.find_var(&self.id)?;
-                let var_type = var.type_sig.clone();
+                let var_type = arw_read!(var, SemanticError::ConcurrencyError)?
+                    .type_sig
+                    .clone();
 
                 self.metadata.info = Info::Resolved {
                     context: context.clone(),
@@ -105,61 +107,67 @@ impl Resolve for Primitive {
                 match context_type {
                     Either::Static(value) => {
                         if let Primitive::Number(n) = self {
-                            if let Number::Unresolved(v) = n.get() {
+                            if let Number::Unresolved(v) = n {
                                 match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Number(value)) => {
                                         match value {
                                             NumberType::U8 => {
-                                                n.set(Number::U8(v.try_into().map_err(|_| {
+                                                *n = Number::U8((*v).try_into().map_err(|_| {
                                                     SemanticError::IncompatibleTypes
-                                                })?))
+                                                })?);
                                             }
                                             NumberType::U16 => {
-                                                n.set(Number::U16(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::U16((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::U32 => {
-                                                n.set(Number::U32(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::U32((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::U64 => {
-                                                n.set(Number::U64(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::U64((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::U128 => {
-                                                n.set(Number::U128(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n = Number::U128((*v).try_into().map_err(
+                                                    |_| SemanticError::IncompatibleTypes,
+                                                )?);
                                             }
                                             NumberType::I8 => {
-                                                n.set(Number::I8(v.try_into().map_err(|_| {
+                                                *n = Number::I8((*v).try_into().map_err(|_| {
                                                     SemanticError::IncompatibleTypes
-                                                })?))
+                                                })?);
                                             }
                                             NumberType::I16 => {
-                                                n.set(Number::I16(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::I16((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::I32 => {
-                                                n.set(Number::I32(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::I32((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::I64 => {
-                                                n.set(Number::I64(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n =
+                                                    Number::I64((*v).try_into().map_err(|_| {
+                                                        SemanticError::IncompatibleTypes
+                                                    })?);
                                             }
                                             NumberType::I128 => {
-                                                n.set(Number::I128(v.try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?))
+                                                *n = Number::I128((*v).try_into().map_err(
+                                                    |_| SemanticError::IncompatibleTypes,
+                                                )?);
                                             }
-                                            NumberType::F64 => n.set(Number::F64(v as f64)),
+                                            NumberType::F64 => *n = Number::F64(*v as f64),
                                         }
                                     }
                                     _ => {}
@@ -177,8 +185,8 @@ impl Resolve for Primitive {
             }
             None => {
                 if let Primitive::Number(n) = self {
-                    if let Number::Unresolved(v) = n.get() {
-                        n.set(Number::I64(v))
+                    if let Number::Unresolved(v) = n {
+                        *n = Number::I64(*v)
                     }
                 }
                 Ok(())
@@ -281,7 +289,7 @@ impl Resolve for StrSlice {
                         if *size < self.value.len() {
                             return Err(SemanticError::IncompatibleTypes);
                         } else if *size >= self.value.len() {
-                            self.padding.set(*size - self.value.len());
+                            self.padding = *size - self.value.len();
                         }
                     }
                     _ => return Err(SemanticError::IncompatibleTypes),
@@ -479,9 +487,9 @@ impl Resolve for Closure {
                     Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
                     None => Some(param),
                 };
-                let var = <Var as BuildVar>::build_var(id, &param_type.unwrap());
-                var.state.set(VarState::Parameter);
-                var.is_declared.set(true);
+                let mut var = <Var as BuildVar>::build_var(id, &param_type.unwrap());
+                var.state = VarState::Parameter;
+                var.is_declared = true;
                 var
             })
             .collect::<Vec<Var>>();
@@ -1037,10 +1045,10 @@ mod tests {
         let _ = arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1061,10 +1069,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1079,10 +1087,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1097,7 +1105,7 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::Static(
                     StaticType::Map(MapType {
@@ -1106,7 +1114,7 @@ mod tests {
                     })
                     .into(),
                 ),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1121,12 +1129,12 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: Either::Static(
                     StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64)])).into(),
                 ),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1147,7 +1155,7 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "point".to_string().into(),
                 type_sig: Either::User(
                     UserType::Struct(
@@ -1164,7 +1172,7 @@ mod tests {
                     )
                     .into(),
                 ),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = variable.resolve(&scope, &None, &mut None);
@@ -1186,10 +1194,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = address.resolve(&scope, &None, &mut ());

@@ -193,7 +193,7 @@ impl FnCall {
                 Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: func,
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 opt_params,
             )
@@ -245,7 +245,7 @@ impl TryParseOperation for FnCall {
                 Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: func,
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 opt_params,
             )
@@ -1184,13 +1184,13 @@ mod tests {
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "f".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                     }))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::Unresolved(10).into()
@@ -1214,13 +1214,13 @@ mod tests {
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                     id: "f".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: Cell::new(false),
+                    from_field: false,
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
                         id: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: Cell::new(false),
+                        from_field: false,
                     }))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::Unresolved(10).into()

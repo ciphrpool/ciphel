@@ -18,7 +18,10 @@ impl Resolve for Assignation {
     {
         let _ = self.left.resolve(scope, &None, &mut None)?;
         if self.left.is_assignable() {
-            let left_type = Some(self.left.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?);
+            let left_type = Some(
+                self.left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+            );
             let _ = self.right.resolve(scope, &left_type, &mut ())?;
             Ok(())
         } else {
@@ -42,11 +45,15 @@ impl Resolve for AssignValue {
         match self {
             AssignValue::Scope(value) => {
                 let _ = value.resolve(scope, context, &mut Vec::default())?;
-                let scope_type = value.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let scope_type =
+                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match context {
                     Some(context) => {
-                        let _ = context.compatible_with(&scope_type, &crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                        let _ = context.compatible_with(
+                            &scope_type,
+                            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        )?;
                     }
                     None => {}
                 }
@@ -54,10 +61,14 @@ impl Resolve for AssignValue {
             }
             AssignValue::Expr(value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let scope_type = value.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let scope_type =
+                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match context {
                     Some(context) => {
-                        let _ = context.compatible_with(&scope_type, &crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                        let _ = context.compatible_with(
+                            &scope_type,
+                            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        )?;
                     }
                     None => {}
                 }
@@ -78,7 +89,7 @@ mod tests {
             scope::{
                 scope::Scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
-                var_impl::Var,
+                var_impl::{Var, VarState},
             },
             Either,
         },
@@ -94,10 +105,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &mut ());
@@ -119,10 +130,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = assignation.resolve(&scope, &None, &mut ());

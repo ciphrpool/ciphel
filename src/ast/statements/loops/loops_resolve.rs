@@ -113,9 +113,9 @@ impl Resolve for ForLoop {
         let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
         let mut item_vars = self.item.resolve(scope, &item_type, &mut ())?;
-        for var in &item_vars {
-            var.state.set(VarState::Parameter);
-            var.is_declared.set(true);
+        for var in item_vars.iter_mut() {
+            var.state = VarState::Parameter;
+            var.is_declared = true;
         }
         // attach the item to the block
         self.scope.to_loop();
@@ -185,10 +185,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -208,10 +208,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -234,10 +234,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -260,10 +260,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(U64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -286,10 +286,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -309,20 +309,20 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
 
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "y".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -345,10 +345,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -371,10 +371,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());
@@ -397,10 +397,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr_loop.resolve(&scope, &None, &mut ());

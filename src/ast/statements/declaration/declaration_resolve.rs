@@ -75,8 +75,8 @@ impl Resolve for Declaration {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                     };
-                    let var = <Var as BuildVar>::build_var(&value.id, &var_type);
-                    var.is_declared.set(true);
+                    let mut var = <Var as BuildVar>::build_var(&value.id, &var_type);
+                    var.is_declared = true;
                     match right {
                         AssignValue::Expr(expr) => match expr.as_ref() {
                             Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {
@@ -268,10 +268,11 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
+        let x_type = binding.read().unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
 
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
@@ -280,10 +281,11 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
+        let x_type = binding.read().unwrap();
         assert_eq!(p_num!(F64), x_type.type_sig);
     }
 
@@ -304,15 +306,17 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
+        let x_type = binding.read().unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"y".to_string().into())
             .unwrap();
+        let y_type = binding.read().unwrap();
         assert_eq!(
             e_static!(StaticType::Primitive(PrimitiveType::Char)),
             y_type.type_sig
@@ -344,15 +348,17 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
+        let x_type = binding.read().unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = arw_read!(scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"y".to_string().into())
             .unwrap();
+        let y_type = binding.read().unwrap();
         assert_eq!(p_num!(I64), y_type.type_sig);
     }
 }

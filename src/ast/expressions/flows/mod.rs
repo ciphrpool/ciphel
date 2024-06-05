@@ -74,7 +74,7 @@ pub struct PatternExpr {
 pub struct TryExpr {
     try_branch: ExprScope,
     else_branch: Option<ExprScope>,
-    pop_last_err: Cell<bool>,
+    pop_last_err: bool,
     metadata: Metadata,
 }
 

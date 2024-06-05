@@ -63,7 +63,7 @@ impl CompatibleWith for EType {
     }
 }
 
-impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
+impl SizeOf for Either {
     fn size_of(&self) -> usize {
         match self {
             Either::Static(value) => value.size_of(),
@@ -274,11 +274,7 @@ impl GetSubTypes for EType {
     }
 }
 
-impl<User, Static> OperandMerging for Either<User, Static>
-where
-    User: CompatibleWith + TypeOf + OperandMerging,
-    Static: CompatibleWith + TypeOf + OperandMerging,
-{
+impl OperandMerging for Either {
     fn can_substract(&self) -> Result<(), SemanticError> {
         match self {
             Either::Static(value) => value.can_substract(),

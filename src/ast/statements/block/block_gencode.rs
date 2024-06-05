@@ -1,5 +1,5 @@
-use crate::arw_write;
 use crate::semantic::scope::scope::Scope;
+use crate::{arw_read, arw_write};
 
 use crate::vm::casm::branch::BranchTry;
 use crate::{
@@ -64,15 +64,20 @@ impl GenerateCode for Block {
         let _return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
         // Parameter allocation if any
-        let parameters = borrowed
-            .vars()
-            .filter(|(v, _)| v.state.get() == VarState::Parameter);
+        let parameters = borrowed.vars().filter(|(v, _)| {
+            arw_read!(v, CodeGenerationError::ConcurrencyError)
+                .ok()
+                .map(|v| v.state == VarState::Parameter)
+                .unwrap_or(false)
+        });
 
         let mut offset_idx = 0;
 
         for (var, offset) in parameters {
             let var = var.as_ref();
-            let var_size = var.type_sig.size_of();
+            let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
+                .type_sig
+                .size_of();
             // Already allocated
             let mut borrowed_offset = arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
             *borrowed_offset = Offset::FP(offset_idx);
@@ -82,9 +87,11 @@ impl GenerateCode for Block {
         let mut offset_idx = 0;
         for (var, offset) in borrowed.vars() {
             let var = var.as_ref();
-            let var_size = var.type_sig.size_of();
+            let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
+                .type_sig
+                .size_of();
 
-            if var.state.get() != VarState::Parameter {
+            if arw_read!(var, CodeGenerationError::ConcurrencyError)?.state != VarState::Parameter {
                 let mut borrowed_offset =
                     arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
                 *borrowed_offset = Offset::FZ(offset_idx as isize);

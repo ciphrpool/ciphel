@@ -3,6 +3,7 @@ use num_traits::ToBytes;
 use ulid::Ulid;
 
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::SemanticError;
 use crate::vm::allocator::stack::UReg;
 use crate::vm::casm::alloc::StackFrame;
 use crate::vm::casm::branch::BranchTry;
@@ -206,7 +207,7 @@ impl GenerateCode for MatchExpr {
                     }
                     Pattern::Primitive(value) => {
                         let data = match value {
-                            Primitive::Number(data) => match data.get() {
+                            Primitive::Number(data) => match data {
                                 Number::U8(data) => data.to_le_bytes().into(),
                                 Number::U16(data) => data.to_le_bytes().into(),
                                 Number::U32(data) => data.to_le_bytes().into(),
@@ -284,7 +285,11 @@ impl GenerateCode for MatchExpr {
             let param_size = borrowed_scope
                 .vars()
                 .filter_map(|(v, _)| {
-                    (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
+                    if let Ok(borrowed) = arw_read!(v, SemanticError::ConcurrencyError) {
+                        (borrowed.state == VarState::Parameter).then(|| borrowed.type_sig.size_of())
+                    } else {
+                        None
+                    }
                 })
                 .sum::<usize>();
             instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
@@ -364,7 +369,7 @@ impl GenerateCode for TryExpr {
         }));
         instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
 
-        if self.pop_last_err.get() {
+        if self.pop_last_err {
             /* Pop the error */
             instructions.push(Casm::If(BranchIf {
                 else_label: end_try_label,
@@ -741,12 +746,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(420, res);
+                                assert_eq!(420, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),
@@ -826,12 +831,12 @@ mod tests {
         for (r_id, res) in &result.fields {
             match res {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
+                    match x {
                         Number::I64(res) => {
                             if **r_id == "x" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             } else if **r_id == "y" {
-                                assert_eq!(69, res);
+                                assert_eq!(69, *res);
                             }
                         }
                         _ => assert!(false, "Expected i64"),

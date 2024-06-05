@@ -33,7 +33,7 @@ use crate::{
 };
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringsFn {
-    ToStr(Cell<StringsCasm>),
+    ToStr(StringsCasm),
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -86,9 +86,7 @@ impl StringsFn {
             None => {}
         }
         match id.as_str() {
-            lexem::TOSTR => Some(StringsFn::ToStr(Cell::new(StringsCasm::ToStr(
-                ToStrCasm::ToStrI64,
-            )))),
+            lexem::TOSTR => Some(StringsFn::ToStr(StringsCasm::ToStr(ToStrCasm::ToStrI64))),
             _ => None,
         }
     }
@@ -120,48 +118,28 @@ impl Resolve for StringsFn {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(p) => match p {
                             PrimitiveType::Number(n) => match n {
-                                NumberType::U8 => casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU8)),
-                                NumberType::U16 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU16))
-                                }
-                                NumberType::U32 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU32))
-                                }
-                                NumberType::U64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU64))
-                                }
+                                NumberType::U8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU8),
+                                NumberType::U16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU16),
+                                NumberType::U32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU32),
+                                NumberType::U64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU64),
                                 NumberType::U128 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrU128))
+                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrU128)
                                 }
-                                NumberType::I8 => casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI8)),
-                                NumberType::I16 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI16))
-                                }
-                                NumberType::I32 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI32))
-                                }
-                                NumberType::I64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI64))
-                                }
+                                NumberType::I8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI8),
+                                NumberType::I16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI16),
+                                NumberType::I32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI32),
+                                NumberType::I64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI64),
                                 NumberType::I128 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrI128))
+                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrI128)
                                 }
-                                NumberType::F64 => {
-                                    casm.set(StringsCasm::ToStr(ToStrCasm::ToStrF64))
-                                }
+                                NumberType::F64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrF64),
                             },
-                            PrimitiveType::Char => {
-                                casm.set(StringsCasm::ToStr(ToStrCasm::ToStrChar))
-                            }
-                            PrimitiveType::Bool => {
-                                casm.set(StringsCasm::ToStr(ToStrCasm::ToStrBool))
-                            }
+                            PrimitiveType::Char => *casm = StringsCasm::ToStr(ToStrCasm::ToStrChar),
+                            PrimitiveType::Bool => *casm = StringsCasm::ToStr(ToStrCasm::ToStrBool),
                         },
-                        StaticType::String(_) => {
-                            casm.set(StringsCasm::ToStr(ToStrCasm::ToStrString))
-                        }
+                        StaticType::String(_) => *casm = StringsCasm::ToStr(ToStrCasm::ToStrString),
                         StaticType::StrSlice(_) => {
-                            casm.set(StringsCasm::ToStr(ToStrCasm::ToStrStrSlice))
+                            *casm = StringsCasm::ToStr(ToStrCasm::ToStrStrSlice)
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -192,7 +170,7 @@ impl GenerateCode for StringsFn {
     ) -> Result<(), CodeGenerationError> {
         match self {
             StringsFn::ToStr(to_str_casm) => instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Strings(to_str_casm.get()),
+                super::StdCasm::Strings(*to_str_casm),
             ))),
         }
         Ok(())

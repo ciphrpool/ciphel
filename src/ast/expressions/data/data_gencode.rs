@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 
 use num_traits::ToBytes;
 
+use crate::arw_read;
 use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{scope, AccessLevel};
@@ -77,14 +78,14 @@ impl Locatable for Data {
                 from_field,
                 metadata,
             }) => {
-                if from_field.get() {
+                if *from_field {
                     Ok(())
                 } else {
                     let (var, address, level) =
                         crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
                             .access_var(id)?;
 
-                    let var_type = &var.as_ref().type_sig;
+                    let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
                     let _var_size = var_type.size_of();
 
                     instructions.push(Casm::Locate(Locate {
@@ -197,7 +198,7 @@ impl GenerateCode for Primitive {
         instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
-            Primitive::Number(data) => match data.get() {
+            Primitive::Number(data) => match data {
                 super::Number::U8(data) => data::Data::Serialized {
                     data: data.to_le_bytes().into(),
                 },
@@ -255,7 +256,7 @@ impl GenerateCode for Variable {
         scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        if self.from_field.get() {
+        if self.from_field {
             let Some(var_type) = self.metadata.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
@@ -272,7 +273,7 @@ impl GenerateCode for Variable {
                 crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
                     .access_var(&self.id)?;
             // dbg!((&var, &address, &level));
-            let var_type = &var.as_ref().type_sig;
+            let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
             let var_size = var_type.size_of();
             if var_size == 0 {
                 return Ok(());
@@ -328,7 +329,7 @@ impl GenerateCode for StrSlice {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
         let size = (&str_bytes).len() as u64;
         instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-        let padding = self.padding.get();
+        let padding = self.padding;
         if padding > 0 {
             instructions.push(Casm::Data(data::Data::Serialized {
                 data: vec![0; padding].into(),
@@ -479,7 +480,7 @@ impl GenerateCode for Closure {
                 .map_err(|_| CodeGenerationError::ConcurrencyError)?
             {
                 let (var, address, level) = outer_scope.access_var(&var.id)?;
-                let var_type = &var.as_ref().type_sig;
+                let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
                 let var_size = var_type.size_of();
                 instructions.push(Casm::Access(Access::Static {
                     address: MemoryAddress::Stack {
@@ -1042,8 +1043,8 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
-                        Number::I64(n) => Some(n),
+                    match x {
+                        Number::I64(n) => Some(*n),
                         _ => None,
                     }
                 }
@@ -1104,8 +1105,8 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
-                    match x.get() {
-                        Number::I64(n) => Some(n),
+                    match x {
+                        Number::I64(n) => Some(*n),
                         _ => None,
                     }
                 }

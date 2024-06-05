@@ -28,12 +28,11 @@ impl Resolve for Block {
             if self.is_loop.load(Ordering::Acquire) {
                 arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
             }
-            let borrowed_caller = arw_read!(self.caller, SemanticError::ConcurrencyError)?;
-            if let Some(caller) = borrowed_caller.as_ref() {
-                let caller = caller.clone();
-                caller.state.set(VarState::Parameter);
+            let mut borrowed_caller = arw_write!(self.caller, SemanticError::ConcurrencyError)?;
+            if let Some(caller) = borrowed_caller.as_mut() {
+                caller.state = VarState::Parameter;
                 let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?
-                    .register_var(caller)?;
+                    .register_var(caller.clone())?;
             }
             let can_capture = arw_read!(self.can_capture, SemanticError::ConcurrencyError)?.clone();
             arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_closure(can_capture);
@@ -95,17 +94,19 @@ mod tests {
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let var_x = arw_read!(res_scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(res_scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
+        let var_x = binding.read().unwrap();
         let x_type = var_x
             .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
             .unwrap();
-        let var_y = arw_read!(res_scope, SemanticError::ConcurrencyError)
+        let binding = arw_read!(res_scope, SemanticError::ConcurrencyError)
             .unwrap()
             .find_var(&"y".to_string().into())
             .unwrap();
+        let var_y = binding.read().unwrap();
         let y_type = var_y
             .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
             .unwrap();

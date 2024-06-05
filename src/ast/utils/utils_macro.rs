@@ -75,9 +75,9 @@ macro_rules! p_num {
 #[macro_export]
 macro_rules! v_num {
     ($type_def:ident,$num:expr) => {
-        crate::ast::expressions::data::Primitive::Number(Cell::new(
+        crate::ast::expressions::data::Primitive::Number(
             crate::ast::expressions::data::Number::$type_def($num),
-        ))
+        )
     };
 }
 

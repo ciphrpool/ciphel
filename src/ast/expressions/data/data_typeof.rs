@@ -6,9 +6,9 @@ use super::{
 };
 use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
-use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
+use crate::{arw_read, e_static};
 
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf};
@@ -57,7 +57,7 @@ impl TypeOf for Primitive {
         Self: Sized + Resolve,
     {
         match self {
-            Primitive::Number(num) => match num.get() {
+            Primitive::Number(num) => match num {
                 Number::U8(_) => {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::U8), scope)
                         .map(|value| (e_static!(value)))
@@ -130,7 +130,7 @@ impl TypeOf for StrSlice {
     {
         StaticType::build_str_slice(
             &StrSliceType {
-                size: self.value.len() + self.padding.get(),
+                size: self.value.len() + self.padding,
             },
             scope,
         )
@@ -179,7 +179,9 @@ impl TypeOf for Closure {
             .map_err(|_| SemanticError::ConcurrencyError)?
             .vars()
         {
-            scope_params_size += v.type_sig.size_of();
+            scope_params_size += arw_read!(v, SemanticError::ConcurrencyError)?
+                .type_sig
+                .size_of();
         }
         StaticType::build_closure(
             &params_types,

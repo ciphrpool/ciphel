@@ -30,18 +30,18 @@ use crate::{
 pub enum IterFn {
     MapItems {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
     MapValues {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
     MapKeys {
         metadata: Metadata,
-        key_size: Cell<usize>,
-        value_size: Cell<usize>,
+        key_size: usize,
+        value_size: usize,
     },
 }
 
@@ -74,18 +74,18 @@ impl IterFn {
         }
         match id.as_str() {
             lexem::ITEMS => Some(IterFn::MapItems {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::KEYS => Some(IterFn::MapKeys {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             lexem::VALUES => Some(IterFn::MapValues {
-                key_size: Cell::new(0),
-                value_size: Cell::new(0),
+                key_size: 0,
+                value_size: 0,
                 metadata: Metadata::default(),
             }),
             _ => None,
@@ -130,8 +130,8 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
 
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
@@ -179,8 +179,8 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
 
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
@@ -223,8 +223,8 @@ impl Resolve for IterFn {
                             keys_type,
                             values_type,
                         }) => {
-                            key_size.set(keys_type.as_ref().size_of());
-                            value_size.set(values_type.as_ref().size_of());
+                            *key_size = keys_type.as_ref().size_of();
+                            *value_size = values_type.as_ref().size_of();
 
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
@@ -277,8 +277,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapItems {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
             IterFn::MapValues {
@@ -287,8 +287,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapValues {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
             IterFn::MapKeys {
@@ -297,8 +297,8 @@ impl GenerateCode for IterFn {
                 value_size,
             } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
                 IterCasm::MapKeys {
-                    key_size: key_size.get(),
-                    value_size: value_size.get(),
+                    key_size: *key_size,
+                    value_size: *value_size,
                 },
             )))),
         }

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -112,7 +112,7 @@ pub mod eater {
     }
 }
 
-pub type ID = Rc<String>;
+pub type ID = Arc<String>;
 
 /*
  * @desc Parse Identifier
@@ -186,7 +186,7 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                     nom::error::ErrorKind::AlphaNumeric,
                 )))
             } else {
-                Ok(Rc::new(id))
+                Ok(Arc::new(id))
             }
         },
     ))

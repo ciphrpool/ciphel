@@ -124,9 +124,9 @@ impl Resolve for MatchStat {
                         }
                     }
 
-                    for (_index, var) in previous_vars.iter().enumerate() {
-                        var.state.set(VarState::Parameter);
-                        var.is_declared.set(true);
+                    for (_index, var) in previous_vars.iter_mut().enumerate() {
+                        var.state = VarState::Parameter;
+                        var.is_declared = true;
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
                     let _ = value.scope.resolve(scope, &context, &mut previous_vars)?;
@@ -171,9 +171,9 @@ impl Resolve for MatchStat {
                             return Err(SemanticError::IncorrectVariant);
                         }
                     }
-                    for (_index, var) in previous_vars.iter().enumerate() {
-                        var.state.set(VarState::Parameter);
-                        var.is_declared.set(true);
+                    for (_index, var) in previous_vars.iter_mut().enumerate() {
+                        var.state = VarState::Parameter;
+                        var.is_declared = true;
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
                     let _ = value.scope.resolve(scope, &context, &mut previous_vars)?;
@@ -323,10 +323,10 @@ mod tests {
         let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
             .unwrap()
             .register_var(Var {
-                state: Cell::default(),
+                state: VarState::Local,
                 id: "x".to_string().into(),
                 type_sig: p_num!(I64),
-                is_declared: Cell::new(false),
+                is_declared: false,
             })
             .unwrap();
         let res = expr.resolve(&scope, &None, &mut ());

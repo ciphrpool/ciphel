@@ -76,7 +76,7 @@ impl BuildStaticType for StaticType {
 
     fn build_slice(
         type_sig: &ast::types::SliceType,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let inner = type_sig.item_type.type_of(&scope)?;
         Ok(Self::Slice(SliceType {
@@ -98,7 +98,7 @@ impl BuildStaticType for StaticType {
 
     fn build_tuple(
         type_sig: &ast::types::TupleType,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.0.len());
         for subtype in &type_sig.0 {
@@ -109,8 +109,8 @@ impl BuildStaticType for StaticType {
     }
 
     fn build_tuple_from(
-        type_sig: &Vec<Either<UserType, Self>>,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        type_sig: &Vec<Either>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let mut vec = Vec::with_capacity(type_sig.len());
         for subtype in type_sig {
@@ -122,15 +122,15 @@ impl BuildStaticType for StaticType {
 
     fn build_vec(
         type_sig: &ast::types::VecType,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.0.type_of(&scope)?;
         Ok(Self::Vec(VecType(Box::new(subtype))))
     }
 
     fn build_vec_from(
-        type_sig: &Either<UserType, Self>,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        type_sig: &Either,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Vec(VecType(Box::new(subtype))))
@@ -154,8 +154,8 @@ impl BuildStaticType for StaticType {
     }
 
     fn build_closure(
-        params: &Vec<Either<UserType, Self>>,
-        ret: &Either<UserType, Self>,
+        params: &Vec<Either>,
+        ret: &Either,
         closed: bool,
         scope_params_size: usize,
         _scope: &std::sync::RwLockReadGuard<Scope>,
@@ -178,15 +178,15 @@ impl BuildStaticType for StaticType {
 
     fn build_addr(
         type_sig: &ast::types::AddrType,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.0.type_of(&scope)?;
         Ok(Self::Address(AddrType(Box::new(subtype))))
     }
 
     fn build_addr_from(
-        type_sig: &Either<UserType, Self>,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        type_sig: &Either,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let subtype = type_sig.type_of(&scope)?;
         Ok(Self::Address(AddrType(Box::new(subtype))))
@@ -194,7 +194,7 @@ impl BuildStaticType for StaticType {
 
     fn build_map(
         type_sig: &ast::types::MapType,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         let key_type = type_sig.keys_type.type_of(&scope)?;
         let subtype = type_sig.values_type.type_of(&scope)?;
@@ -205,9 +205,9 @@ impl BuildStaticType for StaticType {
     }
 
     fn build_map_from(
-        key: &Either<UserType, Self>,
-        value: &Either<UserType, Self>,
-        scope: &std::sync::RwLockReadGuard<Scope>
+        key: &Either,
+        value: &Either,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<Self, SemanticError> {
         Ok(Self::Map(MapType {
             keys_type: Box::new(key.clone()),
