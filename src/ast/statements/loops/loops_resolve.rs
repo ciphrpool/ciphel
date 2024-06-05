@@ -12,7 +12,7 @@ impl Resolve for Loop {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -36,7 +36,7 @@ impl Resolve for ForIterator {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -44,7 +44,9 @@ impl Resolve for ForIterator {
         Self: Sized,
     {
         let _ = self.expr.resolve(scope, &None, &mut None)?;
-        let expr_type = self.expr.type_of(&scope.borrow())?;
+        let expr_type = self
+            .expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !expr_type.is_iterable() {
             return Err(SemanticError::ExpectedIterable);
         }
@@ -73,7 +75,7 @@ impl Resolve for ForItem {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -97,7 +99,7 @@ impl Resolve for ForLoop {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -105,7 +107,9 @@ impl Resolve for ForLoop {
         Self: Sized,
     {
         let _ = self.iterator.resolve(scope, &(), &mut ())?;
-        let item_type = self.iterator.type_of(&scope.borrow())?;
+        let item_type = self
+            .iterator
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
         let mut item_vars = self.item.resolve(scope, &item_type, &mut ())?;
@@ -125,7 +129,7 @@ impl Resolve for WhileLoop {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -134,7 +138,9 @@ impl Resolve for WhileLoop {
     {
         let _ = self.condition.resolve(scope, &None, &mut None)?;
         // check that the condition is a boolean
-        let condition_type = self.condition.type_of(&scope.borrow())?;
+        let condition_type = self
+            .condition
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
@@ -176,8 +182,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -199,8 +205,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -225,8 +231,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -251,8 +257,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -277,8 +283,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -300,8 +306,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -310,8 +316,8 @@ mod tests {
             })
             .unwrap();
 
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "y".to_string().into(),
@@ -336,8 +342,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -362,8 +368,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -388,8 +394,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),

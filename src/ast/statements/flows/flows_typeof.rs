@@ -10,7 +10,7 @@ use crate::semantic::{
 };
 
 impl TypeOf for Flow {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -23,7 +23,7 @@ impl TypeOf for Flow {
     }
 }
 impl TypeOf for IfStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -45,7 +45,7 @@ impl TypeOf for IfStat {
     }
 }
 impl TypeOf for MatchStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -79,7 +79,7 @@ impl TypeOf for MatchStat {
 }
 
 impl TypeOf for TryStat {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -98,7 +98,7 @@ impl TypeOf for TryStat {
 }
 
 impl TypeOf for CallStat {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<crate::semantic::EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<crate::semantic::EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

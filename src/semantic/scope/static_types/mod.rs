@@ -109,7 +109,7 @@ pub struct MapType {
 }
 
 impl TypeOf for StaticType {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {

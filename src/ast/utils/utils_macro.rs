@@ -6,6 +6,32 @@ macro_rules! e_static {
 }
 
 #[macro_export]
+macro_rules! arw_read {
+    ($var:expr,$err:expr) => {
+        $var.try_read().map_err(|_| {
+            panic!("Concucurrency Read error");
+            $err
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! arw_write {
+    ($var:expr,$err:expr) => {
+        $var.try_write().map_err(|_| {
+            panic!("Concucurrency Write error");
+            $err
+        })
+    };
+}
+#[macro_export]
+macro_rules! arw_new {
+    ($var:expr) => {
+        Arc::new(RwLock::new($var))
+    };
+}
+
+#[macro_export]
 macro_rules! e_user {
     ($type_def:expr) => {
         crate::semantic::Either::User($type_def.into())
@@ -52,7 +78,9 @@ macro_rules! resolve_metadata {
     ($info:expr,$self:expr,$scope:expr,$context:expr) => {{
         $info = crate::semantic::Info::Resolved {
             context: $context.clone(),
-            signature: Some($self.type_of(&$scope.borrow())?),
+            signature: Some(
+                $self.type_of(&crate::arw_read!($scope, SemanticError::ConcurrencyError)?)?,
+            ),
         };
     }};
 }
@@ -133,9 +161,8 @@ macro_rules! compile_expression_with_type {
 
         // Create a new block.
         let scope = Scope::new();
-        let _ = scope
-            .as_ref()
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, crate::SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &$user_type.id.clone(),
                 UserType::$expr_type($user_type.clone().into()),

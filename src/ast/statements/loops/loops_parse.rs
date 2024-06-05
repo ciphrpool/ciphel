@@ -166,7 +166,7 @@ mod tests {
                     is_loop: Cell::new(false),
 
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 })
             },
             value
@@ -213,7 +213,7 @@ mod tests {
                     is_loop: Cell::new(false),
 
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None)
+                    inner_scope: None
                 })
             },
             value
@@ -256,7 +256,7 @@ mod tests {
                 is_loop: Cell::new(false),
 
                 caller: Default::default(),
-                inner_scope: RefCell::new(None)
+                inner_scope: None
             })),
             value
         );

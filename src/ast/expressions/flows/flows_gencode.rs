@@ -2,7 +2,6 @@ use num_traits::ToBytes;
 
 use ulid::Ulid;
 
-use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::stack::UReg;
 use crate::vm::casm::alloc::StackFrame;
@@ -11,6 +10,7 @@ use crate::vm::casm::data;
 use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
 use crate::vm::platform::stdlib::StdCasm;
 use crate::vm::platform::LibCasm;
+use crate::{arw_read, e_static};
 use crate::{
     ast::expressions::data::{Number, Primitive},
     semantic::{
@@ -39,7 +39,7 @@ use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
 impl GenerateCode for ExprFlow {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -48,7 +48,10 @@ impl GenerateCode for ExprFlow {
             ExprFlow::Try(value) => value.gencode(scope, instructions),
             ExprFlow::SizeOf(value, _metadata) => {
                 let value = value
-                    .type_of(&scope.borrow())
+                    .type_of(&crate::arw_read!(
+                        scope,
+                        CodeGenerationError::ConcurrencyError
+                    )?)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
                 instructions.push(Casm::Data(Data::Serialized {
@@ -64,7 +67,7 @@ impl GenerateCode for ExprFlow {
 impl GenerateCode for IfExpr {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -126,7 +129,7 @@ impl GenerateCode for IfExpr {
 impl GenerateCode for MatchExpr {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -274,18 +277,16 @@ impl GenerateCode for MatchExpr {
             // let param_size = expr
             //     .parameters_size()
             //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let param_size = expr
+            let scope = expr
                 .scope()
-                .map(|s| {
-                    s.as_ref()
-                        .borrow()
-                        .vars()
-                        .filter_map(|(v, _)| {
-                            (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
-                        })
-                        .sum()
-                })
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
+            let borrowed_scope = arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+            let param_size = borrowed_scope
+                .vars()
+                .filter_map(|(v, _)| {
+                    (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
+                })
+                .sum::<usize>();
             instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
             instructions.push(Casm::Call(Call::From {
                 label: scope_label,
@@ -327,7 +328,7 @@ impl GenerateCode for MatchExpr {
 impl GenerateCode for TryExpr {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -419,7 +420,7 @@ impl GenerateCode for TryExpr {
 impl GenerateCode for FCall {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         for item in &self.value {
@@ -700,8 +701,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
@@ -785,8 +786,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
@@ -941,8 +942,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -1007,8 +1008,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -1073,8 +1074,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -1161,8 +1162,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -1391,8 +1392,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Union(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -1456,8 +1457,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Geo".to_string().into(), UserType::Enum(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement

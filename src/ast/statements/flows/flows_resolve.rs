@@ -20,7 +20,7 @@ impl Resolve for Flow {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -41,7 +41,7 @@ impl Resolve for IfStat {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -50,7 +50,9 @@ impl Resolve for IfStat {
     {
         let _ = self.condition.resolve(scope, &None, &mut None)?;
         // check that condition is a boolean
-        let condition_type = self.condition.type_of(&scope.borrow())?;
+        let condition_type = self
+            .condition
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !<EType as TypeChecking>::is_boolean(&condition_type) {
             return Err(SemanticError::ExpectedBoolean);
         }
@@ -61,7 +63,8 @@ impl Resolve for IfStat {
 
         for (else_if_cond, else_if_scope) in &mut self.else_if_branches {
             let _ = else_if_cond.resolve(scope, &None, &mut None)?;
-            let condition_type = else_if_cond.type_of(&scope.borrow())?;
+            let condition_type =
+                else_if_cond.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
             if !<EType as TypeChecking>::is_boolean(&condition_type) {
                 return Err(SemanticError::ExpectedBoolean);
             }
@@ -80,7 +83,7 @@ impl Resolve for MatchStat {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -88,7 +91,10 @@ impl Resolve for MatchStat {
         Self: Sized,
     {
         let _ = self.expr.resolve(scope, &None, &mut None)?;
-        let expr_type = Some(self.expr.type_of(&scope.borrow())?);
+        let expr_type = Some(
+            self.expr
+                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+        );
 
         let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
             Either::Static(value) => match value.as_ref() {
@@ -184,7 +190,7 @@ impl Resolve for TryStat {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -206,7 +212,7 @@ impl Resolve for CallStat {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -314,8 +320,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),

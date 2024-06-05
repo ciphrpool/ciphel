@@ -15,7 +15,7 @@ impl MergeType for StaticType {
     fn merge<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>
     ) -> Result<Either<UserType, Self>, SemanticError>
     where
         Other: TypeOf,
@@ -53,7 +53,7 @@ impl MergeType for StaticType {
 }
 
 impl MergeType for PrimitiveType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -90,7 +90,7 @@ impl MergeType for PrimitiveType {
 }
 
 impl MergeType for SliceType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -118,7 +118,7 @@ impl MergeType for SliceType {
 }
 
 impl MergeType for RangeType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -145,7 +145,7 @@ impl MergeType for RangeType {
 }
 
 impl MergeType for StringType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -161,7 +161,7 @@ impl MergeType for StringType {
 }
 
 impl MergeType for StrSliceType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -185,7 +185,7 @@ impl MergeType for StrSliceType {
 }
 
 impl MergeType for VecType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -204,7 +204,7 @@ impl MergeType for VecType {
 }
 
 impl MergeType for FnType {
-    fn merge<Other>(&self, _other: &Other, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, _other: &Other, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -236,7 +236,7 @@ impl MergeType for FnType {
 }
 
 impl MergeType for ClosureType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -274,7 +274,7 @@ impl MergeType for ClosureType {
 }
 
 impl MergeType for TupleType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -300,7 +300,7 @@ impl MergeType for TupleType {
 }
 
 impl MergeType for AddrType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -319,7 +319,7 @@ impl MergeType for AddrType {
 }
 
 impl MergeType for MapType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {

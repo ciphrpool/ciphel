@@ -27,7 +27,7 @@ impl Resolve for UnaryOperation {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -40,7 +40,8 @@ impl Resolve for UnaryOperation {
                 //     StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
                 // ));
                 let _ = value.resolve(scope, context, &mut None)?;
-                let value_type = value.type_of(&scope.borrow())?;
+                let value_type =
+                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 // let _ = <EType as OperandMerging>::can_substract(&value_type)?;
                 match value_type {
@@ -61,22 +62,31 @@ impl Resolve for UnaryOperation {
                     Either::User(_) => return Err(SemanticError::IncompatibleOperation),
                 }
                 {
-                    metadata.info = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(value.type_of(&scope.borrow())?),
-                    };
+                    metadata.info =
+                        Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(value.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
+                        };
                 }
                 Ok(())
             }
             UnaryOperation::Not { value, metadata } => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let value_type = value.type_of(&scope.borrow())?;
+                let value_type =
+                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = <EType as OperandMerging>::can_negate(&value_type)?;
                 {
-                    metadata.info = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(value.type_of(&scope.borrow())?),
-                    };
+                    metadata.info =
+                        Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(value.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
+                        };
                 }
                 Ok(())
             }
@@ -90,7 +100,7 @@ impl Resolve for TupleAccess {
     type Extra = Option<EType>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -98,7 +108,9 @@ impl Resolve for TupleAccess {
         Self: Sized,
     {
         let _ = self.var.resolve(scope, context, extra)?;
-        let var_type = self.var.type_of(&scope.borrow())?;
+        let var_type = self
+            .var
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !var_type.is_dotnum_indexable() {
             Err(SemanticError::ExpectedIndexable)
         } else {
@@ -128,7 +140,7 @@ impl Resolve for ListAccess {
     type Extra = Option<EType>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -136,10 +148,14 @@ impl Resolve for ListAccess {
         Self: Sized,
     {
         let _ = self.var.resolve(scope, context, extra)?;
-        let var_type = self.var.type_of(&scope.borrow())?;
+        let var_type = self
+            .var
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if var_type.is_indexable() {
             let _ = self.index.resolve(scope, &Some(p_num!(U64)), extra)?;
-            let index_type = self.index.type_of(&scope.borrow())?;
+            let index_type = self
+                .index
+                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
             if index_type.is_u64() {
                 let item_type = var_type.get_item().ok_or(SemanticError::ExpectedIterable)?;
 
@@ -163,7 +179,7 @@ impl Resolve for FieldAccess {
     type Extra = Option<EType>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -171,7 +187,9 @@ impl Resolve for FieldAccess {
         Self: Sized,
     {
         let _ = self.var.resolve(scope, context, extra)?;
-        let mut var_type = self.var.type_of(&scope.borrow())?;
+        let mut var_type = self
+            .var
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
         match &var_type {
             Either::Static(value) => match value.as_ref() {
@@ -194,7 +212,9 @@ impl Resolve for FieldAccess {
                     let _ = self
                         .field
                         .resolve(scope, context, &mut Some(field_type.clone()))?;
-                    let field_type = self.field.type_of(&scope.borrow())?;
+                    let field_type = self
+                        .field
+                        .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                     self.metadata.info = Info::Resolved {
                         context: Some(var_type),
@@ -214,7 +234,7 @@ impl Resolve for FnCall {
     type Extra = Option<EType>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -223,7 +243,7 @@ impl Resolve for FnCall {
     {
         match self.fn_var.as_mut() {
             Expression::Atomic(Atomic::Data(Data::Variable(Variable { id, .. }))) => {
-                let found = scope.as_ref().borrow().find_var(id);
+                let found = crate::arw_read!(scope, SemanticError::ConcurrencyError)?.find_var(id);
                 if found.is_err() || self.lib.is_some() {
                     if let Some(mut api) = Lib::from(&self.lib, id) {
                         let _ = api.resolve(scope, context, &mut self.params)?;
@@ -237,7 +257,9 @@ impl Resolve for FnCall {
         }
 
         let _ = self.fn_var.resolve(scope, context, extra)?;
-        let fn_var_type = self.fn_var.type_of(&scope.borrow())?;
+        let fn_var_type = self
+            .fn_var
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         if !<EType as TypeChecking>::is_callable(&fn_var_type) {
             return Err(SemanticError::ExpectedCallable);
         }
@@ -254,7 +276,10 @@ impl Resolve for FnCall {
             return Err(SemanticError::IncorrectArguments);
         }
         for (index, (_, field_type)) in fields.iter().enumerate() {
-            let _ = field_type.compatible_with(&self.params[index], &scope.borrow())?;
+            let _ = field_type.compatible_with(
+                &self.params[index],
+                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+            )?;
         }
         resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
@@ -267,7 +292,7 @@ impl Resolve for Range {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -301,7 +326,7 @@ impl Resolve for Product {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -329,12 +354,14 @@ impl Resolve for Product {
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = right.type_of(&scope.borrow())?;
+                let right_type =
+                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = left.type_of(&scope.borrow())?;
+                let left_type =
+                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -343,14 +370,16 @@ impl Resolve for Product {
             }
         }
 
-        let left_type = left.type_of(&scope.borrow())?;
+        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_product(&left_type)?;
 
-        let right_type = right.type_of(&scope.borrow())?;
+        let right_type =
+            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_product(&right_type)?;
 
         // let _ = left_type.compatible_with(right.as_ref(), &block.borrow())?;
-        let merge_type = self.type_of(&scope.borrow())?;
+        let merge_type =
+            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         match self {
             Product::Mult {
                 left,
@@ -393,7 +422,7 @@ impl Resolve for Addition {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -403,12 +432,16 @@ impl Resolve for Addition {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -417,10 +450,14 @@ impl Resolve for Addition {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_add(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_add(&right_type)?;
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
         resolve_metadata!(self.metadata.info, self, scope, context);
@@ -434,7 +471,7 @@ impl Resolve for Substraction {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -444,12 +481,16 @@ impl Resolve for Substraction {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -458,10 +499,14 @@ impl Resolve for Substraction {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_substract(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_substract(&right_type)?;
 
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
@@ -476,7 +521,7 @@ impl Resolve for Shift {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -499,12 +544,14 @@ impl Resolve for Shift {
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = right.type_of(&scope.borrow())?;
+                let right_type =
+                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = left.type_of(&scope.borrow())?;
+                let left_type =
+                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -512,14 +559,16 @@ impl Resolve for Shift {
                 let _ = right.resolve(scope, context, &mut None)?;
             }
         }
-        let left_type = left.type_of(&scope.borrow())?;
+        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_shift(&left_type)?;
 
-        let right_type = right.type_of(&scope.borrow())?;
+        let right_type =
+            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_shift(&right_type)?;
 
         // let _ = left_type.compatible_with(right.as_ref(), &block.borrow())?;
-        let merge_type = self.type_of(&scope.borrow())?;
+        let merge_type =
+            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         match self {
             Shift::Left {
                 left,
@@ -551,7 +600,7 @@ impl Resolve for BitwiseAnd {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -561,12 +610,16 @@ impl Resolve for BitwiseAnd {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -574,10 +627,14 @@ impl Resolve for BitwiseAnd {
                 let _ = self.right.resolve(scope, context, &mut None)?;
             }
         }
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_and(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_and(&right_type)?;
 
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
@@ -591,7 +648,7 @@ impl Resolve for BitwiseXOR {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -601,12 +658,16 @@ impl Resolve for BitwiseXOR {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -615,10 +676,14 @@ impl Resolve for BitwiseXOR {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_xor(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_xor(&right_type)?;
 
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
@@ -632,7 +697,7 @@ impl Resolve for BitwiseOR {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -642,12 +707,16 @@ impl Resolve for BitwiseOR {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -656,10 +725,14 @@ impl Resolve for BitwiseOR {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_or(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_bitwise_or(&right_type)?;
 
         // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
@@ -674,7 +747,7 @@ impl Resolve for Cast {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -686,7 +759,9 @@ impl Resolve for Cast {
 
         if let Some(l_metadata) = self.left.metadata_mut() {
             let signature = l_metadata.signature();
-            let new_context = self.right.type_of(&scope.borrow())?;
+            let new_context = self
+                .right
+                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
             l_metadata.info = Info::Resolved {
                 context: Some(new_context),
@@ -704,7 +779,7 @@ impl Resolve for Comparaison {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -737,12 +812,14 @@ impl Resolve for Comparaison {
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = right.type_of(&scope.borrow())?;
+                let right_type =
+                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = left.type_of(&scope.borrow())?;
+                let left_type =
+                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -751,15 +828,20 @@ impl Resolve for Comparaison {
             }
         }
 
-        let left_type = left.type_of(&scope.borrow())?;
+        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_comparaison(&left_type)?;
 
-        let right_type = right.type_of(&scope.borrow())?;
+        let right_type =
+            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_comparaison(&right_type)?;
 
-        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        let _ = left_type.compatible_with(
+            right.as_ref(),
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
 
-        let merge_type = self.type_of(&scope.borrow())?;
+        let merge_type =
+            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         match self {
             Comparaison::Less {
                 left,
@@ -812,7 +894,7 @@ impl Resolve for Equation {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -835,12 +917,14 @@ impl Resolve for Equation {
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = right.type_of(&scope.borrow())?;
+                let right_type =
+                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = left.type_of(&scope.borrow())?;
+                let left_type =
+                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -849,15 +933,20 @@ impl Resolve for Equation {
             }
         }
 
-        let left_type = left.type_of(&scope.borrow())?;
+        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_equate(&left_type)?;
 
-        let right_type = right.type_of(&scope.borrow())?;
+        let right_type =
+            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_equate(&right_type)?;
 
-        let _ = left_type.compatible_with(right.as_ref(), &scope.borrow())?;
+        let _ = left_type.compatible_with(
+            right.as_ref(),
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
 
-        let merge_type = self.type_of(&scope.borrow())?;
+        let merge_type =
+            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         match self {
             Equation::Equal {
                 left,
@@ -890,7 +979,7 @@ impl Resolve for LogicalAnd {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -900,12 +989,16 @@ impl Resolve for LogicalAnd {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -914,13 +1007,20 @@ impl Resolve for LogicalAnd {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_logical_and(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_logical_and(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        let _ = left_type.compatible_with(
+            self.right.as_ref(),
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
         resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
@@ -931,7 +1031,7 @@ impl Resolve for LogicalOr {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -941,12 +1041,16 @@ impl Resolve for LogicalOr {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let right_type = self.right.type_of(&scope.borrow())?;
+                let right_type = self
+                    .right
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.left.resolve(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let left_type = self.left.type_of(&scope.borrow())?;
+                let left_type = self
+                    .left
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let _ = self.right.resolve(scope, &Some(left_type), &mut None)?;
             }
             _ => {
@@ -955,13 +1059,20 @@ impl Resolve for LogicalOr {
             }
         }
 
-        let left_type = self.left.type_of(&scope.borrow())?;
+        let left_type = self
+            .left
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_logical_or(&left_type)?;
 
-        let right_type = self.right.type_of(&scope.borrow())?;
+        let right_type = self
+            .right
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let _ = <EType as OperandMerging>::can_logical_or(&right_type)?;
 
-        let _ = left_type.compatible_with(self.right.as_ref(), &scope.borrow())?;
+        let _ = left_type.compatible_with(
+            self.right.as_ref(),
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
         resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
     }
@@ -1010,8 +1121,8 @@ mod tests {
 
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -1085,8 +1196,8 @@ mod tests {
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -1189,14 +1300,18 @@ mod tests {
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        let expr_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(F64), expr_type);
 
         let mut expr = Cast::parse("'a' as u64".into()).unwrap().1;
         let scope = Scope::new();
         let res = expr.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr.type_of(&scope.borrow()).unwrap();
+        let expr_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(U64), expr_type);
     }
 
@@ -1330,8 +1445,8 @@ mod tests {
             .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "f".to_string().into(),
@@ -1349,7 +1464,9 @@ mod tests {
         let res = expr.resolve(&scope, &None, &mut None);
         assert!(res.is_ok(), "{:?}", res);
 
-        let ret_type = expr.type_of(&scope.borrow()).unwrap();
+        let ret_type = expr
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(ret_type, p_num!(I64))
     }
 
@@ -1360,8 +1477,8 @@ mod tests {
             .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "f".to_string().into(),
@@ -1380,8 +1497,8 @@ mod tests {
             .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "print".to_string().into(),
@@ -1401,8 +1518,8 @@ mod tests {
             .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "print".to_string().into(),

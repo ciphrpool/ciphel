@@ -360,7 +360,7 @@ impl Resolve for AllocFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -377,7 +377,8 @@ impl Resolve for AllocFn {
                 let item = &mut second_part[0];
 
                 let _ = vector.resolve(scope, &None, &mut None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -400,7 +401,10 @@ impl Resolve for AllocFn {
                         }
                         StaticType::String(_) => {
                             let _ = item.resolve(scope, &None, &mut None)?;
-                            let item_type = item.type_of(&scope.borrow())?;
+                            let item_type = item.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
                             match &item_type {
                                 Either::Static(value) => match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Char) => {
@@ -437,7 +441,8 @@ impl Resolve for AllocFn {
                 let items = &mut second_part[0];
 
                 let _ = vector.resolve(scope, &None, &mut None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -449,7 +454,10 @@ impl Resolve for AllocFn {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
                             let _ = items.resolve(scope, &None, &mut None)?;
-                            let items_type = items.type_of(&scope.borrow())?;
+                            let items_type = items.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
 
                             match items_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -474,7 +482,10 @@ impl Resolve for AllocFn {
                         }
                         StaticType::String(_) => {
                             let _ = items.resolve(scope, &None, &mut None)?;
-                            let items_type = items.type_of(&scope.borrow())?;
+                            let items_type = items.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
 
                             match items_type {
                                 Either::Static(value) => match value.as_ref() {
@@ -522,7 +533,8 @@ impl Resolve for AllocFn {
                 let item = &mut third_part[0];
 
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -579,7 +591,8 @@ impl Resolve for AllocFn {
                 let key = &mut second_part[0];
 
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -634,7 +647,8 @@ impl Resolve for AllocFn {
                 let index = &mut second_part[0];
 
                 let _ = vector.resolve(scope, &None, &mut None)?;
-                let mut vector_type = vector.type_of(&scope.borrow())?;
+                let mut vector_type =
+                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
@@ -647,7 +661,10 @@ impl Resolve for AllocFn {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
                             let _ = index.resolve(scope, &Some(p_num!(U64)), &mut None)?;
-                            let index_type = index.type_of(&scope.borrow())?;
+                            let index_type = index.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?;
                             match &index_type {
                                 Either::Static(value) => match value.as_ref() {
                                     StaticType::Primitive(PrimitiveType::Number(
@@ -716,7 +733,8 @@ impl Resolve for AllocFn {
                 let address = &mut extra[0];
 
                 let _ = address.resolve(scope, &None, &mut None)?;
-                let address_type = address.type_of(&scope.borrow())?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(_)) => {}
@@ -811,7 +829,8 @@ impl Resolve for AllocFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                let param_type = param.type_of(&scope.borrow())?;
+                let param_type =
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match param_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::StrSlice(slice) => {
@@ -839,7 +858,8 @@ impl Resolve for AllocFn {
                 let size = &mut extra[0];
 
                 let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
@@ -856,7 +876,8 @@ impl Resolve for AllocFn {
                 let address = &mut extra[0];
 
                 let _ = address.resolve(scope, &None, &mut None)?;
-                let address_type = address.type_of(&scope.borrow())?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::String(_) => {}
@@ -875,7 +896,8 @@ impl Resolve for AllocFn {
                 let address = &mut extra[0];
 
                 let _ = address.resolve(scope, &None, &mut None)?;
-                let address_type = address.type_of(&scope.borrow())?;
+                let address_type =
+                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 for_map.set(false);
                 match &address_type {
                     Either::Static(value) => match value.as_ref() {
@@ -897,7 +919,8 @@ impl Resolve for AllocFn {
                 let param = &mut extra[0];
 
                 let _ = param.resolve(scope, &None, &mut None)?;
-                let param_type = param.type_of(&scope.borrow())?;
+                let param_type =
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 size.set(param_type.size_of());
 
@@ -917,8 +940,10 @@ impl Resolve for AllocFn {
 
                 let _ = dest.resolve(scope, &None, &mut None)?;
                 let _ = src.resolve(scope, &None, &mut None)?;
-                let dest_type = dest.type_of(&scope.borrow())?;
-                let src_type = src.type_of(&scope.borrow())?;
+                let dest_type =
+                    dest.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &dest_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(_) => {}
@@ -940,7 +965,8 @@ impl Resolve for AllocFn {
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
                 let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
@@ -962,7 +988,8 @@ impl Resolve for AllocFn {
                 let src = &mut extra[0];
 
                 let _ = src.resolve(scope, &None, &mut None)?;
-                let src_type = src.type_of(&scope.borrow())?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &src_type {
                     Either::Static(value) => match value.as_ref() {
@@ -1005,7 +1032,7 @@ impl Resolve for AllocFn {
     }
 }
 impl TypeOf for AllocFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -1045,7 +1072,7 @@ impl TypeOf for AllocFn {
 impl GenerateCode for AllocFn {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

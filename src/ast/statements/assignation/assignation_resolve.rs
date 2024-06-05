@@ -9,7 +9,7 @@ impl Resolve for Assignation {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -18,7 +18,7 @@ impl Resolve for Assignation {
     {
         let _ = self.left.resolve(scope, &None, &mut None)?;
         if self.left.is_assignable() {
-            let left_type = Some(self.left.type_of(&scope.borrow())?);
+            let left_type = Some(self.left.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?);
             let _ = self.right.resolve(scope, &left_type, &mut ())?;
             Ok(())
         } else {
@@ -32,7 +32,7 @@ impl Resolve for AssignValue {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -42,11 +42,11 @@ impl Resolve for AssignValue {
         match self {
             AssignValue::Scope(value) => {
                 let _ = value.resolve(scope, context, &mut Vec::default())?;
-                let scope_type = value.type_of(&scope.borrow())?;
+                let scope_type = value.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
 
                 match context {
                     Some(context) => {
-                        let _ = context.compatible_with(&scope_type, &scope.borrow())?;
+                        let _ = context.compatible_with(&scope_type, &crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                     }
                     None => {}
                 }
@@ -54,10 +54,10 @@ impl Resolve for AssignValue {
             }
             AssignValue::Expr(value) => {
                 let _ = value.resolve(scope, context, &mut None)?;
-                let scope_type = value.type_of(&scope.borrow())?;
+                let scope_type = value.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                 match context {
                     Some(context) => {
-                        let _ = context.compatible_with(&scope_type, &scope.borrow())?;
+                        let _ = context.compatible_with(&scope_type, &crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                     }
                     None => {}
                 }
@@ -91,8 +91,8 @@ mod tests {
         let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -116,8 +116,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),

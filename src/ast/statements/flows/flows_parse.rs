@@ -220,9 +220,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_if_branches: Vec::default(),
                 else_branch: Some(Box::new(Block {
@@ -246,9 +246,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -298,9 +298,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_if_branches: vec![(
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Bool(true)))),
@@ -325,9 +325,9 @@ mod tests {
                         }))],
                         can_capture: Cell::new(ClosureState::DEFAULT),
                         is_loop: Cell::new(false),
-                        
+
                         caller: Default::default(),
-                        inner_scope: RefCell::new(None),
+                        inner_scope: None,
                     }
                 )],
                 else_branch: Some(Box::new(Block {
@@ -351,9 +351,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -397,9 +397,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: Some(Box::new(Block {
                     metadata: Metadata::default(),
@@ -422,9 +422,9 @@ mod tests {
                     }))],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value

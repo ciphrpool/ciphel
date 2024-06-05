@@ -84,7 +84,7 @@ impl Resolve for Return {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -107,32 +107,48 @@ impl Resolve for Return {
                 let _ = expr.resolve(scope, &context, &mut None)?;
                 match context {
                     Some(c) => {
-                        let return_type = expr.type_of(&scope.borrow())?;
-                        let _ = c.compatible_with(&return_type, &scope.borrow())?;
+                        let return_type = expr
+                            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                        let _ = c.compatible_with(
+                            &return_type,
+                            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        )?;
                         metadata.info = Info::Resolved {
                             context: context.clone(),
-                            signature: Some(expr.type_of(&scope.borrow())?),
+                            signature: Some(expr.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
                         };
                         Ok(())
                     }
                     None => {
                         metadata.info = Info::Resolved {
                             context: None,
-                            signature: Some(expr.type_of(&scope.borrow())?),
+                            signature: Some(expr.type_of(&crate::arw_read!(
+                                scope,
+                                SemanticError::ConcurrencyError
+                            )?)?),
                         };
                         Ok(())
                     }
                 }
             }
             Return::Break => {
-                if scope.as_ref().borrow().state().is_loop {
+                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
+                    .state()
+                    .is_loop
+                {
                     Ok(())
                 } else {
                     Err(SemanticError::ExpectedLoop)
                 }
             }
             Return::Continue => {
-                if scope.as_ref().borrow().state().is_loop {
+                if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
+                    .state()
+                    .is_loop
+                {
                     Ok(())
                 } else {
                     Err(SemanticError::ExpectedLoop)
@@ -143,7 +159,7 @@ impl Resolve for Return {
 }
 
 impl TypeOf for Return {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -165,7 +181,7 @@ impl TypeOf for Return {
 impl GenerateCode for Return {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -201,10 +217,10 @@ impl GenerateCode for Return {
 #[cfg(test)]
 mod tests {
     use crate::{
-        e_static, p_num,
+        arw_write, e_static, p_num,
         semantic::{
             scope::{
-                scope::{self},
+                scope,
                 static_types::{NumberType, PrimitiveType, StaticType},
             },
             Either,
@@ -271,7 +287,9 @@ mod tests {
         let res = return_statement.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), return_type);
 
         let mut return_statement = Return::parse(
@@ -285,12 +303,16 @@ mod tests {
 
         let inner_scope = scope::Scope::spawn(&scope, Vec::default())
             .expect("Scope should be able to have child block");
-        inner_scope.as_ref().borrow_mut().to_loop();
+        arw_write!(inner_scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
+            .to_loop();
 
         let res = return_statement.resolve(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
 
         let mut return_statement = Return::parse(
@@ -305,7 +327,9 @@ mod tests {
         let res = return_statement.resolve(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let return_type = return_statement.type_of(&scope.borrow()).unwrap();
+        let return_type = return_statement
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(e_static!(StaticType::Unit), return_type);
     }
 

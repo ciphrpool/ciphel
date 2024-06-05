@@ -1,7 +1,7 @@
 use super::Block;
 
-use crate::resolve_metadata;
 use crate::semantic::scope::scope::Scope;
+use crate::{arw_write, resolve_metadata};
 
 use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{ArcMutex, CompatibleWith, EType, Info, TypeOf};
@@ -14,7 +14,7 @@ impl Resolve for Block {
     type Extra = Vec<Var>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -24,16 +24,15 @@ impl Resolve for Block {
         let mut inner_scope = Scope::spawn(scope, extra.clone())?;
         {
             if self.is_loop.get() {
-                inner_scope.as_ref().borrow_mut().to_loop();
+                arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
             }
             if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
                 let caller = caller.clone();
                 caller.state.set(VarState::Parameter);
-                let _ = inner_scope.as_ref().borrow_mut().register_var(caller)?;
+                let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?
+                    .register_var(caller)?;
             }
-            inner_scope
-                .as_ref()
-                .borrow_mut()
+            arw_write!(inner_scope, SemanticError::ConcurrencyError)?
                 .to_closure(self.can_capture.get());
         }
 
@@ -43,13 +42,15 @@ impl Resolve for Block {
         // {
         //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
         // }
-        {
-            let mut mut_self = self.inner_scope.borrow_mut();
-            mut_self.replace(inner_scope);
-        }
 
-        let return_type = self.type_of(&scope.borrow())?;
-        let _ = context.compatible_with(&return_type, &scope.borrow())?;
+        self.inner_scope.replace(inner_scope);
+
+        let return_type =
+            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+        let _ = context.compatible_with(
+            &return_type,
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
         resolve_metadata!(self.metadata.info, self, scope, context);
 
         Ok(())
@@ -59,6 +60,7 @@ impl Resolve for Block {
 #[cfg(test)]
 mod tests {
     use crate::{
+        arw_read,
         ast::TryParse,
         e_static, p_num,
         semantic::{
@@ -88,23 +90,29 @@ mod tests {
         let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &None, &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
+        let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let var_x = res_scope
-            .borrow()
+        let var_x = arw_read!(res_scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"x".to_string().into())
             .unwrap();
-        let x_type = var_x.type_of(&res_scope.borrow()).unwrap();
-        let var_y = res_scope
-            .borrow()
+        let x_type = var_x
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
+        let var_y = arw_read!(res_scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"y".to_string().into())
             .unwrap();
-        let y_type = var_y.type_of(&res_scope.borrow()).unwrap();
+        let y_type = var_y
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
 
         assert_eq!(p_num!(I64), x_type);
         assert_eq!(p_num!(I64), y_type);
 
-        let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
+        let res = expr_scope
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(e_static!(StaticType::Unit), res)
     }
 
@@ -126,9 +134,11 @@ mod tests {
         let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
+        let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
+        let res = expr_scope
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), res)
     }
 
@@ -154,9 +164,11 @@ mod tests {
         let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
+        let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
+        let res = expr_scope
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), res);
 
         let mut expr_scope = Block::parse(
@@ -179,9 +191,11 @@ mod tests {
         let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
+        let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
+        let res = expr_scope
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), res)
     }
 
@@ -203,9 +217,11 @@ mod tests {
         let scope = scope::Scope::new();
         let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.borrow().clone().unwrap();
+        let res_scope = expr_scope.inner_scope.clone().unwrap();
 
-        let res = expr_scope.type_of(&res_scope.borrow()).unwrap();
+        let res = expr_scope
+            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
+            .unwrap();
         assert_eq!(p_num!(I64), res)
     }
 

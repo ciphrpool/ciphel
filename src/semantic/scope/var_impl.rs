@@ -52,7 +52,11 @@ impl Ord for Var {
 }
 
 impl CompatibleWith for Var {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -61,7 +65,7 @@ impl CompatibleWith for Var {
 }
 
 impl TypeOf for Var {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {

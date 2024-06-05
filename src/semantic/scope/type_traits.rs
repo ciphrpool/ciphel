@@ -99,7 +99,7 @@ pub trait OperandMerging {
     fn merge_substraction<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -115,7 +115,7 @@ pub trait OperandMerging {
     fn merge_product<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -129,7 +129,7 @@ pub trait OperandMerging {
     fn merge_addition<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -143,7 +143,7 @@ pub trait OperandMerging {
     fn merge_shift<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -157,7 +157,7 @@ pub trait OperandMerging {
     fn merge_bitwise_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -171,7 +171,7 @@ pub trait OperandMerging {
     fn merge_bitwise_xor<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -185,7 +185,7 @@ pub trait OperandMerging {
     fn merge_bitwise_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -193,7 +193,7 @@ pub trait OperandMerging {
         Err(SemanticError::IncompatibleOperands)
     }
 
-    fn cast<Other>(&self, _other: &Other, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn cast<Other>(&self, _other: &Other, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -206,7 +206,7 @@ pub trait OperandMerging {
     fn merge_comparaison<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -220,7 +220,7 @@ pub trait OperandMerging {
     fn merge_equation<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -234,7 +234,7 @@ pub trait OperandMerging {
     fn merge_logical_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -248,7 +248,7 @@ pub trait OperandMerging {
     fn merge_logical_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,

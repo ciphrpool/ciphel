@@ -1,5 +1,6 @@
 use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
+use crate::arw_write;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::var_impl::VarState;
@@ -21,7 +22,7 @@ impl Resolve for Definition {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -41,7 +42,7 @@ impl Resolve for TypeDef {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -59,9 +60,12 @@ impl Resolve for TypeDef {
             TypeDef::Enum(value) => &value.id,
         };
 
-        let mut type_def = UserType::build_usertype(self, &scope.borrow())?;
+        let mut type_def = UserType::build_usertype(
+            self,
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        )?;
 
-        let mut borrowed_scope = scope.borrow_mut();
+        let mut borrowed_scope = arw_write!(scope, SemanticError::ConcurrencyError)?;
         let _ = borrowed_scope.register_type(id, type_def)?;
         Ok(())
     }
@@ -73,7 +77,7 @@ impl Resolve for StructDef {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -93,7 +97,7 @@ impl Resolve for UnionDef {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -116,7 +120,7 @@ impl Resolve for EnumDef {
     type Extra = ();
     fn resolve(
         &mut self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -133,7 +137,7 @@ impl Resolve for FnDef {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -145,14 +149,18 @@ impl Resolve for FnDef {
         }
 
         let _ = self.ret.resolve(scope, context, extra)?;
-        let return_type = self.ret.type_of(&scope.borrow())?;
+        let return_type = self
+            .ret
+            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+
+        let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
 
         let mut vars = self
             .params
             .iter()
             .filter_map(|param| {
                 param
-                    .type_of(&scope.borrow())
+                    .type_of(&borrowed_scope)
                     .ok()
                     .map(|p| (param.id.clone(), p))
             })
@@ -164,26 +172,28 @@ impl Resolve for FnDef {
                 var
             })
             .collect::<Vec<Var>>();
-
+        drop(borrowed_scope);
         // convert to FnType -> GOAL : Retrieve function type signature
         let params = {
             let mut params = Vec::with_capacity(self.params.len());
             for p in &self.params {
-                params.push(p.type_of(&scope.borrow())?);
+                params.push(p.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
             }
             params
         };
         let static_type: StaticType = StaticType::build_fn(
             &params,
-            &self.ret.type_of(&scope.borrow())?,
+            &self
+                .ret
+                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
             params.iter().map(|p| p.size_of()).sum::<usize>() + 8,
-            &scope.borrow(),
+            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
         )?;
         let fn_type_sig = e_static!(static_type);
         let var = <Var as BuildVar>::build_var(&self.id, &fn_type_sig);
         var.is_declared.set(true);
         self.scope.set_caller(var.clone());
-        let _ = scope.borrow_mut().register_var(var)?;
+        let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
         let _ = self.scope.resolve(scope, &Some(return_type), &mut vars)?;
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
@@ -196,6 +206,7 @@ mod tests {
     use std::cell::Cell;
 
     use crate::{
+        arw_read,
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
@@ -204,6 +215,7 @@ mod tests {
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },
+        vm::vm::CodeGenerationError,
     };
 
     use super::*;
@@ -225,8 +237,8 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope
-            .borrow()
+        let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_type(&"Point".to_string().into())
             .unwrap();
 
@@ -259,8 +271,8 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(Struct {
@@ -277,8 +289,8 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope
-            .borrow()
+        let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_type(&"Line".to_string().into())
             .unwrap();
 
@@ -342,7 +354,10 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
+        let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
+            .find_type(&"Geo".to_string().into())
+            .unwrap();
 
         assert_eq!(
             UserType::Union(Union {
@@ -395,7 +410,10 @@ mod tests {
         let res = type_def.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = scope.borrow().find_type(&"Geo".to_string().into()).unwrap();
+        let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
+            .find_type(&"Geo".to_string().into())
+            .unwrap();
 
         assert_eq!(
             UserType::Enum(Enum {
@@ -428,8 +446,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope
-            .borrow()
+        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
@@ -467,8 +485,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope
-            .borrow()
+        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
@@ -488,23 +506,21 @@ mod tests {
         );
 
         let function_scope = function.scope;
-        let x_type = function_scope
-            .inner_scope
-            .borrow()
-            .clone()
-            .unwrap()
-            .borrow()
-            .find_var(&"x".to_string().into())
-            .unwrap();
+        let x_type = arw_read!(
+            function_scope.inner_scope.clone().unwrap(),
+            SemanticError::ConcurrencyError
+        )
+        .unwrap()
+        .find_var(&"x".to_string().into())
+        .unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
-        let text_type = function_scope
-            .inner_scope
-            .borrow()
-            .clone()
-            .unwrap()
-            .borrow()
-            .find_var(&"text".to_string().into())
-            .unwrap();
+        let text_type = arw_read!(
+            function_scope.inner_scope.clone().unwrap(),
+            SemanticError::ConcurrencyError
+        )
+        .unwrap()
+        .find_var(&"text".to_string().into())
+        .unwrap();
         assert_eq!(
             e_static!(StaticType::String(StringType())),
             text_type.type_sig
@@ -530,8 +546,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope
-            .borrow()
+        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();
@@ -567,8 +583,8 @@ mod tests {
         .1;
         let scope = scope::Scope::new();
 
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -618,8 +634,8 @@ mod tests {
         .1;
         let scope = scope::Scope::new();
 
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "x".to_string().into(),
@@ -627,8 +643,8 @@ mod tests {
                 is_declared: Cell::new(false),
             })
             .expect("registering vars should succeed");
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_var(Var {
                 state: Cell::default(),
                 id: "y".to_string().into(),
@@ -679,8 +695,8 @@ mod tests {
         let res = function.resolve(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = scope
-            .borrow()
+        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .find_var(&"main".to_string().into())
             .unwrap()
             .clone();

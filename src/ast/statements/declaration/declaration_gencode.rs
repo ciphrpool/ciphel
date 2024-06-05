@@ -1,5 +1,6 @@
 use crate::ast::utils::lexem;
 use crate::semantic::scope::scope::Scope;
+use crate::{arw_read, arw_write};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::{ArcMutex, SizeOf},
@@ -15,7 +16,7 @@ use super::{Declaration, TypedVar};
 impl GenerateCode for Declaration {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -23,28 +24,32 @@ impl GenerateCode for Declaration {
                 // When the variable is created in the general block,
                 // the block can't assign a stackpointer to the variable
                 // therefore the variable have to live at the current offset
-                let borrow = scope.as_ref().borrow();
+                let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+                let mut new_stack_top = borrow.stack_top();
                 for (v, o) in borrow.vars() {
                     if v.id == *id && !v.is_declared.get() {
                         let var = v;
 
                         var.is_declared.set(true);
 
-                        if let Some(stack_top) = scope.borrow().stack_top() {
-                            o.set(Offset::SB(stack_top));
+                        if let Some(ref mut stack_top) = new_stack_top {
+                            o.set(Offset::SB(*stack_top));
                             if var.type_sig.size_of() == 0 {
                                 continue;
                             }
                             instructions.push(Casm::Alloc(Alloc::Stack {
                                 size: var.type_sig.size_of(),
                             }));
-                            let _ = scope
-                                .borrow()
-                                .update_stack_top(stack_top + var.type_sig.size_of())
-                                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                            *stack_top = *stack_top + var.type_sig.size_of();
                         }
                         break;
                     }
+                }
+                drop(borrow);
+                if let Some(stack_top) = new_stack_top {
+                    let _ = arw_write!(scope, CodeGenerationError::ConcurrencyError)?
+                        .update_stack_top(stack_top)
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
                 }
 
                 // let (address, level) = block
@@ -75,7 +80,7 @@ impl GenerateCode for Declaration {
                 };
 
                 for id in &vars {
-                    let borrow = scope.as_ref().borrow();
+                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, o) in borrow.vars() {
                         if v.id == *id && !v.is_declared.get() {
                             let var = v;
@@ -83,10 +88,13 @@ impl GenerateCode for Declaration {
                             if var_size == 0 {
                                 continue;
                             }
-                            if let Some(stack_top) = scope.borrow().stack_top() {
+                            if let Some(stack_top) =
+                                arw_read!(scope, CodeGenerationError::ConcurrencyError)?.stack_top()
+                            {
                                 o.set(Offset::SB(stack_top));
                                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                                let _ = scope.borrow().update_stack_top(stack_top + var_size)?;
+                                let _ = arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                                    .update_stack_top(stack_top + var_size)?;
                             }
                             break;
                         }
@@ -97,7 +105,7 @@ impl GenerateCode for Declaration {
                 let _ = right.gencode(scope, instructions)?;
 
                 for id in &vars {
-                    let borrow = scope.as_ref().borrow();
+                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
                     for (v, _o) in borrow.vars() {
                         if v.id == *id && !v.is_declared.get() {
                             v.is_declared.set(true);
@@ -111,7 +119,9 @@ impl GenerateCode for Declaration {
                 vars.reverse();
 
                 for id in &vars {
-                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                    let (var, address, level) =
+                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                            .access_var(id)?;
 
                     let var_size = var.type_sig.size_of();
                     if var_size == 0 {
@@ -317,8 +327,8 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
@@ -384,8 +394,8 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement

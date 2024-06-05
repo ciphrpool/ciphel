@@ -16,7 +16,7 @@ use crate::semantic::{CompatibleWith, EType};
 use crate::semantic::{Either, SemanticError, TypeOf};
 
 impl TypeOf for Type {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -50,7 +50,7 @@ impl TypeOf for Type {
     }
 }
 impl TypeOf for PrimitiveType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -61,7 +61,7 @@ impl TypeOf for PrimitiveType {
 }
 
 impl CompatibleWith for static_types::PrimitiveType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -93,7 +93,7 @@ impl CompatibleWith for static_types::PrimitiveType {
 }
 
 impl TypeOf for SliceType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -103,7 +103,7 @@ impl TypeOf for SliceType {
     }
 }
 impl TypeOf for StrSliceType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -114,7 +114,7 @@ impl TypeOf for StrSliceType {
 }
 
 impl TypeOf for StringType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -125,7 +125,7 @@ impl TypeOf for StringType {
 }
 
 impl CompatibleWith for static_types::SliceType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -152,7 +152,7 @@ impl CompatibleWith for static_types::SliceType {
 }
 
 impl CompatibleWith for static_types::StringType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -170,7 +170,7 @@ impl CompatibleWith for static_types::StringType {
 }
 
 impl CompatibleWith for static_types::StrSliceType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -192,7 +192,7 @@ impl CompatibleWith for static_types::StrSliceType {
 }
 
 impl TypeOf for VecType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -203,7 +203,7 @@ impl TypeOf for VecType {
 }
 
 impl CompatibleWith for static_types::VecType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -223,7 +223,7 @@ impl CompatibleWith for static_types::VecType {
 }
 
 impl TypeOf for ClosureType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -246,7 +246,7 @@ impl TypeOf for ClosureType {
 }
 
 impl CompatibleWith for static_types::FnType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -281,7 +281,7 @@ impl CompatibleWith for static_types::FnType {
 }
 
 impl CompatibleWith for static_types::ClosureType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -318,7 +318,7 @@ impl CompatibleWith for static_types::ClosureType {
 }
 
 impl TypeOf for TupleType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -329,7 +329,7 @@ impl TypeOf for TupleType {
 }
 
 impl CompatibleWith for static_types::TupleType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -355,7 +355,7 @@ impl CompatibleWith for static_types::TupleType {
 }
 
 impl TypeOf for AddrType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -366,7 +366,7 @@ impl TypeOf for AddrType {
 }
 
 impl CompatibleWith for static_types::AddrType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -387,7 +387,7 @@ impl CompatibleWith for static_types::AddrType {
 }
 
 impl TypeOf for RangeType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -398,7 +398,7 @@ impl TypeOf for RangeType {
 }
 
 impl CompatibleWith for static_types::RangeType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -422,7 +422,7 @@ impl CompatibleWith for static_types::RangeType {
 }
 
 impl TypeOf for MapType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -433,7 +433,7 @@ impl TypeOf for MapType {
 }
 
 impl CompatibleWith for static_types::MapType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(&self, other: &Other, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {

@@ -24,7 +24,7 @@ use super::{ForLoop, Loop, WhileLoop};
 impl GenerateCode for Loop {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -56,7 +56,7 @@ impl GenerateCode for Loop {
 impl GenerateCode for ForLoop {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(iterator_type) = self.iterator.expr.signature() else {
@@ -116,7 +116,7 @@ impl GenerateCode for ForLoop {
 impl GenerateCode for WhileLoop {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();

@@ -35,7 +35,7 @@ use super::{FieldAccess, ListAccess, Range, TupleAccess};
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -69,7 +69,7 @@ impl GenerateCode for super::UnaryOperation {
 impl Locatable for TupleAccess {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
@@ -105,7 +105,7 @@ impl Locatable for TupleAccess {
 impl GenerateCode for TupleAccess {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
@@ -138,7 +138,7 @@ impl GenerateCode for TupleAccess {
 impl Locatable for ListAccess {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -212,7 +212,7 @@ impl Locatable for ListAccess {
 impl GenerateCode for ListAccess {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -280,7 +280,7 @@ impl GenerateCode for ListAccess {
 impl Locatable for FieldAccess {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -322,7 +322,7 @@ impl Locatable for FieldAccess {
 impl GenerateCode for FieldAccess {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
@@ -356,7 +356,7 @@ impl GenerateCode for FieldAccess {
 impl GenerateCode for Range {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -396,7 +396,7 @@ impl GenerateCode for Range {
 impl Locatable for super::FnCall {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.gencode(scope, instructions)?;
@@ -424,7 +424,7 @@ impl Locatable for super::FnCall {
 impl GenerateCode for super::FnCall {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let params_size: usize = self
@@ -557,7 +557,7 @@ impl GenerateCode for super::FnCall {
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -637,7 +637,7 @@ impl GenerateCode for super::Product {
 impl GenerateCode for super::Addition {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -663,7 +663,7 @@ impl GenerateCode for super::Addition {
 impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -689,7 +689,7 @@ impl GenerateCode for super::Substraction {
 impl GenerateCode for super::Shift {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -746,7 +746,7 @@ impl GenerateCode for super::Shift {
 impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -772,7 +772,7 @@ impl GenerateCode for super::BitwiseAnd {
 impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -798,7 +798,7 @@ impl GenerateCode for super::BitwiseXOR {
 impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
@@ -824,13 +824,20 @@ impl GenerateCode for super::BitwiseOR {
 impl GenerateCode for super::Cast {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(right_type) = self.right.type_of(&scope.borrow()).ok() else {
+        let Some(right_type) = self
+            .right
+            .type_of(&crate::arw_read!(
+                scope,
+                CodeGenerationError::ConcurrencyError
+            )?)
+            .ok()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let _ = self.left.gencode(scope, instructions)?;
@@ -855,7 +862,7 @@ impl GenerateCode for super::Cast {
 impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -958,7 +965,7 @@ impl GenerateCode for super::Comparaison {
 impl GenerateCode for super::Equation {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -1015,7 +1022,7 @@ impl GenerateCode for super::Equation {
 impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
@@ -1032,7 +1039,7 @@ impl GenerateCode for super::LogicalAnd {
 impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;

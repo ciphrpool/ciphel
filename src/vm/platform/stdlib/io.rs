@@ -109,7 +109,7 @@ impl Resolve for IOFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -120,7 +120,7 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
+                *param_type.borrow_mut() = Some(param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
                 Ok(())
             }
             IOFn::Println(param_type) => {
@@ -129,7 +129,7 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&scope.as_ref().borrow())?);
+                *param_type.borrow_mut() = Some(param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
                 Ok(())
             }
             IOFn::Scan => {
@@ -142,7 +142,7 @@ impl Resolve for IOFn {
     }
 }
 impl TypeOf for IOFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -157,7 +157,7 @@ impl TypeOf for IOFn {
 impl GenerateCode for IOFn {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

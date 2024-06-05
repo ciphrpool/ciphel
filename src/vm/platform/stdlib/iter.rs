@@ -99,7 +99,7 @@ impl Resolve for IterFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -114,7 +114,7 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -162,7 +162,7 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -205,7 +205,7 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&scope.borrow())?;
+                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -243,7 +243,7 @@ impl Resolve for IterFn {
 }
 
 impl TypeOf for IterFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -264,7 +264,7 @@ impl TypeOf for IterFn {
 impl GenerateCode for IterFn {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

@@ -1,4 +1,5 @@
 use super::{Definition, FnDef, TypeDef};
+use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::SizeOf;
 
@@ -23,7 +24,7 @@ use crate::{
 impl GenerateCode for Definition {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -36,7 +37,7 @@ impl GenerateCode for Definition {
 impl GenerateCode for TypeDef {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         _instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         Ok(())
@@ -46,14 +47,14 @@ impl GenerateCode for TypeDef {
 impl GenerateCode for FnDef {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
         // If the scope is the general scope, update the address, the offset and the scope stack top
-        if let Some(stack_top) = scope.borrow().stack_top() {
-            let borrow = scope.as_ref().borrow();
+        let borrow = arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+        if let Some(stack_top) = borrow.stack_top() {
             let mut size = 8;
             for (v, o) in borrow.vars() {
                 if **v.id == *self.id {
@@ -64,8 +65,7 @@ impl GenerateCode for FnDef {
             }
 
             instructions.push(Casm::Alloc(Alloc::Stack { size }));
-            let _ = scope
-                .borrow()
+            let _ = borrow
                 .update_stack_top(stack_top + size)
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
         }
@@ -80,7 +80,8 @@ impl GenerateCode for FnDef {
 
         instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
 
-        let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
+        let (var, address, level) =
+            crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?.access_var(&self.id)?;
         let var_type = &var.as_ref().type_sig;
 
         let var_size = var_type.size_of();

@@ -7,7 +7,7 @@ use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, T
 use crate::semantic::{EType, Either};
 
 impl TypeOf for Assignation {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -17,7 +17,7 @@ impl TypeOf for Assignation {
     }
 }
 impl TypeOf for AssignValue {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

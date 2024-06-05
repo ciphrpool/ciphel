@@ -1,4 +1,5 @@
 use crate::{
+    arw_read,
     semantic::scope::scope::Scope,
     vm::casm::{alloc::StackFrame, branch::BranchTry, data::Data},
 };
@@ -19,7 +20,7 @@ use crate::{
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
         },
-        Either, ArcMutex, SizeOf,
+        ArcMutex, Either, SizeOf,
     },
     vm::{
         casm::{
@@ -35,7 +36,7 @@ use super::{CallStat, Flow, IfStat, MatchStat, PatternStat, TryStat};
 impl GenerateCode for Flow {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -50,7 +51,7 @@ impl GenerateCode for Flow {
 impl GenerateCode for CallStat {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.call.gencode(scope, instructions)?;
@@ -69,7 +70,7 @@ impl GenerateCode for CallStat {
 impl GenerateCode for IfStat {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let mut else_if_labels: Vec<Ulid> = Vec::default();
@@ -143,7 +144,7 @@ impl GenerateCode for IfStat {
 impl GenerateCode for MatchStat {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(expr_type) = self.expr.signature() else {
@@ -273,27 +274,27 @@ impl GenerateCode for MatchStat {
             (
                 PatternStat {
                     patterns: _,
-                    scope: s,
+                    scope: block,
                 },
                 label,
             ),
         ) in self.patterns.iter().zip(cases).enumerate()
         {
             instructions.push_label_id(label, format!("match_case_{}", idx).into());
-            let param_size = s
-                .scope()
-                .map(|s| {
-                    s.as_ref()
-                        .borrow()
-                        .vars()
-                        .filter_map(|(v, _)| {
-                            (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
-                        })
-                        .sum()
-                })
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-            let _ = inner_block_gencode(scope, &s, Some(param_size), false, false, instructions)?;
+            let scope = block
+                .scope()
+                .map_err(|_| CodeGenerationError::UnresolvedError)?;
+            let borrowed_scope = arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
+            let param_size = borrowed_scope
+                .vars()
+                .filter_map(|(v, _)| {
+                    (v.state.get() == VarState::Parameter).then(|| v.type_sig.size_of())
+                })
+                .sum::<usize>();
+
+            let _ =
+                inner_block_gencode(&scope, &block, Some(param_size), false, false, instructions)?;
             instructions.push(Casm::Goto(Goto {
                 label: Some(end_match_label),
             }));
@@ -318,7 +319,7 @@ impl GenerateCode for MatchStat {
 impl GenerateCode for TryStat {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();

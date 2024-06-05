@@ -20,7 +20,7 @@ use crate::semantic::scope::scope::Scope;
 impl GenerateCode for Assignation {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self.right.gencode(scope, instructions)?;
@@ -66,7 +66,7 @@ impl GenerateCode for Assignation {
 impl GenerateCode for AssignValue {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -167,9 +167,11 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
+
         let _ = declaration
             .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
+
         let _ = statement
             .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
@@ -192,7 +194,7 @@ mod tests {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let mut engine = crate::vm::vm::DbgGameEngine {};
 
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
@@ -235,8 +237,8 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
@@ -417,8 +419,8 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
@@ -510,8 +512,8 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type.clone()),
@@ -619,15 +621,15 @@ mod tests {
         .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(user_type_point.clone()),
             )
             .expect("Registering of user type should have succeeded");
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point3D".to_string().into(),
                 UserType::Struct(user_type_point3d.clone()),

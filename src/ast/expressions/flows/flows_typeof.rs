@@ -18,7 +18,7 @@ use crate::{
 use super::{ExprFlow, FCall, IfExpr, MatchExpr, PatternExpr, TryExpr};
 
 impl TypeOf for ExprFlow {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -32,7 +32,7 @@ impl TypeOf for ExprFlow {
     }
 }
 impl TypeOf for IfExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -42,7 +42,7 @@ impl TypeOf for IfExpr {
 }
 
 impl TypeOf for PatternExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -50,7 +50,7 @@ impl TypeOf for PatternExpr {
     }
 }
 impl TypeOf for MatchExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -81,7 +81,7 @@ impl TypeOf for MatchExpr {
     }
 }
 impl TypeOf for TryExpr {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -92,7 +92,7 @@ impl TypeOf for TryExpr {
 }
 
 impl TypeOf for FCall {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

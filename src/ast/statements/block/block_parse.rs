@@ -27,7 +27,7 @@ impl TryParse for Block {
             ),
             |value| Block {
                 instructions: value,
-                inner_scope: RefCell::new(None),
+                inner_scope: None,
                 can_capture: Cell::new(ClosureState::DEFAULT),
                 is_loop: Cell::new(false),
 

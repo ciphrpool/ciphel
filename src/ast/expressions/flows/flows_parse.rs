@@ -308,9 +308,9 @@ mod tests {
                     ],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: ExprScope::Expr(Block {
                     metadata: Metadata::default(),
@@ -324,9 +324,9 @@ mod tests {
                     ],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 metadata: Metadata::default(),
             },
@@ -376,9 +376,9 @@ mod tests {
                             ],
                             can_capture: Cell::new(ClosureState::DEFAULT),
                             is_loop: Cell::new(false),
-                            
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
@@ -399,9 +399,9 @@ mod tests {
                             ],
                             can_capture: Cell::new(ClosureState::DEFAULT),
                             is_loop: Cell::new(false),
-                            
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
@@ -421,9 +421,9 @@ mod tests {
                             ],
                             can_capture: Cell::new(ClosureState::DEFAULT),
                             is_loop: Cell::new(false),
-                            
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     PatternExpr {
@@ -444,9 +444,9 @@ mod tests {
                             ],
                             can_capture: Cell::new(ClosureState::DEFAULT),
                             is_loop: Cell::new(false),
-                            
+
                             caller: Default::default(),
-                            inner_scope: RefCell::new(None),
+                            inner_scope: None,
                         })
                     },
                     // PatternExpr {
@@ -465,7 +465,7 @@ mod tests {
                     //             }))
                     //         ],
 
-                    //         inner_scope: RefCell::new(None),
+                    //         inner_scope: None,
                     //     })
                     // },
                     // PatternExpr {
@@ -481,7 +481,7 @@ mod tests {
                     //             }))
                     //         ],
 
-                    //         inner_scope: RefCell::new(None),
+                    //         inner_scope: None,
                     //     })
                     // }
                 ],
@@ -497,9 +497,9 @@ mod tests {
                     ],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }))
             },
             value
@@ -525,9 +525,9 @@ mod tests {
                     ],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }),
                 else_branch: Some(ExprScope::Expr(Block {
                     metadata: Metadata::default(),
@@ -541,9 +541,9 @@ mod tests {
                     ],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 })),
                 pop_last_err: Cell::new(false),
                 metadata: Metadata::default(),

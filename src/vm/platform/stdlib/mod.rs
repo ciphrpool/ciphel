@@ -109,7 +109,7 @@ impl Resolve for StdFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -130,7 +130,7 @@ impl Resolve for StdFn {
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
                     &mut None,
                 )?;
-                let size_type = size.type_of(&scope.borrow())?;
+                let size_type = size.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Bool) => expect_err.set(false),
@@ -158,7 +158,7 @@ impl Resolve for StdFn {
 }
 
 impl TypeOf for StdFn {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -176,7 +176,7 @@ impl TypeOf for StdFn {
 impl GenerateCode for StdFn {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

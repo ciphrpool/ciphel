@@ -11,6 +11,7 @@ use crate::semantic::{
     Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{ArcMutex, CompatibleWith, EType, Either};
+use crate::{arw_read, arw_write};
 
 impl Resolve for Declaration {
     type Output = ();
@@ -18,7 +19,7 @@ impl Resolve for Declaration {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -28,10 +29,12 @@ impl Resolve for Declaration {
         match self {
             Declaration::Declared(value) => {
                 let _ = value.resolve(scope, &(), &mut ())?;
-                let var_type = value.signature.type_of(&scope.borrow())?;
+                let var_type = value
+                    .signature
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
-                let _ = scope.borrow_mut().register_var(var)?;
+                let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
                 Ok(())
             }
             Declaration::Assigned {
@@ -39,7 +42,9 @@ impl Resolve for Declaration {
                 right,
             } => {
                 let _ = value.resolve(scope, &(), &mut ())?;
-                let var_type = value.signature.type_of(&scope.borrow())?;
+                let var_type = value
+                    .signature
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
                 if var_type.is_any() {
                     return Err(SemanticError::CantInferType);
@@ -88,23 +93,33 @@ impl Resolve for Declaration {
                             return Err(SemanticError::IncompatibleTypes);
                         }
                     }
-                    let _ = scope.borrow_mut().register_var(var)?;
+                    let _ =
+                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
                     let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
-                    let _ = var_type.compatible_with(right, &scope.borrow())?;
+                    let _ = var_type.compatible_with(
+                        right,
+                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                    )?;
                 } else {
                     let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
-                    let _ = scope.borrow_mut().register_var(var)?;
-                    let _ = var_type.compatible_with(right, &scope.borrow())?;
+                    let _ =
+                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
+                    let _ = var_type.compatible_with(
+                        right,
+                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                    )?;
                 }
 
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
                 let _ = right.resolve(scope, &None, extra)?;
-                let right_type = right.type_of(&scope.borrow())?;
+                let right_type =
+                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let vars = left.resolve(scope, &Some(right_type), &mut ())?;
                 for var in vars {
-                    let _ = scope.borrow_mut().register_var(var)?;
+                    let _ =
+                        arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
                 }
                 Ok(())
             }
@@ -117,7 +132,7 @@ impl Resolve for TypedVar {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -133,7 +148,7 @@ impl Resolve for DeclaredVar {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -167,7 +182,7 @@ impl Resolve for PatternVar {
     type Extra = ();
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -176,9 +191,10 @@ impl Resolve for PatternVar {
     {
         match self {
             PatternVar::StructFields { typename, vars } => {
-                let borrowed_scope = scope.borrow();
+                let borrowed_scope = arw_read!(scope, SemanticError::ConcurrencyError)?;
                 let user_type = borrowed_scope.find_type(typename)?;
-                let user_type = user_type.type_of(&scope.borrow())?;
+                let user_type = user_type
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EType as GetSubTypes>::get_fields(&user_type) else {
                     return Err(SemanticError::InvalidPattern);
@@ -252,7 +268,10 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
+        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"x".to_string().into())
+            .unwrap();
         assert_eq!(p_num!(U64), x_type.type_sig);
 
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
@@ -261,7 +280,10 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
+        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"x".to_string().into())
+            .unwrap();
         assert_eq!(p_num!(F64), x_type.type_sig);
     }
 
@@ -282,9 +304,15 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
+        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"x".to_string().into())
+            .unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = scope.borrow().find_var(&"y".to_string().into()).unwrap();
+        let y_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"y".to_string().into())
+            .unwrap();
         assert_eq!(
             e_static!(StaticType::Primitive(PrimitiveType::Char)),
             y_type.type_sig
@@ -298,8 +326,8 @@ mod tests {
             .1;
 
         let scope = Scope::new();
-        let _ = scope
-            .borrow_mut()
+        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
             .register_type(
                 &"Point".to_string().into(),
                 UserType::Struct(Struct {
@@ -316,9 +344,15 @@ mod tests {
         let res = decl.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
-        let x_type = scope.borrow().find_var(&"x".to_string().into()).unwrap();
+        let x_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"x".to_string().into())
+            .unwrap();
         assert_eq!(p_num!(I64), x_type.type_sig);
-        let y_type = scope.borrow().find_var(&"y".to_string().into()).unwrap();
+        let y_type = arw_read!(scope, SemanticError::ConcurrencyError)
+            .unwrap()
+            .find_var(&"y".to_string().into())
+            .unwrap();
         assert_eq!(p_num!(I64), y_type.type_sig);
     }
 }

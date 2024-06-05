@@ -17,7 +17,7 @@ use crate::{
 use super::Block;
 
 pub fn inner_block_gencode(
-    scope: &ArcMutex<Scope>,
+    scope: &crate::semantic::ArcRwLock<Scope>,
     block: &Block,
     param_size: Option<usize>,
     is_direct_loop: bool,
@@ -51,14 +51,14 @@ pub fn inner_block_gencode(
 impl GenerateCode for Block {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
-        let borrowed = self.inner_scope.borrow();
-        let Some(borrowed_scope) = borrowed.as_ref() else {
+        let borrowed = &self.inner_scope;
+        let Some(borrowed_scope) = borrowed else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let borrowed = borrowed_scope.as_ref().borrow();
+        let borrowed = crate::arw_read!(borrowed_scope, CodeGenerationError::ConcurrencyError)?;
 
         let _return_size = self.metadata.signature().map_or(0, |t| t.size_of());
 
@@ -94,8 +94,8 @@ impl GenerateCode for Block {
         }
         drop(borrowed);
 
-        let inner_scope = self.inner_scope.borrow();
-        let Some(inner_scope) = inner_scope.as_ref() else {
+        let inner_scope = &self.inner_scope;
+        let Some(inner_scope) = inner_scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         for statement in &self.instructions {

@@ -43,7 +43,7 @@ use super::{
 impl GenerateCode for Data {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -68,7 +68,7 @@ impl GenerateCode for Data {
 impl Locatable for Data {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -80,7 +80,9 @@ impl Locatable for Data {
                 if from_field.get() {
                     Ok(())
                 } else {
-                    let (var, address, level) = scope.as_ref().borrow().access_var(id)?;
+                    let (var, address, level) =
+                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                            .access_var(id)?;
 
                     let var_type = &var.as_ref().type_sig;
                     let _var_size = var_type.size_of();
@@ -144,7 +146,7 @@ impl Locatable for Data {
 impl GenerateCode for Number {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
@@ -191,7 +193,7 @@ impl GenerateCode for Number {
 impl GenerateCode for Primitive {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
@@ -250,7 +252,7 @@ impl GenerateCode for Primitive {
 impl GenerateCode for Variable {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         if self.from_field.get() {
@@ -266,7 +268,9 @@ impl GenerateCode for Variable {
             }));
             Ok(())
         } else {
-            let (var, address, level) = scope.as_ref().borrow().access_var(&self.id)?;
+            let (var, address, level) =
+                crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
+                    .access_var(&self.id)?;
             // dbg!((&var, &address, &level));
             let var_type = &var.as_ref().type_sig;
             let var_size = var_type.size_of();
@@ -289,7 +293,7 @@ impl GenerateCode for Variable {
 impl GenerateCode for Slice {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -318,7 +322,7 @@ impl GenerateCode for Slice {
 impl GenerateCode for StrSlice {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
@@ -340,7 +344,7 @@ impl GenerateCode for StrSlice {
 impl GenerateCode for Vector {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -386,7 +390,7 @@ impl GenerateCode for Vector {
 impl GenerateCode for Tuple {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -411,7 +415,7 @@ impl GenerateCode for Tuple {
 impl GenerateCode for ExprScope {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -424,7 +428,7 @@ impl GenerateCode for ExprScope {
 impl GenerateCode for Closure {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
@@ -450,7 +454,11 @@ impl GenerateCode for Closure {
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
             let inner_scope = binding.as_ref().borrow();
 
-            for var in inner_scope.env_vars() {
+            for var in inner_scope
+                .try_read()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+                .env_vars()
+            {
                 let var_type = &var.as_ref().type_sig;
                 let var_size = var_type.size_of();
                 alloc_size += var_size;
@@ -461,9 +469,13 @@ impl GenerateCode for Closure {
             instructions.push(Casm::Data(data::Data::Serialized {
                 data: env_size.to_le_bytes().into(),
             }));
-            let outer_scope = scope.as_ref().borrow();
+            let outer_scope = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
             // Load Env variables
-            for var in inner_scope.env_vars() {
+            for var in inner_scope
+                .try_read()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
+                .env_vars()
+            {
                 let (var, address, level) = outer_scope.access_var(&var.id)?;
                 let var_type = &var.as_ref().type_sig;
                 let var_size = var_type.size_of();
@@ -488,7 +500,7 @@ impl GenerateCode for Closure {
 impl GenerateCode for Address {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
@@ -500,7 +512,7 @@ impl GenerateCode for Address {
 impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.gencode(scope, instructions)?;
@@ -525,7 +537,7 @@ impl GenerateCode for PtrAccess {
 impl GenerateCode for Struct {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -565,7 +577,7 @@ impl GenerateCode for Struct {
 impl GenerateCode for Union {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -635,7 +647,7 @@ impl GenerateCode for Union {
 impl GenerateCode for Enum {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
@@ -668,7 +680,7 @@ impl GenerateCode for Enum {
 impl GenerateCode for Map {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());

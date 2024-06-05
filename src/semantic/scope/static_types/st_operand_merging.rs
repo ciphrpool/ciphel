@@ -27,7 +27,7 @@ impl OperandMerging for StaticType {
     fn merge_substraction<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -79,7 +79,7 @@ impl OperandMerging for StaticType {
     fn merge_product<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -123,7 +123,7 @@ impl OperandMerging for StaticType {
     fn merge_addition<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -171,7 +171,11 @@ impl OperandMerging for StaticType {
             _ => Err(SemanticError::IncompatibleOperation),
         }
     }
-    fn merge_shift<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -212,7 +216,7 @@ impl OperandMerging for StaticType {
     fn merge_bitwise_and<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -260,7 +264,7 @@ impl OperandMerging for StaticType {
     fn merge_bitwise_xor<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -308,7 +312,7 @@ impl OperandMerging for StaticType {
     fn merge_bitwise_or<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -341,7 +345,11 @@ impl OperandMerging for StaticType {
         }
     }
 
-    fn cast<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -453,7 +461,7 @@ impl OperandMerging for StaticType {
     fn merge_comparaison<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -480,7 +488,7 @@ impl OperandMerging for StaticType {
     fn merge_equation<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -504,7 +512,7 @@ impl OperandMerging for StaticType {
     fn merge_logical_and<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -528,7 +536,7 @@ impl OperandMerging for StaticType {
     fn merge_logical_or<Other>(
         &self,
         _other: &Other,
-        _scope: &Ref<Scope>,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,

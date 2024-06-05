@@ -1,6 +1,7 @@
 use std::cell::Cell;
 
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::ArcRwLock;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
@@ -112,7 +113,7 @@ pub enum ExprScope {
 }
 
 impl ExprScope {
-    pub fn scope(&self) -> Result<ArcMutex<Scope>, SemanticError> {
+    pub fn scope(&self) -> Result<ArcRwLock<Scope>, SemanticError> {
         match self {
             ExprScope::Scope(scope) => scope.scope(),
             ExprScope::Expr(scope) => scope.scope(),

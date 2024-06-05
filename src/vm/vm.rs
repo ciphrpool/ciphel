@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use ulid::Ulid;
 
-use crate::semantic::ArcMutex;
+use crate::semantic::{ArcMutex, ArcRwLock};
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
 use super::{
@@ -22,6 +22,7 @@ use super::{
 pub enum CodeGenerationError {
     CantLocate,
     UnresolvedError,
+    ConcurrencyError,
     Default,
 }
 
@@ -64,7 +65,7 @@ pub enum RuntimeError {
 pub trait GenerateCode {
     fn gencode(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 }
@@ -72,7 +73,7 @@ pub trait GenerateCode {
 pub trait Locatable {
     fn locate(
         &self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 
@@ -329,7 +330,7 @@ impl ThreadState {
 #[derive(Debug, Clone)]
 pub struct Thread {
     pub state: ThreadState,
-    pub scope: ArcMutex<Scope>,
+    pub scope: ArcRwLock<Scope>,
     pub stack: Stack,
     pub program: CasmProgram,
     pub tid: Tid,
@@ -423,7 +424,7 @@ impl Runtime {
         }
     }
 
-    pub fn spawn_with_scope(&mut self, scope: ArcMutex<Scope>) -> Result<usize, RuntimeError> {
+    pub fn spawn_with_scope(&mut self, scope: ArcRwLock<Scope>) -> Result<usize, RuntimeError> {
         let program = CasmProgram::default();
         let stack = Stack::new();
         let tid = self.tid_count.as_ref().load(Ordering::Acquire) + 1;
@@ -443,7 +444,7 @@ impl Runtime {
         tid: Tid,
     ) -> Result<
         (
-            &'runtime mut ArcMutex<Scope>,
+            &'runtime mut ArcRwLock<Scope>,
             &'runtime mut Stack,
             &mut CasmProgram,
         ),

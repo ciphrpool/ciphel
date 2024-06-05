@@ -3,6 +3,7 @@ use std::{
     cell::{Ref, RefCell},
     ops::Deref,
     rc::Rc,
+    sync::{Arc, RwLock},
 };
 
 use crate::ast::utils::strings::ID;
@@ -14,6 +15,7 @@ pub mod scope;
 pub mod utils;
 
 pub type ArcMutex<T> = Rc<RefCell<T>>;
+pub type ArcRwLock<T> = Arc<RwLock<T>>;
 
 #[derive(Debug, Clone)]
 pub enum SemanticError {
@@ -50,6 +52,8 @@ pub enum SemanticError {
     IncompatibleTypes,
     IncompatibleOperation,
     IncompatibleOperands,
+
+    ConcurrencyError,
     Default,
 }
 
@@ -126,7 +130,7 @@ pub trait Resolve {
     type Extra: Default;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -138,20 +142,24 @@ pub trait CompatibleWith {
     fn compatible_with<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<(), SemanticError>
     where
         Other: TypeOf;
 }
 
 pub trait TypeOf {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized;
 }
 
 pub trait MergeType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf;
 }

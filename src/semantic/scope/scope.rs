@@ -1,16 +1,17 @@
+use crate::{
+    arw_new, arw_read,
+    ast::utils::strings::ID,
+    p_num,
+    semantic::{AccessLevel, ArcMutex, ArcRwLock, Either, SemanticError, SizeOf},
+    vm::{allocator::stack::Offset, vm::CodeGenerationError},
+};
+use std::sync::{Arc, RwLock, Weak};
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap},
-    rc::{Rc, Weak},
+    rc::Rc,
     slice::Iter,
-};
-
-use crate::{
-    ast::utils::strings::ID,
-    p_num,
-    semantic::{AccessLevel, Either, ArcMutex, SemanticError, SizeOf},
-    vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 
 use super::{
@@ -32,8 +33,8 @@ pub struct ScopeData {
 #[derive(Debug, Clone)]
 pub enum Scope {
     Inner {
-        parent: Option<Weak<RefCell<Scope>>>,
-        general: ArcMutex<Scope>,
+        parent: Option<Weak<RwLock<Scope>>>,
+        general: ArcRwLock<Scope>,
         data: ScopeData,
     },
     General {
@@ -65,8 +66,8 @@ impl ScopeData {
 }
 
 impl Scope {
-    pub fn new() -> ArcMutex<Self> {
-        Rc::new(RefCell::new(Self::General {
+    pub fn new() -> ArcRwLock<Self> {
+        Arc::new(RwLock::new(Self::General {
             data: ScopeData::new(),
             stack_top: Cell::new(0),
         }))
@@ -74,19 +75,22 @@ impl Scope {
 }
 
 impl Scope {
-    pub fn spawn(parent: &ArcMutex<Self>, vars: Vec<Var>) -> Result<ArcMutex<Self>, SemanticError> {
-        let borrowed_parent = parent.as_ref().borrow();
+    pub fn spawn(
+        parent: &ArcRwLock<Self>,
+        vars: Vec<Var>,
+    ) -> Result<ArcRwLock<Self>, SemanticError> {
+        let borrowed_parent = arw_read!(parent, SemanticError::ConcurrencyError)?;
         match &*borrowed_parent {
             Scope::Inner { general, data, .. } => {
                 let mut child = Self::Inner {
-                    parent: Some(Rc::downgrade(parent)),
+                    parent: Some(Arc::downgrade(parent)),
                     general: general.clone(),
                     data: data.spawn(),
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
                 }
-                let child = Rc::new(RefCell::new(child));
+                let child = arw_new!(child);
                 Ok(child)
             }
             Scope::General { .. } => {
@@ -98,7 +102,7 @@ impl Scope {
                 for variable in vars {
                     let _ = child.register_var(variable);
                 }
-                Ok(Rc::new(RefCell::new(child)))
+                Ok(arw_new!(child))
             }
         }
     }
@@ -146,7 +150,7 @@ impl Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = p.as_ref().borrow();
+                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
                         let var = {
                             let var = borrowed_scope.find_var(id);
                             var.ok()
@@ -158,7 +162,7 @@ impl Scope {
                     }),
                     None => {
                         let borrowed_scope =
-                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.find_var(id) {
@@ -197,7 +201,7 @@ impl Scope {
                 .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::Direct))
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = p.as_ref().borrow();
+                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
                         match borrowed_scope.access_var(id) {
                             Ok((var, offset, level)) => {
                                 let level = match level {
@@ -236,7 +240,7 @@ impl Scope {
                     }),
                     None => {
                         let borrowed_scope =
-                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.access_var(id) {
@@ -265,7 +269,7 @@ impl Scope {
                 parent, general, ..
             } => match parent {
                 Some(parent) => parent.upgrade().and_then(|p| {
-                    let borrowed_scope = p.as_ref().borrow();
+                    let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
                     match borrowed_scope.access_var(id) {
                         Ok((var, offset, level)) => {
                             let level = match level {
@@ -279,12 +283,15 @@ impl Scope {
                     }
                 }),
                 None => {
-                    let borrowed_scope = <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
-                    let borrowed_scope = borrowed_scope.borrow();
-
-                    match borrowed_scope.access_var(id) {
-                        Ok(var) => Some(var),
-                        Err(_) => None,
+                    if let Some(borrowed_scope) =
+                        arw_read!(general, SemanticError::ConcurrencyError).ok()
+                    {
+                        match borrowed_scope.access_var(id) {
+                            Ok(var) => Some(var),
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
                     }
                 }
             }
@@ -318,13 +325,13 @@ impl Scope {
                 .cloned()
                 .or_else(|| match parent {
                     Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&p);
+                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
                         let borrowed_scope = borrowed_scope.borrow();
                         borrowed_scope.find_type(id).ok()
                     }),
                     None => {
                         let borrowed_scope =
-                            <ArcMutex<Scope> as Borrow<RefCell<Scope>>>::borrow(&general);
+                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
                         let borrowed_scope = borrowed_scope.borrow();
 
                         borrowed_scope.find_type(id).ok()

@@ -260,7 +260,10 @@ mod tests {
         assert_eq!(
             EnumDef {
                 id: "Sport".to_string().into(),
-                values: vec!["Football".to_string().into(), "Basketball".to_string().into()]
+                values: vec![
+                    "Football".to_string().into(),
+                    "Basketball".to_string().into()
+                ]
             },
             value
         );
@@ -297,9 +300,9 @@ mod tests {
                     })],
                     can_capture: Cell::new(ClosureState::DEFAULT),
                     is_loop: Cell::new(false),
-                    
+
                     caller: Default::default(),
-                    inner_scope: RefCell::new(None),
+                    inner_scope: None,
                 }
             },
             value

@@ -62,10 +62,12 @@ impl Ciphel {
                 .map_err(|e| CompilationError::SemanticError(e))?;
         }
 
-        let _ = scope
-            .borrow()
-            .update_stack_top(stack.top())
-            .map_err(|e| CompilationError::CodeGen(e))?;
+        let _ = arw_read!(
+            scope,
+            CompilationError::SemanticError(SemanticError::ConcurrencyError)
+        )?
+        .update_stack_top(stack.top())
+        .map_err(|e| CompilationError::CodeGen(e))?;
 
         for statement in &statements {
             let _ = statement

@@ -85,7 +85,7 @@ impl ThreadFn {
 }
 fn expect_one_u64(
     params: &mut Vec<Expression>,
-    scope: &ArcMutex<Scope>,
+    scope: &crate::semantic::ArcRwLock<Scope>,
 ) -> Result<(), SemanticError> {
     if params.len() != 1 {
         return Err(SemanticError::IncorrectArguments);
@@ -94,7 +94,7 @@ fn expect_one_u64(
     let size = &mut params[0];
 
     let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
-    let size_type = size.type_of(&scope.borrow())?;
+    let size_type = size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
     match &size_type {
         Either::Static(value) => match value.as_ref() {
             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
@@ -110,7 +110,7 @@ impl Resolve for ThreadFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -141,7 +141,7 @@ impl Resolve for ThreadFn {
     }
 }
 impl TypeOf for ThreadFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -160,7 +160,7 @@ impl TypeOf for ThreadFn {
 impl GenerateCode for ThreadFn {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

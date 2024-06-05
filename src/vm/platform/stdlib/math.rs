@@ -189,7 +189,7 @@ impl Resolve for MathFn {
     type Extra = Vec<Expression>;
     fn resolve(
         &mut self,
-        scope: &ArcMutex<Scope>,
+        scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -229,7 +229,7 @@ impl Resolve for MathFn {
                 }
                 let n = &mut extra[0];
                 let _ = n.resolve(scope, &Some(p_num!(F64)), &mut None)?;
-                let n_type = n.type_of(&scope.borrow())?;
+                let n_type = n.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
 
                 match &n_type {
                     Either::Static(value) => match value.as_ref() {
@@ -253,8 +253,8 @@ impl Resolve for MathFn {
                 let _ = x.resolve(scope, &Some(p_num!(F64)), &mut None)?;
                 let _ = y.resolve(scope, &Some(p_num!(F64)), &mut None)?;
 
-                let x_type = x.type_of(&scope.borrow())?;
-                let y_type = y.type_of(&scope.borrow())?;
+                let x_type = x.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let y_type = y.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
 
                 match &x_type {
                     Either::Static(value) => match value.as_ref() {
@@ -278,7 +278,7 @@ impl Resolve for MathFn {
     }
 }
 impl TypeOf for MathFn {
-    fn type_of(&self, _scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -294,7 +294,7 @@ impl TypeOf for MathFn {
 impl GenerateCode for MathFn {
     fn gencode(
         &self,
-        _scope: &ArcMutex<Scope>,
+        _scope: &crate::semantic::ArcRwLock<Scope>,
         instructions: &CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {

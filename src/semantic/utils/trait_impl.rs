@@ -20,7 +20,11 @@ impl<T> CompatibleWith for Option<T>
 where
     T: CompatibleWith,
 {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
     {
@@ -42,7 +46,11 @@ where
 }
 
 impl CompatibleWith for EType {
-    fn compatible_with<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<(), SemanticError>
+    fn compatible_with<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<(), SemanticError>
     where
         Other: TypeOf,
 
@@ -65,7 +73,7 @@ impl<S: SizeOf, U: SizeOf> SizeOf for Either<S, U> {
 }
 
 impl TypeOf for EType {
-    fn type_of(&self, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
     where
         Self: Sized,
     {
@@ -77,7 +85,11 @@ impl TypeOf for EType {
 }
 
 impl MergeType for EType {
-    fn merge<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -277,7 +289,7 @@ where
     fn merge_substraction<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -303,7 +315,7 @@ where
     fn merge_product<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -323,7 +335,7 @@ where
     fn merge_addition<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -340,7 +352,11 @@ where
             Either::User(value) => value.can_shift(),
         }
     }
-    fn merge_shift<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn merge_shift<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -359,7 +375,7 @@ where
     fn merge_bitwise_and<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -379,7 +395,7 @@ where
     fn merge_bitwise_xor<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -399,7 +415,7 @@ where
     fn merge_bitwise_or<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -409,7 +425,11 @@ where
             Either::User(value) => value.merge_bitwise_or(other, scope),
         }
     }
-    fn cast<Other>(&self, other: &Other, scope: &Ref<Scope>) -> Result<EType, SemanticError>
+    fn cast<Other>(
+        &self,
+        other: &Other,
+        scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {
@@ -427,7 +447,7 @@ where
     fn merge_comparaison<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -447,7 +467,7 @@ where
     fn merge_equation<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -467,7 +487,7 @@ where
     fn merge_logical_and<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -487,7 +507,7 @@ where
     fn merge_logical_or<Other>(
         &self,
         other: &Other,
-        scope: &Ref<Scope>,
+        scope: &std::sync::RwLockReadGuard<Scope>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
