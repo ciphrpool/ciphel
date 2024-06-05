@@ -67,7 +67,7 @@ impl PartialEq for FnCall {
 pub struct Range {
     pub lower: Box<Expression>,
     pub upper: Box<Expression>,
-    pub incr: Option<Cell<Number>>,
+    pub incr: Option<Number>,
     pub inclusive: bool,
     pub metadata: Metadata,
 }
