@@ -1,3 +1,4 @@
+use crate::arw_write;
 use crate::semantic::scope::scope::Scope;
 
 use crate::vm::casm::branch::BranchTry;
@@ -73,7 +74,8 @@ impl GenerateCode for Block {
             let var = var.as_ref();
             let var_size = var.type_sig.size_of();
             // Already allocated
-            offset.set(Offset::FP(offset_idx));
+            let mut borrowed_offset = arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
+            *borrowed_offset = Offset::FP(offset_idx);
             offset_idx += var_size;
         }
 
@@ -83,7 +85,9 @@ impl GenerateCode for Block {
             let var_size = var.type_sig.size_of();
 
             if var.state.get() != VarState::Parameter {
-                offset.set(Offset::FZ(offset_idx as isize));
+                let mut borrowed_offset =
+                    arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
+                *borrowed_offset = Offset::FZ(offset_idx as isize);
                 // Alloc and push heap address on stack
                 if var_size == 0 {
                     continue;

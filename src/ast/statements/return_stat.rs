@@ -136,7 +136,7 @@ impl Resolve for Return {
             }
             Return::Break => {
                 if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
-                    .state()
+                    .state()?
                     .is_loop
                 {
                     Ok(())
@@ -146,7 +146,7 @@ impl Resolve for Return {
             }
             Return::Continue => {
                 if crate::arw_read!(scope, SemanticError::ConcurrencyError)?
-                    .state()
+                    .state()?
                     .is_loop
                 {
                     Ok(())

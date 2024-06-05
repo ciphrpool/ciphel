@@ -16,6 +16,26 @@ macro_rules! arw_read {
 }
 
 #[macro_export]
+macro_rules! am_read {
+    ($var:expr,$err:expr) => {
+        $var.try_read().map_err(|_| {
+            panic!("Concucurrency Read error");
+            $err
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! am_write {
+    ($var:expr,$err:expr) => {
+        $var.try_read().map_err(|_| {
+            panic!("Concucurrency Read error");
+            $err
+        })
+    };
+}
+
+#[macro_export]
 macro_rules! arw_write {
     ($var:expr,$err:expr) => {
         $var.try_write().map_err(|_| {

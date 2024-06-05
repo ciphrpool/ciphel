@@ -12,7 +12,6 @@ use super::{
     allocator::{
         heap::{Heap, HeapError},
         stack::{Stack, StackError},
-        vtable::VTableError,
     },
     casm::CasmProgram,
     stdio::StdIO,
@@ -44,7 +43,7 @@ pub enum Signal {
 pub enum RuntimeError {
     StackError(StackError),
     HeapError(HeapError),
-    VTableError(VTableError),
+    // VTableError(VTableError),
     Deserialization,
     UnsupportedOperation,
     MathError,

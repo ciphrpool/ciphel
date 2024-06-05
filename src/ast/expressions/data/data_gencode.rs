@@ -458,8 +458,9 @@ impl GenerateCode for Closure {
                 .try_read()
                 .map_err(|_| CodeGenerationError::ConcurrencyError)?
                 .env_vars()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
             {
-                let var_type = &var.as_ref().type_sig;
+                let var_type = &var.type_sig;
                 let var_size = var_type.size_of();
                 alloc_size += var_size;
                 env_size += var_size;
@@ -475,6 +476,7 @@ impl GenerateCode for Closure {
                 .try_read()
                 .map_err(|_| CodeGenerationError::ConcurrencyError)?
                 .env_vars()
+                .map_err(|_| CodeGenerationError::ConcurrencyError)?
             {
                 let (var, address, level) = outer_scope.access_var(&var.id)?;
                 let var_type = &var.as_ref().type_sig;

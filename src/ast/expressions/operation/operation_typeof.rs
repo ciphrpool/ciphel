@@ -1,6 +1,7 @@
 use std::cell::Ref;
 
 use crate::{
+    arw_read,
     ast::expressions::{
         data::{Data, Variable},
         Atomic, Expression,
@@ -73,8 +74,8 @@ impl TypeOf for FnCall {
     {
         match self.fn_var.as_ref() {
             Expression::Atomic(Atomic::Data(Data::Variable(Variable { .. }))) => {
-                let borrow = self.platform.as_ref().borrow();
-                match borrow.as_ref() {
+                let borrowed_platform = arw_read!(self.platform, SemanticError::ConcurrencyError)?;
+                match borrowed_platform.as_ref() {
                     Some(api) => return api.type_of(scope),
                     None => {}
                 }

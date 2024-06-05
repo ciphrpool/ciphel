@@ -212,7 +212,7 @@ impl FnCall {
                 fn_var,
                 params,
                 metadata: Metadata::default(),
-                platform: Rc::default(),
+                platform: Default::default(),
             });
             Ok((remainder, left))
         } else {
@@ -265,7 +265,7 @@ impl TryParseOperation for FnCall {
                 fn_var,
                 params,
                 metadata: Metadata::default(),
-                platform: Rc::default(),
+                platform: Default::default(),
             });
             if peeked.is_some() {
                 return Ok((remainder, left));
@@ -1197,7 +1197,7 @@ mod tests {
                     ))))
                 ],
                 metadata: Metadata::default(),
-                platform: Rc::default(),
+                platform: Default::default(),
             }),
             value
         );
@@ -1227,7 +1227,7 @@ mod tests {
                     ))))
                 ],
                 metadata: Metadata::default(),
-                platform: Rc::default(),
+                platform: Default::default(),
             }),
             value
         );

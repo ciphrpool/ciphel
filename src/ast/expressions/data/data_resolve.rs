@@ -503,7 +503,7 @@ impl Resolve for Closure {
                 .scope()?
                 .try_read()
                 .map_err(|_| SemanticError::ConcurrencyError)?
-                .env_vars()
+                .env_vars()?
                 .len()
                 > 0
         {

@@ -1,7 +1,9 @@
+use std::sync::atomic::Ordering;
+
 use super::Block;
 
 use crate::semantic::scope::scope::Scope;
-use crate::{arw_write, resolve_metadata};
+use crate::{arw_read, arw_write, resolve_metadata};
 
 use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{ArcMutex, CompatibleWith, EType, Info, TypeOf};
@@ -23,17 +25,18 @@ impl Resolve for Block {
     {
         let mut inner_scope = Scope::spawn(scope, extra.clone())?;
         {
-            if self.is_loop.get() {
+            if self.is_loop.load(Ordering::Acquire) {
                 arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
             }
-            if let Some(caller) = self.caller.as_ref().borrow().as_ref() {
+            let borrowed_caller = arw_read!(self.caller, SemanticError::ConcurrencyError)?;
+            if let Some(caller) = borrowed_caller.as_ref() {
                 let caller = caller.clone();
                 caller.state.set(VarState::Parameter);
                 let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?
                     .register_var(caller)?;
             }
-            arw_write!(inner_scope, SemanticError::ConcurrencyError)?
-                .to_closure(self.can_capture.get());
+            let can_capture = arw_read!(self.can_capture, SemanticError::ConcurrencyError)?.clone();
+            arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_closure(can_capture);
         }
 
         for instruction in &mut self.instructions {

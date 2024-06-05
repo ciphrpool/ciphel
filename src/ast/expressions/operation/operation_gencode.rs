@@ -1,3 +1,4 @@
+use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
 use crate::semantic::scope::type_traits::GetSubTypes;
@@ -433,7 +434,8 @@ impl GenerateCode for super::FnCall {
             .map(|p| p.signature().map_or(0, |s| s.size_of()))
             .sum();
 
-        if let Some(platform_api) = self.platform.as_ref().borrow().as_ref() {
+        let borrowed_platform = arw_read!(self.platform, CodeGenerationError::ConcurrencyError)?;
+        if let Some(platform_api) = borrowed_platform.as_ref() {
             for param in &self.params {
                 let _ = param.gencode(scope, instructions)?;
             }

@@ -3,7 +3,7 @@ use std::{
     cell::{Ref, RefCell},
     ops::Deref,
     rc::Rc,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use crate::ast::utils::strings::ID;
@@ -14,7 +14,7 @@ use self::scope::{static_types::StaticType, user_type_impl::UserType};
 pub mod scope;
 pub mod utils;
 
-pub type ArcMutex<T> = Rc<RefCell<T>>;
+pub type ArcMutex<T> = Arc<Mutex<T>>;
 pub type ArcRwLock<T> = Arc<RwLock<T>>;
 
 #[derive(Debug, Clone)]

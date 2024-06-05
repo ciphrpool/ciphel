@@ -33,7 +33,8 @@ impl GenerateCode for Declaration {
                         var.is_declared.set(true);
 
                         if let Some(ref mut stack_top) = new_stack_top {
-                            o.set(Offset::SB(*stack_top));
+                            let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
+                            *o = Offset::SB(*stack_top);
                             if var.type_sig.size_of() == 0 {
                                 continue;
                             }
@@ -91,7 +92,8 @@ impl GenerateCode for Declaration {
                             if let Some(stack_top) =
                                 arw_read!(scope, CodeGenerationError::ConcurrencyError)?.stack_top()
                             {
-                                o.set(Offset::SB(stack_top));
+                                let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
+                                *o = Offset::SB(stack_top);
                                 instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
                                 let _ = arw_read!(scope, CodeGenerationError::ConcurrencyError)?
                                     .update_stack_top(stack_top + var_size)?;

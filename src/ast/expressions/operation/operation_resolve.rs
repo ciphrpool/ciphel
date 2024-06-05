@@ -10,7 +10,7 @@ use crate::semantic::scope::static_types::{
     AddrType, NumberType, PrimitiveType, RangeType, StaticType,
 };
 use crate::vm::platform::Lib;
-use crate::{p_num, resolve_metadata};
+use crate::{arw_write, p_num, resolve_metadata};
 
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
@@ -247,7 +247,10 @@ impl Resolve for FnCall {
                 if found.is_err() || self.lib.is_some() {
                     if let Some(mut api) = Lib::from(&self.lib, id) {
                         let _ = api.resolve(scope, context, &mut self.params)?;
-                        *self.platform.as_ref().borrow_mut() = Some(api);
+
+                        let mut borrowed_platform =
+                            arw_write!(self.platform, SemanticError::ConcurrencyError)?;
+                        *borrowed_platform = Some(api);
                         resolve_metadata!(self.metadata.info, self, scope, context);
                         return Ok(());
                     }

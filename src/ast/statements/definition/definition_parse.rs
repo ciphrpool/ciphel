@@ -160,6 +160,7 @@ mod tests {
     use std::{
         cell::{Cell, RefCell},
         collections::HashMap,
+        sync::{Arc, RwLock},
     };
 
     use crate::{
@@ -298,8 +299,8 @@ mod tests {
                         ))))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,

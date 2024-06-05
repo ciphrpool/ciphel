@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{Metadata, ArcMutex},
+    semantic::{ArcMutex, ArcRwLock, Metadata},
     vm::platform::Lib,
 };
 
@@ -44,13 +44,23 @@ pub struct ListAccess {
     pub metadata: Metadata,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct FnCall {
     pub lib: Option<ID>,
     pub fn_var: Box<Expression>,
     pub params: Vec<Expression>,
     pub metadata: Metadata,
-    pub platform: ArcMutex<Option<Lib>>,
+    pub platform: ArcRwLock<Option<Lib>>,
+}
+
+impl PartialEq for FnCall {
+    fn eq(&self, other: &Self) -> bool {
+        self.lib == other.lib
+            && self.fn_var == other.fn_var
+            && self.params == other.params
+            && self.metadata == other.metadata
+        // && self.platform == other.platform
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

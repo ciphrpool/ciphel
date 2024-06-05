@@ -1,7 +1,7 @@
 use super::{Definition, FnDef, TypeDef};
-use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::SizeOf;
+use crate::{arw_read, arw_write};
 
 use crate::vm::allocator::stack::Offset;
 use crate::vm::allocator::MemoryAddress;
@@ -58,7 +58,8 @@ impl GenerateCode for FnDef {
             let mut size = 8;
             for (v, o) in borrow.vars() {
                 if **v.id == *self.id {
-                    o.set(Offset::SB(stack_top));
+                    let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
+                    *o = Offset::SB(stack_top);
                     size = v.type_sig.size_of();
                     break;
                 }

@@ -160,6 +160,7 @@ mod tests {
     use std::{
         cell::{Cell, RefCell},
         rc::Rc,
+        sync::{Arc, RwLock},
     };
 
     use crate::{
@@ -215,11 +216,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -241,11 +242,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -293,11 +294,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -320,11 +321,11 @@ mod tests {
                                     v_num!(Unresolved, 10)
                                 )))],
                                 metadata: Metadata::default(),
-                                platform: Rc::default(),
+                                platform: Default::default(),
                             })
                         }))],
-                        can_capture: Cell::new(ClosureState::DEFAULT),
-                        is_loop: Cell::new(false),
+                        can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                        is_loop: Default::default(),
 
                         caller: Default::default(),
                         inner_scope: None,
@@ -346,11 +347,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -392,11 +393,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -417,11 +418,11 @@ mod tests {
                                 v_num!(Unresolved, 10)
                             )))],
                             metadata: Metadata::default(),
-                            platform: Rc::default(),
+                            platform: Default::default(),
                         })
                     }))],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,

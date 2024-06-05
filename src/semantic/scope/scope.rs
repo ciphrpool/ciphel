@@ -1,16 +1,18 @@
 use crate::{
-    arw_new, arw_read,
+    arw_new, arw_read, arw_write,
     ast::utils::strings::ID,
     p_num,
     semantic::{AccessLevel, ArcMutex, ArcRwLock, Either, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex, RwLock, Weak,
+};
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap},
-    rc::Rc,
     slice::Iter,
 };
 
@@ -21,13 +23,13 @@ use super::{
     ClosureState, ScopeState,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ScopeData {
-    vars: Vec<(Rc<Var>, Cell<Offset>)>,
-    env_vars: ArcMutex<BTreeSet<Rc<Var>>>,
-    env_vars_address: HashMap<ID, Cell<AccessLevel>>,
-    types: HashMap<ID, Rc<UserType>>,
-    state: Cell<ScopeState>,
+    vars: Vec<(Arc<Var>, ArcRwLock<Offset>)>,
+    env_vars: ArcRwLock<BTreeSet<Arc<Var>>>,
+    env_vars_address: HashMap<ID, ArcMutex<AccessLevel>>,
+    types: HashMap<ID, Arc<UserType>>,
+    state: ArcRwLock<ScopeState>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +41,7 @@ pub enum Scope {
     },
     General {
         data: ScopeData,
-        stack_top: Cell<usize>,
+        stack_top: Arc<AtomicUsize>,
     },
 }
 
@@ -48,8 +50,8 @@ impl ScopeData {
         Self {
             vars: Vec::new(),
             types: HashMap::new(),
-            state: Cell::default(),
-            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
+            state: Default::default(),
+            env_vars: Default::default(),
             env_vars_address: HashMap::default(),
         }
     }
@@ -59,7 +61,7 @@ impl ScopeData {
             vars: Vec::default(),
             types: HashMap::new(),
             state: self.state.clone(),
-            env_vars: Rc::new(RefCell::new(BTreeSet::default())),
+            env_vars: Default::default(),
             env_vars_address: HashMap::default(),
         }
     }
@@ -69,7 +71,7 @@ impl Scope {
     pub fn new() -> ArcRwLock<Self> {
         Arc::new(RwLock::new(Self::General {
             data: ScopeData::new(),
-            stack_top: Cell::new(0),
+            stack_top: Default::default(),
         }))
     }
 }
@@ -123,18 +125,18 @@ impl Scope {
     pub fn register_var(&mut self, reg: Var) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.vars.push((reg.into(), Cell::default()));
+                data.vars.push((reg.into(), Default::default()));
                 Ok(())
             }
             Scope::General { data, .. } => {
                 reg.state.set(VarState::Global);
-                data.vars.push((reg.into(), Cell::default()));
+                data.vars.push((reg.into(), Default::default()));
                 Ok(())
             }
         }
     }
 
-    pub fn find_var(&self, id: &ID) -> Result<Rc<Var>, SemanticError> {
+    pub fn find_var(&self, id: &ID) -> Result<Arc<Var>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -185,23 +187,38 @@ impl Scope {
     pub fn access_var(
         &self,
         id: &ID,
-    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let is_closure = self.state().is_closure;
+    ) -> Result<(Arc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let is_closure = self
+            .state()
+            .map_err(|_| CodeGenerationError::ConcurrencyError)?
+            .is_closure;
         match self {
             Scope::Inner {
                 data,
                 parent,
                 general,
                 ..
-            } => data
-                .vars
-                .iter()
-                .rev()
-                .find(|(var, _)| &var.as_ref().id == id && var.is_declared.get())
-                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::Direct))
-                .or_else(|| match parent {
-                    Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
+            } => {
+                for (var, offset) in data.vars.iter().rev() {
+                    if &var.as_ref().id == id && var.is_declared.get() {
+                        return Ok((
+                            var.clone(),
+                            arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
+                            AccessLevel::Direct,
+                        ));
+                    } else {
+                        continue;
+                    }
+                }
+                // The variable is in a parent scope
+                match parent {
+                    Some(parent) => {
+                        let Some(p) = parent.upgrade() else {
+                            return Err(CodeGenerationError::UnresolvedError);
+                        };
+
+                        let borrowed_scope = arw_read!(p, CodeGenerationError::ConcurrencyError)?;
+
                         match borrowed_scope.access_var(id) {
                             Ok((var, offset, level)) => {
                                 let level = match level {
@@ -217,7 +234,10 @@ impl Scope {
                                     };
                                     let offset = {
                                         let mut idx = 0;
-                                        for env_var in borrowed_scope.env_vars() {
+                                        for env_var in borrowed_scope
+                                            .env_vars()
+                                            .map_err(|_| CodeGenerationError::ConcurrencyError)?
+                                        {
                                             if env_var.id == var.id {
                                                 break;
                                             }
@@ -228,42 +248,52 @@ impl Scope {
                                     let env_offset =
                                         match self.access_var(&"$ENV".to_string().into()).ok() {
                                             Some((_, Offset::FP(o), _)) => o,
-                                            _ => return None,
+                                            _ => return Err(CodeGenerationError::UnresolvedError),
                                         };
-                                    Some((var, Offset::FE(env_offset, offset), level))
+                                    return Ok((var, Offset::FE(env_offset, offset), level));
                                 } else {
-                                    Some((var, offset, level))
+                                    return Ok((var, offset, level));
                                 }
                             }
-                            Err(_) => None,
+                            Err(_) => {}
                         }
-                    }),
+                    }
                     None => {
                         let borrowed_scope =
-                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
+                            arw_read!(general, CodeGenerationError::ConcurrencyError)?;
                         let borrowed_scope = borrowed_scope.borrow();
 
                         match borrowed_scope.access_var(id) {
-                            Ok(var) => Some(var),
-                            Err(_) => None,
-                        }
+                            Ok(var) => return Ok(var),
+                            Err(_) => {}
+                        };
                     }
-                })
-                .ok_or(CodeGenerationError::UnresolvedError),
-            Scope::General { data, .. } => data
-                .vars
-                .iter()
-                .find(|(var, _)| &var.as_ref().id == id)
-                .map(|(var, offset)| (var.clone(), offset.get(), AccessLevel::General))
-                .ok_or(CodeGenerationError::UnresolvedError),
+                }
+                return Err(CodeGenerationError::UnresolvedError);
+            }
+            Scope::General { data, .. } => {
+                for (var, offset) in data.vars.iter().rev() {
+                    if &var.as_ref().id == id {
+                        return Ok((
+                            var.clone(),
+                            arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
+                            AccessLevel::General,
+                        ));
+                    }
+                }
+                return Err(CodeGenerationError::UnresolvedError);
+            }
         }
     }
 
     pub fn access_var_in_parent(
         &self,
         id: &ID,
-    ) -> Result<(Rc<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let _is_closure = self.state().is_closure;
+    ) -> Result<(Arc<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let _is_closure = self
+            .state()
+            .map_err(|_| CodeGenerationError::ConcurrencyError)?
+            .is_closure;
         match self {
             Scope::Inner {
                 parent, general, ..
@@ -299,20 +329,26 @@ impl Scope {
             Scope::General { .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    pub fn capture(&self, var: Rc<Var>) -> bool {
+    pub fn capture(&self, var: Arc<Var>) -> Result<bool, SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                if data.state.get().is_closure != ClosureState::DEFAULT {
-                    data.env_vars.as_ref().borrow_mut().insert(var);
-                    return true;
+                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
+                if state.is_closure != ClosureState::DEFAULT {
+                    let Some(mut env_vars) =
+                        arw_write!(data.env_vars, SemanticError::ConcurrencyError).ok()
+                    else {
+                        return Ok(false);
+                    };
+                    env_vars.insert(var);
+                    return Ok(true);
                 }
-                return false;
+                return Ok(false);
             }
-            _ => false,
+            _ => Ok(false),
         }
     }
 
-    pub fn find_type(&self, id: &ID) -> Result<Rc<UserType>, SemanticError> {
+    pub fn find_type(&self, id: &ID) -> Result<Arc<UserType>, SemanticError> {
         match self {
             Scope::Inner {
                 data,
@@ -346,17 +382,24 @@ impl Scope {
         }
     }
 
-    pub fn state(&self) -> ScopeState {
+    pub fn state(&self) -> Result<ScopeState, SemanticError> {
         match self {
-            Scope::Inner { data, .. } => data.state.get(),
-            Scope::General { data, .. } => data.state.get(),
+            Scope::Inner { data, .. } => {
+                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
+                Ok(state.clone())
+            }
+            Scope::General { data, .. } => {
+                let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
+                Ok(state.clone())
+            }
         }
     }
 
-    pub fn to_closure(&mut self, state: ClosureState) {
+    pub fn to_closure(&mut self, state: ClosureState) -> Result<(), SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
-                data.state.get_mut().is_closure = state;
+                let mut data_state = arw_write!(data.state, SemanticError::ConcurrencyError)?;
+                data_state.is_closure = state;
                 if state == ClosureState::CAPTURING {
                     let mut offset = 0;
                     for (var, _o) in &data.vars {
@@ -365,45 +408,52 @@ impl Scope {
                         }
                     }
                     data.vars.push((
-                        Rc::new(Var {
+                        Arc::new(Var {
                             id: "$ENV".to_string().into(),
                             type_sig: p_num!(U64),
                             state: VarState::Parameter.into(),
                             is_declared: Cell::new(true),
                         }),
-                        Cell::new(Offset::FP(offset)),
+                        Arc::new(RwLock::new(Offset::FP(offset))),
                     ));
+                    Ok(())
+                } else {
+                    Ok(())
                 }
             }
-            _ => {}
+            _ => Ok(()),
         }
     }
 
-    pub fn to_loop(&mut self) {
+    pub fn to_loop(&mut self) -> Result<(), SemanticError> {
         match self {
-            Scope::Inner { data, .. } => data.state.get_mut().is_loop = true,
-            _ => {}
+            Scope::Inner { data, .. } => {
+                let mut data_state = arw_write!(data.state, SemanticError::ConcurrencyError)?;
+                data_state.is_loop = true;
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 
-    pub fn env_vars(&self) -> Vec<Rc<Var>> {
+    pub fn env_vars(&self) -> Result<Vec<Arc<Var>>, SemanticError> {
         match self {
-            Scope::Inner { data, .. } => (&data.env_vars)
-                .as_ref()
-                .borrow()
-                .clone()
-                .into_iter()
-                .collect(),
-            Scope::General { data, .. } => (&data.env_vars)
-                .as_ref()
-                .borrow()
-                .clone()
-                .into_iter()
-                .collect(),
+            Scope::Inner { data, .. } => {
+                Ok(arw_read!(data.env_vars, SemanticError::ConcurrencyError)?
+                    .clone()
+                    .into_iter()
+                    .collect())
+            }
+            Scope::General { data, .. } => {
+                Ok(arw_read!(data.env_vars, SemanticError::ConcurrencyError)?
+                    .clone()
+                    .into_iter()
+                    .collect())
+            }
         }
     }
 
-    pub fn vars(&self) -> Iter<(Rc<Var>, Cell<Offset>)> {
+    pub fn vars(&self) -> Iter<(Arc<Var>, ArcRwLock<Offset>)> {
         match self {
             Scope::Inner {
                 parent: _,
@@ -418,11 +468,13 @@ impl Scope {
         &self,
         id: &ID,
         offset: Offset,
-    ) -> Result<Rc<Var>, CodeGenerationError> {
+    ) -> Result<Arc<Var>, CodeGenerationError> {
         match self {
             Scope::Inner { data, .. } => {
                 if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
-                    var_offset.set(offset);
+                    let mut var_offset =
+                        arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
+                    *var_offset = offset;
                     Ok(var.clone())
                 } else {
                     Err(CodeGenerationError::UnresolvedError)
@@ -430,7 +482,9 @@ impl Scope {
             }
             Scope::General { data, .. } => {
                 if let Some((var, var_offset)) = data.vars.iter().rev().find(|(v, _)| &v.id == id) {
-                    var_offset.set(offset);
+                    let mut var_offset =
+                        arw_write!(var_offset, CodeGenerationError::ConcurrencyError)?;
+                    *var_offset = offset;
                     Ok(var.clone())
                 } else {
                     Err(CodeGenerationError::UnresolvedError)
@@ -441,7 +495,7 @@ impl Scope {
     pub fn stack_top(&self) -> Option<usize> {
         match self {
             Scope::Inner { .. } => None,
-            Scope::General { stack_top, .. } => Some(stack_top.get()),
+            Scope::General { stack_top, .. } => Some(stack_top.load(Ordering::Acquire)),
         }
     }
 
@@ -449,7 +503,7 @@ impl Scope {
         match self {
             Scope::Inner { .. } => Err(CodeGenerationError::UnresolvedError),
             Scope::General { stack_top, .. } => {
-                stack_top.set(top);
+                stack_top.store(top, Ordering::Release);
                 Ok(())
             }
         }

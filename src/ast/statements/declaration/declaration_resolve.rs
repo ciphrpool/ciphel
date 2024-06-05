@@ -81,8 +81,8 @@ impl Resolve for Declaration {
                         AssignValue::Expr(expr) => match expr.as_ref() {
                             Expression::Atomic(Atomic::Data(Data::Closure(closure))) => {
                                 match &closure.scope {
-                                    ExprScope::Scope(s) => s.set_caller(var.clone()),
-                                    ExprScope::Expr(s) => s.set_caller(var.clone()),
+                                    ExprScope::Scope(s) => s.set_caller(var.clone())?,
+                                    ExprScope::Expr(s) => s.set_caller(var.clone())?,
                                 }
                             }
                             _ => {

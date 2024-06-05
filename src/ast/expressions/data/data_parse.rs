@@ -1,4 +1,7 @@
-use std::cell::{Cell, RefCell};
+use std::{
+    cell::{Cell, RefCell},
+    sync::{Arc, RwLock},
+};
 
 use crate::{
     ast::{
@@ -261,8 +264,8 @@ impl TryParse for ExprScope {
                         expr: Box::new(value),
                         metadata: Metadata::default(),
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None,
@@ -434,7 +437,11 @@ impl TryParse for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, rc::Rc};
+    use std::{
+        cell::Cell,
+        rc::Rc,
+        sync::{Arc, RwLock},
+    };
 
     use crate::{
         ast::{
@@ -579,8 +586,8 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None
@@ -616,8 +623,8 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None
@@ -656,8 +663,8 @@ mod tests {
                         )))),
                         metadata: Metadata::default()
                     })],
-                    can_capture: Cell::new(ClosureState::DEFAULT),
-                    is_loop: Cell::new(false),
+                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
+                    is_loop: Default::default(),
 
                     caller: Default::default(),
                     inner_scope: None
@@ -976,7 +983,7 @@ mod tests {
                         Primitive::Number(Number::Unresolved(10).into())
                     )))],
                     metadata: Metadata::default(),
-                    platform: Rc::default(),
+                    platform: Default::default(),
                 })
                 .into(),
                 index: 1,

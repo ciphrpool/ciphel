@@ -119,7 +119,7 @@ impl ExprScope {
             ExprScope::Expr(scope) => scope.scope(),
         }
     }
-    pub fn to_capturing(&self, state: ClosureState) {
+    pub fn to_capturing(&self, state: ClosureState) -> Result<(), SemanticError> {
         match self {
             ExprScope::Scope(value) => value.to_capturing(state),
             ExprScope::Expr(value) => value.to_capturing(state),
