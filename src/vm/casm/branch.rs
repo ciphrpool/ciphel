@@ -30,7 +30,7 @@ impl Label {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Label {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         stdio.push_casm_label(engine, &self.name);
     }
 }
@@ -38,7 +38,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Label {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Label {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -56,7 +56,7 @@ pub enum Call {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Call::From { label, param_size } => {
                 let label = program
@@ -73,7 +73,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -99,7 +99,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
                 .frame(
                     //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
                     param_size,
-                    program.cursor.as_ref().load(Ordering::Acquire) + 1,
+                    program.cursor + 1,
                 )
                 .map_err(|e| e.into())?;
             let _ = stack
@@ -110,7 +110,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
                 .frame(
                     //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
                     param_size,
-                    program.cursor.as_ref().load(Ordering::Acquire) + 1,
+                    program.cursor + 1,
                 )
                 .map_err(|e| e.into())?;
         }
@@ -126,7 +126,7 @@ pub struct Goto {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Goto {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self.label {
             Some(label) => {
                 let label = program
@@ -142,7 +142,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Goto {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Goto {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -171,7 +171,7 @@ pub struct BranchIf {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchIf {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         let label = program
             .get_label_name(&self.else_label)
             .unwrap_or("".to_string().into())
@@ -182,7 +182,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchIf {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -194,7 +194,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
             return Err(RuntimeError::CodeSegmentation);
         };
         program.cursor_set(if condition {
-            program.cursor.as_ref().load(Ordering::Acquire) + 1
+            program.cursor + 1
         } else {
             else_label
         });
@@ -216,7 +216,7 @@ pub enum BranchTable {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             BranchTable::Swith {
                 size,
@@ -270,7 +270,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -397,7 +397,7 @@ pub enum BranchTry {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTry {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             BranchTry::StartTry { else_label } => {
                 let label = program
@@ -413,7 +413,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTry {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

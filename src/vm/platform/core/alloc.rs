@@ -231,7 +231,7 @@ pub enum AllocCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             AllocCasm::AppendChar => stdio.push_casm_lib(engine, "append"),
             AllocCasm::AppendItem(_) => stdio.push_casm_lib(engine, "append"),
@@ -1073,7 +1073,7 @@ impl GenerateCode for AllocFn {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             AllocFn::Append {
@@ -1986,7 +1986,7 @@ pub mod map_impl {
 impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -3418,9 +3418,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3474,9 +3474,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3521,9 +3521,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3589,9 +3589,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3827,9 +3827,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3869,9 +3869,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3926,9 +3926,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3994,9 +3994,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4085,9 +4085,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4129,9 +4129,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4178,9 +4178,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4247,9 +4247,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4300,9 +4300,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4368,9 +4368,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4443,9 +4443,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4498,9 +4498,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4547,9 +4547,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4621,9 +4621,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4685,9 +4685,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");

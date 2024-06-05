@@ -45,7 +45,7 @@ pub enum IOCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
             IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
@@ -120,7 +120,9 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
+                *param_type.borrow_mut() = Some(
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+                );
                 Ok(())
             }
             IOFn::Println(param_type) => {
@@ -129,7 +131,9 @@ impl Resolve for IOFn {
                 }
                 let param = extra.first_mut().unwrap();
                 let _ = param.resolve(scope, &None, &mut None)?;
-                *param_type.borrow_mut() = Some(param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
+                *param_type.borrow_mut() = Some(
+                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
+                );
                 Ok(())
             }
             IOFn::Scan => {
@@ -158,7 +162,7 @@ impl GenerateCode for IOFn {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IOFn::Print(inner) => {
@@ -203,7 +207,7 @@ impl GenerateCode for IOFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -267,7 +271,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
 impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -365,29 +369,28 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
 
                 program.incr();
                 let start = program.cursor_get();
-                let mut current_instruction = None;
-                let borrowed_main = program.main.as_ref().borrow();
+
                 stdio.stdout.spawn_buffer();
 
                 stdio.stdout.push(crate::ast::utils::lexem::SQ_BRA_C);
                 for idx in 0..length {
                     loop {
                         let cursor = program.cursor_get();
-                        current_instruction = borrowed_main.get(cursor);
-                        if let Some(instruction) = current_instruction {
-                            match instruction {
-                                Casm::Label(Label { id, .. }) => {
-                                    if id == continue_label {
-                                        program.cursor_set(start);
-                                        break;
-                                    } else {
-                                        program.incr();
-                                    }
+                        let instruction = match program.main.get(cursor) {
+                            Some(instruction) => instruction.clone(), // Clone to avoid borrow conflict
+                            None => return Ok(()),
+                        };
+                        match instruction {
+                            Casm::Label(Label { id, .. }) => {
+                                if id == *continue_label {
+                                    program.cursor_set(start);
+                                    break;
+                                } else {
+                                    program.incr();
                                 }
-                                _ => {
-                                    let _ =
-                                        instruction.execute(program, stack, heap, stdio, engine)?;
-                                }
+                            }
+                            _ => {
+                                let _ = instruction.execute(program, stack, heap, stdio, engine)?;
                             }
                         }
                     }

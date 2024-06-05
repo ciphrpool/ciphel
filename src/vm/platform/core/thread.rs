@@ -49,7 +49,7 @@ pub enum ThreadCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for ThreadCasm {
-    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             ThreadCasm::Spawn => stdio.push_casm_lib(engine, "spawn"),
             ThreadCasm::Close => stdio.push_casm_lib(engine, "close"),
@@ -161,7 +161,7 @@ impl GenerateCode for ThreadFn {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ThreadFn::Spawn => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
@@ -194,7 +194,7 @@ pub fn sig_spawn(
     requested_spawn_count: &mut usize,
     availaible_tids: &mut Vec<Tid>,
     spawned_tid: &mut Vec<Tid>,
-    program: &CasmProgram,
+    program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     let tid = *requested_spawn_count + 1;
@@ -225,7 +225,7 @@ pub fn sig_close(
     tid: &Tid,
     availaible_tids: &mut Vec<Tid>,
     closed_tid: &mut Vec<Tid>,
-    program: &CasmProgram,
+    program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if availaible_tids.contains(&tid) {
@@ -248,7 +248,7 @@ pub fn sig_close(
     }
 }
 
-pub fn sig_wait(state: &mut ThreadState, program: &CasmProgram) -> Result<(), RuntimeError> {
+pub fn sig_wait(state: &mut ThreadState, program: &mut CasmProgram) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::WAITING)?;
     program.incr();
     Err(RuntimeError::Signal(Signal::WAIT))
@@ -258,7 +258,7 @@ pub fn sig_wake(
     tid: &Tid,
     availaible_tids: &mut Vec<Tid>,
     wakingup_tid: &mut HashSet<Tid>,
-    program: &CasmProgram,
+    program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if availaible_tids.contains(tid) {
@@ -276,7 +276,7 @@ pub fn sig_wake(
 pub fn sig_sleep(
     nb_maf: &usize,
     state: &mut ThreadState,
-    program: &CasmProgram,
+    program: &mut CasmProgram,
 ) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::SLEEPING(*nb_maf))?;
     program.incr();
@@ -289,7 +289,7 @@ pub fn sig_join(
     state: &mut ThreadState,
     waiting_list: &mut Vec<WaitingStatus>,
     availaible_tids: &mut Vec<Tid>,
-    program: &CasmProgram,
+    program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     dbg!((own_tid, join_tid));
@@ -364,7 +364,7 @@ pub fn sig_wait_stdin(
 impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,

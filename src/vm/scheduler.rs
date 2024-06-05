@@ -182,7 +182,7 @@ impl Scheduler {
                         let _ = state.to(ThreadState::IDLE);
                         break;
                     }
-                    let return_status = program.evaluate(|instruction| {
+                    let return_status = program.evaluate(|program, instruction| {
                         instruction.name(stdio, program, engine);
                         thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
                         total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);

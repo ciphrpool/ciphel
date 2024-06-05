@@ -128,7 +128,7 @@ impl GenerateCode for Statement {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
@@ -154,7 +154,7 @@ impl GenerateCode for Statement {
                 }));
                 instructions.push_label_id(scope_label, "block".to_string().into());
 
-                let _ = value.gencode(scope, &instructions)?;
+                let _ = value.gencode(scope, instructions)?;
 
                 instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {

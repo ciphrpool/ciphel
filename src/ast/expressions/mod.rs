@@ -213,7 +213,7 @@ impl GenerateCode for Expression {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Product(value) => value.gencode(scope, instructions),
@@ -242,7 +242,7 @@ impl Locatable for Expression {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::Atomic(value) => value.locate(scope, instructions),
@@ -303,7 +303,7 @@ impl GenerateCode for Atomic {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.gencode(scope, instructions),
@@ -318,7 +318,7 @@ impl Locatable for Atomic {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.locate(scope, instructions),

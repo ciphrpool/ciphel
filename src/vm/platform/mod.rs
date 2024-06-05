@@ -35,7 +35,7 @@ pub enum LibCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LibCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             LibCasm::Core(value) => value.name(stdio, program, engine),
             LibCasm::Std(value) => value.name(stdio, program, engine),
@@ -88,7 +88,7 @@ impl GenerateCode for Lib {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Lib::Core(value) => value.gencode(scope, instructions),
@@ -99,7 +99,7 @@ impl GenerateCode for Lib {
 impl<G: crate::GameEngineStaticFn> Executable<G> for LibCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

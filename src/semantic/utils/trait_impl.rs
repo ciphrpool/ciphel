@@ -531,7 +531,7 @@ impl DeserializeFrom for EType {
 }
 
 impl Printer for EType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.build_printer(instructions),
             Either::User(value) => value.build_printer(instructions),
@@ -540,13 +540,13 @@ impl Printer for EType {
 }
 
 impl NextItem for EType {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_address(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
         }
     }
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.init_index(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),
@@ -555,7 +555,7 @@ impl NextItem for EType {
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: ulid::Ulid,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -564,7 +564,7 @@ impl NextItem for EType {
         }
     }
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             Either::Static(value) => value.next(instructions),
             Either::User(_value) => Err(CodeGenerationError::UnresolvedError),

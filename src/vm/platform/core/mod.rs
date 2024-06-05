@@ -36,7 +36,7 @@ pub enum CoreCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             CoreCasm::Alloc(value) => value.name(stdio, program, engine),
             CoreCasm::Thread(value) => value.name(stdio, program, engine),
@@ -89,7 +89,7 @@ impl GenerateCode for CoreFn {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             CoreFn::Alloc(value) => value.gencode(scope, instructions),
@@ -101,7 +101,7 @@ impl GenerateCode for CoreFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

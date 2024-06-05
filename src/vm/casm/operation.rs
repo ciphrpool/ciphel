@@ -28,7 +28,7 @@ pub struct Operation {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -41,7 +41,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Operation {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self.kind {
             OperationKind::Align => stdio.push_casm(engine, "align"),
             OperationKind::CastCharToUTF8 => stdio.push_casm(engine, "char_to_utf8"),
@@ -270,7 +270,7 @@ impl OpPrimitive {
 impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -341,7 +341,7 @@ pub struct Mod {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -359,7 +359,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -377,7 +377,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mod {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -407,7 +407,7 @@ pub struct Substraction {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -439,7 +439,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Substraction {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -468,7 +468,7 @@ pub struct ShiftRight {
 impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -486,7 +486,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
 impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftRight {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -510,7 +510,7 @@ pub struct BitwiseAnd {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseAnd {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -534,7 +534,7 @@ pub struct BitwiseXOR {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseXOR {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -558,7 +558,7 @@ pub struct BitwiseOR {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseOR {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -597,7 +597,7 @@ pub struct GreaterEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -636,7 +636,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
 impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -675,7 +675,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -714,7 +714,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
 impl<G: crate::GameEngineStaticFn> Executable<G> for GreaterEqual {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -764,7 +764,7 @@ pub struct NotEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -784,7 +784,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
 impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -807,7 +807,7 @@ pub struct LogicalAnd();
 impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -826,7 +826,7 @@ pub struct LogicalOr();
 impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalOr {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -847,7 +847,7 @@ pub struct Minus {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -935,7 +935,7 @@ pub struct Not();
 impl<G: crate::GameEngineStaticFn> Executable<G> for Not {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -996,7 +996,7 @@ macro_rules! push_data_as_type {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -1279,7 +1279,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1300,7 +1300,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1321,7 +1321,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1342,7 +1342,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1363,7 +1363,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1384,7 +1384,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1405,7 +1405,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1426,7 +1426,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1447,7 +1447,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1468,7 +1468,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
@@ -1489,7 +1489,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1510,7 +1510,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1529,7 +1529,7 @@ mod tests {
             from: OpPrimitive::Number(NumberType::U64),
             to: OpPrimitive::Bool,
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1549,7 +1549,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1570,7 +1570,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1591,7 +1591,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1612,7 +1612,7 @@ mod tests {
             left: OpPrimitive::Number(NumberType::U32),
             right: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1630,7 +1630,7 @@ mod tests {
         init_bool(true, stack).expect("init should have succeeded");
         init_bool(true, stack).expect("init should have succeeded");
         LogicalAnd()
-            .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1648,7 +1648,7 @@ mod tests {
         init_bool(true, stack).expect("init should have succeeded");
         init_bool(true, stack).expect("init should have succeeded");
         LogicalOr()
-            .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
@@ -1667,7 +1667,7 @@ mod tests {
         Minus {
             data_type: OpPrimitive::Number(NumberType::U32),
         }
-        .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+        .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
         .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_num8::<i64>(stack).expect("result should be of valid type");
@@ -1684,7 +1684,7 @@ mod tests {
         let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
         init_bool(true, stack).expect("init should have succeeded");
         Not()
-            .execute(&program, stack, &mut heap, &mut stdio, &mut engine)
+            .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine)
             .expect("execution should have succeeded");
 
         let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");

@@ -35,7 +35,7 @@ pub enum Mem {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Mem::MemCopy => stdio.push_casm(engine, "memcpy"),
             Mem::Dup(n) => stdio.push_casm(engine, &format!("dup {n}")),
@@ -73,7 +73,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

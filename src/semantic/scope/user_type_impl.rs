@@ -243,7 +243,7 @@ impl SizeOf for UserType {
 }
 
 impl Printer for UserType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             UserType::Struct(value) => value.build_printer(instructions),
             UserType::Enum(value) => value.build_printer(instructions),
@@ -499,7 +499,7 @@ impl DeserializeFrom for Struct {
 }
 
 impl Printer for Struct {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintID(self.id.clone()),
         )))));
@@ -559,7 +559,7 @@ impl DeserializeFrom for Union {
 }
 
 impl Printer for Union {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
         let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
 
@@ -625,7 +625,7 @@ impl DeserializeFrom for Enum {
 }
 
 impl Printer for Enum {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
         let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
         let end_label = Label::gen();

@@ -40,7 +40,7 @@ impl GenerateCode for ExprFlow {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ExprFlow::If(value) => value.gencode(scope, instructions),
@@ -68,7 +68,7 @@ impl GenerateCode for IfExpr {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -82,7 +82,7 @@ impl GenerateCode for IfExpr {
 
         let _if_label = instructions.push_label("if".to_string().into());
 
-        let _ = self.condition.gencode(scope, &instructions)?;
+        let _ = self.condition.gencode(scope, instructions)?;
 
         instructions.push(Casm::If(BranchIf { else_label }));
         instructions.push(Casm::Goto(Goto {
@@ -90,7 +90,7 @@ impl GenerateCode for IfExpr {
         }));
         instructions.push_label_id(if_scope_label, "if_scope".to_string().into());
 
-        let _ = self.then_branch.gencode(scope, &instructions)?;
+        let _ = self.then_branch.gencode(scope, instructions)?;
 
         instructions.push_label_id(end_if_scope_label, "end_if_scope".to_string().into());
         instructions.push(Casm::Call(Call::From {
@@ -108,7 +108,7 @@ impl GenerateCode for IfExpr {
         }));
         instructions.push_label_id(else_scope_label, "else_scope".to_string().into());
 
-        let _ = self.else_branch.gencode(scope, &instructions)?;
+        let _ = self.else_branch.gencode(scope, instructions)?;
 
         instructions.push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
         instructions.push(Casm::Call(Call::From {
@@ -130,7 +130,7 @@ impl GenerateCode for MatchExpr {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(_return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -329,7 +329,7 @@ impl GenerateCode for TryExpr {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -355,7 +355,7 @@ impl GenerateCode for TryExpr {
         }));
         instructions.push_label_id(try_scope_label, "try_scope".to_string().into());
 
-        let _ = self.try_branch.gencode(scope, &instructions)?;
+        let _ = self.try_branch.gencode(scope, instructions)?;
 
         instructions.push_label_id(end_try_scope_label, "end_try_scope".to_string().into());
         instructions.push(Casm::Call(Call::From {
@@ -392,7 +392,7 @@ impl GenerateCode for TryExpr {
 
         match &self.else_branch {
             Some(else_branch) => {
-                let _ = else_branch.gencode(scope, &instructions)?;
+                let _ = else_branch.gencode(scope, instructions)?;
                 instructions
                     .push_label_id(end_else_scope_label, "end_else_scope".to_string().into());
                 instructions.push(Casm::Call(Call::From {
@@ -421,7 +421,7 @@ impl GenerateCode for FCall {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         for item in &self.value {
             match item {
@@ -495,9 +495,9 @@ mod tests {
             .resolve(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
         // Code generation.
-        let instructions_then = CasmProgram::default();
+        let mut instructions_then = CasmProgram::default();
         statement_then
-            .gencode(&scope, &instructions_then)
+            .gencode(&scope, &mut instructions_then)
             .expect("Code generation should have succeeded");
 
         assert!(instructions_then.len() > 0);
@@ -542,9 +542,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_else = CasmProgram::default();
+        let mut instructions_else = CasmProgram::default();
         statement_else
-            .gencode(&scope, &instructions_else)
+            .gencode(&scope, &mut instructions_else)
             .expect("Code generation should have succeeded");
 
         assert!(instructions_else.len() > 0);
@@ -591,9 +591,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = CasmProgram::default();
+        let mut instructions_then = CasmProgram::default();
         statement_then
-            .gencode(&scope, &instructions_then)
+            .gencode(&scope, &mut instructions_then)
             .expect("Code generation should have succeeded");
 
         assert!(instructions_then.len() > 0);
@@ -643,9 +643,9 @@ mod tests {
 
         // Code generation.
 
-        let instructions_else = CasmProgram::default();
+        let mut instructions_else = CasmProgram::default();
         statement_else
-            .gencode(&scope, &instructions_else)
+            .gencode(&scope, &mut instructions_else)
             .expect("Code generation should have succeeded");
 
         assert!(instructions_else.len() > 0);
@@ -713,9 +713,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = CasmProgram::default();
+        let mut instructions_then = CasmProgram::default();
         statement_then
-            .gencode(&scope, &instructions_then)
+            .gencode(&scope, &mut instructions_then)
             .expect("Code generation should have succeeded");
         assert!(instructions_then.len() > 0);
         // Execute the instructions.
@@ -798,9 +798,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_else = CasmProgram::default();
+        let mut instructions_else = CasmProgram::default();
         statement_else
-            .gencode(&scope, &instructions_else)
+            .gencode(&scope, &mut instructions_else)
             .expect("Code generation should have succeeded");
         assert!(instructions_else.len() > 0);
         // Execute the instructions.
@@ -862,9 +862,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions_then = CasmProgram::default();
+        let mut instructions_then = CasmProgram::default();
         statement_then
-            .gencode(&scope, &instructions_then)
+            .gencode(&scope, &mut instructions_then)
             .expect("Code generation should have succeeded");
 
         assert!(instructions_then.len() > 0);
@@ -951,9 +951,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -1017,9 +1017,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -1083,9 +1083,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -1171,9 +1171,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -1401,9 +1401,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -1466,9 +1466,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);

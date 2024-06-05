@@ -53,7 +53,7 @@ pub enum IterCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             IterCasm::MapItems { .. } => stdio.push_casm_lib(engine, "items"),
             IterCasm::MapValues { .. } => stdio.push_casm_lib(engine, "values"),
@@ -114,7 +114,8 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -162,7 +163,8 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -205,7 +207,8 @@ impl Resolve for IterFn {
                 }
                 let map = &mut extra[0];
                 let _ = map.resolve(scope, &None, &mut None)?;
-                let mut map_type = map.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let mut map_type =
+                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
@@ -265,7 +268,7 @@ impl GenerateCode for IterFn {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IterFn::MapItems {
@@ -306,7 +309,7 @@ impl GenerateCode for IterFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

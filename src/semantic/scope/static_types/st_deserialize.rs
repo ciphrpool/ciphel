@@ -64,7 +64,7 @@ impl DeserializeFrom for StaticType {
 }
 
 impl Printer for StaticType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             StaticType::Primitive(value) => value.build_printer(instructions),
             StaticType::Slice(value) => value.build_printer(instructions),
@@ -178,7 +178,7 @@ impl DeserializeFrom for NumberType {
 }
 
 impl Printer for NumberType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             NumberType::U8 => instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
                 IOCasm::Print(PrintCasm::PrintU8),
@@ -247,7 +247,7 @@ impl DeserializeFrom for PrimitiveType {
     }
 }
 impl Printer for PrimitiveType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         match self {
             PrimitiveType::Number(value) => {
                 let _ = value.build_printer(instructions)?;
@@ -327,7 +327,7 @@ impl DeserializeFrom for VecType {
     }
 }
 impl Printer for VecType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Mem(Mem::CloneFromSmartPointer(self.0.size_of())));
 
         let continue_label = Label::gen();
@@ -372,7 +372,7 @@ impl DeserializeFrom for StringType {
     }
 }
 impl Printer for StringType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Mem(Mem::CloneFromSmartPointer(1)));
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintString,
@@ -401,7 +401,7 @@ impl DeserializeFrom for StrSliceType {
     }
 }
 impl Printer for StrSliceType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::PrintString,
         )))));
@@ -439,7 +439,7 @@ impl DeserializeFrom for TupleType {
     }
 }
 impl Printer for TupleType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::StdOutBufOpen,
         )))));
@@ -498,7 +498,7 @@ impl DeserializeFrom for SliceType {
     }
 }
 impl Printer for SliceType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         let continue_label = Label::gen();
         let end_label = Label::gen();
 
@@ -554,7 +554,7 @@ impl Printer for SliceType {
 // }
 
 impl Printer for RangeType {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
             PrintCasm::StdOutBufOpen,
         )))));

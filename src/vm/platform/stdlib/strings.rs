@@ -62,7 +62,7 @@ pub enum ToStrCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringsCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             StringsCasm::ToStr(_) => stdio.push_casm_lib(engine, "to_str"),
             StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
@@ -113,7 +113,8 @@ impl Resolve for StringsFn {
                 let src = &mut extra[0];
 
                 let _ = src.resolve(scope, &None, &mut None)?;
-                let src_type = src.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let src_type =
+                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &src_type {
                     Either::Static(value) => match value.as_ref() {
@@ -187,7 +188,7 @@ impl GenerateCode for StringsFn {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             StringsFn::ToStr(to_str_casm) => instructions.push(Casm::Platform(LibCasm::Std(
@@ -201,7 +202,7 @@ impl GenerateCode for StringsFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

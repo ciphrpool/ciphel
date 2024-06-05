@@ -37,7 +37,7 @@ impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata: _ } => {
@@ -71,7 +71,7 @@ impl Locatable for TupleAccess {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
         let Some(from_type) = self.var.signature() else {
@@ -107,7 +107,7 @@ impl GenerateCode for TupleAccess {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.var.locate(scope, instructions)?;
         let Some(from_type) = self.var.signature() else {
@@ -140,7 +140,7 @@ impl Locatable for ListAccess {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -214,7 +214,7 @@ impl GenerateCode for ListAccess {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -282,7 +282,7 @@ impl Locatable for FieldAccess {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -324,7 +324,7 @@ impl GenerateCode for FieldAccess {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // Locate the variable
         let _ = self.var.locate(scope, instructions)?;
@@ -358,7 +358,7 @@ impl GenerateCode for Range {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -398,7 +398,7 @@ impl Locatable for super::FnCall {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.gencode(scope, instructions)?;
         let Some(value_type) = self.metadata.signature() else {
@@ -426,7 +426,7 @@ impl GenerateCode for super::FnCall {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let params_size: usize = self
             .params
@@ -560,7 +560,7 @@ impl GenerateCode for super::Product {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Product::Mult {
@@ -640,7 +640,7 @@ impl GenerateCode for super::Addition {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -666,7 +666,7 @@ impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -692,7 +692,7 @@ impl GenerateCode for super::Shift {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Shift::Left {
@@ -749,7 +749,7 @@ impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -775,7 +775,7 @@ impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -801,7 +801,7 @@ impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -827,7 +827,7 @@ impl GenerateCode for super::Cast {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -865,7 +865,7 @@ impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Comparaison::Less {
@@ -968,7 +968,7 @@ impl GenerateCode for super::Equation {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Equation::Equal {
@@ -1025,7 +1025,7 @@ impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
@@ -1042,7 +1042,7 @@ impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.left.gencode(scope, instructions)?;
         let _ = self.right.gencode(scope, instructions)?;
@@ -1815,8 +1815,8 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);

@@ -44,7 +44,7 @@ impl GenerateCode for Data {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Primitive(value) => value.gencode(scope, instructions),
@@ -69,7 +69,7 @@ impl Locatable for Data {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Variable(Variable {
@@ -147,7 +147,7 @@ impl GenerateCode for Number {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             super::Number::U8(data) => data::Data::Serialized {
@@ -194,7 +194,7 @@ impl GenerateCode for Primitive {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             Primitive::Number(data) => match data.get() {
@@ -253,7 +253,7 @@ impl GenerateCode for Variable {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         if self.from_field.get() {
             let Some(var_type) = self.metadata.signature() else {
@@ -294,7 +294,7 @@ impl GenerateCode for Slice {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -323,7 +323,7 @@ impl GenerateCode for StrSlice {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let str_bytes: Box<[u8]> = self.value.as_bytes().into();
         let size = (&str_bytes).len() as u64;
@@ -345,7 +345,7 @@ impl GenerateCode for Vector {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -391,7 +391,7 @@ impl GenerateCode for Tuple {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -416,7 +416,7 @@ impl GenerateCode for ExprScope {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ExprScope::Scope(value) => value.gencode(scope, instructions),
@@ -429,7 +429,7 @@ impl GenerateCode for Closure {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
@@ -503,7 +503,7 @@ impl GenerateCode for Address {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
         let _ = self.value.locate(scope, instructions)?;
@@ -515,7 +515,7 @@ impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.gencode(scope, instructions)?;
         let mut size = self
@@ -540,7 +540,7 @@ impl GenerateCode for Struct {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -580,7 +580,7 @@ impl GenerateCode for Union {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -650,7 +650,7 @@ impl GenerateCode for Enum {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -683,7 +683,7 @@ impl GenerateCode for Map {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());
         let Some(map_type) = self.metadata.signature() else {
@@ -1067,8 +1067,8 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);

@@ -23,7 +23,7 @@ pub fn inner_block_gencode(
     param_size: Option<usize>,
     is_direct_loop: bool,
     is_try_block: bool,
-    instructions: &CasmProgram,
+    instructions: &mut CasmProgram,
 ) -> Result<(), CodeGenerationError> {
     let scope_label = Label::gen();
     let end_scope_label = Label::gen();
@@ -34,7 +34,7 @@ pub fn inner_block_gencode(
 
     instructions.push_label_id(scope_label, "block".to_string().into());
 
-    let _ = block.gencode(scope, &instructions)?;
+    let _ = block.gencode(scope, instructions)?;
 
     instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
     instructions.push(Casm::Call(Call::From {
@@ -53,7 +53,7 @@ impl GenerateCode for Block {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let borrowed = &self.inner_scope;
         let Some(borrowed_scope) = borrowed else {

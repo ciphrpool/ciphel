@@ -65,7 +65,7 @@ pub trait GenerateCode {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 }
 
@@ -73,7 +73,7 @@ pub trait Locatable {
     fn locate(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError>;
 
     fn is_assignable(&self) -> bool;
@@ -186,7 +186,7 @@ impl GameEngineStaticFn for DbgGameEngine {
 pub trait Executable<G: GameEngineStaticFn> {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -195,7 +195,7 @@ pub trait Executable<G: GameEngineStaticFn> {
 }
 
 pub trait CasmMetadata<G: GameEngineStaticFn> {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G);
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G);
     fn weight(&self) -> usize {
         1
     }
@@ -207,21 +207,21 @@ pub trait DeserializeFrom {
 }
 
 pub trait Printer {
-    fn build_printer(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 }
 
 pub trait NextItem {
-    fn init_address(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 
-    fn init_index(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 
     fn build_item(
         &self,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
         end_label: Ulid,
     ) -> Result<(), CodeGenerationError>;
 
-    fn next(&self, instructions: &CasmProgram) -> Result<(), CodeGenerationError>;
+    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 }
 
 pub const MAX_THREAD_COUNT: usize = 4;

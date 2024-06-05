@@ -100,7 +100,7 @@ pub enum MathCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             MathCasm::Ceil => stdio.push_casm_lib(engine, "ceil"),
             MathCasm::Floor => stdio.push_casm_lib(engine, "floor"),
@@ -229,7 +229,8 @@ impl Resolve for MathFn {
                 }
                 let n = &mut extra[0];
                 let _ = n.resolve(scope, &Some(p_num!(F64)), &mut None)?;
-                let n_type = n.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let n_type =
+                    n.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &n_type {
                     Either::Static(value) => match value.as_ref() {
@@ -253,8 +254,10 @@ impl Resolve for MathFn {
                 let _ = x.resolve(scope, &Some(p_num!(F64)), &mut None)?;
                 let _ = y.resolve(scope, &Some(p_num!(F64)), &mut None)?;
 
-                let x_type = x.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
-                let y_type = y.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let x_type =
+                    x.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let y_type =
+                    y.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
                 match &x_type {
                     Either::Static(value) => match value.as_ref() {
@@ -295,7 +298,7 @@ impl GenerateCode for MathFn {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             MathFn::Ceil => Ok(instructions.push(Casm::Platform(LibCasm::Std(
@@ -400,7 +403,7 @@ impl GenerateCode for MathFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

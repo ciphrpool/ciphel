@@ -9,7 +9,7 @@ macro_rules! e_static {
 macro_rules! arw_read {
     ($var:expr,$err:expr) => {
         $var.try_read().map_err(|_| {
-            panic!("Concucurrency Read error");
+            // panic!("Concucurrency Read error");
             $err
         })
     };
@@ -19,7 +19,7 @@ macro_rules! arw_read {
 macro_rules! am_read {
     ($var:expr,$err:expr) => {
         $var.try_read().map_err(|_| {
-            panic!("Concucurrency Read error");
+            // panic!("Concucurrency Read error");
             $err
         })
     };
@@ -147,8 +147,8 @@ macro_rules! compile_expression {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
         assert!(instructions.len() > 0);
 
@@ -193,8 +193,8 @@ macro_rules! compile_expression_with_type {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
         assert!(instructions.len() > 0);
 
@@ -226,9 +226,9 @@ macro_rules! compile_statement {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         $statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
         assert!(instructions.len() > 0);
         let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
@@ -254,9 +254,9 @@ macro_rules! compile_statement_for_stdout {
             .resolve(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         $statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -285,9 +285,9 @@ macro_rules! compile_statement_for_string {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         $statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -339,8 +339,8 @@ macro_rules! eval_and_compare {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -382,8 +382,8 @@ macro_rules! eval_and_compare_bool {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
-        expr.gencode(&scope, &instructions)
+        let mut instructions = CasmProgram::default();
+        expr.gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");

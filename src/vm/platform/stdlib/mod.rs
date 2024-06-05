@@ -58,7 +58,7 @@ pub enum StdCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StdCasm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             StdCasm::IO(value) => value.name(stdio, program, engine),
             StdCasm::Math(value) => value.name(stdio, program, engine),
@@ -130,7 +130,8 @@ impl Resolve for StdFn {
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
                     &mut None,
                 )?;
-                let size_type = size.type_of(&crate::arw_read!(scope,SemanticError::ConcurrencyError)?)?;
+                let size_type =
+                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Primitive(PrimitiveType::Bool) => expect_err.set(false),
@@ -177,7 +178,7 @@ impl GenerateCode for StdFn {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             StdFn::IO(value) => value.gencode(scope, instructions),
@@ -210,7 +211,7 @@ pub const OK_VALUE: [u8; 1] = [0];
 impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

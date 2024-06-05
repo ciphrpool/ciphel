@@ -29,7 +29,7 @@ pub enum Data {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Data::Serialized { data } => {
                 stdio.push_casm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
@@ -59,7 +59,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

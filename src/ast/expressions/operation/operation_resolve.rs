@@ -251,6 +251,7 @@ impl Resolve for FnCall {
                         let mut borrowed_platform =
                             arw_write!(self.platform, SemanticError::ConcurrencyError)?;
                         *borrowed_platform = Some(api);
+                        drop(borrowed_platform);
                         resolve_metadata!(self.metadata.info, self, scope, context);
                         return Ok(());
                     }

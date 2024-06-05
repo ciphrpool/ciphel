@@ -37,7 +37,7 @@ impl GenerateCode for Flow {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Flow::If(value) => value.gencode(scope, instructions),
@@ -52,7 +52,7 @@ impl GenerateCode for CallStat {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.call.gencode(scope, instructions)?;
         let Some(return_type) = self.call.signature() else {
@@ -71,7 +71,7 @@ impl GenerateCode for IfStat {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let mut else_if_labels: Vec<Ulid> = Vec::default();
         let else_label = match &self.else_branch {
@@ -84,7 +84,7 @@ impl GenerateCode for IfStat {
             else_if_labels.push(Label::gen());
         }
 
-        let _ = self.condition.gencode(scope, &instructions)?;
+        let _ = self.condition.gencode(scope, instructions)?;
 
         match &self.else_if_branches.first() {
             Some(_) => {
@@ -111,7 +111,7 @@ impl GenerateCode for IfStat {
             let ((cond_1, scope_1), label_1) = &pair[0];
             let ((_, _), label_2) = &pair[1];
             instructions.push_label_id(**label_1, "else_if".to_string().into());
-            let _ = cond_1.gencode(scope, &instructions)?;
+            let _ = cond_1.gencode(scope, instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: **label_2,
             }));
@@ -123,7 +123,7 @@ impl GenerateCode for IfStat {
                 *else_if_labels.last().unwrap(),
                 "else_if".to_string().into(),
             );
-            let _ = cond.gencode(scope, &instructions)?;
+            let _ = cond.gencode(scope, instructions)?;
             instructions.push(Casm::If(BranchIf {
                 else_label: else_label.unwrap_or(end_if_label),
             }));
@@ -145,7 +145,7 @@ impl GenerateCode for MatchStat {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(expr_type) = self.expr.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -320,7 +320,7 @@ impl GenerateCode for TryStat {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();
         let end_try_label = Label::gen();

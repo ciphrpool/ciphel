@@ -25,7 +25,7 @@ impl GenerateCode for Loop {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Loop::For(value) => value.gencode(scope, instructions),
@@ -57,7 +57,7 @@ impl GenerateCode for ForLoop {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let Some(iterator_type) = self.iterator.expr.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -117,7 +117,7 @@ impl GenerateCode for WhileLoop {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();
         let end_label = Label::gen();

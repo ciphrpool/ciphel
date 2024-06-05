@@ -29,10 +29,10 @@ pub mod operation;
 
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
-    pub main: ArcMutex<Vec<Casm>>,
-    cursor: Arc<AtomicUsize>,
-    pub labels: ArcMutex<HashMap<Ulid, (usize, Box<str>)>>,
-    pub catch_stack: ArcMutex<Vec<Ulid>>,
+    pub main: Vec<Casm>,
+    cursor: usize,
+    pub labels: HashMap<Ulid, (usize, Box<str>)>,
+    pub catch_stack: Vec<Ulid>,
 }
 
 impl Default for CasmProgram {
@@ -47,59 +47,54 @@ impl Default for CasmProgram {
 }
 
 impl CasmProgram {
-    pub fn push(&self, value: Casm) {
-        let mut borrowed = self.main.as_ref().borrow_mut();
-        borrowed.push(value);
+    pub fn push(&mut self, value: Casm) {
+        self.main.push(value);
     }
     pub fn cursor_is_at_end(&self) -> bool {
-        self.cursor.as_ref().load(Ordering::Acquire) == self.main.as_ref().borrow().len()
+        self.cursor == self.main.len()
     }
-    pub fn incr(&self) {
-        self.cursor.as_ref().fetch_add(1, Ordering::AcqRel);
+    pub fn incr(&mut self) {
+        self.cursor += 1;
     }
-    pub fn cursor_set(&self, offset: usize) {
-        self.cursor.as_ref().store(offset, Ordering::Release);
+    pub fn cursor_set(&mut self, offset: usize) {
+        self.cursor = offset;
     }
     pub fn cursor_get(&self) -> usize {
-        self.cursor.as_ref().load(Ordering::Acquire)
+        self.cursor
     }
-    pub fn push_label(&self, label: String) -> Ulid {
+    pub fn push_label(&mut self, label: String) -> Ulid {
         let id = Ulid::new();
-        let mut borrowed_labels = self.labels.as_ref().borrow_mut();
-        let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, (borrowed_main.len(), label.clone().into()));
-        borrowed_main.push(Casm::Label(Label { id, name: label }));
+
+        self.labels
+            .insert(id, (self.main.len(), label.clone().into()));
+        self.main.push(Casm::Label(Label { id, name: label }));
         id
     }
-    pub fn push_label_id(&self, id: Ulid, label: String) -> Ulid {
-        let mut borrowed_labels = self.labels.as_ref().borrow_mut();
-        let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, (borrowed_main.len(), label.clone().into()));
-        borrowed_main.push(Casm::Label(Label { id, name: label }));
+    pub fn push_label_id(&mut self, id: Ulid, label: String) -> Ulid {
+        self.labels
+            .insert(id, (self.main.len(), label.clone().into()));
+        self.main.push(Casm::Label(Label { id, name: label }));
         id
     }
 
-    pub fn push_data(&self, data: Data) -> Ulid {
+    pub fn push_data(&mut self, data: Data) -> Ulid {
         let id = Ulid::new();
-        let mut borrowed_labels = self.labels.as_ref().borrow_mut();
-        let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_labels.insert(id, (borrowed_main.len(), "data".to_string().into()));
-        borrowed_main.push(Casm::Data(data));
+        self.labels
+            .insert(id, (self.main.len(), "data".to_string().into()));
+        self.main.push(Casm::Data(data));
         id
     }
 
-    pub fn push_catch(&self, label: &Ulid) {
-        let mut borrowed = self.catch_stack.as_ref().borrow_mut();
-        borrowed.push(*label);
+    pub fn push_catch(&mut self, label: &Ulid) {
+        self.catch_stack.push(*label);
     }
 
-    pub fn pop_catch(&self) {
-        let mut borrowed = self.catch_stack.as_ref().borrow_mut();
-        borrowed.pop();
+    pub fn pop_catch(&mut self) {
+        self.catch_stack.pop();
     }
 
-    pub fn catch(&self, err: RuntimeError) -> Result<(), RuntimeError> {
-        if let Some(label) = self.catch_stack.as_ref().borrow().last() {
+    pub fn catch(&mut self, err: RuntimeError) -> Result<(), RuntimeError> {
+        if let Some(label) = self.catch_stack.last() {
             let Some(idx) = self.get(&label) else {
                 return Err(RuntimeError::CodeSegmentation);
             };
@@ -111,93 +106,74 @@ impl CasmProgram {
     }
 
     pub fn get(&self, label: &Ulid) -> Option<usize> {
-        let borrowed_labels = self.labels.as_ref().borrow();
-        borrowed_labels.get(label).map(|(i, _)| i).cloned()
+        self.labels.get(label).map(|(i, _)| i).cloned()
     }
 
     pub fn get_label_name(&self, label: &Ulid) -> Option<Box<str>> {
-        let borrowed_labels = self.labels.as_ref().borrow();
-        borrowed_labels.get(label).map(|(_, name)| name).cloned()
+        self.labels.get(label).map(|(_, name)| name).cloned()
     }
 
     pub fn data_at_offset(&self, offset: usize) -> Result<Vec<Box<[u8]>>, RuntimeError> {
-        let borrowed_main = self.main.as_ref().borrow();
-        match borrowed_main.get(offset) {
+        match self.main.get(offset) {
             Some(Casm::Data(data::Data::Dump { data })) => Ok(data.to_vec()),
             _ => Err(RuntimeError::CodeSegmentation),
         }
     }
 
     pub fn table_at_offset(&self, offset: usize) -> Result<Vec<Ulid>, RuntimeError> {
-        let borrowed_main = self.main.as_ref().borrow();
-        match borrowed_main.get(offset) {
+        match self.main.get(offset) {
             Some(Casm::Data(data::Data::Table { data })) => Ok(data.to_vec()),
             _ => Err(RuntimeError::CodeSegmentation),
         }
     }
 
-    pub fn extend<I>(&self, iter: I)
+    pub fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = Casm>,
     {
-        let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_main.extend(iter);
+        self.main.extend(iter);
     }
 
-    pub fn merge(&self, other: CasmProgram) {
-        let mut borrowed_labels = self.labels.as_ref().borrow_mut();
-        let mut borrowed_main = self.main.as_ref().borrow_mut();
-        borrowed_main.extend(other.main.as_ref().take());
-        borrowed_labels.extend(other.labels.as_ref().take());
+    pub fn merge(&mut self, other: CasmProgram) {
+        self.main.extend(other.main);
+        self.labels.extend(other.labels);
     }
 
     pub fn len(&self) -> usize {
-        let borrowed_main = self.main.as_ref().borrow();
-        borrowed_main.len()
+        self.main.len()
     }
     pub fn evaluate(
-        &self,
-        callback: impl FnOnce(&Casm) -> Result<(), vm::RuntimeError>,
+        &mut self,
+        callback: impl FnOnce(&mut Self, &Casm) -> Result<(), vm::RuntimeError>,
     ) -> Result<(), vm::RuntimeError> {
-        let borrowed_main = self.main.as_ref().borrow();
-        let cursor = self.cursor.as_ref().load(Ordering::Acquire);
-        match borrowed_main.get(cursor) {
-            Some(instruction) => callback(instruction),
-            None => {
-                return Err(RuntimeError::CodeSegmentation);
-            }
-        }
+        let instruction = match self.main.get(self.cursor) {
+            Some(instruction) => instruction.clone(), // Clone to avoid borrow conflict
+            None => return Err(RuntimeError::CodeSegmentation),
+        };
+        callback(self, &instruction)
     }
     pub fn execute<'runtime, G: crate::GameEngineStaticFn + Clone>(
-        &self,
+        &mut self,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), vm::RuntimeError> {
-        let borrowed_main = self.main.as_ref().borrow();
         loop {
-            let cursor = self.cursor.as_ref().load(Ordering::Acquire);
-            match borrowed_main.get(cursor) {
-                Some(instruction) => {
-                    // dbg!((cursor, instruction, stack.top(),));
-                    // let mut buffer = String::new();
-                    // io::stdin().read_line(&mut buffer);
-                    match instruction.execute(self, stack, heap, stdio, engine) {
-                        Ok(_) => {}
-                        Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
-                        Err(RuntimeError::AssertError) => return Ok(()),
-                        Err(e) => match self.catch(e) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                panic!("{:?} in {:?}", e, instruction)
-                            }
-                        },
-                    }
-                }
-                None => {
-                    return Ok(());
-                }
+            let cursor = self.cursor; // Save cursor to avoid borrowing self
+            let instruction = match self.main.get(cursor) {
+                Some(instruction) => instruction.clone(), // Clone to avoid borrow conflict
+                None => return Ok(()),
+            };
+
+            match instruction.execute(self, stack, heap, stdio, engine) {
+                Ok(_) => {}
+                Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),
+                Err(RuntimeError::AssertError) => return Ok(()),
+                Err(e) => match self.catch(e) {
+                    Ok(_) => {}
+                    Err(e) => panic!("{:?} in {:?}", e, instruction),
+                },
             }
         }
     }
@@ -230,7 +206,7 @@ pub enum Casm {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
     fn execute(
         &self,
-        program: &CasmProgram,
+        program: &mut CasmProgram,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -266,7 +242,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
-    fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Casm::Platform(value) => value.name(stdio, program, engine),
             Casm::StackFrame(value) => value.name(stdio, program, engine),

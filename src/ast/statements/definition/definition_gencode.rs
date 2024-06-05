@@ -25,7 +25,7 @@ impl GenerateCode for Definition {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Definition::Type(value) => value.gencode(scope, instructions),
@@ -38,7 +38,7 @@ impl GenerateCode for TypeDef {
     fn gencode(
         &self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
-        _instructions: &CasmProgram,
+        _instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         Ok(())
     }
@@ -48,7 +48,7 @@ impl GenerateCode for FnDef {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         let end_closure = Label::gen();
 
@@ -246,9 +246,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         // dbg!(&instructions);
@@ -304,9 +304,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         // dbg!(&instructions);

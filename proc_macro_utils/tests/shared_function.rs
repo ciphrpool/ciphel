@@ -88,7 +88,7 @@ pub mod vm {
         pub trait Executable {
             fn execute(
                 &self,
-                program: &CasmProgram,
+                program: &mut CasmProgram,
                 stack: &mut Stack,
                 heap: &mut Heap,
                 stdio: &mut StdIO,
@@ -96,7 +96,7 @@ pub mod vm {
         }
 
         pub trait CasmMetadata {
-            fn name(&self, stdio: &mut StdIO, program: &CasmProgram, engine: &mut G);
+            fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G);
             fn weight(&self) -> usize {
                 1
             }

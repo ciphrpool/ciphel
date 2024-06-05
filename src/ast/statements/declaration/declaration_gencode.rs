@@ -17,7 +17,7 @@ impl GenerateCode for Declaration {
     fn gencode(
         &self,
         scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &CasmProgram,
+        instructions: &mut CasmProgram,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Declaration::Declared(TypedVar { id, .. }) => {
@@ -338,9 +338,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -405,9 +405,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -462,9 +462,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -514,9 +514,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -569,9 +569,9 @@ mod tests {
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
-        let instructions = CasmProgram::default();
+        let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &instructions)
+            .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
