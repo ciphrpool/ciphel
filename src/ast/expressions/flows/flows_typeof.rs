@@ -1,17 +1,14 @@
-use std::cell::Ref;
 
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StringType;
 use crate::{
-    ast::expressions::data::Variable,
     p_num,
     semantic::{
         scope::{
-            static_types::{NumberType, PrimitiveType, StaticType},
-            type_traits::GetSubTypes,
+            static_types::{StaticType},
         },
-        EType, Either, MergeType, Resolve, SemanticError, TypeOf,
+        EType, MergeType, Resolve, SemanticError, TypeOf,
     },
 };
 

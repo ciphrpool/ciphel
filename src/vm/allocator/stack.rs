@@ -1,6 +1,4 @@
 use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
@@ -10,7 +8,7 @@ use std::{
 use num_traits::ToBytes;
 
 use crate::{
-    semantic::{AccessLevel, ArcMutex},
+    semantic::{AccessLevel},
     vm::vm::RuntimeError,
 };
 

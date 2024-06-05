@@ -7,9 +7,7 @@ use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::scope::BuildVar;
-use crate::semantic::ArcMutex;
 use crate::semantic::EType;
-use crate::semantic::Either;
 use crate::semantic::SizeOf;
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
@@ -60,7 +58,7 @@ impl Resolve for TypeDef {
             TypeDef::Enum(value) => &value.id,
         };
 
-        let mut type_def = UserType::build_usertype(
+        let type_def = UserType::build_usertype(
             self,
             &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
         )?;
@@ -203,15 +201,13 @@ impl Resolve for FnDef {
 #[cfg(test)]
 mod tests {
 
-    use std::cell::Cell;
-
     use crate::{
         arw_read,
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
             scope,
-            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
+            static_types::{FnType, StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },
@@ -301,7 +297,7 @@ mod tests {
                     let mut res = Vec::new();
                     res.push((
                         "start".to_string().into(),
-                        Either::User(
+                        crate::semantic::Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".to_string().into(),
                                 fields: vec![
@@ -314,7 +310,7 @@ mod tests {
                     ));
                     res.push((
                         "end".to_string().into(),
-                        Either::User(
+                        crate::semantic::Either::User(
                             UserType::Struct(Struct {
                                 id: "Point".to_string().into(),
                                 fields: vec![
@@ -456,7 +452,7 @@ mod tests {
 
         assert_eq!(
             *function_type,
-            Either::Static(
+            crate::semantic::Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(e_static!(StaticType::Unit)),
@@ -495,7 +491,7 @@ mod tests {
 
         assert_eq!(
             *function_type,
-            Either::Static(
+            crate::semantic::Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![p_num!(U64), e_static!(StaticType::String(StringType()))],
                     ret: Box::new(e_static!(StaticType::Unit)),
@@ -558,7 +554,7 @@ mod tests {
 
         assert_eq!(
             *function_type,
-            Either::Static(
+            crate::semantic::Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),
@@ -707,7 +703,7 @@ mod tests {
 
         assert_eq!(
             *function_type,
-            Either::Static(
+            crate::semantic::Either::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),

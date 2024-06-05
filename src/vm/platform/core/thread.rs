@@ -1,9 +1,8 @@
-use std::cell::Ref;
 use std::collections::HashSet;
 
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, TupleType};
+use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{Either, TypeOf};
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
@@ -17,7 +16,7 @@ use crate::vm::vm::{
 };
 use crate::{
     ast::expressions::Expression,
-    semantic::{ArcMutex, EType, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -398,7 +397,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
 mod tests {
     use crate::{vm::vm::NoopGameEngine, Ciphel};
 
-    use super::*;
+    
 
     #[test]
     fn valid_spawn() {

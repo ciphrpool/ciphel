@@ -1,4 +1,3 @@
-use std::sync::atomic::Ordering;
 
 use super::{operation::OpPrimitive, CasmProgram};
 

@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
@@ -11,7 +10,7 @@ use crate::{
             strings::{eater, wst},
         },
     },
-    semantic::{AccessLevel, ArcMutex, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf},
+    semantic::{AccessLevel, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::{stack::Offset, MemoryAddress},
         casm::{locate::Locate, Casm, CasmProgram},

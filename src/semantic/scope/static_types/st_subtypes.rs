@@ -1,14 +1,14 @@
 use crate::{
     ast::utils::strings::ID,
-    e_static, e_user, p_num,
+    e_static, p_num,
     semantic::{
-        scope::{type_traits::GetSubTypes, user_type_impl::UserType},
+        scope::{type_traits::GetSubTypes},
         EType, Either, SizeOf,
     },
 };
 
 use super::{
-    AddrType, NumberType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType, TupleType,
+    AddrType, PrimitiveType, SliceType, StaticType, StrSliceType, TupleType,
 };
 
 impl GetSubTypes for StaticType {

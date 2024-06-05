@@ -1,10 +1,8 @@
 use std::{
-    cell::{Ref, RefCell},
-    rc::Rc,
     sync::Arc,
 };
 
-use crate::{arw_read, semantic::scope::scope::Scope, vm::casm};
+use crate::{semantic::scope::scope::Scope, vm::casm};
 use ulid::Ulid;
 
 use crate::{

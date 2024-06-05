@@ -1,17 +1,16 @@
-use std::{cell::Cell, rc::Rc};
 
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    multi::{separated_list1},
+    sequence::{delimited, pair, preceded, separated_pair},
 };
 
 use crate::{
     ast::{
         expressions::{
             data::{Data, ExprScope, Primitive, StrSlice, Variable},
-            operation::{FieldAccess, FnCall},
+            operation::{FnCall},
             Atomic, Expression,
         },
         types::Type,
@@ -20,7 +19,7 @@ use crate::{
             lexem,
             strings::{
                 parse_id,
-                string_parser::{parse_fstring, parse_string},
+                string_parser::{parse_fstring},
                 wst,
             },
         },
@@ -270,7 +269,6 @@ impl TryParse for FCall {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::{Cell, RefCell},
         sync::{Arc, RwLock},
     };
 

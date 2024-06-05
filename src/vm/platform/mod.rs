@@ -1,8 +1,7 @@
-use std::cell::Ref;
 
 use crate::{
     ast::{expressions::Expression, utils::strings::ID},
-    semantic::{ArcMutex, EType, Resolve, SemanticError, TypeOf},
+    semantic::{EType, Resolve, SemanticError, TypeOf},
 };
 
 use self::{

@@ -1,7 +1,5 @@
-use std::cell::Ref;
 
 use super::Block;
-use crate::ast::statements::return_stat::Return;
 use crate::ast::statements::Statement;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
@@ -9,7 +7,7 @@ use crate::{arw_read, e_static};
 
 use crate::semantic::scope::BuildStaticType;
 use crate::semantic::{EType, MergeType};
-use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
+use crate::semantic::{Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Block {
     fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>

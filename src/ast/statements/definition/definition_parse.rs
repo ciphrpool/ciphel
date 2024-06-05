@@ -158,15 +158,13 @@ impl TryParse for FnDef {
 mod tests {
 
     use std::{
-        cell::{Cell, RefCell},
-        collections::HashMap,
         sync::{Arc, RwLock},
     };
 
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive},
+                data::{Data},
                 Atomic, Expression,
             },
             statements::{Return, Statement},

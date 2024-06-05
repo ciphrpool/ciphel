@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use super::{AssignValue, Assignation};
 use crate::semantic::scope::scope::Scope;

@@ -6,7 +6,7 @@ use crate::semantic::scope::scope::Scope;
 use crate::{arw_read, arw_write, resolve_metadata};
 
 use crate::semantic::scope::var_impl::{Var, VarState};
-use crate::semantic::{ArcMutex, CompatibleWith, EType, Info, TypeOf};
+use crate::semantic::{CompatibleWith, EType, TypeOf};
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Block {
@@ -68,9 +68,8 @@ mod tests {
         semantic::{
             scope::{
                 scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
+                static_types::{StaticType},
             },
-            Either,
         },
     };
 

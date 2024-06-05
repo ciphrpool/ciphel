@@ -1,4 +1,3 @@
-use std::{cell::Cell, rc::Rc};
 
 use nom::{
     branch::alt,
@@ -6,7 +5,7 @@ use nom::{
     character::complete::digit1,
     combinator::{map, opt, peek, value},
     multi::separated_list0,
-    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
 };
 use nom_supreme::error::ErrorTree;
 
@@ -744,7 +743,7 @@ impl TryParseOperation for LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::expressions::data::{Data, Number, Primitive},

@@ -4,7 +4,7 @@ use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
 use crate::semantic::{scope::var_impl::Var, Resolve, SemanticError, TypeOf};
-use crate::semantic::{ArcMutex, EType};
+use crate::semantic::{EType};
 
 impl Resolve for Loop {
     type Output = ();
@@ -152,7 +152,7 @@ impl Resolve for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::TryParse,
@@ -160,10 +160,8 @@ mod tests {
         semantic::{
             scope::{
                 scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
                 var_impl::Var,
             },
-            Either,
         },
     };
 

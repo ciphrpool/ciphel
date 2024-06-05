@@ -1,8 +1,8 @@
-use std::{cell::Ref, cmp::max};
+use std::{cmp::max};
 
 use crate::{
     e_static,
-    semantic::{scope::user_type_impl::UserType, EType, Either, MergeType, SemanticError, TypeOf},
+    semantic::{EType, Either, MergeType, SemanticError, TypeOf},
 };
 
 use super::{

@@ -1,6 +1,6 @@
 use super::{AssignValue, Assignation};
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{ArcMutex, CompatibleWith, EType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EType, Resolve, SemanticError, TypeOf};
 use crate::vm::vm::Locatable;
 
 impl Resolve for Assignation {
@@ -80,7 +80,7 @@ impl Resolve for AssignValue {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::TryParse,
@@ -88,10 +88,8 @@ mod tests {
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
                 var_impl::{Var, VarState},
             },
-            Either,
         },
     };
 

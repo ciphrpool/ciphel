@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use super::{
     AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
@@ -6,9 +5,8 @@ use super::{
 };
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{self, StaticType};
-use crate::{e_static, e_user};
+use crate::{e_static};
 
-use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::SizeOf;
 
 use crate::semantic::scope::BuildStaticType;

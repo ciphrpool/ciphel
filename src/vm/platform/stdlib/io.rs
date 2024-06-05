@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-use std::cell::{Ref, RefCell};
 
 use ulid::Ulid;
 
@@ -7,7 +5,7 @@ use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{StaticType, StringType};
-use crate::semantic::{Either, TypeOf};
+use crate::semantic::{TypeOf};
 
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
@@ -22,7 +20,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{ArcMutex, EType, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -166,7 +164,7 @@ impl GenerateCode for IOFn {
     ) -> Result<(), CodeGenerationError> {
         match self {
             IOFn::Print(inner) => {
-                let binding = inner.borrow();
+                let binding = inner;
 
                 let Some(param_type) = binding.as_ref() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -179,7 +177,7 @@ impl GenerateCode for IOFn {
                 Ok(())
             }
             IOFn::Println(inner) => {
-                let binding = inner.borrow();
+                let binding = inner;
 
                 let Some(param_type) = binding.as_ref() else {
                     return Err(CodeGenerationError::UnresolvedError);
@@ -415,7 +413,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    
 
     use crate::{
         ast::{statements::Statement, TryParse},

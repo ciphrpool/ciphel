@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::semantic::scope::scope::Scope;

@@ -13,8 +13,7 @@ use crate::vm::casm::mem::Mem;
 use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
-        scope::static_types::{NumberType, RangeType, StaticType},
-        ArcMutex, Either, SizeOf, TypeOf,
+        scope::static_types::{NumberType, RangeType, StaticType}, Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -1057,10 +1056,7 @@ impl GenerateCode for super::LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
-    };
+    
 
     use crate::{
         ast::{
@@ -1075,13 +1071,12 @@ mod tests {
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{PrimitiveType, StrSliceType, StringType},
+                static_types::{PrimitiveType, StrSliceType},
             },
             Resolve,
         },
         v_num,
         vm::{
-            allocator::Memory,
             vm::{DeserializeFrom, Runtime},
         },
     };
@@ -1770,7 +1765,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 

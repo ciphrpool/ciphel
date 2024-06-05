@@ -3,7 +3,7 @@ use crate::{arw_read, arw_write};
 
 use crate::vm::casm::branch::BranchTry;
 use crate::{
-    semantic::{scope::var_impl::VarState, ArcMutex, SizeOf},
+    semantic::{scope::var_impl::VarState, SizeOf},
     vm::{
         allocator::stack::Offset,
         casm::{

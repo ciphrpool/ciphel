@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
@@ -11,8 +10,8 @@ use crate::semantic::scope::static_types::StaticType;
 use crate::{arw_read, e_static};
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{scope::type_traits::GetSubTypes, Either, Resolve, SemanticError, TypeOf};
-use crate::semantic::{EType, MergeType, SizeOf};
+use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
+use crate::semantic::{EType, SizeOf};
 
 impl TypeOf for Data {
     fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>

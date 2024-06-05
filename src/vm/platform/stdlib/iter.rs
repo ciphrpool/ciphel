@@ -1,4 +1,3 @@
-use std::cell::{Cell, Ref};
 
 use num_traits::ToBytes;
 
@@ -10,7 +9,7 @@ use crate::{
             scope::Scope,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, ArcMutex, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
+        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
         TypeOf,
     },
     vm::{

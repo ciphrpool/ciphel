@@ -10,7 +10,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{ArcMutex, CompatibleWith, EType, Either};
+use crate::semantic::{CompatibleWith, EType, Either};
 use crate::{arw_read, arw_write};
 
 impl Resolve for Declaration {
@@ -253,7 +253,7 @@ mod tests {
         e_static, p_num,
         semantic::scope::{
             scope::Scope,
-            static_types::{NumberType, PrimitiveType, StaticType},
+            static_types::{PrimitiveType, StaticType},
             user_type_impl::{Struct, UserType},
         },
     };

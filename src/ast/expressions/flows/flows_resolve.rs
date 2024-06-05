@@ -1,7 +1,5 @@
 use super::{ExprFlow, FCall, IfExpr, MatchExpr, Pattern, PatternExpr, TryExpr};
-use crate::ast::expressions::data::{Data, StrSlice, Variable};
 use crate::ast::expressions::flows::FormatItem;
-use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::TupleType;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
@@ -13,9 +11,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{ArcMutex, EType, Info, MergeType, Metadata};
-use crate::vm::platform::stdlib::StdFn;
-use crate::vm::platform::Lib;
+use crate::semantic::{EType, Info, MergeType};
 use crate::{e_static, p_num, resolve_metadata};
 use std::collections::HashMap;
 
@@ -541,7 +537,7 @@ impl Resolve for FCall {
 #[cfg(test)]
 mod tests {
 
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::TryParse,
@@ -549,8 +545,8 @@ mod tests {
         semantic::scope::{
             scope::Scope,
             static_types::{
-                AddrType, FnType, MapType, NumberType, PrimitiveType, SliceType, StaticType,
-                StringType, VecType,
+                StaticType,
+                StringType,
             },
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,

@@ -12,7 +12,7 @@ use crate::{
             locate::{Locate, LocateUTF8Char},
             mem::Mem,
             operation::{
-                Addition, Equal, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
+                Addition, Greater, Less, LessEqual, Mult, NotEqual, OpPrimitive, Operation,
                 OperationKind, Substraction,
             },
             Casm, CasmProgram,

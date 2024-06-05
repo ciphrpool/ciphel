@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{ArcMutex, ArcRwLock, Metadata},
+    semantic::{ArcRwLock, Metadata},
     vm::platform::Lib,
 };
 

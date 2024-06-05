@@ -1,4 +1,4 @@
-use std::{cell::Ref, fmt::Debug};
+use std::{fmt::Debug};
 
 use crate::ast::{statements::definition, types, utils::strings::ID};
 

@@ -1,5 +1,3 @@
-use std::cell::Ref;
-
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::Info;
 
@@ -13,10 +11,9 @@ use crate::{
         },
         TryParse,
     },
-    resolve_metadata,
     semantic::{
         scope::{static_types::StaticType, type_traits::TypeChecking, BuildStaticType},
-        ArcMutex, CompatibleWith, EType, Either, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Either, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         casm::{alloc::StackFrame, Casm, CasmProgram},
@@ -221,7 +218,7 @@ mod tests {
         semantic::{
             scope::{
                 scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
+                static_types::{PrimitiveType, StaticType},
             },
             Either,
         },
@@ -303,7 +300,7 @@ mod tests {
 
         let inner_scope = scope::Scope::spawn(&scope, Vec::default())
             .expect("Scope should be able to have child block");
-        arw_write!(inner_scope, CodeGenerationError::ConcurrencyError)
+        let _ = arw_write!(inner_scope, CodeGenerationError::ConcurrencyError)
             .unwrap()
             .to_loop();
 

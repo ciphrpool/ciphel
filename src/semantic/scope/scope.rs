@@ -2,25 +2,22 @@ use crate::{
     arw_new, arw_read, arw_write,
     ast::utils::strings::ID,
     p_num,
-    semantic::{AccessLevel, ArcMutex, ArcRwLock, Either, SemanticError, SizeOf},
+    semantic::{AccessLevel, ArcMutex, ArcRwLock, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
 };
 use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::{Cell, RefCell},
+    borrow::{Borrow},
     collections::{BTreeSet, HashMap},
     slice::Iter,
 };
 use std::{
-    slice::IterMut,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Mutex, RwLock, Weak,
+        Arc, RwLock, Weak,
     },
 };
 
 use super::{
-    static_types::{NumberType, PrimitiveType, StaticType},
     user_type_impl::UserType,
     var_impl::{Var, VarState},
     ClosureState, ScopeState,

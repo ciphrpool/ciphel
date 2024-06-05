@@ -1,11 +1,8 @@
-use std::borrow::Borrow;
-
 use num_traits::ToBytes;
 
 use crate::arw_read;
-use crate::ast::expressions::{Atomic, Expression};
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{scope, AccessLevel};
+use crate::semantic::AccessLevel;
 use crate::vm::allocator::stack::Offset;
 use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
 use crate::vm::platform::core::CoreCasm;
@@ -14,12 +11,8 @@ use crate::vm::vm::Locatable;
 use crate::{
     ast::utils::strings::ID,
     semantic::{
-        scope::{
-            static_types::{NumberType, StaticType},
-            type_traits::GetSubTypes,
-            user_type_impl::UserType,
-        },
-        ArcMutex, EType, Either, Metadata, SizeOf,
+        scope::{type_traits::GetSubTypes, user_type_impl::UserType},
+        Either, SizeOf,
     },
     vm::{
         allocator::{align, MemoryAddress},
@@ -27,9 +20,8 @@ use crate::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
             data,
-            locate::{Locate, LocateUTF8Char},
+            locate::Locate,
             mem::Mem,
-            operation::{Addition, Mult, OpPrimitive, Operation, OperationKind},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -453,7 +445,7 @@ impl GenerateCode for Closure {
                 .scope
                 .scope()
                 .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let inner_scope = binding.as_ref().borrow();
+            let inner_scope = binding.as_ref();
 
             for var in inner_scope
                 .try_read()
@@ -727,7 +719,6 @@ impl GenerateCode for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, mem};
 
     use num_traits::Zero;
 
@@ -739,26 +730,20 @@ mod tests {
                 data::{Data, Number},
                 Atomic, Expression,
             },
-            statements::{self, Statement},
+            statements::Statement,
             TryParse,
         },
         compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{
-                    PrimitiveType, SliceType, StrSliceType, StringType, TupleType, VecType,
-                },
+                static_types::{PrimitiveType, SliceType, StrSliceType, TupleType, VecType},
                 user_type_impl,
             },
-            Resolve, TypeOf,
+            Resolve,
         },
         v_num,
-        vm::{
-            allocator::Memory,
-            casm::branch::BranchTable,
-            vm::{DeserializeFrom, Executable, Runtime},
-        },
+        vm::vm::{DeserializeFrom, Executable, Runtime},
     };
     use crate::{clear_stack, compile_expression};
 
@@ -813,7 +798,7 @@ mod tests {
 
         let (expr, data) = compile_expression!(Primitive, "420.69");
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::F64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::F64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -824,7 +809,9 @@ mod tests {
     fn valid_tuple() {
         let (expr, data) = compile_expression!(Tuple, "(true,17)");
         let result: Tuple = TupleType(vec![
-            e_static!(StaticType::Primitive(PrimitiveType::Bool)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Bool
+            )),
             p_num!(I64),
         ])
         .deserialize_from(&data)
@@ -844,9 +831,13 @@ mod tests {
         let (expr, data) = compile_expression!(Tuple, "(420i128,true,17,'a')");
         let result: Tuple = TupleType(vec![
             p_num!(I128),
-            e_static!(StaticType::Primitive(PrimitiveType::Bool)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Bool
+            )),
             p_num!(I64),
-            e_static!(StaticType::Primitive(PrimitiveType::Char)),
+            e_static!(crate::semantic::scope::static_types::StaticType::Primitive(
+                PrimitiveType::Char
+            )),
         ])
         .deserialize_from(&data)
         .expect("Deserialization should have succeeded");
@@ -1080,7 +1071,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1164,7 +1155,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1189,7 +1180,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1260,7 +1251,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1292,7 +1283,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1338,7 +1329,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1367,7 +1358,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1396,7 +1387,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1427,7 +1418,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1458,7 +1449,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1484,7 +1475,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1510,7 +1501,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::I64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1543,7 +1534,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");
@@ -1575,7 +1566,7 @@ mod tests {
         let data = compile_statement!(statement);
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
+            &PrimitiveType::Number(crate::semantic::scope::static_types::NumberType::U64),
             &data,
         )
         .expect("Deserialization should have succeeded");

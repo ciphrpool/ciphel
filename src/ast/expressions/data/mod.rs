@@ -1,5 +1,3 @@
-use std::cell::Cell;
-
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::ArcRwLock;
 use crate::{
@@ -7,10 +5,10 @@ use crate::{
     e_static, p_num,
     semantic::{
         scope::{
-            static_types::{NumberType, PrimitiveType, StaticType},
+            static_types::{PrimitiveType, StaticType},
             ClosureState,
         },
-        ArcMutex, EType, Either, Metadata, SemanticError,
+        EType, Either, Metadata, SemanticError,
     },
 };
 

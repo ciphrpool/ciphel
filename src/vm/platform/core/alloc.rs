@@ -1,16 +1,12 @@
-use std::{
-    cell::{Cell, Ref},
-    vec,
-};
+use std::vec;
 
 use crate::{
     ast::utils::strings::ID,
     err_tuple,
     semantic::scope::{
         scope::Scope,
-        static_types::{MapType, SliceType, TupleType},
+        static_types::{MapType, SliceType},
         type_traits::TypeChecking,
-        user_type_impl::UserType,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack},
@@ -33,8 +29,7 @@ use crate::{
             static_types::{AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType},
             type_traits::GetSubTypes,
         },
-        AccessLevel, ArcMutex, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
-        TypeOf,
+        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{align, stack::Offset},
@@ -3428,7 +3423,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3484,7 +3479,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3531,7 +3526,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3599,7 +3594,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3837,7 +3832,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3879,7 +3874,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -3936,7 +3931,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4004,7 +3999,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4095,7 +4090,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4139,7 +4134,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4188,7 +4183,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4257,7 +4252,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4310,7 +4305,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4378,7 +4373,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4453,7 +4448,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4508,7 +4503,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4557,7 +4552,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4631,7 +4626,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -4695,7 +4690,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -5115,11 +5110,12 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let data = compile_statement!(statement);
-        let result = <TupleType as DeserializeFrom>::deserialize_from(
-            &TupleType(vec![p_num!(U64), p_num!(U64)]),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <crate::semantic::scope::static_types::TupleType as DeserializeFrom>::deserialize_from(
+                &crate::semantic::scope::static_types::TupleType(vec![p_num!(U64), p_num!(U64)]),
+                &data,
+            )
+            .expect("Deserialization should have succeeded");
         let value = &result.value[0];
         let value = match value {
             Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(v)))) => match v {

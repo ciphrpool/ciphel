@@ -1,9 +1,8 @@
-use std::cell::Ref;
 
 use crate::{
     e_static, p_num,
     semantic::{
-        scope::{type_traits::OperandMerging, user_type_impl::UserType},
+        scope::{type_traits::OperandMerging},
         CompatibleWith, EType, Either, MergeType, SemanticError, TypeOf,
     },
 };

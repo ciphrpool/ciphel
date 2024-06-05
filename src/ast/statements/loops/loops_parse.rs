@@ -99,15 +99,13 @@ impl TryParse for WhileLoop {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
         sync::{Arc, RwLock},
     };
 
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, Variable},
+                data::{Data, Primitive, Variable},
                 operation::FnCall,
                 Atomic,
             },

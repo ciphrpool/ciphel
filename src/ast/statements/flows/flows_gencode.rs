@@ -19,8 +19,7 @@ use crate::{
             static_types::StaticType,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-        },
-        ArcMutex, Either, SizeOf,
+        }, Either, SizeOf,
     },
     vm::{
         casm::{
@@ -352,17 +351,17 @@ impl GenerateCode for TryStat {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use super::*;
 
-    use crate::ast::expressions::data::{Number, Primitive};
+    
     use crate::ast::TryParse;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
-    use crate::vm::vm::{DeserializeFrom, Runtime};
+    use crate::vm::vm::{DeserializeFrom};
     use crate::{ast::statements::Statement, semantic::scope::scope::Scope};
-    use crate::{clear_stack, compile_statement, v_num};
+    use crate::{compile_statement, v_num};
 
     #[test]
     fn valid_if() {

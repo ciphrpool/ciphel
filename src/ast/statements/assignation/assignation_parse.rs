@@ -6,10 +6,7 @@ use nom::{
 use nom_supreme::ParserExt;
 
 use crate::ast::{
-    expressions::{
-        data::{PtrAccess, Variable},
-        Expression,
-    },
+    expressions::Expression,
     statements::block::Block,
     utils::{
         io::{PResult, Span},
@@ -61,11 +58,10 @@ impl TryParse for AssignValue {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
 
     use crate::{
         ast::expressions::{
-            data::{Data, Number, Primitive, Variable},
+            data::{Data, Variable},
             operation::FieldAccess,
             Atomic,
         },
@@ -99,15 +95,17 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Assignation {
-                left: Expression::Atomic(Atomic::Data(Data::PtrAccess(PtrAccess {
-                    value: Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
-                        from_field: false,
-                        metadata: Metadata::default(),
-                    }))
-                    .into(),
-                    metadata: Metadata::default()
-                }))),
+                left: Expression::Atomic(Atomic::Data(Data::PtrAccess(
+                    crate::ast::expressions::data::PtrAccess {
+                        value: Atomic::Data(Data::Variable(Variable {
+                            id: "x".to_string().into(),
+                            from_field: false,
+                            metadata: Metadata::default(),
+                        }))
+                        .into(),
+                        metadata: Metadata::default()
+                    }
+                ))),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(
                     Data::Primitive(v_num!(Unresolved, 10))
                 ))))

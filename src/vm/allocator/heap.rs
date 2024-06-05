@@ -1,8 +1,5 @@
 use std::{
-    borrow::BorrowMut,
-    cell::{Cell, RefCell},
     fmt::Debug,
-    rc::Rc,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -11,7 +8,7 @@ use std::{
 
 use num_traits::ToBytes;
 
-use crate::{semantic::ArcMutex, vm::vm::RuntimeError};
+use crate::{vm::vm::RuntimeError};
 
 use super::{align, stack::STACK_SIZE};
 

@@ -1,14 +1,13 @@
 use std::sync::atomic::Ordering;
 
 use num_traits::ToBytes;
-use ulid::Ulid;
 
 use crate::{
     semantic::AccessLevel,
     vm::{
         allocator::{
             heap::Heap,
-            stack::{Offset, Stack, StackSlice, UReg, STACK_SIZE},
+            stack::{Offset, Stack, UReg, STACK_SIZE},
             MemoryAddress,
         },
         casm::operation::OpPrimitive,

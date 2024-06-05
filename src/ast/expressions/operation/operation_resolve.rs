@@ -18,7 +18,7 @@ use crate::semantic::scope::user_type_impl::UserType;
 use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{ArcMutex, EType, Info};
+use crate::semantic::{EType, Info};
 use crate::vm::vm::Locatable;
 
 impl Resolve for UnaryOperation {
@@ -1084,17 +1084,16 @@ impl Resolve for LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::{
             expressions::{operation::operation_parse::TryParseOperation, Expression},
             TryParse,
-        },
-        e_static, p_num,
+        }, p_num,
         semantic::scope::{
             scope::Scope,
-            static_types::{FnType, NumberType, PrimitiveType, SliceType, StaticType, StringType},
+            static_types::{FnType, StaticType},
             var_impl::{Var, VarState},
         },
     };

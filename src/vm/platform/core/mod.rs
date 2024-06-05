@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
@@ -8,7 +7,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{ArcMutex, EType, Resolve, SemanticError, TypeOf},
+    semantic::{EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},

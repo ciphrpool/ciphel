@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 

@@ -136,7 +136,7 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::{

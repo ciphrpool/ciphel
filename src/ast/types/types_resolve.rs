@@ -4,7 +4,7 @@ use super::{
 };
 use crate::arw_read;
 use crate::semantic::scope::scope::Scope;
-use crate::semantic::{scope::type_traits::IsEnum, ArcMutex, Resolve, SemanticError};
+use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Type {
     type Output = ();

@@ -1,5 +1,4 @@
 use crate::ast::expressions::{
-    data::{PtrAccess, Variable},
     Expression,
 };
 

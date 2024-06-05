@@ -1,5 +1,4 @@
 use std::{
-    cell::{Cell, RefCell},
     sync::{Arc, RwLock},
 };
 
@@ -26,14 +25,11 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, take_while_m_n},
-    character::complete::digit1,
-    combinator::{map, opt, peek, value},
+    combinator::{map, opt, value},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
+    sequence::{delimited, pair, preceded, separated_pair},
     Parser,
 };
-use nom_supreme::error::ErrorTree;
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
@@ -438,8 +434,6 @@ impl TryParse for Map {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::Cell,
-        rc::Rc,
         sync::{Arc, RwLock},
     };
 
@@ -447,10 +441,9 @@ mod tests {
         ast::{
             expressions::{
                 data::Number,
-                operation::{FieldAccess, FnCall, ListAccess, Range, TupleAccess},
+                operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
                 Atomic,
             },
-            statements::block::Block,
         },
         semantic::scope::ClosureState,
         v_num,

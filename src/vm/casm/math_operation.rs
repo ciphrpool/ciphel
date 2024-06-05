@@ -3,7 +3,7 @@ use num_traits::ToBytes;
 use crate::{
     semantic::scope::static_types::NumberType,
     vm::{
-        allocator::{stack::Stack, Memory},
+        allocator::{stack::Stack},
         vm::RuntimeError,
     },
 };

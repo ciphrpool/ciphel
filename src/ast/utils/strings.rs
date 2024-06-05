@@ -1,21 +1,19 @@
-use std::{rc::Rc, sync::Arc};
+use std::{sync::Arc};
 
 use nom::{
     branch::alt,
     character::complete::{alpha1, alphanumeric1},
-    combinator::{map, map_res, recognize, value},
+    combinator::{map_res, recognize, value},
     multi::many0_count,
     sequence::pair,
     Parser,
 };
 
 use nom_supreme::{
-    error::{ErrorTree, GenericErrorTree},
     tag::complete::tag,
     ParserExt,
 };
 
-use crate::vm::platform;
 
 use super::{
     io::{PResult, Span},

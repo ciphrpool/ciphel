@@ -10,7 +10,6 @@ use crate::vm::casm::alloc::Alloc;
 use crate::vm::casm::locate::Locate;
 
 use crate::{
-    semantic::ArcMutex,
     vm::{
         casm::{
             branch::{Goto, Label},
@@ -101,10 +100,10 @@ impl GenerateCode for FnDef {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use super::*;
-    use crate::ast::expressions::data::{Number, Primitive};
+    
     use crate::ast::TryParse;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
@@ -259,7 +258,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -317,7 +316,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -326,7 +325,7 @@ mod tests {
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+        let engine = crate::vm::vm::NoopGameEngine {};
 
         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
             &PrimitiveType::Number(NumberType::U64),

@@ -1,7 +1,6 @@
-use nom_supreme::context;
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive,
     PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::expressions::Atomic;
@@ -9,15 +8,15 @@ use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{
     AddrType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType, VecType,
 };
-use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
+use crate::semantic::scope::type_traits::{GetSubTypes};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
 use crate::semantic::{
     scope::{static_types::StaticType, var_impl::Var},
     CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{ArcMutex, EType, Info, MergeType};
-use crate::{arw_read, e_static, p_num, resolve_metadata};
+use crate::semantic::{EType, Info, MergeType};
+use crate::{arw_read, e_static, resolve_metadata};
 
 impl Resolve for Data {
     type Output = ();
@@ -859,19 +858,16 @@ impl Resolve for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::Cell,
-        collections::{HashMap, HashSet},
-    };
+    
 
     use crate::{
         arw_write,
-        ast::{expressions::Expression, statements, TryParse},
+        ast::{expressions::Expression, TryParse},
         p_num,
         semantic::scope::{
             scope::Scope,
             static_types::{
-                AddrType, MapType, NumberType, PrimitiveType, SliceType, StaticType, StrSliceType,
+                AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType,
                 StringType, TupleType, VecType,
             },
             user_type_impl::{self, UserType},

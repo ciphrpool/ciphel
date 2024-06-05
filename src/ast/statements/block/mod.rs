@@ -1,16 +1,14 @@
 use std::{
-    cell::{Cell, RefCell},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc,
     },
 };
 
 use crate::{
     arw_write,
     semantic::{
-        scope::{var_impl::Var, ClosureState},
-        ArcMutex, ArcRwLock, Metadata, SemanticError,
+        scope::{var_impl::Var, ClosureState}, ArcRwLock, Metadata, SemanticError,
     },
 };
 

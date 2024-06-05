@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use nom::{
     branch::alt,
@@ -15,7 +14,7 @@ use super::{utils::strings::eater, TryParse};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{
-        scope::static_types::StaticType, ArcMutex, EType, Either, Resolve, SemanticError, TypeOf,
+        scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf,
     },
     vm::{
         casm::{

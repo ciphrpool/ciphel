@@ -4,31 +4,26 @@ use ulid::Ulid;
 
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::SemanticError;
-use crate::vm::allocator::stack::UReg;
 use crate::vm::casm::alloc::StackFrame;
 use crate::vm::casm::branch::BranchTry;
 use crate::vm::casm::data;
 use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
 use crate::vm::platform::stdlib::StdCasm;
 use crate::vm::platform::LibCasm;
-use crate::{arw_read, e_static};
+use crate::{arw_read};
 use crate::{
     ast::expressions::data::{Number, Primitive},
     semantic::{
         scope::{
-            static_types::{ClosureType, NumberType, StaticType},
+            static_types::{StaticType},
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-        },
-        ArcMutex, Either, SizeOf, TypeOf,
+        }, Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
-            alloc::Access,
             branch::{BranchIf, BranchTable, Call, Goto, Label},
             data::Data,
-            mem::Mem,
-            operation::{Addition, OpPrimitive, Operation, OperationKind, Substraction},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -455,7 +450,7 @@ impl GenerateCode for FCall {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use crate::{
         ast::{
@@ -470,14 +465,12 @@ mod tests {
         semantic::{
             scope::{
                 scope::Scope,
-                static_types::{NumberType, PrimitiveType, StaticType},
+                static_types::{NumberType, PrimitiveType},
                 user_type_impl::{self, UserType},
-            },
-            Either, Resolve,
+            }, Resolve,
         },
         v_num,
         vm::{
-            allocator::Memory,
             vm::{DeserializeFrom, Executable, Runtime},
         },
     };
@@ -512,7 +505,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -558,7 +551,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -608,7 +601,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -659,7 +652,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -729,7 +722,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -814,7 +807,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_else);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -879,7 +872,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions_then);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -967,7 +960,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1033,7 +1026,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1099,7 +1092,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1187,7 +1180,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1417,7 +1410,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
@@ -1482,7 +1475,7 @@ mod tests {
         let tid = runtime
             .spawn_with_scope(scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, mut stack, mut program) = runtime.get_mut(tid).expect("Thread should exist");
+        let (_, stack, program) = runtime.get_mut(tid).expect("Thread should exist");
         program.merge(instructions);
         let mut engine = crate::vm::vm::NoopGameEngine {};
 

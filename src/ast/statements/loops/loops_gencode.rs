@@ -6,7 +6,6 @@ use crate::vm::casm::branch::BranchIf;
 
 use crate::vm::vm::NextItem;
 use crate::{
-    semantic::ArcMutex,
     vm::{
         allocator::stack::UReg,
         casm::{
@@ -145,22 +144,21 @@ impl GenerateCode for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::Resolve;
     use crate::{
         ast::{
-            expressions::data::{Number, Primitive},
+            expressions::data::{Primitive},
             statements::Statement,
         },
-        clear_stack,
         semantic::scope::{
             scope::Scope,
             static_types::{NumberType, PrimitiveType},
         },
-        vm::vm::{DeserializeFrom, Runtime},
+        vm::vm::{DeserializeFrom},
     };
     use crate::{compile_statement, v_num};
 

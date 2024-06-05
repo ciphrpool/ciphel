@@ -1,5 +1,3 @@
-use std::arch::x86_64;
-use std::cell::Ref;
 use std::f64::consts::E;
 use std::f64::consts::PI;
 use std::f64::INFINITY;
@@ -23,7 +21,7 @@ use crate::vm::vm::CasmMetadata;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{ArcMutex, EType, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -630,7 +628,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::Cell,
         f64::{
             consts::{E, PI},
             NEG_INFINITY,
@@ -639,14 +636,13 @@ mod tests {
 
     use crate::{
         ast::{
-            expressions::data::{Number, Primitive},
+            expressions::data::{Primitive},
             statements::Statement,
             TryParse,
-        },
-        clear_stack, compile_statement,
+        }, compile_statement,
         semantic::scope::scope::Scope,
         v_num,
-        vm::vm::{DeserializeFrom, Runtime},
+        vm::vm::{DeserializeFrom},
     };
 
     use super::*;

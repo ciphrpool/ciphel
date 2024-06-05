@@ -8,8 +8,7 @@ use crate::{
             type_traits::TypeChecking,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-        },
-        ArcMutex, EType, Either, Resolve, SemanticError, TypeOf,
+        }, EType, Either, Resolve, SemanticError, TypeOf,
     },
 };
 use std::collections::HashMap;
@@ -225,13 +224,13 @@ impl Resolve for CallStat {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    
 
     use super::*;
     use crate::ast::TryParse;
     use crate::p_num;
     use crate::semantic::scope::scope::Scope;
-    use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
+    
     use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {

@@ -158,15 +158,13 @@ impl TryParse for CallStat {
 #[cfg(test)]
 mod tests {
     use std::{
-        cell::{Cell, RefCell},
-        rc::Rc,
         sync::{Arc, RwLock},
     };
 
     use crate::{
         ast::{
             expressions::{
-                data::{Data, Number, Primitive, Variable},
+                data::{Data, Primitive, Variable},
                 Atomic, Expression,
             },
             statements::{

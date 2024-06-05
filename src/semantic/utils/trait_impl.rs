@@ -1,4 +1,3 @@
-use std::cell::Ref;
 
 use crate::semantic::scope::scope::Scope;
 use crate::{

@@ -1,14 +1,4 @@
-use std::cell::{Cell, Ref, RefCell};
-use std::rc::Rc;
-
-use nom::bytes::complete::{tag, take_till, take_while};
-use nom::combinator::eof;
-use nom::complete::take;
-use nom::multi::{many0, many_till};
-use nom::sequence::delimited;
-
 use crate::ast::utils::strings::ID;
-use crate::ast::{self, TryParse};
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, StringType};
@@ -25,7 +15,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{ArcMutex, EType, Resolve, SemanticError},
+    semantic::{EType, Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -333,11 +323,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::result;
 
     use super::*;
+    use crate::ast::TryParse;
     use crate::vm::vm::Runtime;
-    use crate::{ast::statements::Statement, compile_statement, vm::vm::DeserializeFrom};
+    use crate::{ast::statements::Statement, vm::vm::DeserializeFrom};
     use crate::{clear_stack, compile_statement_for_string};
     #[test]
     fn valid_format_i64() {
