@@ -1,6 +1,4 @@
-use std::{
-    sync::{Arc, Mutex, RwLock},
-};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
@@ -31,6 +29,7 @@ pub enum SemanticError {
     ExpectedStruct,
     ExpectedLoop,
     ExpectedMovedClosure,
+    ExpectedClosure,
     ExpectedLeftExpression,
 
     UnknownVar(ID),

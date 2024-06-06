@@ -1084,13 +1084,13 @@ impl Resolve for LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::{
             expressions::{operation::operation_parse::TryParseOperation, Expression},
             TryParse,
-        }, p_num,
+        },
+        p_num,
         semantic::scope::{
             scope::Scope,
             static_types::{FnType, StaticType},

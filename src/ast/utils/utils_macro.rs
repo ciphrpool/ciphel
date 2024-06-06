@@ -29,7 +29,7 @@ macro_rules! am_read {
 macro_rules! am_write {
     ($var:expr,$err:expr) => {
         $var.try_read().map_err(|_| {
-            panic!("Concucurrency Read error");
+            // panic!("Concucurrency Read error");
             $err
         })
     };
@@ -39,7 +39,7 @@ macro_rules! am_write {
 macro_rules! arw_write {
     ($var:expr,$err:expr) => {
         $var.try_write().map_err(|_| {
-            panic!("Concucurrency Write error");
+            // panic!("Concucurrency Write error");
             $err
         })
     };

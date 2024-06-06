@@ -1,5 +1,3 @@
-
-
 use super::vm::GameEngineStaticFn;
 
 #[derive(Debug, Clone)]

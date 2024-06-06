@@ -13,7 +13,8 @@ use crate::vm::casm::mem::Mem;
 use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
-        scope::static_types::{NumberType, RangeType, StaticType}, Either, SizeOf, TypeOf,
+        scope::static_types::{NumberType, RangeType, StaticType},
+        Either, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -1056,7 +1057,6 @@ impl GenerateCode for super::LogicalOr {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::{
@@ -1076,9 +1076,7 @@ mod tests {
             Resolve,
         },
         v_num,
-        vm::{
-            vm::{DeserializeFrom, Runtime},
-        },
+        vm::vm::{DeserializeFrom, Runtime},
     };
 
     use super::*;

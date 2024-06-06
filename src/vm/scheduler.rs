@@ -1,22 +1,27 @@
 use std::{
+    cell::{Cell, RefCell},
     collections::HashSet,
+    marker::PhantomData,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
 };
 
+use num_traits::ToBytes;
 
 use crate::vm::{
     casm::Casm,
     platform::{
         core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
+        utils::lexem::SPAWN,
     },
-    vm::{Signal, Thread, ThreadState},
+    vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
 };
 
 use super::{
-    allocator::{heap::Heap},
+    allocator::{heap::Heap, stack::Stack, Memory},
+    casm::CasmProgram,
     platform::core::thread::sig_wait_stdin,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, GameEngineStaticFn, Runtime, RuntimeError, Tid},

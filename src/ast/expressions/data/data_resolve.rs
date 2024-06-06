@@ -1,14 +1,13 @@
-
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive,
-    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
+    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::expressions::Atomic;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{
     AddrType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType, VecType,
 };
-use crate::semantic::scope::type_traits::{GetSubTypes};
+use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::{BuildVar, ClosureState};
 use crate::semantic::{
@@ -498,9 +497,9 @@ impl Resolve for Closure {
             None => None,
         };
         if self.closed {
-            self.scope.to_capturing(ClosureState::CAPTURING);
+            let _ = self.scope.to_capturing(ClosureState::CAPTURING);
         } else {
-            self.scope.to_capturing(ClosureState::NOT_CAPTURING);
+            let _ = self.scope.to_capturing(ClosureState::NOT_CAPTURING);
         }
 
         let _ = self.scope.resolve(scope, &context_return, &mut vars)?;
@@ -858,7 +857,6 @@ impl Resolve for Map {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         arw_write,
@@ -867,8 +865,8 @@ mod tests {
         semantic::scope::{
             scope::Scope,
             static_types::{
-                AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType,
-                StringType, TupleType, VecType,
+                AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
+                TupleType, VecType,
             },
             user_type_impl::{self, UserType},
             var_impl::Var,

@@ -1316,7 +1316,15 @@ mod tests {
         let mut statement = Statement::parse(
             r##"
         let x = {
-            let f = (x:u64) -> x+1;
+            let f = (x:u64) ->{ 
+                let y:u64;
+                let u:u64;
+                let i:u64;
+                let o:u64;
+                let e:u64;
+                
+                return x+1;
+            };
             return f(68); 
         };
 
@@ -1432,6 +1440,11 @@ mod tests {
         let x = {
             let env = 1u64;
             let rec f : dyn fn(u64) -> u64 = move (x:u64) -> {
+                let y:u64;
+                let z:u64;
+                let e:u64;
+                let t:u64;
+                let u:u64;
                 if x >= 5 {
                     return 5u64;
                 }

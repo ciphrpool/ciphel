@@ -1,3 +1,4 @@
+use ast::statements::{self, Statement};
 use semantic::SemanticError;
 use vm::{
     allocator::heap::Heap,
@@ -12,12 +13,13 @@ pub mod ast;
 pub mod semantic;
 pub mod vm;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CompilationError {
     ParsingError(),
     SemanticError(SemanticError),
     CodeGen(CodeGenerationError),
     InvalidTID(usize),
+    TransactionError,
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +48,95 @@ impl Ciphel {
 
     pub fn available_tids(&self) -> Vec<usize> {
         self.runtime.threads.iter().map(|t| t.tid).collect()
+    }
+
+    pub fn compile_with_transaction(
+        &mut self,
+        tid: usize,
+        src_code: &str,
+    ) -> Result<(), CompilationError> {
+        let (scope, stack, program) = self
+            .runtime
+            .get_mut(tid)
+            .map_err(|_| CompilationError::InvalidTID(tid))?;
+        {
+            let mut borrowed_scope = scope
+                .write()
+                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let _ = borrowed_scope.open_transaction()?;
+        }
+
+        let mut statements: Vec<ast::statements::Statement> = parse_statements(src_code.into())?;
+        for statement in &mut statements {
+            let _ = statement
+                .resolve(scope, &None, &mut ())
+                .map_err(|e| CompilationError::SemanticError(e))?;
+        }
+        program.statements_buffer.extend(statements);
+        program.in_transaction = true;
+        Ok(())
+    }
+
+    pub fn commit_transaction(&mut self, tid: usize) -> Result<(), CompilationError> {
+        let (scope, stack, program) = self
+            .runtime
+            .get_mut(tid)
+            .map_err(|_| CompilationError::InvalidTID(tid))?;
+
+        {
+            let mut borrowed_scope = scope
+                .write()
+                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let _ = borrowed_scope.commit_transaction()?;
+            let _ = borrowed_scope.close_transaction()?;
+        }
+
+        program.in_transaction = false;
+        Ok(())
+    }
+
+    pub fn reject_transaction(&mut self, tid: usize) -> Result<(), CompilationError> {
+        let (scope, stack, program) = self
+            .runtime
+            .get_mut(tid)
+            .map_err(|_| CompilationError::InvalidTID(tid))?;
+
+        {
+            let mut borrowed_scope = scope
+                .write()
+                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let _ = borrowed_scope.reject_transaction()?;
+            let _ = borrowed_scope.close_transaction()?;
+        }
+        program.statements_buffer.clear();
+        program.in_transaction = false;
+        Ok(())
+    }
+
+    pub fn push_compilation(&mut self, tid: usize) -> Result<(), CompilationError> {
+        let (scope, stack, program) = self
+            .runtime
+            .get_mut(tid)
+            .map_err(|_| CompilationError::InvalidTID(tid))?;
+
+        if program.in_transaction {
+            return Err(CompilationError::TransactionError);
+        }
+        let _ = arw_read!(
+            scope,
+            CompilationError::SemanticError(SemanticError::ConcurrencyError)
+        )?
+        .update_stack_top(stack.top())
+        .map_err(|e| CompilationError::CodeGen(e))?;
+
+        let statements: Vec<Statement> = program.statements_buffer.drain(..).collect();
+        for statement in statements {
+            let _ = statement
+                .gencode(scope, program)
+                .map_err(|e| CompilationError::CodeGen(e))?;
+        }
+
+        Ok(())
     }
 
     pub fn compile(&mut self, tid: usize, src_code: &str) -> Result<(), CompilationError> {
@@ -201,6 +292,51 @@ mod tests {
             .compile(tid, src)
             .expect("Compilation should have succeeded");
 
+        ciphel.run(&mut engine).expect("no error should arise");
+    }
+
+    #[test]
+    fn valid_commit_transaction() {
+        let mut engine = NoopGameEngine {};
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        println("Hello world");
+        "##;
+
+        ciphel
+            .compile_with_transaction(tid, src)
+            .expect("Compilation should have succeeded");
+
+        ciphel
+            .commit_transaction(tid)
+            .expect("Compilation should have succeeded");
+        ciphel
+            .push_compilation(tid)
+            .expect("Compilation should have succeeded");
+        ciphel.run(&mut engine).expect("no error should arise");
+    }
+    #[test]
+    fn valid_reject_transaction() {
+        let mut engine = DbgGameEngine {};
+        let mut ciphel = Ciphel::new();
+        let tid = ciphel.start().expect("starting should not fail");
+
+        let src = r##"
+        println("Hello world");
+        "##;
+
+        ciphel
+            .compile_with_transaction(tid, src)
+            .expect("Compilation should have succeeded");
+
+        ciphel
+            .reject_transaction(tid)
+            .expect("Compilation should have succeeded");
+        ciphel
+            .push_compilation(tid)
+            .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
     }
 }

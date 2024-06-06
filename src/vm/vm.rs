@@ -1,9 +1,11 @@
+use std::cell::Cell;
+use std::marker::PhantomData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use ulid::Ulid;
 
-use crate::semantic::{ArcRwLock};
+use crate::semantic::{ArcMutex, ArcRwLock};
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
 use super::{

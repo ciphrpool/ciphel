@@ -1,7 +1,7 @@
-use std::{
-    collections::HashMap,
-};
+use std::collections::HashMap;
 use ulid::Ulid;
+
+use crate::ast::statements::Statement;
 
 use self::{branch::Label, data::Data};
 
@@ -22,6 +22,8 @@ pub mod operation;
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
     pub main: Vec<Casm>,
+    pub statements_buffer: Vec<Statement>,
+    pub in_transaction: bool,
     cursor: usize,
     pub labels: HashMap<Ulid, (usize, Box<str>)>,
     pub catch_stack: Vec<Ulid>,
@@ -34,6 +36,8 @@ impl Default for CasmProgram {
             cursor: Default::default(),
             labels: Default::default(),
             catch_stack: Default::default(),
+            statements_buffer: Vec::default(),
+            in_transaction: false,
         }
     }
 }
@@ -157,7 +161,7 @@ impl CasmProgram {
                 Some(instruction) => instruction.clone(), // Clone to avoid borrow conflict
                 None => return Ok(()),
             };
-
+            instruction.name(stdio, self, engine);
             match instruction.execute(self, stack, heap, stdio, engine) {
                 Ok(_) => {}
                 Err(RuntimeError::Signal(Signal::EXIT)) => return Ok(()),

@@ -4,17 +4,16 @@ use crate::{
     p_num,
     semantic::{AccessLevel, ArcMutex, ArcRwLock, SemanticError, SizeOf},
     vm::{allocator::stack::Offset, vm::CodeGenerationError},
+    CompilationError,
+};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, RwLock, Weak,
 };
 use std::{
-    borrow::{Borrow},
+    borrow::Borrow,
     collections::{BTreeSet, HashMap},
     slice::Iter,
-};
-use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, RwLock, Weak,
-    },
 };
 
 use super::{
@@ -41,7 +40,9 @@ pub enum Scope {
     },
     General {
         data: ScopeData,
+        transaction_data: ScopeData,
         stack_top: Arc<AtomicUsize>,
+        in_transaction: bool,
     },
 }
 
@@ -56,14 +57,27 @@ impl ScopeData {
         }
     }
 
-    pub fn spawn(&self) -> Self {
-        Self {
+    pub fn clear(&mut self) {
+        self.vars.clear();
+        self.types.clear();
+        self.state = Default::default();
+        self.env_vars = Default::default();
+        self.env_vars_address = Default::default();
+    }
+
+    pub fn spawn(&self) -> Result<Self, SemanticError> {
+        Ok(Self {
             vars: Vec::default(),
             types: HashMap::new(),
-            state: self.state.clone(),
+            state: Arc::new(RwLock::new(
+                self.state
+                    .read()
+                    .map_err(|_| SemanticError::ConcurrencyError)?
+                    .clone(),
+            )),
             env_vars: Default::default(),
             env_vars_address: HashMap::default(),
-        }
+        })
     }
 }
 
@@ -71,12 +85,98 @@ impl Scope {
     pub fn new() -> ArcRwLock<Self> {
         Arc::new(RwLock::new(Self::General {
             data: ScopeData::new(),
+            transaction_data: ScopeData::new(),
             stack_top: Default::default(),
+            in_transaction: false,
         }))
     }
 }
 
 impl Scope {
+    pub fn open_transaction(&mut self) -> Result<(), CompilationError> {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                data,
+            } => return Err(CompilationError::TransactionError),
+            Scope::General {
+                data,
+                stack_top,
+                in_transaction,
+                transaction_data,
+            } => {
+                *in_transaction = true;
+                transaction_data.clear();
+                Ok(())
+            }
+        }
+    }
+
+    pub fn commit_transaction(&mut self) -> Result<(), CompilationError> {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                data,
+            } => return Err(CompilationError::TransactionError),
+            Scope::General {
+                data,
+                stack_top,
+                in_transaction,
+                transaction_data,
+            } => {
+                if *in_transaction {
+                    data.vars.extend(transaction_data.vars.drain(..));
+                    data.types.extend(transaction_data.types.drain());
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn reject_transaction(&mut self) -> Result<(), CompilationError> {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                data,
+            } => return Err(CompilationError::TransactionError),
+            Scope::General {
+                data,
+                stack_top,
+                in_transaction,
+                transaction_data,
+            } => {
+                if *in_transaction {
+                    data.vars.clear();
+                    data.types.clear();
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn close_transaction(&mut self) -> Result<(), CompilationError> {
+        match self {
+            Scope::Inner {
+                parent,
+                general,
+                data,
+            } => return Err(CompilationError::TransactionError),
+            Scope::General {
+                data,
+                stack_top,
+                in_transaction,
+                transaction_data,
+            } => {
+                *in_transaction = true;
+                transaction_data.clear();
+                Ok(())
+            }
+        }
+    }
+
     pub fn spawn(
         parent: &ArcRwLock<Self>,
         vars: Vec<Var>,
@@ -87,7 +187,7 @@ impl Scope {
                 let mut child = Self::Inner {
                     parent: Some(Arc::downgrade(parent)),
                     general: general.clone(),
-                    data: data.spawn(),
+                    data: data.spawn()?,
                 };
                 for variable in vars {
                     let _ = child.register_var(variable);
@@ -115,8 +215,17 @@ impl Scope {
                 data.types.insert(id.clone(), reg.into());
                 Ok(())
             }
-            Scope::General { data, .. } => {
-                data.types.insert(id.clone(), reg.into());
+            Scope::General {
+                data,
+                in_transaction,
+                transaction_data,
+                ..
+            } => {
+                if *in_transaction {
+                    transaction_data.types.insert(id.clone(), reg.into());
+                } else {
+                    data.types.insert(id.clone(), reg.into());
+                }
                 Ok(())
             }
         }
@@ -129,10 +238,22 @@ impl Scope {
                     .push((Arc::new(RwLock::new(reg)), Default::default()));
                 Ok(())
             }
-            Scope::General { data, .. } => {
-                reg.state = VarState::Global;
-                data.vars
-                    .push((Arc::new(RwLock::new(reg)), Default::default()));
+            Scope::General {
+                data,
+                in_transaction,
+                transaction_data,
+                ..
+            } => {
+                if *in_transaction {
+                    reg.state = VarState::Global;
+                    transaction_data
+                        .vars
+                        .push((Arc::new(RwLock::new(reg)), Default::default()));
+                } else {
+                    reg.state = VarState::Global;
+                    data.vars
+                        .push((Arc::new(RwLock::new(reg)), Default::default()));
+                }
                 Ok(())
             }
         }
@@ -167,7 +288,7 @@ impl Scope {
                             var.ok()
                         };
                         if let Some(var) = &var {
-                            self.capture(var.clone());
+                            let err = self.capture(var.clone());
                         }
                         var
                     }),
@@ -183,20 +304,30 @@ impl Scope {
                     }
                 })
                 .ok_or(SemanticError::UnknownVar(id.clone())),
-            Scope::General { data, .. } => data
-                .vars
-                .iter()
-                .find(|(var, _)| {
-                    let borrowed_var = &arw_read!(var, CodeGenerationError::ConcurrencyError);
-                    if let Ok(v) = borrowed_var {
-                        v.id == *id
-                    } else {
-                        false
+            Scope::General {
+                data,
+                in_transaction,
+                transaction_data,
+                ..
+            } => {
+                for (var, _) in data.vars.iter() {
+                    let borrowed_var = &arw_read!(var, SemanticError::ConcurrencyError)?;
+
+                    if borrowed_var.id == *id {
+                        return Ok(var.clone());
                     }
-                })
-                .map(|(v, _)| v)
-                .cloned()
-                .ok_or(SemanticError::UnknownVar(id.clone())),
+                }
+                if *in_transaction {
+                    for (var, _) in transaction_data.vars.iter() {
+                        let borrowed_var = &arw_read!(var, SemanticError::ConcurrencyError)?;
+
+                        if borrowed_var.id == *id {
+                            return Ok(var.clone());
+                        }
+                    }
+                }
+                return Err(SemanticError::UnknownVar(id.clone()));
+            }
         }
     }
 
@@ -351,10 +482,12 @@ impl Scope {
             Scope::General { .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
+
     pub fn capture(&self, var: ArcRwLock<Var>) -> Result<bool, SemanticError> {
         match self {
             Scope::Inner { data, .. } => {
                 let state = arw_read!(data.state, SemanticError::ConcurrencyError)?;
+
                 if state.is_closure != ClosureState::DEFAULT {
                     let Some(mut env_vars) =
                         arw_write!(data.env_vars, SemanticError::ConcurrencyError).ok()
@@ -397,11 +530,26 @@ impl Scope {
                     }
                 })
                 .ok_or(SemanticError::UnknownType(id.clone())),
-            Scope::General { data, .. } => data
-                .types
-                .get(id)
-                .cloned()
-                .ok_or(SemanticError::UnknownType(id.clone())),
+            Scope::General {
+                data,
+                in_transaction,
+                transaction_data,
+                ..
+            } => {
+                let found = data.types.get(id);
+                if let Some(typ) = found {
+                    return Ok(typ.clone());
+                } else if *in_transaction {
+                    let found = transaction_data.types.get(id);
+                    if let Some(typ) = found {
+                        return Ok(typ.clone());
+                    } else {
+                        return Err(SemanticError::UnknownType(id.clone()));
+                    }
+                } else {
+                    return Err(SemanticError::UnknownType(id.clone()));
+                }
+            }
         }
     }
 
@@ -485,6 +633,19 @@ impl Scope {
                 data,
             } => data.vars.iter(),
             Scope::General { data, .. } => data.vars.iter(),
+        }
+    }
+
+    pub fn for_closure_vars(
+        &self,
+    ) -> Result<Iter<(ArcRwLock<Var>, ArcRwLock<Offset>)>, SemanticError> {
+        match self {
+            Scope::Inner {
+                parent: _,
+                general: _,
+                data,
+            } => Ok(data.vars.iter()),
+            Scope::General { data, .. } => Err(SemanticError::ExpectedClosure),
         }
     }
 

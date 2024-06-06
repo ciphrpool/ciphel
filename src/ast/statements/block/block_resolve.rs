@@ -26,7 +26,7 @@ impl Resolve for Block {
         let mut inner_scope = Scope::spawn(scope, extra.clone())?;
         {
             if self.is_loop.load(Ordering::Acquire) {
-                arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
+                let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
             }
             let mut borrowed_caller = arw_write!(self.caller, SemanticError::ConcurrencyError)?;
             if let Some(caller) = borrowed_caller.as_mut() {
@@ -35,7 +35,8 @@ impl Resolve for Block {
                     .register_var(caller.clone())?;
             }
             let can_capture = arw_read!(self.can_capture, SemanticError::ConcurrencyError)?.clone();
-            arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_closure(can_capture);
+            let _ =
+                arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_closure(can_capture);
         }
 
         for instruction in &mut self.instructions {
@@ -65,12 +66,7 @@ mod tests {
         arw_read,
         ast::TryParse,
         e_static, p_num,
-        semantic::{
-            scope::{
-                scope,
-                static_types::{StaticType},
-            },
-        },
+        semantic::scope::{scope, static_types::StaticType},
     };
 
     use super::*;

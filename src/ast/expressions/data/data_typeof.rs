@@ -1,4 +1,3 @@
-
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
     Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
@@ -7,11 +6,12 @@ use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
 
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::scope::var_impl::VarState;
 use crate::{arw_read, e_static};
 
 use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
 use crate::semantic::{EType, SizeOf};
+use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Data {
     fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
@@ -176,11 +176,12 @@ impl TypeOf for Closure {
             .scope()?
             .try_read()
             .map_err(|_| SemanticError::ConcurrencyError)?
-            .vars()
+            .for_closure_vars()?
         {
-            scope_params_size += arw_read!(v, SemanticError::ConcurrencyError)?
-                .type_sig
-                .size_of();
+            let var = arw_read!(v, SemanticError::ConcurrencyError)?;
+            if var.state == VarState::Parameter {
+                scope_params_size += var.type_sig.size_of();
+            }
         }
         StaticType::build_closure(
             &params_types,
