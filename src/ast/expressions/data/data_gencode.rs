@@ -1544,7 +1544,6 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        dbg!(&statement);
 
         let data = compile_statement!(statement);
 

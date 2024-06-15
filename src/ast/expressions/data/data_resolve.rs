@@ -1264,7 +1264,6 @@ mod tests {
         let mut map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        dbg!(&map);
         let scope = Scope::new();
         let res = map.resolve(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);

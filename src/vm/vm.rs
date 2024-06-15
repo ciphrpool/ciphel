@@ -447,7 +447,6 @@ impl PlayerThreadsManager {
             tid,
             state: ThreadState::IDLE,
         });
-        dbg!(("spawn", tid));
         engine.spawn(tid);
         Ok(tid)
     }
@@ -474,7 +473,6 @@ impl PlayerThreadsManager {
             tid,
             state: ThreadState::IDLE,
         });
-        dbg!(("spawn with tid", tid));
         engine.spawn(tid);
         Ok(())
     }

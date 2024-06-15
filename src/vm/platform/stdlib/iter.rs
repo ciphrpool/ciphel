@@ -1,4 +1,3 @@
-
 use num_traits::ToBytes;
 
 use crate::{
@@ -9,8 +8,7 @@ use crate::{
             scope::Scope,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf,
-        TypeOf,
+        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{
@@ -429,8 +427,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let map_layout =
                     map_impl::map_layout(map_heap_address, *key_size, *value_size, heap)?;
                 let keys_ptr = map_layout.retrieve_vec_keys(heap)?;
-
-                dbg!(&keys_ptr);
 
                 let len = keys_ptr.len() as u64;
                 let cap = align(len as usize) as u64;

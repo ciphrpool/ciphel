@@ -70,12 +70,10 @@ impl SchedulerContext {
     }
 
     pub fn request_spawn(&mut self) -> Result<Tid, RuntimeError> {
-        dbg!("request Spawn");
         let mut tid = None;
         for i in 0..MAX_THREAD_COUNT {
             if !self.threads[i] && !self.spawned_tid[i] {
                 tid = Some(i);
-                dbg!(("spawning ", i));
                 self.spawned_tid[i] = true;
                 break;
             }
@@ -414,7 +412,6 @@ impl Scheduler {
             }
         }
         // spawn and close the needed thread
-        dbg!(&self.p1_context);
         for (tid, to_spawn) in self.p1_context.spawned_tid.iter().enumerate() {
             if *to_spawn {
                 let _ = runtime.spawn_with_tid(super::vm::Player::P1, tid, engine)?;

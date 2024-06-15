@@ -1833,7 +1833,6 @@ pub mod map_impl {
             let mut items_ptr = Vec::with_capacity(self.len as usize);
 
             for (idx, bucket) in bytes_buckets.chunks_exact(self.bucket_size).enumerate() {
-                dbg!((idx, &bucket[0..MAP_BUCKET_SIZE]));
                 for idx_top_hash in 0..MAP_BUCKET_SIZE {
                     if bucket[idx_top_hash] > TopHashValue::MIN as u8 {
                         items_ptr.push(
