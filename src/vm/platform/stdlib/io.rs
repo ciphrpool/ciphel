@@ -1,11 +1,10 @@
-
 use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{StaticType, StringType};
-use crate::semantic::{TypeOf};
+use crate::semantic::TypeOf;
 
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
@@ -413,7 +412,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::{statements::Statement, TryParse},
@@ -733,7 +731,9 @@ mod tests {
             in_buf: String::new(),
         };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -743,7 +743,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");

@@ -10,9 +10,9 @@ use crate::vm::casm::Casm;
 use crate::vm::platform::stdlib::{ERROR_VALUE, OK_VALUE};
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
-use crate::vm::scheduler::WaitingStatus;
+use crate::vm::scheduler::{SchedulerContext, WaitingStatus};
 use crate::vm::vm::{
-    CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid, MAX_THREAD_COUNT,
+    CasmMetadata, Executable, Runtime, RuntimeError, Signal, ThreadState, Tid, MAX_THREAD_COUNT,
 };
 use crate::{
     ast::expressions::Expression,
@@ -190,17 +190,11 @@ impl GenerateCode for ThreadFn {
 }
 
 pub fn sig_spawn(
-    requested_spawn_count: &mut usize,
-    availaible_tids: &mut Vec<Tid>,
-    spawned_tid: &mut Vec<Tid>,
+    context: &mut SchedulerContext,
     program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
-    let tid = *requested_spawn_count + 1;
-    if availaible_tids.len() < MAX_THREAD_COUNT {
-        *requested_spawn_count += 1;
-        availaible_tids.push(tid);
-        spawned_tid.push(tid);
+    if let Ok(tid) = context.request_spawn() {
         let _ = stack
             .push_with(&(tid as u64).to_le_bytes())
             .map_err(|e| e.into())?;
@@ -221,17 +215,12 @@ pub fn sig_spawn(
 }
 
 pub fn sig_close(
-    tid: &Tid,
-    availaible_tids: &mut Vec<Tid>,
-    closed_tid: &mut Vec<Tid>,
+    tid: Tid,
+    context: &mut SchedulerContext,
     program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
-    if availaible_tids.contains(&tid) {
-        let idx = availaible_tids.iter().position(|i| *i == *tid).unwrap();
-        availaible_tids.remove(idx);
-        closed_tid.push(*tid);
-
+    if context.request_close(tid).is_ok() {
         let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Ok(())
@@ -243,7 +232,7 @@ pub fn sig_close(
 
         let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
-        Err(RuntimeError::InvalidTID(*tid))
+        Err(RuntimeError::InvalidTID(tid))
     }
 }
 
@@ -254,21 +243,19 @@ pub fn sig_wait(state: &mut ThreadState, program: &mut CasmProgram) -> Result<()
 }
 
 pub fn sig_wake(
-    tid: &Tid,
-    availaible_tids: &mut Vec<Tid>,
-    wakingup_tid: &mut HashSet<Tid>,
+    tid: Tid,
+    context: &mut SchedulerContext,
     program: &mut CasmProgram,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
-    if availaible_tids.contains(tid) {
-        wakingup_tid.insert(*tid);
+    if context.request_wake(tid).is_ok() {
         let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
         program.incr();
         Ok(())
     } else {
         let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
         program.incr();
-        Err(RuntimeError::InvalidTID(*tid))
+        Err(RuntimeError::InvalidTID(tid))
     }
 }
 
@@ -285,14 +272,13 @@ pub fn sig_sleep(
 pub fn sig_join(
     own_tid: Tid,
     join_tid: Tid,
+    context: &mut SchedulerContext,
     state: &mut ThreadState,
-    waiting_list: &mut Vec<WaitingStatus>,
-    availaible_tids: &mut Vec<Tid>,
     program: &mut CasmProgram,
     stack: &mut Stack,
+    waiting_list: &mut Vec<WaitingStatus>,
 ) -> Result<(), RuntimeError> {
-    dbg!((own_tid, join_tid));
-    if availaible_tids.contains(&join_tid) {
+    if let Ok(true) = context.is_alive(join_tid) {
         let _ = state.to(ThreadState::WAITING)?;
         waiting_list.push(WaitingStatus::Join {
             join_tid: own_tid,
@@ -311,13 +297,12 @@ pub fn sig_join(
 }
 pub fn sig_exit(
     tid: Tid,
+    context: &mut SchedulerContext,
     state: &mut ThreadState,
-    closed_tid: &mut Vec<Tid>,
     waiting_list: &mut Vec<WaitingStatus>,
-    wakingup_tid: &mut HashSet<Tid>,
 ) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::COMPLETED);
-    closed_tid.push(tid);
+    context.request_close(tid)?;
     let idx_tid_list: Vec<(usize, usize)> = waiting_list
         .iter()
         .enumerate()
@@ -344,7 +329,7 @@ pub fn sig_exit(
 
     for (idx, tid) in idx_tid_list {
         waiting_list.remove(idx);
-        wakingup_tid.insert(tid);
+        context.request_wake(tid)?;
     }
 
     Err(RuntimeError::Signal(Signal::EXIT))
@@ -395,15 +380,24 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
 
 #[cfg(test)]
 mod tests {
-    use crate::{vm::vm::NoopGameEngine, Ciphel};
-
-    
+    use crate::{
+        vm::vm::{
+            DbgGameEngine, NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine,
+            MAX_THREAD_COUNT,
+        },
+        Ciphel,
+    };
 
     #[test]
     fn valid_spawn() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = ThreadTestGameEngine {
+            closed_thread: 0,
+            spawned_thread: 0,
+        };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -418,19 +412,25 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
-        assert!(tids.len() > 1);
+
+        let child_tid = engine.spawned_thread;
+        assert_eq!(child_tid, 1)
     }
 
     #[test]
     fn valid_close() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = ThreadTestGameEngine {
+            closed_thread: 0,
+            spawned_thread: 0,
+        };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -445,16 +445,13 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
-        assert!(tids.len() > 1);
-        let child_tid = tids
-            .into_iter()
-            .find(|id| *id != tid)
-            .expect("Child should have an id");
+
+        let child_tid = engine.spawned_thread;
+        assert_eq!(child_tid, 1);
 
         let child_src = r##"
         
@@ -468,7 +465,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(child_tid, child_src)
+            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -481,11 +478,12 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
 
+        let closed_tid = engine.closed_thread;
+        assert_eq!(closed_tid, 1);
         let src = r##"
             
             main();
@@ -493,18 +491,20 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
-        assert!(tids.len() == 1);
+        let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
+        assert_eq!(tids.len(), MAX_THREAD_COUNT - 1);
     }
 
     #[test]
     fn valid_sleep() {
         let mut engine = NoopGameEngine {};
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -517,7 +517,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -531,9 +531,14 @@ mod tests {
 
     #[test]
     fn valid_wait_wake() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = ThreadTestGameEngine {
+            closed_thread: 0,
+            spawned_thread: 0,
+        };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -548,15 +553,11 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
-        let tids = ciphel.available_tids();
-        let child_tid = tids
-            .into_iter()
-            .find(|id| *id != tid)
-            .expect("Child should have an id");
+        let child_tid = engine.spawned_thread;
 
         let child_src = r##"
         
@@ -565,7 +566,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(child_tid, child_src)
+            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
@@ -577,9 +578,14 @@ mod tests {
 
     #[test]
     fn valid_join() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = ThreadTestGameEngine {
+            closed_thread: 0,
+            spawned_thread: 0,
+        };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -594,22 +600,18 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
-        let tids = ciphel.available_tids();
-        let child_tid = tids
-            .into_iter()
-            .find(|id| *id != tid)
-            .expect("Child should have an id");
+        let child_tid = engine.spawned_thread;
 
         let child_src = r##"
         sleep(5);
         "##;
 
         ciphel
-            .compile(child_tid, child_src)
+            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
@@ -622,9 +624,11 @@ mod tests {
 
     #[test]
     fn valid_exit() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = StdoutTestGameEngine { out: String::new() };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -637,18 +641,25 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
-        assert!(tids.len() == 0);
+        let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
+        let output = engine.out;
+        assert!(tids.len() == MAX_THREAD_COUNT);
+        assert!(output.is_empty())
     }
 
     #[test]
     fn valid_join_exit() {
-        let mut engine = NoopGameEngine {};
+        let mut engine = ThreadTestGameEngine {
+            closed_thread: 0,
+            spawned_thread: 0,
+        };
         let mut ciphel = Ciphel::new();
-        let tid = ciphel.start().expect("starting should not fail");
+        let tid = ciphel
+            .start_arena(&mut engine)
+            .expect("starting should not fail");
 
         let src = r##"
         
@@ -663,16 +674,11 @@ mod tests {
         "##;
 
         ciphel
-            .compile(tid, src)
+            .compile(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
-        let tids = ciphel.available_tids();
-        let child_tid = tids
-            .into_iter()
-            .find(|id| *id != tid)
-            .expect("Child should have an id");
-
+        let child_tid = engine.spawned_thread;
         let child_src = r##"
         sleep(3);
         exit();
@@ -680,14 +686,14 @@ mod tests {
         "##;
 
         ciphel
-            .compile(child_tid, child_src)
+            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
-        let tids = ciphel.available_tids();
-        assert!(tids.len() == 1);
+        let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
+        assert_eq!(tids.len(), 3);
     }
 }

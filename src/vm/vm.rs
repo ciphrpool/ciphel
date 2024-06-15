@@ -8,6 +8,7 @@ use ulid::Ulid;
 use crate::semantic::{ArcMutex, ArcRwLock};
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
+use super::scheduler::WaitingStatus;
 use super::{
     allocator::{
         heap::{Heap, HeapError},
@@ -88,6 +89,9 @@ pub trait GameEngineStaticFn {
     fn stdin_scan(&mut self) -> Option<String>;
     fn stdin_request(&mut self);
     fn stdcasm_print(&mut self, content: String);
+
+    fn spawn(&mut self, tid: Tid) {}
+    fn close(&mut self, tid: Tid) {}
 }
 
 #[derive(Debug, Clone)]
@@ -183,6 +187,32 @@ impl GameEngineStaticFn for DbgGameEngine {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ThreadTestGameEngine {
+    pub spawned_thread: usize,
+    pub closed_thread: usize,
+}
+
+impl GameEngineStaticFn for ThreadTestGameEngine {
+    fn stdout_print(&mut self, content: String) {}
+    fn stdout_println(&mut self, content: String) {}
+
+    fn stderr_print(&mut self, content: String) {}
+
+    fn stdin_scan(&mut self) -> Option<String> {
+        None
+    }
+    fn stdin_request(&mut self) {}
+
+    fn stdcasm_print(&mut self, content: String) {}
+    fn close(&mut self, tid: Tid) {
+        self.closed_thread = tid;
+    }
+    fn spawn(&mut self, tid: Tid) {
+        self.spawned_thread = tid;
+    }
+}
+
 pub trait Executable<G: GameEngineStaticFn> {
     fn execute(
         &self,
@@ -225,6 +255,12 @@ pub trait NextItem {
 }
 
 pub const MAX_THREAD_COUNT: usize = 4;
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Player {
+    P1,
+    P2,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ThreadState {
@@ -337,16 +373,149 @@ pub struct Thread {
 
 #[derive(Debug, Clone)]
 pub struct Runtime {
-    pub tid_count: Arc<AtomicUsize>,
-    pub threads: Vec<Thread>,
+    pub p1_manager: PlayerThreadsManager,
+    pub p2_manager: PlayerThreadsManager,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlayerThreadsManager {
+    pub threads: [Option<Thread>; MAX_THREAD_COUNT],
+}
+
+const THREAD_INIT_VALUE_NONE: Option<Thread> = None;
+impl PlayerThreadsManager {
+    pub fn new() -> Self {
+        Self {
+            threads: [THREAD_INIT_VALUE_NONE; MAX_THREAD_COUNT],
+        }
+    }
+
+    pub fn info(&self) -> String {
+        let mut buf = String::new();
+
+        for thread in self.threads.iter() {
+            if let Some(Thread {
+                ref tid, ref state, ..
+            }) = thread
+            {
+                buf.push_str(&format!(" Tid {tid} = {:?},", state));
+            }
+        }
+        buf
+    }
+
+    pub fn all_noop(&self) -> bool {
+        let mut noop = true;
+        for thread in &self.threads {
+            if let Some(Thread { state, .. }) = thread {
+                if !state.is_noop() {
+                    noop = false
+                }
+            }
+        }
+        noop
+    }
+
+    pub fn thread_count(&self) -> usize {
+        self.threads.iter().filter(|t| t.is_some()).count()
+    }
+
+    pub fn alive(&self) -> [bool; MAX_THREAD_COUNT] {
+        let mut buff = [false; MAX_THREAD_COUNT];
+        for i in 0..MAX_THREAD_COUNT {
+            buff[i] = self.threads[i].is_some();
+        }
+        buff
+    }
+
+    pub fn spawn<G: GameEngineStaticFn>(&mut self, engine: &mut G) -> Result<usize, RuntimeError> {
+        if self.thread_count() >= MAX_THREAD_COUNT {
+            return Err(RuntimeError::TooManyThread);
+        }
+
+        let scope = Scope::new();
+        let program = CasmProgram::default();
+        let stack = Stack::new();
+        let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
+            return Err(RuntimeError::TooManyThread);
+        };
+
+        self.threads[tid].replace(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
+        dbg!(("spawn", tid));
+        engine.spawn(tid);
+        Ok(tid)
+    }
+
+    pub fn spawn_with_tid<G: GameEngineStaticFn>(
+        &mut self,
+        tid: Tid,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        if self.thread_count() >= MAX_THREAD_COUNT {
+            return Err(RuntimeError::TooManyThread);
+        }
+        if tid >= MAX_THREAD_COUNT {
+            return Err(RuntimeError::InvalidTID(tid));
+        }
+        let scope = Scope::new();
+        let program = CasmProgram::default();
+        let stack = Stack::new();
+
+        self.threads[tid].replace(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
+        dbg!(("spawn with tid", tid));
+        engine.spawn(tid);
+        Ok(())
+    }
+
+    pub fn close<G: GameEngineStaticFn>(
+        &mut self,
+        tid: Tid,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        if tid >= MAX_THREAD_COUNT || self.threads[tid].is_none() {
+            return Err(RuntimeError::InvalidTID(tid));
+        }
+
+        let _ = self.threads[tid].take();
+        engine.close(tid);
+        Ok(())
+    }
+
+    pub fn spawn_with_scope(&mut self, scope: ArcRwLock<Scope>) -> Result<usize, RuntimeError> {
+        let program = CasmProgram::default();
+        let stack = Stack::new();
+        let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
+            return Err(RuntimeError::TooManyThread);
+        };
+        self.threads[tid].replace(Thread {
+            scope,
+            stack,
+            program,
+            tid,
+            state: ThreadState::IDLE,
+        });
+        Ok(tid)
+    }
 }
 
 impl Runtime {
     pub fn new() -> (Self, Heap, StdIO) {
         (
             Self {
-                tid_count: Default::default(),
-                threads: Vec::with_capacity(MAX_THREAD_COUNT),
+                p1_manager: PlayerThreadsManager::new(),
+                p2_manager: PlayerThreadsManager::new(),
             },
             Heap::new(),
             StdIO::default(),
@@ -354,92 +523,60 @@ impl Runtime {
     }
 
     pub fn tid_info(&self) -> String {
-        let info = {
-            let mut buf = String::new();
-            for Thread {
-                ref tid, ref state, ..
-            } in self.threads.iter()
-            {
-                buf.push_str(&format!(" Tid {tid} = {:?},", state));
-            }
-            buf
-        };
-        info
+        let mut buf = String::new();
+        buf.push_str(&self.p1_manager.info());
+        buf.push_str(&self.p2_manager.info());
+        buf
     }
 
-    pub fn all_noop(&self) -> bool {
-        let mut noop = true;
-        for thread in &self.threads {
-            if !thread.state.is_noop() {
-                noop = false
-            }
-        }
-        noop
-    }
-
-    pub fn spawn(&mut self) -> Result<Tid, RuntimeError> {
-        if self.threads.len() >= MAX_THREAD_COUNT {
-            return Err(RuntimeError::TooManyThread);
-        }
-        let scope = Scope::new();
-        let program = CasmProgram::default();
-        let stack = Stack::new();
-        let tid = self.tid_count.as_ref().load(Ordering::Acquire) + 1;
-        self.tid_count.as_ref().store(tid, Ordering::Release);
-        self.threads.push(Thread {
-            scope,
-            stack,
-            program,
-            tid,
-            state: ThreadState::IDLE,
-        });
-        Ok(tid)
-    }
-
-    pub fn spawn_with_tid(&mut self, tid: Tid) -> Result<(), RuntimeError> {
-        if self.threads.len() >= MAX_THREAD_COUNT {
-            return Err(RuntimeError::TooManyThread);
-        }
-        let scope = Scope::new();
-        let program = CasmProgram::default();
-        let stack = Stack::new();
-        self.tid_count.as_ref().store(tid + 1, Ordering::Release);
-        self.threads.push(Thread {
-            scope,
-            stack,
-            program,
-            tid,
-            state: ThreadState::IDLE,
-        });
-        Ok(())
-    }
-    pub fn close(&mut self, tid: Tid) -> Result<(), RuntimeError> {
-        let idx = self.threads.iter().position(|t| t.tid == tid);
-        if let Some(idx) = idx {
-            let _ = self.threads.remove(idx);
-            Ok(())
-        } else {
-            Err(RuntimeError::InvalidTID(tid))
+    pub fn spawn<G: GameEngineStaticFn>(
+        &mut self,
+        player: Player,
+        engine: &mut G,
+    ) -> Result<Tid, RuntimeError> {
+        match player {
+            Player::P1 => self.p1_manager.spawn(engine),
+            Player::P2 => self.p2_manager.spawn(engine),
         }
     }
 
-    pub fn spawn_with_scope(&mut self, scope: ArcRwLock<Scope>) -> Result<usize, RuntimeError> {
-        let program = CasmProgram::default();
-        let stack = Stack::new();
-        let tid = self.tid_count.as_ref().load(Ordering::Acquire) + 1;
-        self.tid_count.as_ref().store(tid, Ordering::Release);
-        self.threads.push(Thread {
-            scope,
-            stack,
-            program,
-            tid,
-            state: ThreadState::IDLE,
-        });
-        Ok(tid)
+    pub fn spawn_with_tid<G: GameEngineStaticFn>(
+        &mut self,
+        player: Player,
+        tid: Tid,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        match player {
+            Player::P1 => self.p1_manager.spawn_with_tid(tid, engine),
+            Player::P2 => self.p2_manager.spawn_with_tid(tid, engine),
+        }
+    }
+    pub fn close<G: GameEngineStaticFn>(
+        &mut self,
+        player: Player,
+        tid: Tid,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        match player {
+            Player::P1 => self.p1_manager.close(tid, engine),
+            Player::P2 => self.p2_manager.close(tid, engine),
+        }
+    }
+
+    pub fn spawn_with_scope(
+        &mut self,
+        player: Player,
+        scope: ArcRwLock<Scope>,
+    ) -> Result<usize, RuntimeError> {
+        match player {
+            Player::P1 => self.p1_manager.spawn_with_scope(scope),
+            Player::P2 => self.p2_manager.spawn_with_scope(scope),
+        }
     }
 
     pub fn get_mut<'runtime>(
         &'runtime mut self,
+        player: Player,
         tid: Tid,
     ) -> Result<
         (
@@ -449,21 +586,33 @@ impl Runtime {
         ),
         RuntimeError,
     > {
-        self.threads
-            .iter_mut()
-            .find(|thread| thread.tid == tid)
-            .ok_or(RuntimeError::InvalidTID(tid))
-            .map(
-                |Thread {
-                     scope,
-                     stack,
-                     program,
-                     ..
-                 }| (scope, stack, program),
-            )
+        match player {
+            Player::P1 => {
+                if tid >= MAX_THREAD_COUNT {
+                    return Err(RuntimeError::InvalidTID(tid));
+                }
+                let Some(thread) = &mut self.p1_manager.threads[tid] else {
+                    return Err(RuntimeError::InvalidTID(tid));
+                };
+                Ok((&mut thread.scope, &mut thread.stack, &mut thread.program))
+            }
+            Player::P2 => {
+                if tid >= MAX_THREAD_COUNT {
+                    return Err(RuntimeError::InvalidTID(tid));
+                }
+                let Some(thread) = &mut self.p2_manager.threads[tid] else {
+                    return Err(RuntimeError::InvalidTID(tid));
+                };
+                Ok((&mut thread.scope, &mut thread.stack, &mut thread.program))
+            }
+        }
     }
 
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Thread> {
-        self.threads.iter_mut()
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Option<&mut Thread>, Option<&mut Thread>)> {
+        let p1_iter = self.p1_manager.threads.iter_mut().map(|t| t.as_mut());
+
+        let p2_iter = self.p2_manager.threads.iter_mut().map(|t| t.as_mut());
+
+        std::iter::zip(p1_iter, p2_iter)
     }
 }

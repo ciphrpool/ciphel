@@ -19,11 +19,19 @@ mod math_operation;
 pub mod mem;
 pub mod operation;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransactionState {
+    OPEN,
+    CLOSE,
+    COMMITED,
+    REVERTED,
+}
+
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
     pub main: Vec<Casm>,
     pub statements_buffer: Vec<Statement>,
-    pub in_transaction: bool,
+    pub in_transaction: TransactionState,
     cursor: usize,
     pub labels: HashMap<Ulid, (usize, Box<str>)>,
     pub catch_stack: Vec<Ulid>,
@@ -37,7 +45,7 @@ impl Default for CasmProgram {
             labels: Default::default(),
             catch_stack: Default::default(),
             statements_buffer: Vec::default(),
-            in_transaction: false,
+            in_transaction: TransactionState::CLOSE,
         }
     }
 }
