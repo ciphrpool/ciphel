@@ -47,7 +47,6 @@ impl Ciphel {
         engine: &mut G,
     ) -> Result<usize, RuntimeError> {
         let main_tid = self.runtime.spawn(vm::vm::Player::P1, engine)?;
-        engine.spawn(main_tid);
         Ok(main_tid)
     }
 
@@ -111,7 +110,7 @@ impl Ciphel {
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
-
+        dbg!(program.in_transaction);
         if program.in_transaction == TransactionState::CLOSE {
             return Err(CompilationError::TransactionError);
         }
