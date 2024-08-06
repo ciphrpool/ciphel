@@ -226,11 +226,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
@@ -239,21 +239,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&OK_VALUE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&ERROR_VALUE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
             StdCasm::Error => {
-                let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+                let _ = stack.push_with(&ERROR_VALUE)?;
                 program.incr();
                 Ok(())
             }
             StdCasm::Ok => {
-                let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+                let _ = stack.push_with(&OK_VALUE)?;
                 program.incr();
                 Ok(())
             }

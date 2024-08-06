@@ -67,7 +67,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
     ) -> Result<(), RuntimeError> {
         match self {
             Data::Serialized { data } => {
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
             }
             Data::Dump { data } => program.incr(),

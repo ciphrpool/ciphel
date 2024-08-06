@@ -5,50 +5,81 @@ use crate::semantic::scope::scope::Scope;
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
+use thiserror::Error;
 pub mod scope;
 pub mod utils;
 
 pub type ArcMutex<T> = Arc<Mutex<T>>;
 pub type ArcRwLock<T> = Arc<RwLock<T>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum SemanticError {
+    #[error("NotResolvedYet")]
     NotResolvedYet,
+    #[error("PlatformAPIOverriding")]
     PlatformAPIOverriding,
 
+    #[error("CantReturn")]
     CantReturn,
+    #[error("CantInferType")]
     CantInferType,
+    #[error("CantRegisterType")]
     CantRegisterType,
+    #[error("CantRegisterVar")]
     CantRegisterVar,
 
+    #[error("ExpectedBoolean")]
     ExpectedBoolean,
+    #[error("ExpectedIterable")]
     ExpectedIterable,
+    #[error("ExpectedIndexable")]
     ExpectedIndexable,
+    #[error("ExpectedCallable")]
     ExpectedCallable,
+    #[error("ExpectedEnum")]
     ExpectedEnum,
+    #[error("ExpectedStruct")]
     ExpectedStruct,
+    #[error("ExpectedLoop")]
     ExpectedLoop,
+    #[error("ExpectedMovedClosure")]
     ExpectedMovedClosure,
+    #[error("ExpectedClosure")]
     ExpectedClosure,
+    #[error("ExpectedLeftExpression")]
     ExpectedLeftExpression,
 
+    #[error("UnknownVar")]
     UnknownVar(ID),
+    #[error("UnknownType")]
     UnknownType(ID),
+    #[error("UnknownField")]
     UnknownField,
 
+    #[error("DoubleInfinitRange")]
     DoubleInfinitRange,
 
+    #[error("IncorrectArguments")]
     IncorrectArguments,
+    #[error("IncorrectStruct")]
     IncorrectStruct,
+    #[error("IncorrectVariant")]
     IncorrectVariant,
+    #[error("InvalidPattern")]
     InvalidPattern,
+    #[error("InvalidRange")]
     InvalidRange,
 
+    #[error("IncompatibleTypes")]
     IncompatibleTypes,
+    #[error("IncompatibleOperation")]
     IncompatibleOperation,
+    #[error("IncompatibleOperands")]
     IncompatibleOperands,
 
+    #[error("ConcurrencyError")]
     ConcurrencyError,
+    #[error("Default")]
     Default,
 }
 

@@ -14,12 +14,24 @@ pub mod ast;
 pub mod semantic;
 pub mod vm;
 
-#[derive(Debug, Clone)]
+pub type CiphelResult<T> = Option<T>;
+
+use thiserror::Error;
+
+#[derive(Debug, Clone,Error)]
 pub enum CompilationError {
+    #[error("Parsing Error")]
     ParsingError(),
-    SemanticError(SemanticError),
-    CodeGen(CodeGenerationError),
+
+    #[error("Semantic Error : {0}")]
+    SemanticError(#[from] SemanticError),
+
+    #[error("Code Generation Error : {0}")]
+    CodeGen(#[from] CodeGenerationError),
+
+    #[error("Invalid thread id : {0}")]
     InvalidTID(usize),
+    #[error("Transaction Error")]
     TransactionError,
 }
 

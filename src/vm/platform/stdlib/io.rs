@@ -232,22 +232,22 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                    let address = heap.alloc(alloc_size as usize)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                     let data = content.as_bytes();
                     /* Write len */
-                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address, &len_bytes)?;
                     /* Write capacity */
-                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 8, &cap_bytes)?;
                     /* Write slice */
                     let _ = heap
                         .write(address + 16, &data.to_vec())
-                        .map_err(|e| e.into())?;
+                        ?;
 
                     let _ = stack
                         .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                        ?;
                     program.incr();
                     Ok(())
                 } else {

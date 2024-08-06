@@ -82,46 +82,46 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
         match self {
             Mem::CloneFromSmartPointer(size) => {
                 let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let data = heap.read(heap_address as usize, 8).map_err(|e| e.into())?;
+                let data = heap.read(heap_address as usize, 8)?;
                 let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let length = u64::from_le_bytes(*data);
 
                 let data = heap
                     .read(heap_address as usize + 16, size * length as usize)
-                    .map_err(|e| e.into())?;
+                    ?;
 
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 let _ = stack
                     .push_with(&length.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             Mem::TakeToHeap { size } => {
                 let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let data = stack.pop(*size).map_err(|e| e.into())?;
+                let data = stack.pop(*size)?;
                 let _ = heap
                     .write(heap_address as usize, &data.to_vec())
-                    .map_err(|e| e.into())?;
+                    ?;
                 let _ = stack
                     .push_with(&heap_address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             Mem::Take { size } => {
                 let address = OpPrimitive::get_num8::<u64>(stack)?;
                 if address < STACK_SIZE as u64 {
-                    let data = stack.pop(*size).map_err(|e| e.into())?.to_owned();
+                    let data = stack.pop(*size)?.to_owned();
                     let _ = stack
                         .write(Offset::SB(address as usize), AccessLevel::General, &data)
-                        .map_err(|e| e.into())?;
+                        ?;
                 } else {
-                    let data = stack.pop(*size).map_err(|e| e.into())?;
+                    let data = stack.pop(*size)?;
                     let _ = heap
                         .write(address as usize, &data.to_vec())
-                        .map_err(|e| e.into())?;
+                        ?;
                     let _ = stack
                         .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                        ?;
                 }
             }
             Mem::TakeUTF8Char => {
@@ -134,33 +134,33 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                             AccessLevel::General,
                             &value.to_string().as_bytes(),
                         )
-                        .map_err(|e| e.into())?;
+                        ?;
                 } else {
                     let _ = heap
                         .write(address as usize, &value.to_string().as_bytes().to_vec())
-                        .map_err(|e| e.into())?;
+                        ?;
                     let _ = stack
                         .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                        ?;
                 }
             }
             Mem::TakeToStack { size } => {
                 let stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let data = stack.pop(*size).map_err(|e| e.into())?.to_owned();
+                let data = stack.pop(*size)?.to_owned();
                 let _ = stack
                     .write(
                         Offset::SB(stack_address as usize),
                         AccessLevel::General,
                         &data,
                     )
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             Mem::Dup(size) => {
                 let data = stack
                     .read(Offset::ST(-(*size as isize)), AccessLevel::Direct, *size)
-                    .map_err(|e| e.into())?
+                    ?
                     .to_owned();
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
             }
             Mem::SetReg(reg, opt_offset) => match opt_offset {
                 Some(offset) => {
@@ -173,20 +173,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
             },
             Mem::GetReg(reg) => {
                 let idx = stack.get_reg(*reg);
-                let _ = stack.push_with(&idx.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&idx.to_le_bytes())?;
             }
             Mem::AddReg(reg, opt_offset) => match opt_offset {
-                Some(offset) => stack.reg_add(*reg, *offset).map_err(|e| e.into())?,
+                Some(offset) => stack.reg_add(*reg, *offset)?,
                 None => {
                     let offset = OpPrimitive::get_num8::<u64>(stack)?;
-                    stack.reg_add(*reg, offset).map_err(|e| e.into())?;
+                    stack.reg_add(*reg, offset)?;
                 }
             },
             Mem::SubReg(reg, opt_offset) => match opt_offset {
-                Some(offset) => stack.reg_sub(*reg, *offset).map_err(|e| e.into())?,
+                Some(offset) => stack.reg_sub(*reg, *offset)?,
                 None => {
                     let offset = OpPrimitive::get_num8::<u64>(stack)?;
-                    stack.reg_sub(*reg, offset).map_err(|e| e.into())?;
+                    stack.reg_sub(*reg, offset)?;
                 }
             },
             Mem::LabelOffset(label) => {
@@ -194,12 +194,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                     return Err(RuntimeError::CodeSegmentation);
                 };
                 let idx = idx as u64;
-                let _ = stack.push_with(&idx.to_le_bytes()).map_err(|e| e.into())?;
+                let _ = stack.push_with(&idx.to_le_bytes())?;
             }
             Mem::DumpRegisters => {
                 for reg in [UReg::R1, UReg::R2, UReg::R3, UReg::R4] {
                     let idx = stack.get_reg(reg);
-                    let _ = stack.push_with(&idx.to_le_bytes()).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&idx.to_le_bytes())?;
                 }
             }
             Mem::RecoverRegisters => {
@@ -231,25 +231,25 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                 let from_data = match from_address {
                     MemoryAddress::Heap { offset } => {
                         // let address = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                        let bytes = heap.read(offset, size).map_err(|err| err.into())?;
+                        let bytes = heap.read(offset, size)?;
                         bytes
                     }
                     MemoryAddress::Stack { offset, level } => {
                         if let Offset::FE(stack_idx, heap_udx) = offset {
                             let heap_address = stack
                                 .read(Offset::FP(stack_idx), level, 8)
-                                .map_err(|err| err.into())?;
+                                ?;
                             let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let heap_address = u64::from_le_bytes(*data);
 
                             let bytes = heap
                                 .read(heap_address as usize + heap_udx, size)
-                                .map_err(|err| err.into())?;
+                                ?;
                             bytes
                         } else {
                             let bytes =
-                                stack.read(offset, level, size).map_err(|err| err.into())?;
+                                stack.read(offset, level, size)?;
                             bytes.to_vec()
                         }
                     }
@@ -261,11 +261,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                             AccessLevel::General,
                             &from_data,
                         )
-                        .map_err(|e| e.into())?;
+                        ?;
                 } else {
                     let _ = heap
                         .write(to_address as usize, &from_data)
-                        .map_err(|e| e.into())?;
+                        ?;
                 }
             }
         };

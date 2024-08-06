@@ -324,7 +324,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                         AccessLevel::Direct,
                         8,
                     )
-                    .map_err(|err| err.into())?;
+                    ?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -346,21 +346,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
                 let _ = heap
                     .write(address + 16, &items_data)
-                    .map_err(|e| e.into())?;
+                    ?;
 
                 let _ = stack
                     .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             IterCasm::MapValues {
                 key_size,
@@ -373,7 +373,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                         AccessLevel::Direct,
                         8,
                     )
-                    .map_err(|err| err.into())?;
+                    ?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -393,21 +393,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
                 let _ = heap
                     .write(address + 16, &values_data)
-                    .map_err(|e| e.into())?;
+                    ?;
 
                 let _ = stack
                     .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             IterCasm::MapKeys {
                 key_size,
@@ -420,7 +420,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                         AccessLevel::Direct,
                         8,
                     )
-                    .map_err(|err| err.into())?;
+                    ?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -440,19 +440,19 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
 
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap.write(address + 16, &keys_data).map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &keys_data)?;
 
                 let _ = stack
                     .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
         }
         program.incr();

@@ -53,16 +53,16 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
                         size as usize
                     }
                 };
-                let address = heap.alloc(size).map_err(|e| e.into())?;
+                let address = heap.alloc(size)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = (address as u64).to_le_bytes().to_vec();
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
             Alloc::Stack { size } => {
-                let _ = stack.push(*size).map_err(|e| e.into())?;
+                let _ = stack.push(*size)?;
                 program.incr();
                 Ok(())
             }
@@ -102,11 +102,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
         let heap_address = OpPrimitive::get_num8::<u64>(stack)? - 8;
         let address = heap
             .realloc(heap_address as usize, size)
-            .map_err(|e| e.into())?;
+            ?;
         let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
         let data = (address as u64).to_le_bytes().to_vec();
-        let _ = stack.push_with(&data).map_err(|e| e.into())?;
+        let _ = stack.push_with(&data)?;
         program.incr();
         Ok(())
     }
@@ -132,7 +132,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
         if address < STACK_SIZE as u64 {
             return Err(RuntimeError::CodeSegmentation);
         } else {
-            heap.free(address as usize).map_err(|e| e.into())?;
+            heap.free(address as usize)?;
         }
         program.incr();
         Ok(())
@@ -192,10 +192,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
 
                 program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?; /* return flag set to BREAK */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_BREAK])?; /* return flag set to BREAK */
 
                 Ok(())
             }
@@ -205,37 +205,37 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
 
                 program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?; /* return flag set to CONTINUE */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_CONTINUE])?; /* return flag set to CONTINUE */
 
                 Ok(())
             }
             StackFrame::SoftClean => {
                 program.incr();
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_VOID])?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::Clean => {
                 program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_VOID]).map_err(|e| e.into())?; /* return flag set to false */
+                let _ = stack.push_with(&0u64.to_le_bytes())?;
+                let _ = stack.push_with(&[FLAG_VOID])?; /* return flag set to false */
                 Ok(())
             }
             StackFrame::OpenWindow => {
-                let _ = stack.open_window().map_err(|e| e.into())?;
+                let _ = stack.open_window()?;
                 program.incr();
                 Ok(())
             }
             StackFrame::CloseWindow => {
-                let _ = stack.open_window().map_err(|e| e.into())?;
+                let _ = stack.open_window()?;
                 program.incr();
                 Ok(())
             }
@@ -248,17 +248,17 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                         size as usize
                     }
                 };
-                let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
+                let return_data = stack.pop(return_size)?.to_owned();
 
                 program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                let _ = stack.clean().map_err(|e| e.into())?;
+                let _ = stack.clean()?;
 
-                let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&return_data)?;
                 let _ = stack
                     .push_with(&(return_size as u64).to_le_bytes())
-                    .map_err(|e| e.into())?;
-                let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?; /* return flag set to true */
+                    ?;
+                let _ = stack.push_with(&[FLAG_RETURN])?; /* return flag set to true */
 
                 Ok(())
             }
@@ -270,10 +270,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                         if !*is_direct_loop {
                             program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                            let _ = stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean()?;
 
-                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                            let _ = stack.push_with(&[FLAG_BREAK]).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&0u64.to_le_bytes())?;
+                            let _ = stack.push_with(&[FLAG_BREAK])?;
                         /* return flag set to BREAK */
                         } else {
                             let break_link = stack.get_reg(UReg::R4);
@@ -284,10 +284,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                         if !*is_direct_loop {
                             program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                            let _ = stack.clean().map_err(|e| e.into())?;
+                            let _ = stack.clean()?;
 
-                            let _ = stack.push_with(&0u64.to_le_bytes()).map_err(|e| e.into())?;
-                            let _ = stack.push_with(&[FLAG_CONTINUE]).map_err(|e| e.into())?;
+                            let _ = stack.push_with(&0u64.to_le_bytes())?;
+                            let _ = stack.push_with(&[FLAG_CONTINUE])?;
                         /* return flag set to CONTINUE */
                         } else {
                             let continue_link = stack.get_reg(UReg::R3);
@@ -296,17 +296,17 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                         }
                     }
                     FLAG_RETURN => {
-                        let return_data = stack.pop(return_size).map_err(|e| e.into())?.to_owned();
+                        let return_data = stack.pop(return_size)?.to_owned();
 
                         program.cursor = stack.registers.link.as_ref().load(Ordering::Acquire);
 
-                        let _ = stack.clean().map_err(|e| e.into())?;
+                        let _ = stack.clean()?;
 
-                        let _ = stack.push_with(&return_data).map_err(|e| e.into())?;
+                        let _ = stack.push_with(&return_data)?;
                         let _ = stack
                             .push_with(&(return_size as u64).to_le_bytes())
-                            .map_err(|e| e.into())?;
-                        let _ = stack.push_with(&[FLAG_RETURN]).map_err(|e| e.into())?;
+                            ?;
+                        let _ = stack.push_with(&[FLAG_RETURN])?;
                         /* return flag set to true */
                     }
                     FLAG_VOID => {
@@ -405,12 +405,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 
                 let data = match self {
                     Access::RuntimeCharUTF8 => {
-                        let (bytes, _) = heap.read_utf8(offset, 0, 1).map_err(|err| err.into())?;
+                        let (bytes, _) = heap.read_utf8(offset, 0, 1)?;
 
                         bytes.to_vec()
                     }
                     Access::RuntimeCharUTF8AtIdx { .. } => {
-                        let len_bytes = heap.read(offset, 8).map_err(|e| e.into())?;
+                        let len_bytes = heap.read(offset, 8)?;
                         let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes) as usize;
@@ -419,17 +419,17 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         }
                         let (bytes, _) = heap
                             .read_utf8(offset + 16, index.unwrap_or(0) as usize, len)
-                            .map_err(|err| err.into())?;
+                            ?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = heap.read(offset, size).map_err(|err| err.into())?;
+                        let bytes = heap.read(offset, size)?;
                         bytes
                     }
                 };
 
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
@@ -437,7 +437,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                 if let Offset::FE(stack_idx, heap_udx) = offset {
                     let heap_address = stack
                         .read(Offset::FP(stack_idx), level, 8)
-                        .map_err(|err| err.into())?;
+                        ?;
                     let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
@@ -446,14 +446,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         Access::RuntimeCharUTF8 => {
                             let (bytes, _) = heap
                                 .read_utf8(heap_address as usize + heap_udx, 0, 1)
-                                .map_err(|err| err.into())?;
+                                ?;
 
                             bytes.to_vec()
                         }
                         Access::RuntimeCharUTF8AtIdx { .. } => {
                             let len_bytes = heap
                                 .read(heap_address as usize + heap_udx, 8)
-                                .map_err(|e| e.into())?;
+                                ?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes) as usize;
@@ -466,19 +466,19 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                                     index.unwrap_or(0) as usize,
                                     len,
                                 )
-                                .map_err(|err| err.into())?;
+                                ?;
 
                             bytes.to_vec()
                         }
                         _ => {
                             let bytes = heap
                                 .read(heap_address as usize + heap_udx, size)
-                                .map_err(|err| err.into())?;
+                                ?;
                             bytes
                         }
                     };
 
-                    let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                    let _ = stack.push_with(&data)?;
                     program.incr();
                     return Ok(());
                 }
@@ -487,7 +487,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                     Access::RuntimeCharUTF8 => {
                         let (bytes, _) = stack
                             .read_utf8(offset, level, 0, 1)
-                            .map_err(|err| err.into())?;
+                            ?;
 
                         bytes.to_vec()
                     }
@@ -500,18 +500,18 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         }
                         let (bytes, _) = stack
                             .read_utf8(offset, level, index.unwrap_or(0) as usize, *len)
-                            .map_err(|err| err.into())?;
+                            ?;
 
                         bytes.to_vec()
                     }
                     _ => {
-                        let bytes = stack.read(offset, level, size).map_err(|err| err.into())?;
+                        let bytes = stack.read(offset, level, size)?;
                         bytes.to_vec()
                     }
                 };
                 // dbg!(&data);
                 // Copy data onto stack;
-                let _ = stack.push_with(&data).map_err(|e| e.into())?;
+                let _ = stack.push_with(&data)?;
                 program.incr();
                 Ok(())
             }
@@ -552,12 +552,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
                 let item_addr = (address as u64 + index * self.item_size as u64) as u64;
                 let _ = stack
                     .push_with(&item_addr.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             } else {
                 return Err(RuntimeError::CodeSegmentation);
             }
         } else {
-            let len_bytes = heap.read(address as usize, 8).map_err(|e| e.into())?;
+            let len_bytes = heap.read(address as usize, 8)?;
             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                 .map_err(|_| RuntimeError::Deserialization)?;
             let len = u64::from_le_bytes(*len_bytes);
@@ -567,7 +567,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
             let item_addr = (address as u64 + 16 + index * self.item_size as u64) as u64;
             let _ = stack
                 .push_with(&item_addr.to_le_bytes())
-                .map_err(|e| e.into())?;
+                ?;
         }
 
         program.incr();

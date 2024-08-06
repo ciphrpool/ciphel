@@ -162,7 +162,7 @@ impl OpPrimitive {
     //     let data = memory
     //         .stack
     //         .pop(PrimitiveType::Float.size_of())
-    //         .map_err(|e| e.into())?;
+    //         ?;
 
     //     let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
     //         .map_err(|_| RuntimeError::Deserialization)?;
@@ -193,31 +193,31 @@ impl OpPrimitive {
     pub fn get_num16<N: FromBytes<Bytes = [u8; 16]>>(
         memory: &mut Stack,
     ) -> Result<N, RuntimeError> {
-        let data = memory.pop(16).map_err(|e| e.into())?;
+        let data = memory.pop(16)?;
         let data =
             TryInto::<&[u8; 16]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num8<N: FromBytes<Bytes = [u8; 8]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(8).map_err(|e| e.into())?;
+        let data = memory.pop(8)?;
         let data =
             TryInto::<&[u8; 8]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num4<N: FromBytes<Bytes = [u8; 4]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(4).map_err(|e| e.into())?;
+        let data = memory.pop(4)?;
         let data =
             TryInto::<&[u8; 4]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num2<N: FromBytes<Bytes = [u8; 2]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(2).map_err(|e| e.into())?;
+        let data = memory.pop(2)?;
         let data =
             TryInto::<&[u8; 2]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
     }
     pub fn get_num1<N: FromBytes<Bytes = [u8; 1]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(1).map_err(|e| e.into())?;
+        let data = memory.pop(1)?;
         let data =
             TryInto::<&[u8; 1]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(N::from_le_bytes(data))
@@ -226,14 +226,14 @@ impl OpPrimitive {
     pub fn get_bool(memory: &mut Stack) -> Result<bool, RuntimeError> {
         let data = memory
             .pop(PrimitiveType::Bool.size_of())
-            .map_err(|e| e.into())?;
+            ?;
 
         Ok(data.first().map_or(false, |byte| *byte != 0))
     }
     pub fn get_char(memory: &mut Stack) -> Result<char, RuntimeError> {
         let data = memory
             .pop(PrimitiveType::Char.size_of())
-            .map_err(|e| e.into())?;
+            ?;
         let data =
             TryInto::<&[u8; 4]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
 
@@ -246,7 +246,7 @@ impl OpPrimitive {
     }
     pub fn get_str_slice(memory: &mut Stack) -> Result<String, RuntimeError> {
         let len = OpPrimitive::get_num8::<u64>(memory)? as usize;
-        let data = memory.pop(len).map_err(|e| e.into())?;
+        let data = memory.pop(len)?;
         let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(data.to_string())
     }
@@ -303,18 +303,18 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
             OperationKind::Align => {
                 let num = OpPrimitive::get_num8::<u64>(stack)?;
                 let aligned_num = align(num as usize) as u64;
-                stack
-                    .push_with(&aligned_num.to_le_bytes())
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&aligned_num.to_le_bytes())?)
+                    
             }
             OperationKind::CastCharToUTF8 => {
                 let chara = OpPrimitive::get_char(stack)?;
                 let chara = chara.to_string();
                 let chara = chara.as_bytes();
-                let _ = stack.push_with(chara).map_err(|e| e.into())?;
-                stack
-                    .push_with(&(chara.len() as u64).to_le_bytes())
-                    .map_err(|e| e.into())
+                let _ = stack.push_with(chara)?;
+                Ok(stack
+                    .push_with(&(chara.len() as u64).to_le_bytes())?)
+                    
             }
         }
     }
@@ -423,11 +423,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
 
                 stack
                     .push_with(str_bytes.as_slice())
-                    .map_err(|e| e.into())?;
+                    ?;
 
-                stack
-                    .push_with(&(str_bytes.len() as u64).to_le_bytes())
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&(str_bytes.len() as u64).to_le_bytes())?)
+                    
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -608,23 +608,23 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
                 let right = OpPrimitive::get_bool(stack)?;
                 let left = OpPrimitive::get_bool(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
                 let right = OpPrimitive::get_char(stack)?;
                 let left = OpPrimitive::get_char(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::String, OpPrimitive::String) => {
                 let right = OpPrimitive::get_str_slice(stack)?;
                 let left = OpPrimitive::get_str_slice(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -647,23 +647,23 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
                 let right = OpPrimitive::get_bool(stack)?;
                 let left = OpPrimitive::get_bool(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
                 let right = OpPrimitive::get_char(stack)?;
                 let left = OpPrimitive::get_char(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::String, OpPrimitive::String) => {
                 let right = OpPrimitive::get_str_slice(stack)?;
                 let left = OpPrimitive::get_str_slice(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -686,23 +686,23 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
                 let right = OpPrimitive::get_bool(stack)?;
                 let left = OpPrimitive::get_bool(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
                 let right = OpPrimitive::get_char(stack)?;
                 let left = OpPrimitive::get_char(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::String, OpPrimitive::String) => {
                 let right = OpPrimitive::get_str_slice(stack)?;
                 let left = OpPrimitive::get_str_slice(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -725,23 +725,23 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for GreaterEqual {
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
                 let right = OpPrimitive::get_bool(stack)?;
                 let left = OpPrimitive::get_bool(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
                 let right = OpPrimitive::get_char(stack)?;
                 let left = OpPrimitive::get_char(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             (OpPrimitive::String, OpPrimitive::String) => {
                 let right = OpPrimitive::get_str_slice(stack)?;
                 let left = OpPrimitive::get_str_slice(stack)?;
-                stack
-                    .push_with(&[(left < right) as u8])
-                    .map_err(|e| e.into())
+                Ok(stack
+                    .push_with(&[(left < right) as u8])?)
+                    
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -769,13 +769,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let data = {
-            let right_data = stack.pop(self.right).map_err(|e| e.into())?.to_owned();
+            let right_data = stack.pop(self.right)?.to_owned();
 
-            let left_data = stack.pop(self.left).map_err(|e| e.into())?;
+            let left_data = stack.pop(self.left)?;
 
             [(left_data == right_data) as u8]
         };
-        stack.push_with(&data).map_err(|e| e.into())
+        Ok(stack.push_with(&data)?)
     }
 }
 
@@ -789,13 +789,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let data = {
-            let right_data = stack.pop(self.right).map_err(|e| e.into())?.to_owned();
+            let right_data = stack.pop(self.right)?.to_owned();
 
-            let left_data = stack.pop(self.left).map_err(|e| e.into())?.to_owned();
+            let left_data = stack.pop(self.left)?.to_owned();
 
             [(left_data != right_data) as u8]
         };
-        stack.push_with(&data).map_err(|e| e.into())
+        Ok(stack.push_with(&data)?)
     }
 }
 
@@ -814,7 +814,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
         let right_data = OpPrimitive::get_bool(stack)?;
         let left_data = OpPrimitive::get_bool(stack)?;
         let data = [(left_data && right_data) as u8];
-        stack.push_with(&data).map_err(|e| e.into())
+        Ok(stack.push_with(&data)?)
     }
 }
 
@@ -833,7 +833,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalOr {
         let right_data = OpPrimitive::get_bool(stack)?;
         let left_data = OpPrimitive::get_bool(stack)?;
         let data = [(left_data || right_data) as u8];
-        stack.push_with(&data).map_err(|e| e.into())
+        Ok(stack.push_with(&data)?)
     }
 }
 
@@ -855,69 +855,69 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
             OpPrimitive::Number(number) => match number {
                 NumberType::U8 => {
                     let data = OpPrimitive::get_num1::<u8>(stack)? as i16;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::U16 => {
                     let data = OpPrimitive::get_num2::<u16>(stack)? as i32;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::U32 => {
                     let data = OpPrimitive::get_num4::<u32>(stack)? as i64;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::U64 => {
                     let data = OpPrimitive::get_num8::<u64>(stack)? as i128;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::U128 => {
                     let data = OpPrimitive::get_num16::<u128>(stack)? as i128;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::I8 => {
                     let data = OpPrimitive::get_num1::<i8>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::I16 => {
                     let data = OpPrimitive::get_num2::<i16>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::I32 => {
                     let data = OpPrimitive::get_num4::<i32>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::I64 => {
                     let data = OpPrimitive::get_num8::<i64>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::I128 => {
                     let data = OpPrimitive::get_num16::<i128>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
                 NumberType::F64 => {
                     let data = OpPrimitive::get_num8::<f64>(stack)?;
-                    stack
-                        .push_with(&(-data).to_le_bytes())
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&(-data).to_le_bytes())?)
+                        
                 }
             },
             OpPrimitive::Char => Err(RuntimeError::UnsupportedOperation),
@@ -941,7 +941,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Not {
     ) -> Result<(), RuntimeError> {
         let data = OpPrimitive::get_bool(stack)?;
         let data = [(!data) as u8];
-        stack.push_with(&data).map_err(|e| e.into())
+        Ok(stack.push_with(&data)?)
     }
 }
 
@@ -956,37 +956,37 @@ macro_rules! push_data_as_type {
         match $num_type {
             NumberType::U8 => $memory
                 .push_with(&($data as u8).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::U16 => $memory
                 .push_with(&($data as u16).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::U32 => $memory
                 .push_with(&($data as u32).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::U64 => $memory
                 .push_with(&($data as u64).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::U128 => $memory
                 .push_with(&($data as u128).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::I8 => $memory
                 .push_with(&($data as i8).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::I16 => $memory
                 .push_with(&($data as i16).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::I32 => $memory
                 .push_with(&($data as i32).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::I64 => $memory
                 .push_with(&($data as i64).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::I128 => $memory
                 .push_with(&($data as i128).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
             NumberType::F64 => $memory
                 .push_with(&($data as f64).to_le_bytes())
-                .map_err(|e| e.into()),
+                ,
         }
     };
 }
@@ -1004,95 +1004,95 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {
                 NumberType::U8 => {
                     let data = OpPrimitive::get_num1::<u8>(stack)?;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U16 => {
                     let data = OpPrimitive::get_num2::<u16>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U32 => {
                     let data = OpPrimitive::get_num4::<u32>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U64 => {
                     let data = OpPrimitive::get_num8::<u64>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U128 => {
                     let data = OpPrimitive::get_num16::<u128>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I8 => {
                     let data = OpPrimitive::get_num1::<i8>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I16 => {
                     let data = OpPrimitive::get_num2::<i16>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I32 => {
                     let data = OpPrimitive::get_num4::<i32>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I64 => {
                     let data = OpPrimitive::get_num8::<i64>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I128 => {
                     let data = OpPrimitive::get_num16::<i128>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::F64 => {
                     let data = OpPrimitive::get_num8::<f64>(stack)? as f64;
-                    push_data_as_type!(data, to, stack)
+                    Ok(push_data_as_type!(data, to, stack)?)
                 }
             },
             (OpPrimitive::Number(number), OpPrimitive::Bool) => match number {
                 NumberType::U8 => {
                     let data = OpPrimitive::get_num1::<u8>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U16 => {
                     let data = OpPrimitive::get_num2::<u16>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U32 => {
                     let data = OpPrimitive::get_num4::<u32>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U64 => {
                     let data = OpPrimitive::get_num8::<u64>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U128 => {
                     let data = OpPrimitive::get_num16::<u128>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I8 => {
                     let data = OpPrimitive::get_num1::<i8>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I16 => {
                     let data = OpPrimitive::get_num2::<i16>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I32 => {
                     let data = OpPrimitive::get_num4::<i32>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I64 => {
                     let data = OpPrimitive::get_num8::<i64>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I128 => {
                     let data = OpPrimitive::get_num16::<i128>(stack)?;
-                    stack.push_with(&[(data != 0) as u8]).map_err(|e| e.into())
+                    Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::F64 => {
                     let data = OpPrimitive::get_num8::<f64>(stack)?;
-                    stack
-                        .push_with(&[(data == 0.0) as u8])
-                        .map_err(|e| e.into())
+                    Ok(stack
+                        .push_with(&[(data == 0.0) as u8])?)
+                        
                 }
             },
             (OpPrimitive::Number(NumberType::U8), OpPrimitive::Char) => Ok(()),
@@ -1103,37 +1103,37 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
             (OpPrimitive::Bool, OpPrimitive::Number(number)) => {
                 let data = OpPrimitive::get_num1::<u8>(stack)? as u8;
                 match number {
-                    NumberType::U8 => stack.push_with(&data.to_le_bytes()).map_err(|e| e.into()),
-                    NumberType::U16 => stack
-                        .push_with(&(data as u16).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U32 => stack
-                        .push_with(&(data as u32).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U64 => stack
-                        .push_with(&(data as u64).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U128 => stack
-                        .push_with(&(data as u128).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::I8 => stack
-                        .push_with(&(data as i8).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::I16 => stack
-                        .push_with(&(data as i16).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::I32 => stack
-                        .push_with(&(data as i32).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::I64 => stack
-                        .push_with(&(data as i64).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::I128 => stack
-                        .push_with(&(data as i128).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::F64 => stack
-                        .push_with(&(data as f64).to_le_bytes())
-                        .map_err(|e| e.into()),
+                    NumberType::U8 => Ok(stack.push_with(&data.to_le_bytes())?),
+                    NumberType::U16 => Ok(stack
+                        .push_with(&(data as u16).to_le_bytes())?)
+                        ,
+                    NumberType::U32 => Ok(stack
+                        .push_with(&(data as u32).to_le_bytes())?)
+                        ,
+                    NumberType::U64 => Ok(stack
+                        .push_with(&(data as u64).to_le_bytes())?)
+                        ,
+                    NumberType::U128 => Ok(stack
+                        .push_with(&(data as u128).to_le_bytes())?)
+                        ,
+                    NumberType::I8 => Ok(stack
+                        .push_with(&(data as i8).to_le_bytes())?)
+                        ,
+                    NumberType::I16 => Ok(stack
+                        .push_with(&(data as i16).to_le_bytes())?)
+                        ,
+                    NumberType::I32 => Ok(stack
+                        .push_with(&(data as i32).to_le_bytes())?)
+                        ,
+                    NumberType::I64 => Ok(stack
+                        .push_with(&(data as i64).to_le_bytes())?)
+                        ,
+                    NumberType::I128 => Ok(stack
+                        .push_with(&(data as i128).to_le_bytes())?)
+                        ,
+                    NumberType::F64 => Ok(stack
+                        .push_with(&(data as f64).to_le_bytes())?)
+                        ,
                 }
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => Ok(()),
@@ -1142,21 +1142,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
             (OpPrimitive::Char, OpPrimitive::Number(number)) => {
                 let data = OpPrimitive::get_num4::<u32>(stack)?;
                 match number {
-                    NumberType::U8 => stack
-                        .push_with(&(data as u8).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U16 => stack
-                        .push_with(&(data as u16).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U32 => stack
-                        .push_with(&(data as u32).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U64 => stack
-                        .push_with(&(data as u64).to_le_bytes())
-                        .map_err(|e| e.into()),
-                    NumberType::U128 => stack
-                        .push_with(&(data as u128).to_le_bytes())
-                        .map_err(|e| e.into()),
+                    NumberType::U8 => Ok(stack
+                        .push_with(&(data as u8).to_le_bytes())?)
+                        ,
+                    NumberType::U16 => Ok(stack
+                        .push_with(&(data as u16).to_le_bytes())?)
+                        ,
+                    NumberType::U32 => Ok(stack
+                        .push_with(&(data as u32).to_le_bytes())?)
+                        ,
+                    NumberType::U64 => Ok(stack
+                        .push_with(&(data as u64).to_le_bytes())?)
+                        ,
+                    NumberType::U128 => Ok(stack
+                        .push_with(&(data as u128).to_le_bytes())?)
+                        ,
                     _ => Err(RuntimeError::UnsupportedOperation),
                 }
             }
@@ -1181,7 +1181,7 @@ mod tests {
 
     fn init_float(num: f64, memory: &mut Stack) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
@@ -1190,7 +1190,7 @@ mod tests {
         memory: &mut Stack,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
@@ -1199,7 +1199,7 @@ mod tests {
         memory: &mut Stack,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
@@ -1208,7 +1208,7 @@ mod tests {
         memory: &mut Stack,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
@@ -1217,7 +1217,7 @@ mod tests {
         memory: &mut Stack,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
@@ -1226,24 +1226,24 @@ mod tests {
         memory: &mut Stack,
     ) -> Result<(), RuntimeError> {
         let data = num.to_le_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
     fn init_char(memory: &mut Stack) -> Result<(), RuntimeError> {
         let data = vec!['a' as u8];
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
     fn init_bool(state: bool, memory: &mut Stack) -> Result<(), RuntimeError> {
         let data = vec![state as u8];
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 
     fn init_string(text: &str, memory: &mut Stack) -> Result<(), RuntimeError> {
         let data = text.as_bytes().to_vec();
-        let _ = memory.push_with(&data).map_err(|e| e.into())?;
+        let _ = memory.push_with(&data)?;
         Ok(())
     }
 

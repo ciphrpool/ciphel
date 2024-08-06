@@ -197,18 +197,18 @@ pub fn sig_spawn(
     if let Ok(tid) = context.request_spawn() {
         let _ = stack
             .push_with(&(tid as u64).to_le_bytes())
-            .map_err(|e| e.into())?;
+            ?;
 
-        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE)?;
         program.incr();
         Ok(())
     } else {
         // Error TooManyThread
         let _ = stack
             .push_with(&(0u64).to_le_bytes())
-            .map_err(|e| e.into())?;
+            ?;
 
-        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();
         Err(RuntimeError::TooManyThread)
     }
@@ -221,16 +221,16 @@ pub fn sig_close(
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_close(tid).is_ok() {
-        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE)?;
         program.incr();
         Ok(())
     } else {
         // Error InvalidTID
         let _ = stack
             .push_with(&(0u64).to_le_bytes())
-            .map_err(|e| e.into())?;
+            ?;
 
-        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(tid))
     }
@@ -249,11 +249,11 @@ pub fn sig_wake(
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_wake(tid).is_ok() {
-        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE)?;
         program.incr();
         Ok(())
     } else {
-        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(tid))
     }
@@ -284,13 +284,13 @@ pub fn sig_join(
             join_tid: own_tid,
             to_be_completed_tid: join_tid,
         });
-        let _ = stack.push_with(&[true as u8]).map_err(|e| e.into())?;
+        let _ = stack.push_with(&[true as u8])?;
 
-        let _ = stack.push_with(&OK_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&OK_VALUE)?;
         program.incr();
         Err(RuntimeError::Signal(Signal::JOIN(join_tid)))
     } else {
-        let _ = stack.push_with(&ERROR_VALUE).map_err(|e| e.into())?;
+        let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(join_tid))
     }

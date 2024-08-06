@@ -167,6 +167,33 @@ impl GenerateCode for StringsFn {
     }
 }
 
+pub fn push_string(src:String,
+    stack: &mut Stack,
+    heap: &mut Heap
+)  -> Result<(), RuntimeError> {
+    let len = src.len();
+    let cap = align(len as usize) as u64;
+    let alloc_size = cap + 16;
+
+    let len_bytes = len.to_le_bytes().as_slice().to_vec();
+    let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
+    let address = heap.alloc(alloc_size as usize)?;
+    let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
+
+    let data = src.into_bytes();
+    /* Write len */
+    let _ = heap.write(address, &len_bytes)?;
+    /* Write capacity */
+    let _ = heap.write(address + 8, &cap_bytes)?;
+    /* Write slice */
+    let _ = heap.write(address + 16, &data)?;
+    /* Push heap address back to stack */
+    let _ = stack
+        .push_with(&address.to_le_bytes())
+        ?;
+    Ok(())
+}
+
 impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
     fn execute(
         &self,
@@ -246,20 +273,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
 
                 let len_bytes = len.to_le_bytes().as_slice().to_vec();
                 let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                let address = heap.alloc(alloc_size as usize)?;
                 let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                 let data = res.into_bytes();
                 /* Write len */
-                let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address, &len_bytes)?;
                 /* Write capacity */
-                let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write slice */
-                let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
+                let _ = heap.write(address + 16, &data)?;
 
                 let _ = stack
                     .push_with(&address.to_le_bytes())
-                    .map_err(|e| e.into())?;
+                    ?;
             }
             StringsCasm::Join(value) => match value {
                 JoinCasm::NoSepFromSlice(opt_len) => {
@@ -276,18 +303,18 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
 
                         let string_len_bytes = heap
                             .read(string_heap_address as usize, 8)
-                            .map_err(|e| e.into())?;
+                            ?;
                         let string_len_bytes =
                             TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                         let string_len = u64::from_le_bytes(*string_len_bytes);
                         let string_data = heap
                             .read(string_heap_address as usize + 16, string_len as usize)
-                            .map_err(|e| e.into())?;
+                            ?;
 
                         let _ = heap
                             .free(string_heap_address as usize - 8)
-                            .map_err(|e| e.into())?;
+                            ?;
 
                         slice_data.push(string_data);
                     }
@@ -299,19 +326,19 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
 
                     let len_bytes = len.to_le_bytes().as_slice().to_vec();
                     let cap_bytes = cap.to_le_bytes().as_slice().to_vec();
-                    let address = heap.alloc(alloc_size as usize).map_err(|e| e.into())?;
+                    let address = heap.alloc(alloc_size as usize)?;
                     let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
                     /* Write len */
-                    let _ = heap.write(address, &len_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address, &len_bytes)?;
                     /* Write capacity */
-                    let _ = heap.write(address + 8, &cap_bytes).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 8, &cap_bytes)?;
                     /* Write slice */
-                    let _ = heap.write(address + 16, &data).map_err(|e| e.into())?;
+                    let _ = heap.write(address + 16, &data)?;
 
                     let _ = stack
                         .push_with(&address.to_le_bytes())
-                        .map_err(|e| e.into())?;
+                        ?;
                 }
             },
         }

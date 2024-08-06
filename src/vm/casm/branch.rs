@@ -93,17 +93,17 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
             }
         };
         if param_size != 0 {
-            let data = stack.pop(param_size).map_err(|e| e.into())?.to_owned();
+            let data = stack.pop(param_size)?.to_owned();
             let _ = stack
                 .frame(
                     //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
                     param_size,
                     program.cursor + 1,
                 )
-                .map_err(|e| e.into())?;
+                ?;
             let _ = stack
                 .write(Offset::FP(0), AccessLevel::Direct, &data)
-                .map_err(|e| e.into())?;
+                ?;
         } else {
             let _ = stack
                 .frame(
@@ -111,7 +111,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
                     param_size,
                     program.cursor + 1,
                 )
-                .map_err(|e| e.into())?;
+                ?;
         }
 
         program.cursor_set(function_offset);
@@ -294,7 +294,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
                     }
                 };
                 let data = match size {
-                    Some(size) => stack.pop(*size).map_err(|e| e.into())?.to_vec(),
+                    Some(size) => stack.pop(*size)?.to_vec(),
                     None => {
                         let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
                         let data = heap
@@ -321,7 +321,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
                     Some(idx) => {
                         let _ = stack
                             .push_with(&(idx as u64).to_le_bytes())
-                            .map_err(|e| e.into())?;
+                            ?;
                         program.incr();
                     }
                     None => {

@@ -234,7 +234,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
             Casm::LocateUTF8Char(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Platform(value) => value.execute(program, stack, heap, stdio, engine),
             Casm::Pop(size) => {
-                stack.pop(*size).map_err(|e| e.into())?;
+                stack.pop(*size)?;
                 program.incr();
                 Ok(())
             }

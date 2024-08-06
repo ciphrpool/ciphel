@@ -11,22 +11,22 @@ use crate::{
     semantic::{AccessLevel},
     vm::vm::RuntimeError,
 };
+use thiserror::Error;
 
 pub const STACK_SIZE: usize = 2024;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum StackError {
+    #[error("StackOverflow")]
     StackOverflow,
+    #[error("StackUnderflow")]
     StackUnderflow,
+    #[error("ReadError")]
     ReadError,
+    #[error("WriteError")]
     WriteError,
+    #[error("Default")]
     Default,
-}
-
-impl Into<RuntimeError> for StackError {
-    fn into(self) -> RuntimeError {
-        RuntimeError::StackError(self)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

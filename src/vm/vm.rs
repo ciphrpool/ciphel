@@ -17,12 +17,15 @@ use super::{
     casm::CasmProgram,
     stdio::StdIO,
 };
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum CodeGenerationError {
-    CantLocate,
+    #[error("Unresolved Error")]
     UnresolvedError,
+    #[error("Concurrency Error")]
     ConcurrencyError,
+    #[error("Default error")]
     Default,
 }
 
@@ -40,25 +43,42 @@ pub enum Signal {
     JOIN(Tid),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum RuntimeError {
-    StackError(StackError),
-    HeapError(HeapError),
+    #[error("StackError : {0}")]
+    StackError(#[from] StackError),
+    #[error("HeapError : {0}")]
+    HeapError(#[from] HeapError),
     // VTableError(VTableError),
+    #[error("Deserialization")]
     Deserialization,
+    #[error("UnsupportedOperation")]
     UnsupportedOperation,
+    #[error("MathError")]
     MathError,
+    #[error("ReturnFlagError")]
     ReturnFlagError,
+    #[error("InvalidUTF8Char")]
     InvalidUTF8Char,
+    #[error("CodeSegmentation")]
     CodeSegmentation,
+    #[error("IncorrectVariant")]
     IncorrectVariant,
+    #[error("IndexOutOfBound")]
     IndexOutOfBound,
+    #[error("InvalidTID")]
     InvalidTID(usize),
+    #[error("InvalidThreadStateTransition")]
     InvalidThreadStateTransition(ThreadState, ThreadState),
+    #[error("TooManyThread")]
     TooManyThread,
+    #[error("Signal")]
     Signal(Signal),
+    #[error("AssertError")]
     AssertError,
+    #[error("ConcurrencyError")]
     ConcurrencyError,
+    #[error("Default")]
     Default,
 }
 

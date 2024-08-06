@@ -8,6 +8,7 @@ use std::{
 
 use num_traits::ToBytes;
 
+use thiserror::Error;
 use crate::{vm::vm::RuntimeError};
 
 use super::{align, stack::STACK_SIZE};
@@ -18,20 +19,20 @@ pub const HEAP_ADDRESS_SIZE: usize = 8;
 
 type Pointer = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum HeapError {
+    #[error("AllocationError")]
     AllocationError,
+    #[error("WriteError")]
     WriteError,
+    #[error("ReadError")]
     ReadError,
+    #[error("FreeError")]
     FreeError,
+    #[error("InvalidPointer")]
     InvalidPointer,
+    #[error("Default")]
     Default,
-}
-
-impl Into<RuntimeError> for HeapError {
-    fn into(self) -> RuntimeError {
-        RuntimeError::HeapError(self)
-    }
 }
 
 #[derive(Clone)]
