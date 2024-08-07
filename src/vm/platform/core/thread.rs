@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
@@ -12,7 +11,7 @@ use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 use crate::vm::scheduler::{SchedulerContext, WaitingStatus};
 use crate::vm::vm::{
-    CasmMetadata, Executable, Runtime, RuntimeError, Signal, ThreadState, Tid, MAX_THREAD_COUNT,
+    CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid,
 };
 use crate::{
     ast::expressions::Expression,
@@ -376,7 +375,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
 mod tests {
     use crate::{
         vm::vm::{
-            DbgGameEngine, NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine,
+            NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine,
             MAX_THREAD_COUNT,
         },
         Ciphel,

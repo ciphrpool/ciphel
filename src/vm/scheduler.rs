@@ -1,7 +1,4 @@
 use std::{
-    cell::{Cell, RefCell},
-    collections::HashSet,
-    marker::PhantomData,
     ops::ControlFlow,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -9,21 +6,17 @@ use std::{
     },
 };
 
-use nom_supreme::context;
-use num_traits::ToBytes;
 
 use crate::vm::{
     casm::Casm,
     platform::{
         core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
-        utils::lexem::SPAWN,
     },
     vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
 };
 
 use super::{
-    allocator::{heap::Heap, stack::Stack, Memory},
-    casm::CasmProgram,
+    allocator::{heap::Heap},
     platform::core::thread::sig_wait_stdin,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, GameEngineStaticFn, Player, Runtime, RuntimeError, Tid},
@@ -511,7 +504,7 @@ impl Scheduler {
         state: &mut ThreadState,
         tid: &usize,
     ) -> Result<Option<ControlFlow<(), ()>>, RuntimeError> {
-        if (ThreadState::IDLE == *state || ThreadState::COMPLETED == *state) {
+        if ThreadState::IDLE == *state || ThreadState::COMPLETED == *state {
             // Wake up all threads that are waiting on tid
             let mut waiting_list = match player {
                 Player::P1 => self

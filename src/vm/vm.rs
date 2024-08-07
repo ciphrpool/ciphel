@@ -1,16 +1,11 @@
-use std::cell::Cell;
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 use ulid::Ulid;
 
 use crate::e_static;
 use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::{ArcMutex, ArcRwLock, EType, SemanticError};
+use crate::semantic::{ArcRwLock, EType, SemanticError};
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
-use super::scheduler::WaitingStatus;
 use super::{
     allocator::{
         heap::{Heap, HeapError},

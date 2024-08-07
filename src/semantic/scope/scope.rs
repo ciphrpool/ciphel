@@ -645,7 +645,7 @@ impl Scope {
                 general: _,
                 data,
             } => Ok(data.vars.iter()),
-            Scope::General { data, .. } => Err(SemanticError::ExpectedClosure),
+            Scope::General {  .. } => Err(SemanticError::ExpectedClosure),
         }
     }
 

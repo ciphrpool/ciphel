@@ -1,4 +1,4 @@
-use ast::statements::{self, Statement};
+use ast::statements::{Statement};
 use semantic::SemanticError;
 use vm::{
     allocator::heap::Heap,
@@ -247,7 +247,7 @@ impl Ciphel {
 
 #[cfg(test)]
 mod tests {
-    use vm::vm::{StdinTestGameEngine, StdoutTestGameEngine};
+    use vm::vm::{StdoutTestGameEngine};
 
     use self::vm::vm::{DbgGameEngine, NoopGameEngine};
 

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::semantic::scope::scope::Scope;
-use crate::{ast::utils::strings::ID, vm::vm::GameEngineStaticFn};
+use crate::{ast::utils::strings::ID};
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 

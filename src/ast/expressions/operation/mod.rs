@@ -1,4 +1,3 @@
-use std::cell::Cell;
 
 use crate::{
     ast::{types::Type, utils::strings::ID},
