@@ -212,6 +212,7 @@ impl FnCall {
                 params,
                 metadata: Metadata::default(),
                 platform: Default::default(),
+                is_dynamic_fn : Default::default(),
             });
             Ok((remainder, left))
         } else {
@@ -265,6 +266,7 @@ impl TryParseOperation for FnCall {
                 params,
                 metadata: Metadata::default(),
                 platform: Default::default(),
+                is_dynamic_fn : Default::default(),
             });
             if peeked.is_some() {
                 return Ok((remainder, left));
@@ -1197,6 +1199,7 @@ mod tests {
                 ],
                 metadata: Metadata::default(),
                 platform: Default::default(),
+                is_dynamic_fn : Default::default(),
             }),
             value
         );
@@ -1227,6 +1230,7 @@ mod tests {
                 ],
                 metadata: Metadata::default(),
                 platform: Default::default(),
+                is_dynamic_fn : Default::default(),
             }),
             value
         );

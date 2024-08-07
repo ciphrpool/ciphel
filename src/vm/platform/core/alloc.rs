@@ -351,7 +351,7 @@ impl Resolve for AllocFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -369,7 +369,7 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let item = &mut second_part[0];
 
-                let _ = vector.resolve(scope, &None, &mut None)?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
                 let mut vector_type =
                     vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
@@ -385,7 +385,7 @@ impl Resolve for AllocFn {
                         StaticType::Vec(_) => {
                             let item_type = vector_type.get_item();
                             *append_kind = AppendKind::Vec;
-                            let _ = item.resolve(scope, &item_type, &mut None)?;
+                            let _ = item.resolve::<G>(scope, &item_type, &mut None)?;
                             let Some(item_type) = item_type else {
                                 return Err(SemanticError::IncorrectArguments);
                             };
@@ -393,7 +393,7 @@ impl Resolve for AllocFn {
                             Ok(())
                         }
                         StaticType::String(_) => {
-                            let _ = item.resolve(scope, &None, &mut None)?;
+                            let _ = item.resolve::<G>(scope, &None, &mut None)?;
                             let item_type = item.type_of(&crate::arw_read!(
                                 scope,
                                 SemanticError::ConcurrencyError
@@ -433,7 +433,7 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let items = &mut second_part[0];
 
-                let _ = vector.resolve(scope, &None, &mut None)?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
                 let mut vector_type =
                     vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
@@ -446,7 +446,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = items.resolve(scope, &None, &mut None)?;
+                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
                             let items_type = items.type_of(&crate::arw_read!(
                                 scope,
                                 SemanticError::ConcurrencyError
@@ -474,7 +474,7 @@ impl Resolve for AllocFn {
                             }
                         }
                         StaticType::String(_) => {
-                            let _ = items.resolve(scope, &None, &mut None)?;
+                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
                             let items_type = items.type_of(&crate::arw_read!(
                                 scope,
                                 SemanticError::ConcurrencyError
@@ -525,7 +525,7 @@ impl Resolve for AllocFn {
                 let key = &mut second_part[0];
                 let item = &mut third_part[0];
 
-                let _ = map.resolve(scope, &None, &mut None)?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
                 let mut map_type =
                     map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
@@ -543,8 +543,8 @@ impl Resolve for AllocFn {
                             values_type,
                         }) => {
                             let _ =
-                                key.resolve(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
-                            let _ = item.resolve(
+                                key.resolve::<G>(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
+                            let _ = item.resolve::<G>(
                                 scope,
                                 &Some(values_type.as_ref().clone()),
                                 &mut None,
@@ -583,7 +583,7 @@ impl Resolve for AllocFn {
                 let map = &mut first_part[0];
                 let key = &mut second_part[0];
 
-                let _ = map.resolve(scope, &None, &mut None)?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
                 let mut map_type =
                     map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
@@ -601,7 +601,7 @@ impl Resolve for AllocFn {
                             values_type,
                         }) => {
                             let _ =
-                                key.resolve(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
+                                key.resolve::<G>(scope, &Some(keys_type.as_ref().clone()), &mut None)?;
                             *value_size = values_type.size_of();
                             *key_size = keys_type.size_of();
 
@@ -639,7 +639,7 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let index = &mut second_part[0];
 
-                let _ = vector.resolve(scope, &None, &mut None)?;
+                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
                 let mut vector_type =
                     vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &vector_type {
@@ -653,7 +653,7 @@ impl Resolve for AllocFn {
                 match &vector_type {
                     Either::Static(value) => match value.as_ref() {
                         StaticType::Vec(_) => {
-                            let _ = index.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+                            let _ = index.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                             let index_type = index.type_of(&crate::arw_read!(
                                 scope,
                                 SemanticError::ConcurrencyError
@@ -702,7 +702,7 @@ impl Resolve for AllocFn {
                                 }
                             }
 
-                            let _ = index.resolve(
+                            let _ = index.resolve::<G>(
                                 scope,
                                 &Some(keys_type.as_ref().clone()),
                                 &mut None,
@@ -727,7 +727,7 @@ impl Resolve for AllocFn {
 
                 let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &mut None)?;
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
                 let address_type =
                     address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
@@ -753,7 +753,7 @@ impl Resolve for AllocFn {
                     *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -790,7 +790,7 @@ impl Resolve for AllocFn {
                     *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType);
@@ -823,7 +823,7 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve(scope, &None, &mut None)?;
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
                 let param_type =
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match param_type {
@@ -852,7 +852,7 @@ impl Resolve for AllocFn {
 
                 let size = &mut extra[0];
 
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 let size_type =
                     size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
@@ -870,7 +870,7 @@ impl Resolve for AllocFn {
                 }
                 let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &mut None)?;
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
                 let address_type =
                     address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &address_type {
@@ -890,7 +890,7 @@ impl Resolve for AllocFn {
                 }
                 let address = &mut extra[0];
 
-                let _ = address.resolve(scope, &None, &mut None)?;
+                let _ = address.resolve::<G>(scope, &None, &mut None)?;
                 let address_type =
                     address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 *for_map = false;
@@ -913,7 +913,7 @@ impl Resolve for AllocFn {
                 }
                 let param = &mut extra[0];
 
-                let _ = param.resolve(scope, &None, &mut None)?;
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
                 let param_type =
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
@@ -933,8 +933,8 @@ impl Resolve for AllocFn {
                 let src = &mut second_part[0];
                 let size = &mut third_part[0];
 
-                let _ = dest.resolve(scope, &None, &mut None)?;
-                let _ = src.resolve(scope, &None, &mut None)?;
+                let _ = dest.resolve::<G>(scope, &None, &mut None)?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
                 let dest_type =
                     dest.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let src_type =
@@ -959,7 +959,7 @@ impl Resolve for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 let size_type =
                     size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &size_type {
@@ -982,7 +982,7 @@ impl Resolve for AllocFn {
 
                 let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &mut None)?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
                 let src_type =
                     src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
@@ -3407,7 +3407,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3463,7 +3463,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3510,7 +3510,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3578,7 +3578,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3816,7 +3816,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3858,7 +3858,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3915,7 +3915,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -3983,7 +3983,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4074,7 +4074,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4118,7 +4118,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4167,7 +4167,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4236,7 +4236,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4289,7 +4289,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4357,7 +4357,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4432,7 +4432,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4487,7 +4487,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4536,7 +4536,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4610,7 +4610,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -4674,7 +4674,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();

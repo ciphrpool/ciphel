@@ -1055,7 +1055,7 @@ mod tests {
         // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
-        expr.resolve(&scope, &None, &mut ())
+        expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

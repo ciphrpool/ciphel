@@ -434,6 +434,11 @@ impl GenerateCode for super::FnCall {
             .map(|p| p.signature().map_or(0, |s| s.size_of()))
             .sum();
 
+        if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
+            instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(dynamic_fn_id.clone())));
+            return Ok(())
+        }
+
         let borrowed_platform = arw_read!(self.platform, CodeGenerationError::ConcurrencyError)?;
         if let Some(platform_api) = borrowed_platform.as_ref() {
             for param in &self.params {
@@ -1748,7 +1753,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

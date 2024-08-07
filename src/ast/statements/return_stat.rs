@@ -79,7 +79,7 @@ impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -101,7 +101,7 @@ impl Resolve for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
-                let _ = expr.resolve(scope, &context, &mut None)?;
+                let _ = expr.resolve::<G>(scope, &context, &mut None)?;
                 match context {
                     Some(c) => {
                         let return_type = expr
@@ -270,7 +270,7 @@ mod tests {
         .1;
         let scope = scope::Scope::new();
 
-        let res = return_statement.resolve(&scope, &None, &mut ());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut return_statement = Return::parse(
@@ -281,7 +281,7 @@ mod tests {
         )
         .unwrap()
         .1;
-        let res = return_statement.resolve(&scope, &None, &mut ());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement
@@ -304,7 +304,7 @@ mod tests {
             .unwrap()
             .to_loop();
 
-        let res = return_statement.resolve(&inner_scope, &None, &mut ());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement
@@ -321,7 +321,7 @@ mod tests {
         .unwrap()
         .1;
 
-        let res = return_statement.resolve(&inner_scope, &None, &mut ());
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement
@@ -341,7 +341,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = return_statement.resolve(
+        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(
             &scope,
             &Some(Either::Static(
                 StaticType::Primitive(PrimitiveType::Char).into(),

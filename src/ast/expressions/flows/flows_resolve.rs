@@ -19,7 +19,7 @@ impl Resolve for ExprFlow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -29,18 +29,18 @@ impl Resolve for ExprFlow {
         Self: Sized,
     {
         match self {
-            ExprFlow::If(value) => value.resolve(scope, context, extra),
-            ExprFlow::Match(value) => value.resolve(scope, context, extra),
-            ExprFlow::Try(value) => value.resolve(scope, context, extra),
+            ExprFlow::If(value) => value.resolve::<G>(scope, context, extra),
+            ExprFlow::Match(value) => value.resolve::<G>(scope, context, extra),
+            ExprFlow::Try(value) => value.resolve::<G>(scope, context, extra),
             ExprFlow::SizeOf(value, metadata) => {
-                let _ = value.resolve(scope, &(), extra);
+                let _ = value.resolve::<G>(scope, &(), extra);
                 metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(p_num!(U64)),
                 };
                 Ok(())
             }
-            ExprFlow::FCall(value) => value.resolve(scope, context, extra),
+            ExprFlow::FCall(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
@@ -48,7 +48,7 @@ impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -57,7 +57,7 @@ impl Resolve for IfExpr {
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, context, &mut None)?;
+        let _ = self.condition.resolve::<G>(scope, context, &mut None)?;
         // Check if condition is a boolean
         let condition_type = self
             .condition
@@ -68,10 +68,10 @@ impl Resolve for IfExpr {
 
         let _ = self
             .then_branch
-            .resolve(scope, context, &mut Vec::default())?;
+            .resolve::<G>(scope, context, &mut Vec::default())?;
         let _ = self
             .else_branch
-            .resolve(scope, context, &mut Vec::default())?;
+            .resolve::<G>(scope, context, &mut Vec::default())?;
 
         let then_branch_type = self
             .then_branch
@@ -88,7 +88,7 @@ impl Resolve for Pattern {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -99,7 +99,7 @@ impl Resolve for Pattern {
     {
         match self {
             Pattern::Primitive(value) => {
-                let _ = value.resolve(scope, context, extra)?;
+                let _ = value.resolve::<G>(scope, context, extra)?;
                 Ok(Vec::default())
             }
             Pattern::String(value) => {
@@ -114,7 +114,7 @@ impl Resolve for Pattern {
                     },
                     _ => return Err(SemanticError::IncompatibleTypes),
                 }
-                let _ = value.resolve(scope, &None, extra)?;
+                let _ = value.resolve::<G>(scope, &None, extra)?;
                 Ok(Vec::default())
             }
             Pattern::Enum { typename, value } => {
@@ -215,7 +215,7 @@ impl Resolve for PatternExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -224,9 +224,9 @@ impl Resolve for PatternExpr {
     where
         Self: Sized,
     {
-        let mut previous_vars = self.patterns[0].resolve(scope, &extra, &mut ())?;
+        let mut previous_vars = self.patterns[0].resolve::<G>(scope, &extra, &mut ())?;
         for pattern in &mut self.patterns[1..] {
-            let vars = pattern.resolve(scope, &extra, &mut ())?;
+            let vars = pattern.resolve::<G>(scope, &extra, &mut ())?;
             if previous_vars != vars {
                 return Err(SemanticError::IncorrectVariant);
             }
@@ -236,7 +236,7 @@ impl Resolve for PatternExpr {
             var.is_declared = true;
         }
         // create a block and assign the pattern variable to it before resolving the expression
-        let _ = self.expr.resolve(scope, context, &mut previous_vars)?;
+        let _ = self.expr.resolve::<G>(scope, context, &mut previous_vars)?;
         Ok(())
     }
 }
@@ -244,7 +244,7 @@ impl Resolve for MatchExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -253,7 +253,7 @@ impl Resolve for MatchExpr {
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &mut None)?;
+        let _ = self.expr.resolve::<G>(scope, &None, &mut None)?;
         let mut expr_type = Some(
             self.expr
                 .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
@@ -277,9 +277,9 @@ impl Resolve for MatchExpr {
 
         match &mut self.else_branch {
             Some(else_branch) => {
-                let _ = else_branch.resolve(scope, &context, &mut Vec::default())?;
+                let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
                 for pattern in &mut self.patterns {
-                    let _ = pattern.resolve(scope, &context, &mut expr_type)?;
+                    let _ = pattern.resolve::<G>(scope, &context, &mut expr_type)?;
                 }
 
                 if let Some(exhaustive_cases) = exhaustive_cases {
@@ -363,7 +363,7 @@ impl Resolve for MatchExpr {
                     return Err(SemanticError::InvalidPattern);
                 };
                 for pattern in &mut self.patterns {
-                    let _ = pattern.resolve(scope, &context, &mut expr_type)?;
+                    let _ = pattern.resolve::<G>(scope, &context, &mut expr_type)?;
                 }
             }
         }
@@ -376,7 +376,7 @@ impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -387,9 +387,9 @@ impl Resolve for TryExpr {
     {
         let _ = self
             .try_branch
-            .resolve(scope, context, &mut Vec::default())?;
+            .resolve::<G>(scope, context, &mut Vec::default())?;
         match &mut self.else_branch {
-            Some(else_branch) => else_branch.resolve(scope, context, &mut Vec::default())?,
+            Some(else_branch) => else_branch.resolve::<G>(scope, context, &mut Vec::default())?,
             None => {}
         }
 
@@ -512,7 +512,7 @@ impl Resolve for FCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -525,7 +525,7 @@ impl Resolve for FCall {
             match item {
                 FormatItem::Str(_) => {}
                 FormatItem::Expr(expr) => {
-                    let _ = expr.resolve(scope, &None, &mut None)?;
+                    let _ = expr.resolve::<G>(scope, &None, &mut None)?;
                 }
             }
         }
@@ -561,7 +561,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -571,14 +571,14 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
 
         let mut expr = IfExpr::parse("if true then 10 else 'a'".into())
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -606,7 +606,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr
@@ -661,7 +661,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr
             .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
@@ -706,7 +706,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let match_type = expr
@@ -754,7 +754,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
 
         let mut expr = MatchExpr::parse(
@@ -779,7 +779,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -872,7 +872,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
         let match_type = expr
             .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
@@ -886,7 +886,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -896,7 +896,7 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
         let scope = Scope::new();
-        let res = expr.resolve(&scope, &None, &mut ());
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -906,7 +906,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
 
@@ -917,7 +917,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Resolutionb should have succeeded");
     }
     #[test]
@@ -927,7 +927,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
     #[test]
@@ -937,7 +937,7 @@ mod tests {
             .1;
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect_err("Resolution shoud have failed");
     }
 }

@@ -17,7 +17,7 @@ impl Resolve for Declaration {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -28,7 +28,7 @@ impl Resolve for Declaration {
     {
         match self {
             Declaration::Declared(value) => {
-                let _ = value.resolve(scope, &(), &mut ())?;
+                let _ = value.resolve::<G>(scope, &(), &mut ())?;
                 let var_type = value
                     .signature
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
@@ -41,7 +41,7 @@ impl Resolve for Declaration {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve(scope, &(), &mut ())?;
+                let _ = value.resolve::<G>(scope, &(), &mut ())?;
                 let var_type = value
                     .signature
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
@@ -95,13 +95,13 @@ impl Resolve for Declaration {
                     }
                     let _ =
                         arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-                    let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
+                    let _ = right.resolve::<G>(scope, &Some(var_type.clone()), &mut ())?;
                     let _ = var_type.compatible_with(
                         right,
                         &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
                     )?;
                 } else {
-                    let _ = right.resolve(scope, &Some(var_type.clone()), &mut ())?;
+                    let _ = right.resolve::<G>(scope, &Some(var_type.clone()), &mut ())?;
                     let _ =
                         arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
                     let _ = var_type.compatible_with(
@@ -113,10 +113,10 @@ impl Resolve for Declaration {
                 Ok(())
             }
             Declaration::Assigned { left, right } => {
-                let _ = right.resolve(scope, &None, extra)?;
+                let _ = right.resolve::<G>(scope, &None, extra)?;
                 let right_type =
                     right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let vars = left.resolve(scope, &Some(right_type), &mut ())?;
+                let vars = left.resolve::<G>(scope, &Some(right_type), &mut ())?;
                 for var in vars {
                     let _ =
                         arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
@@ -130,7 +130,7 @@ impl Resolve for TypedVar {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -139,14 +139,14 @@ impl Resolve for TypedVar {
     where
         Self: Sized,
     {
-        self.signature.resolve(scope, context, extra)
+        self.signature.resolve::<G>(scope, context, extra)
     }
 }
 impl Resolve for DeclaredVar {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -172,7 +172,7 @@ impl Resolve for DeclaredVar {
             DeclaredVar::Typed(_) => {
                 unreachable!("Path already covered in Declaration::resolve")
             }
-            DeclaredVar::Pattern(value) => value.resolve(scope, context, extra),
+            DeclaredVar::Pattern(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }
@@ -180,7 +180,7 @@ impl Resolve for PatternVar {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -265,7 +265,7 @@ mod tests {
         let mut decl = Declaration::parse("let x:u64 = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let binding = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -278,7 +278,7 @@ mod tests {
         let mut decl = Declaration::parse("let x = 1.0;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let binding = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -294,7 +294,7 @@ mod tests {
         let mut decl = Declaration::parse("let x:char = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -303,7 +303,7 @@ mod tests {
         let mut decl = Declaration::parse("let (x,y) = (1,'a');".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = decl.resolve(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let binding = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -345,7 +345,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = decl.resolve(&scope, &None, &mut ());
+        let res = decl.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let binding = arw_read!(scope, SemanticError::ConcurrencyError)

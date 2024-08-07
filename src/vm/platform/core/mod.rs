@@ -59,15 +59,15 @@ impl Resolve for CoreFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            CoreFn::Alloc(value) => value.resolve(scope, context, extra),
-            CoreFn::Thread(value) => value.resolve(scope, context, extra),
+            CoreFn::Alloc(value) => value.resolve::<G>(scope, context, extra),
+            CoreFn::Thread(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }

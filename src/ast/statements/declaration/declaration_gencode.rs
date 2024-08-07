@@ -337,7 +337,7 @@ mod tests {
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -404,7 +404,7 @@ mod tests {
             .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -461,7 +461,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -513,7 +513,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -568,7 +568,7 @@ mod tests {
         let scope = Scope::new();
 
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

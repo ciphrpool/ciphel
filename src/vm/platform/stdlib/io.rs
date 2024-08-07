@@ -104,7 +104,7 @@ impl Resolve for IOFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -116,7 +116,7 @@ impl Resolve for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve(scope, &None, &mut None)?;
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
                 *param_type = Some(
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
                 );
@@ -127,7 +127,7 @@ impl Resolve for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve(scope, &None, &mut None)?;
+                let _ = param.resolve::<G>(scope, &None, &mut None)?;
                 *param_type = Some(
                     param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
                 );
@@ -743,7 +743,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<StdinTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");

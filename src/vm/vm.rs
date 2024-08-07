@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use ulid::Ulid;
 
-use crate::semantic::{ArcMutex, ArcRwLock};
+use crate::e_static;
+use crate::semantic::scope::static_types::StaticType;
+use crate::semantic::{ArcMutex, ArcRwLock, EType, SemanticError};
 use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
 
 use super::scheduler::WaitingStatus;
@@ -102,6 +104,25 @@ pub trait Locatable {
     fn most_left_id(&self) -> Option<ID>;
 }
 
+pub trait GameEngineDynamicFn {
+
+    fn resolve(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<EType, SemanticError>;
+}
+pub struct DefaultDynamicFn;
+impl GameEngineDynamicFn for DefaultDynamicFn {
+    fn resolve(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<EType, SemanticError> {
+        Ok(e_static!(StaticType::Unit))
+    }
+}
+
 pub trait GameEngineStaticFn {
     fn stdout_print(&mut self, content: String);
     fn stdout_println(&mut self, content: String);
@@ -109,6 +130,28 @@ pub trait GameEngineStaticFn {
     fn stdin_scan(&mut self) -> Option<String>;
     fn stdin_request(&mut self);
     fn stdcasm_print(&mut self, content: String);
+
+    fn is_dynamic_fn(suffixe: &Option<ID>, id: &ID) -> Option<impl GameEngineDynamicFn> {
+        None::<DefaultDynamicFn>
+    }
+
+    fn execute_dynamic_fn(
+        fn_id : String,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine:&mut Self) -> Result<(),RuntimeError> {
+        unimplemented!("This engine does not have dynamic functions")
+    }
+
+    fn name_of_dynamic_fn(fn_id : String, stdio: &mut StdIO, program: &mut CasmProgram,engine:&mut Self) {
+        unimplemented!("This engine does not have dynamic functions")
+    }
+
+    fn weight_of_dynamic_fn(fn_id : String) -> usize {
+        unimplemented!("This engine does not have dynamic functions")
+    }
 
     fn spawn(&mut self, tid: Tid) {}
     fn close(&mut self, tid: Tid) {}
@@ -230,6 +273,90 @@ impl GameEngineStaticFn for ThreadTestGameEngine {
     }
     fn spawn(&mut self, tid: Tid) {
         self.spawned_thread = tid;
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct TestDynamicGameEngine {
+    pub dynamic_fn_provider : TestDynamicFnProvider,
+    pub out: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TestDynamicFnProvider {}
+
+impl TestDynamicFnProvider {
+    fn get_dynamic_fn(prefix:&Option<ID>,id:String) -> Option<TestDynamicFn> {
+        if "dynamic_fn" == id {
+            return Some(TestDynamicFn{});
+        } else {
+            return None;
+        }
+    }
+}
+pub struct TestDynamicFn {}
+
+impl GameEngineDynamicFn for TestDynamicFn {
+    fn resolve(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        params: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<EType, SemanticError> {
+        Ok(e_static!(StaticType::Unit))
+    }
+}
+
+impl<G:GameEngineStaticFn> Executable<G> for TestDynamicFn {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+    ) -> Result<(), RuntimeError> {
+        stdio.stdout.push("\"Hello World from Dynamic function\"");
+        Ok(())
+    }
+}
+
+impl GameEngineStaticFn for TestDynamicGameEngine {
+    fn stdout_print(&mut self, content: String) {
+        self.out = content;
+    }
+    fn stdout_println(&mut self, content: String) {
+        self.out = format!("{}\n", content);
+    }
+    fn stderr_print(&mut self, content: String) {}
+
+    fn stdin_scan(&mut self) -> Option<String> {
+        None
+    }
+    fn stdin_request(&mut self) {}
+
+    fn stdcasm_print(&mut self, content: String) {}
+
+    fn execute_dynamic_fn(
+            fn_id : String,
+            program: &mut CasmProgram,
+            stack: &mut Stack,
+            heap: &mut Heap,
+            stdio: &mut StdIO,
+            engine:&mut Self) -> Result<(),RuntimeError> {
+        if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None,fn_id) {
+            dynamic_fn.execute(program, stack, heap, stdio, engine)?;
+        }
+        Ok(())
+    }
+    fn is_dynamic_fn(preffixe: &Option<ID>, id: &ID) -> Option<impl GameEngineDynamicFn> {
+        TestDynamicFnProvider::get_dynamic_fn(preffixe,id.to_string()) 
+    }
+    fn name_of_dynamic_fn(fn_id : String, stdio: &mut StdIO, program: &mut CasmProgram,engine:&mut Self) {
+        stdio.push_casm_lib(engine, &fn_id);
+    }
+    fn weight_of_dynamic_fn(fn_id : String) -> usize {
+        1
     }
 }
 

@@ -7,7 +7,7 @@ impl Resolve for Assignation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -16,13 +16,13 @@ impl Resolve for Assignation {
     where
         Self: Sized,
     {
-        let _ = self.left.resolve(scope, &None, &mut None)?;
+        let _ = self.left.resolve::<G>(scope, &None, &mut None)?;
         if self.left.is_assignable() {
             let left_type = Some(
                 self.left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
             );
-            let _ = self.right.resolve(scope, &left_type, &mut ())?;
+            let _ = self.right.resolve::<G>(scope, &left_type, &mut ())?;
             Ok(())
         } else {
             Err(SemanticError::ExpectedLeftExpression)
@@ -33,7 +33,7 @@ impl Resolve for AssignValue {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -44,7 +44,7 @@ impl Resolve for AssignValue {
     {
         match self {
             AssignValue::Scope(value) => {
-                let _ = value.resolve(scope, context, &mut Vec::default())?;
+                let _ = value.resolve::<G>(scope, context, &mut Vec::default())?;
                 let scope_type =
                     value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
@@ -60,7 +60,7 @@ impl Resolve for AssignValue {
                 Ok(())
             }
             AssignValue::Expr(value) => {
-                let _ = value.resolve(scope, context, &mut None)?;
+                let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let scope_type =
                     value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match context {
@@ -109,7 +109,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = assignation.resolve(&scope, &None, &mut ());
+        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut assignation = Assignation::parse(
@@ -134,7 +134,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = assignation.resolve(&scope, &None, &mut ());
+        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -143,7 +143,7 @@ mod tests {
         let mut assignation = Assignation::parse("x = 1;".into()).unwrap().1;
 
         let scope = Scope::new();
-        let res = assignation.resolve(&scope, &None, &mut ());
+        let res = assignation.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 }

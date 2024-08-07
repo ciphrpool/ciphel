@@ -86,7 +86,7 @@ impl Resolve for StringsFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -100,7 +100,7 @@ impl Resolve for StringsFn {
 
                 let src = &mut extra[0];
 
-                let _ = src.resolve(scope, &None, &mut None)?;
+                let _ = src.resolve::<G>(scope, &None, &mut None)?;
                 let src_type =
                     src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 

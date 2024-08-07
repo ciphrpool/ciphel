@@ -18,7 +18,7 @@ impl Resolve for Definition {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -28,8 +28,8 @@ impl Resolve for Definition {
         Self: Sized,
     {
         match self {
-            Definition::Type(value) => value.resolve(scope, &(), &mut ()),
-            Definition::Fn(value) => value.resolve(scope, &(), &mut ()),
+            Definition::Type(value) => value.resolve::<G>(scope, &(), &mut ()),
+            Definition::Fn(value) => value.resolve::<G>(scope, &(), &mut ()),
         }
     }
 }
@@ -38,7 +38,7 @@ impl Resolve for TypeDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -48,9 +48,9 @@ impl Resolve for TypeDef {
         Self: Sized,
     {
         let _ = match self {
-            TypeDef::Struct(value) => value.resolve(scope, context, extra),
-            TypeDef::Union(value) => value.resolve(scope, context, extra),
-            TypeDef::Enum(value) => value.resolve(scope, context, extra),
+            TypeDef::Struct(value) => value.resolve::<G>(scope, context, extra),
+            TypeDef::Union(value) => value.resolve::<G>(scope, context, extra),
+            TypeDef::Enum(value) => value.resolve::<G>(scope, context, extra),
         }?;
         let id = match &self {
             TypeDef::Struct(value) => &value.id,
@@ -73,7 +73,7 @@ impl Resolve for StructDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -83,7 +83,7 @@ impl Resolve for StructDef {
         Self: Sized,
     {
         for (_, type_siq) in &mut self.fields {
-            let _ = type_siq.resolve(scope, context, extra)?;
+            let _ = type_siq.resolve::<G>(scope, context, extra)?;
         }
         Ok(())
     }
@@ -93,7 +93,7 @@ impl Resolve for UnionDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -104,7 +104,7 @@ impl Resolve for UnionDef {
     {
         for (_, variant) in &mut self.variants {
             for (_, type_sig) in variant {
-                let _ = type_sig.resolve(scope, context, extra);
+                let _ = type_sig.resolve::<G>(scope, context, extra);
             }
         }
 
@@ -116,7 +116,7 @@ impl Resolve for EnumDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -133,7 +133,7 @@ impl Resolve for FnDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -143,10 +143,10 @@ impl Resolve for FnDef {
         Self: Sized,
     {
         for value in &mut self.params {
-            let _ = value.resolve(scope, context, extra)?;
+            let _ = value.resolve::<G>(scope, context, extra)?;
         }
 
-        let _ = self.ret.resolve(scope, context, extra)?;
+        let _ = self.ret.resolve::<G>(scope, context, extra)?;
         let return_type = self
             .ret
             .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
@@ -192,7 +192,7 @@ impl Resolve for FnDef {
         var.is_declared = true;
         self.scope.set_caller(var.clone());
         let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-        let _ = self.scope.resolve(scope, &Some(return_type), &mut vars)?;
+        let _ = self.scope.resolve::<G>(scope, &Some(return_type), &mut vars)?;
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
     }
@@ -230,7 +230,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &mut ());
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -282,7 +282,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        let res = type_def.resolve(&scope, &(), &mut ());
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -347,7 +347,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &mut ());
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
@@ -403,7 +403,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = type_def.resolve(&scope, &(), &mut ());
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
@@ -439,7 +439,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -478,7 +478,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -541,7 +541,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
@@ -591,7 +591,7 @@ mod tests {
             })
             .expect("registering vars should succeed");
 
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         // let captured_vars = function
@@ -650,7 +650,7 @@ mod tests {
                 is_declared: false,
             })
             .expect("registering vars should succeed");
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         // let captured_vars = function
@@ -690,7 +690,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = function.resolve(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let function_var = arw_read!(scope, SemanticError::ConcurrencyError)

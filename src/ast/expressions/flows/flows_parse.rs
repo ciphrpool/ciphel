@@ -256,6 +256,7 @@ impl TryParse for FCall {
                                 params: vec![expr],
                                 metadata: Metadata::default(),
                                 platform: Default::default(),
+                                is_dynamic_fn : Default::default(),
                             }))
                         }
                     })

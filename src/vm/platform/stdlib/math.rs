@@ -185,7 +185,7 @@ impl Resolve for MathFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -226,7 +226,7 @@ impl Resolve for MathFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let n = &mut extra[0];
-                let _ = n.resolve(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = n.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
                 let n_type =
                     n.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
 
@@ -249,8 +249,8 @@ impl Resolve for MathFn {
                 let x = &mut first_part[0];
                 let y = &mut second_part[0];
 
-                let _ = x.resolve(scope, &Some(p_num!(F64)), &mut None)?;
-                let _ = y.resolve(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = x.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = y.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
 
                 let x_type =
                     x.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;

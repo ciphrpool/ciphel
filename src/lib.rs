@@ -85,7 +85,7 @@ impl Ciphel {
         }
     }
 
-    pub fn compile_with_transaction(
+    pub fn compile_with_transaction<G: crate::GameEngineStaticFn>(
         &mut self,
         player: crate::vm::vm::Player,
         tid: usize,
@@ -105,7 +105,7 @@ impl Ciphel {
         let mut statements: Vec<ast::statements::Statement> = parse_statements(src_code.into())?;
         for statement in &mut statements {
             let _ = statement
-                .resolve(scope, &None, &mut ())
+                .resolve::<G>(scope, &None, &mut ())
                 .map_err(|e| CompilationError::SemanticError(e))?;
         }
         program.statements_buffer.extend(statements);
@@ -194,7 +194,7 @@ impl Ciphel {
         Ok(())
     }
 
-    pub fn compile(
+    pub fn compile<G: crate::GameEngineStaticFn>(
         &mut self,
         player: crate::vm::vm::Player,
         tid: usize,
@@ -209,7 +209,7 @@ impl Ciphel {
 
         for statement in &mut statements {
             let _ = statement
-                .resolve(scope, &None, &mut ())
+                .resolve::<G>(scope, &None, &mut ())
                 .map_err(|e| CompilationError::SemanticError(e))?;
         }
 
@@ -272,7 +272,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<DbgGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -301,7 +301,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         let src = r##"
@@ -313,7 +313,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -338,7 +338,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, main_tid, src)
+            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, main_tid, src)
             .expect("Compilation should have succeeded");
 
         let tid = ciphel
@@ -357,7 +357,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<NoopGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -376,7 +376,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel
@@ -403,7 +403,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel
@@ -415,7 +415,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel

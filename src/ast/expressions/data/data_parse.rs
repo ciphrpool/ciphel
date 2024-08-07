@@ -977,6 +977,7 @@ mod tests {
                     )))],
                     metadata: Metadata::default(),
                     platform: Default::default(),
+                    is_dynamic_fn : None,
                 })
                 .into(),
                 index: 1,

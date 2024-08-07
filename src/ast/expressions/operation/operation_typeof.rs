@@ -71,6 +71,11 @@ impl TypeOf for FnCall {
     where
         Self: Sized + Resolve,
     {
+        if self.is_dynamic_fn.is_some() {
+            return self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+        }
         match self.fn_var.as_ref() {
             Expression::Atomic(Atomic::Data(Data::Variable(Variable { .. }))) => {
                 let borrowed_platform = arw_read!(self.platform, SemanticError::ConcurrencyError)?;

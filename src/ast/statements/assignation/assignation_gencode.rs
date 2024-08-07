@@ -168,11 +168,11 @@ mod tests {
         let scope = Scope::new();
 
         let _ = declaration
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -244,7 +244,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -309,7 +309,7 @@ mod tests {
         .1;
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -426,7 +426,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -519,7 +519,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -635,7 +635,7 @@ mod tests {
             )
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

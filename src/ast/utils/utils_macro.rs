@@ -140,10 +140,11 @@ macro_rules! compile_expression {
             .expect("Parsing should have succeeded")
             .1;
 
+        let mut engine = crate::vm::vm::NoopGameEngine {};
         // Create a new block.
         let scope = Scope::new();
         // Perform semantic check.
-        expr.resolve(&scope, &None, &mut ())
+        expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -161,7 +162,6 @@ macro_rules! compile_expression {
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
 
-        let mut engine = crate::vm::vm::NoopGameEngine {};
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
@@ -174,6 +174,7 @@ macro_rules! compile_expression {
 #[macro_export]
 macro_rules! compile_expression_with_type {
     ($expr_type:ident,$expr_str:expr,$user_type:ident) => {{
+        let mut engine = crate::vm::vm::NoopGameEngine {};
         // Parse the expression.
         let mut expr = $expr_type::parse($expr_str.into())
             .expect("Parsing should have succeeded")
@@ -189,7 +190,7 @@ macro_rules! compile_expression_with_type {
             )
             .expect("Type registering should have succeeded");
         // Perform semantic check.
-        expr.resolve(&scope, &None, &mut ())
+        expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -206,7 +207,6 @@ macro_rules! compile_expression_with_type {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
@@ -220,9 +220,10 @@ macro_rules! compile_expression_with_type {
 #[macro_export]
 macro_rules! compile_statement {
     ($statement:ident) => {{
+        let mut engine = crate::vm::vm::NoopGameEngine {};
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -237,7 +238,6 @@ macro_rules! compile_statement {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
@@ -249,9 +249,10 @@ macro_rules! compile_statement {
 #[macro_export]
 macro_rules! compile_statement_for_stdout {
     ($statement:ident) => {{
+        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::StdoutTestGameEngine>(&scope, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
@@ -268,7 +269,6 @@ macro_rules! compile_statement_for_stdout {
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
 
-        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
@@ -279,9 +279,10 @@ macro_rules! compile_statement_for_stdout {
 #[macro_export]
 macro_rules! compile_statement_for_string {
     ($statement:ident) => {{
+        let mut engine = crate::vm::vm::NoopGameEngine {};
         let scope = Scope::new();
         let _ = $statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -297,7 +298,6 @@ macro_rules! compile_statement_for_string {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
@@ -330,12 +330,13 @@ macro_rules! compile_statement_for_string {
 #[macro_export]
 macro_rules! eval_and_compare {
     ($expr:expr, $expected:expr,$size:ident) => {{
-        // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+        
         let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -352,7 +353,6 @@ macro_rules! eval_and_compare {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
             .execute(stack, &mut heap,&mut  stdio,&mut engine)
@@ -373,12 +373,13 @@ macro_rules! eval_and_compare {
 #[macro_export]
 macro_rules! eval_and_compare_bool {
     ($expr:expr, $expected:expr) => {{
-        // Assuming `Expression`, `Scope`, `CasmProgram`, `Memory`, and `Primitive` are defined in the context.
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+        
         let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
 
         let scope = Scope::new();
         let _ = expr
-            .resolve(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -395,7 +396,6 @@ macro_rules! eval_and_compare_bool {
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
         program.merge(instructions);
-        let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
             .execute(stack, &mut heap,&mut  stdio,&mut engine)

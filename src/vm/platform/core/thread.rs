@@ -82,7 +82,7 @@ impl ThreadFn {
         }
     }
 }
-fn expect_one_u64(
+fn expect_one_u64<G:crate::GameEngineStaticFn>(
     params: &mut Vec<Expression>,
     scope: &crate::semantic::ArcRwLock<Scope>,
 ) -> Result<(), SemanticError> {
@@ -92,7 +92,7 @@ fn expect_one_u64(
 
     let size = &mut params[0];
 
-    let _ = size.resolve(scope, &Some(p_num!(U64)), &mut None)?;
+    let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
     let size_type = size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
     match &size_type {
         Either::Static(value) => match value.as_ref() {
@@ -107,7 +107,7 @@ impl Resolve for ThreadFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -126,16 +126,16 @@ impl Resolve for ThreadFn {
                 }
                 Ok(())
             }
-            ThreadFn::Close => expect_one_u64(extra, scope),
+            ThreadFn::Close => expect_one_u64::<G>(extra, scope),
             ThreadFn::Wait => {
                 if extra.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 Ok(())
             }
-            ThreadFn::Wake => expect_one_u64(extra, scope),
-            ThreadFn::Sleep => expect_one_u64(extra, scope),
-            ThreadFn::Join => expect_one_u64(extra, scope),
+            ThreadFn::Wake => expect_one_u64::<G>(extra, scope),
+            ThreadFn::Sleep => expect_one_u64::<G>(extra, scope),
+            ThreadFn::Join => expect_one_u64::<G>(extra, scope),
         }
     }
 }
@@ -412,7 +412,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -445,7 +445,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -465,7 +465,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -478,7 +478,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
@@ -491,7 +491,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
@@ -517,7 +517,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
 
         ciphel.run(&mut engine).expect("no error should arise");
@@ -553,7 +553,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
@@ -566,7 +566,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
@@ -600,7 +600,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
@@ -611,7 +611,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");
@@ -641,7 +641,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         let tids = ciphel.available_tids(crate::vm::vm::Player::P1);
@@ -674,7 +674,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, tid, src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
@@ -686,7 +686,7 @@ mod tests {
         "##;
 
         ciphel
-            .compile(crate::vm::vm::Player::P1, child_tid, child_src)
+            .compile::<ThreadTestGameEngine>(crate::vm::vm::Player::P1, child_tid, child_src)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
         ciphel.run(&mut engine).expect("no error should arise");

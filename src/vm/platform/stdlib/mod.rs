@@ -106,17 +106,17 @@ impl Resolve for StdFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            StdFn::IO(value) => value.resolve(scope, context, extra),
-            StdFn::Math(value) => value.resolve(scope, context, extra),
-            StdFn::Strings(value) => value.resolve(scope, context, extra),
-            StdFn::Iter(value) => value.resolve(scope, context, extra),
+            StdFn::IO(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Math(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Strings(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::Iter(value) => value.resolve::<G>(scope, context, extra),
             StdFn::Assert(expect_err) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -124,7 +124,7 @@ impl Resolve for StdFn {
 
                 let size = &mut extra[0];
 
-                let _ = size.resolve(
+                let _ = size.resolve::<G>(
                     scope,
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
                     &mut None,

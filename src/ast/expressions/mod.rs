@@ -92,7 +92,7 @@ impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -102,10 +102,10 @@ impl Resolve for Atomic {
         Self: Sized,
     {
         match self {
-            Atomic::Data(value) => value.resolve(scope, context, extra),
-            Atomic::UnaryOperation(value) => value.resolve(scope, context, &mut ()),
-            Atomic::Paren(value) => value.resolve(scope, context, extra),
-            Atomic::ExprFlow(value) => value.resolve(scope, context, &mut ()),
+            Atomic::Data(value) => value.resolve::<G>(scope, context, extra),
+            Atomic::UnaryOperation(value) => value.resolve::<G>(scope, context, &mut ()),
+            Atomic::Paren(value) => value.resolve::<G>(scope, context, extra),
+            Atomic::ExprFlow(value) => value.resolve::<G>(scope, context, &mut ()),
         }
     }
 }
@@ -148,7 +148,7 @@ impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -158,24 +158,24 @@ impl Resolve for Expression {
         Self: Sized,
     {
         match self {
-            Expression::Product(value) => value.resolve(scope, context, &mut ()),
-            Expression::Addition(value) => value.resolve(scope, context, &mut ()),
-            Expression::Substraction(value) => value.resolve(scope, context, &mut ()),
-            Expression::Shift(value) => value.resolve(scope, context, &mut ()),
-            Expression::BitwiseAnd(value) => value.resolve(scope, context, &mut ()),
-            Expression::BitwiseXOR(value) => value.resolve(scope, context, &mut ()),
-            Expression::BitwiseOR(value) => value.resolve(scope, context, &mut ()),
-            Expression::Comparaison(value) => value.resolve(scope, context, &mut ()),
-            Expression::LogicalAnd(value) => value.resolve(scope, context, &mut ()),
-            Expression::Equation(value) => value.resolve(scope, context, &mut ()),
-            Expression::LogicalOr(value) => value.resolve(scope, context, &mut ()),
-            Expression::Atomic(value) => value.resolve(scope, context, extra),
-            Expression::Cast(value) => value.resolve(scope, context, &mut ()),
-            Expression::Range(value) => value.resolve(scope, context, &mut ()),
-            Expression::FieldAccess(value) => value.resolve(scope, context, extra),
-            Expression::ListAccess(value) => value.resolve(scope, context, extra),
-            Expression::TupleAccess(value) => value.resolve(scope, context, extra),
-            Expression::FnCall(value) => value.resolve(scope, context, extra),
+            Expression::Product(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Addition(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Substraction(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Shift(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseAnd(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseXOR(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::BitwiseOR(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Comparaison(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::LogicalAnd(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Equation(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::LogicalOr(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Atomic(value) => value.resolve::<G>(scope, context, extra),
+            Expression::Cast(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::Range(value) => value.resolve::<G>(scope, context, &mut ()),
+            Expression::FieldAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::ListAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::TupleAccess(value) => value.resolve::<G>(scope, context, extra),
+            Expression::FnCall(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }

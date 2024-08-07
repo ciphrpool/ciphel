@@ -242,7 +242,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
@@ -300,7 +300,7 @@ mod tests {
 
         let scope = Scope::new();
         let _ = statement
-            .resolve(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.

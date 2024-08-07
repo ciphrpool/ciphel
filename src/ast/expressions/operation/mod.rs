@@ -51,6 +51,7 @@ pub struct FnCall {
     pub params: Vec<Expression>,
     pub metadata: Metadata,
     pub platform: ArcRwLock<Option<Lib>>,
+    pub is_dynamic_fn: Option<String>,
 }
 
 impl PartialEq for FnCall {

@@ -80,7 +80,7 @@ impl Resolve for Statement {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -91,15 +91,15 @@ impl Resolve for Statement {
     {
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve(scope, context, &mut Vec::default())?;
+                let _ = value.resolve::<G>(scope, context, &mut Vec::default())?;
                 Ok(())
             }
-            Statement::Flow(value) => value.resolve(scope, context, extra),
-            Statement::Assignation(value) => value.resolve(scope, context, extra),
-            Statement::Declaration(value) => value.resolve(scope, context, extra),
-            Statement::Definition(value) => value.resolve(scope, context, extra),
-            Statement::Loops(value) => value.resolve(scope, context, extra),
-            Statement::Return(value) => value.resolve(scope, context, extra),
+            Statement::Flow(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Assignation(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Declaration(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Definition(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Loops(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Return(value) => value.resolve::<G>(scope, context, extra),
         }
     }
 }

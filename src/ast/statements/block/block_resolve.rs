@@ -14,7 +14,7 @@ impl Resolve for Block {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Var>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -40,7 +40,7 @@ impl Resolve for Block {
         }
 
         for instruction in &mut self.instructions {
-            let _ = instruction.resolve(&mut inner_scope, context, &mut ())?;
+            let _ = instruction.resolve::<G>(&mut inner_scope, context, &mut ())?;
         }
         // {
         //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
@@ -85,7 +85,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &None, &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
@@ -131,7 +131,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
@@ -161,7 +161,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
@@ -188,7 +188,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
@@ -214,7 +214,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_ok(), "{:?}", res);
         let res_scope = expr_scope.inner_scope.clone().unwrap();
 
@@ -242,7 +242,7 @@ mod tests {
         .unwrap()
         .1;
         let scope = scope::Scope::new();
-        let res = expr_scope.resolve(&scope, &Some(p_num!(I64)), &mut Vec::default());
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut Vec::default());
         assert!(res.is_err());
     }
 }

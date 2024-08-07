@@ -10,7 +10,7 @@ impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -20,11 +20,11 @@ impl Resolve for Loop {
         Self: Sized,
     {
         match self {
-            Loop::For(value) => value.resolve(scope, context, extra),
-            Loop::While(value) => value.resolve(scope, context, extra),
+            Loop::For(value) => value.resolve::<G>(scope, context, extra),
+            Loop::While(value) => value.resolve::<G>(scope, context, extra),
             Loop::Loop(value) => {
                 value.to_loop();
-                let _ = value.resolve(scope, &context, &mut Vec::default())?;
+                let _ = value.resolve::<G>(scope, &context, &mut Vec::default())?;
                 Ok(())
             }
         }
@@ -34,7 +34,7 @@ impl Resolve for ForIterator {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -43,7 +43,7 @@ impl Resolve for ForIterator {
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve(scope, &None, &mut None)?;
+        let _ = self.expr.resolve::<G>(scope, &None, &mut None)?;
         let expr_type = self
             .expr
             .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
@@ -62,9 +62,9 @@ impl Resolve for ForIterator {
         //         }
         //         Ok(())
         //     }
-        //     ForIterator::Vec(value) => value.resolve(block, &None, &mut ()),
-        //     ForIterator::Slice(value) => value.resolve(block, &None, &mut ()),
-        //     ForIterator::Receive { addr, .. } => addr.resolve(block, &None, &mut ()),
+        //     ForIterator::Vec(value) => value.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
+        //     ForIterator::Slice(value) => value.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
+        //     ForIterator::Receive { addr, .. } => addr.resolve::<crate::vm::vm::NoopGameEngine>(block, &None, &mut ()),
         // }
     }
 }
@@ -73,7 +73,7 @@ impl Resolve for ForItem {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -89,7 +89,7 @@ impl Resolve for ForItem {
                 };
                 Ok(vec![<Var as BuildVar>::build_var(value, &item_type)])
             }
-            ForItem::Pattern(pattern) => pattern.resolve(scope, context, extra),
+            ForItem::Pattern(pattern) => pattern.resolve::<G>(scope, context, extra),
         }
     }
 }
@@ -97,7 +97,7 @@ impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -106,20 +106,20 @@ impl Resolve for ForLoop {
     where
         Self: Sized,
     {
-        let _ = self.iterator.resolve(scope, &(), &mut ())?;
+        let _ = self.iterator.resolve::<G>(scope, &(), &mut ())?;
         let item_type = self
             .iterator
             .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
         let item_type = <EType as GetSubTypes>::get_item(&item_type);
 
-        let mut item_vars = self.item.resolve(scope, &item_type, &mut ())?;
+        let mut item_vars = self.item.resolve::<G>(scope, &item_type, &mut ())?;
         for var in item_vars.iter_mut() {
             var.state = VarState::Parameter;
             var.is_declared = true;
         }
         // attach the item to the block
         self.scope.to_loop();
-        let _ = self.scope.resolve(scope, context, &mut item_vars)?;
+        let _ = self.scope.resolve::<G>(scope, context, &mut item_vars)?;
         Ok(())
     }
 }
@@ -127,7 +127,7 @@ impl Resolve for WhileLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -136,7 +136,7 @@ impl Resolve for WhileLoop {
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve(scope, &None, &mut None)?;
+        let _ = self.condition.resolve::<G>(scope, &None, &mut None)?;
         // check that the condition is a boolean
         let condition_type = self
             .condition
@@ -145,7 +145,7 @@ impl Resolve for WhileLoop {
             return Err(SemanticError::ExpectedBoolean);
         }
         self.scope.to_loop();
-        let _ = self.scope.resolve(scope, context, &mut Vec::default())?;
+        let _ = self.scope.resolve::<G>(scope, context, &mut Vec::default())?;
         Ok(())
     }
 }
@@ -189,7 +189,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr_loop = ForLoop::parse(
@@ -212,7 +212,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -238,7 +238,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -264,7 +264,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -290,7 +290,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
 
         let mut expr_loop = ForLoop::parse(
@@ -323,7 +323,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -349,7 +349,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -375,7 +375,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -401,7 +401,7 @@ mod tests {
                 is_declared: false,
             })
             .unwrap();
-        let res = expr_loop.resolve(&scope, &None, &mut ());
+        let res = expr_loop.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 }

@@ -94,7 +94,7 @@ impl Resolve for IterFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve(
+    fn resolve<G:crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -110,7 +110,7 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve(scope, &None, &mut None)?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
                 let mut map_type =
                     map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
@@ -159,7 +159,7 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve(scope, &None, &mut None)?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
                 let mut map_type =
                     map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
@@ -203,7 +203,7 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve(scope, &None, &mut None)?;
+                let _ = map.resolve::<G>(scope, &None, &mut None)?;
                 let mut map_type =
                     map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 match &map_type {
