@@ -266,69 +266,73 @@ impl Scope {
                 parent,
                 general,
                 ..
-            } => data
-                .vars
-                .iter()
-                .rev()
-                .find(|(var, _)| {
-                    let borrowed_var = &arw_read!(var, CodeGenerationError::ConcurrencyError);
-                    if let Ok(v) = borrowed_var {
-                        v.id == *id
-                    } else {
-                        false
-                    }
-                })
-                .map(|(v, _)| v)
-                .cloned()
-                .or_else(|| match parent {
-                    Some(parent) => parent.upgrade().and_then(|p| {
-                        let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
-                        let var = {
-                            let var = borrowed_scope.find_var(id);
-                            var.ok()
-                        };
-                        if let Some(var) = &var {
-                            let err = self.capture(var.clone());
-                        }
-                        var
-                    }),
-                    None => {
-                        let borrowed_scope =
-                            arw_read!(general, SemanticError::ConcurrencyError).ok()?;
-                        let borrowed_scope = borrowed_scope.borrow();
-
-                        match borrowed_scope.find_var(id) {
-                            Ok(var) => Some(var),
-                            Err(_) => None,
-                        }
-                    }
-                })
-                .ok_or(SemanticError::UnknownVar(id.clone())),
+            } => self
+                .find_var_in_data(data, id)
+                .or_else(|| self.find_var_in_parent(parent, id))
+                .or_else(|| self.find_var_in_general(general, id))
+                .ok_or_else(|| SemanticError::UnknownVar(id.clone())),
             Scope::General {
                 data,
                 in_transaction,
                 transaction_data,
                 ..
-            } => {
-                for (var, _) in data.vars.iter() {
-                    let borrowed_var = &arw_read!(var, SemanticError::ConcurrencyError)?;
-
-                    if borrowed_var.id == *id {
-                        return Ok(var.clone());
-                    }
-                }
-                if *in_transaction {
-                    for (var, _) in transaction_data.vars.iter() {
-                        let borrowed_var = &arw_read!(var, SemanticError::ConcurrencyError)?;
-
-                        if borrowed_var.id == *id {
-                            return Ok(var.clone());
-                        }
-                    }
-                }
-                return Err(SemanticError::UnknownVar(id.clone()));
-            }
+            } => self.find_var_in_general_scope(data, *in_transaction, transaction_data, id),
         }
+    }
+
+    fn find_var_in_data(&self, data: &ScopeData, id: &ID) -> Option<ArcRwLock<Var>> {
+        data.vars.iter().rev().find_map(|(var, _)| {
+            arw_read!(var, SemanticError::ConcurrencyError)
+                .ok()
+                .filter(|v| v.id == *id)
+                .map(|_| var.clone())
+        })
+    }
+
+    fn find_var_in_parent(
+        &self,
+        parent: &Option<Weak<RwLock<Scope>>>,
+        id: &ID,
+    ) -> Option<ArcRwLock<Var>> {
+        parent.as_ref().and_then(|p| {
+            p.upgrade().and_then(|p| {
+                let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
+                let var = borrowed_scope.find_var(id).ok()?;
+                let _ = self.capture(var.clone());
+                Some(var)
+            })
+        })
+    }
+
+    fn find_var_in_general(&self, general: &ArcRwLock<Scope>, id: &ID) -> Option<ArcRwLock<Var>> {
+        arw_read!(general, SemanticError::ConcurrencyError)
+            .ok()
+            .and_then(|borrowed_scope| borrowed_scope.find_var(id).ok())
+    }
+
+    fn find_var_in_general_scope(
+        &self,
+        data: &ScopeData,
+        in_transaction: bool,
+        transaction_data: &ScopeData,
+        id: &ID,
+    ) -> Result<ArcRwLock<Var>, SemanticError> {
+        let find_in_data = |data: &ScopeData| {
+            data.vars.iter().find_map(|(var, _)| {
+                match arw_read!(var, SemanticError::ConcurrencyError) {
+                    Ok(borrowed_var) if borrowed_var.id == *id => Some(var.clone()),
+                    _ => None,
+                }
+            })
+        };
+
+        find_in_data(data)
+            .or_else(|| {
+                in_transaction
+                    .then(|| find_in_data(transaction_data))
+                    .flatten()
+            })
+            .ok_or_else(|| SemanticError::UnknownVar(id.clone()))
     }
 
     pub fn access_var(
@@ -645,7 +649,7 @@ impl Scope {
                 general: _,
                 data,
             } => Ok(data.vars.iter()),
-            Scope::General {  .. } => Err(SemanticError::ExpectedClosure),
+            Scope::General { .. } => Err(SemanticError::ExpectedClosure),
         }
     }
 
