@@ -18,7 +18,7 @@ pub type CiphelResult<T> = Option<T>;
 
 use thiserror::Error;
 
-#[derive(Debug, Clone,Error)]
+#[derive(Debug, Clone, Error)]
 pub enum CompilationError {
     #[error("Parsing Error")]
     ParsingError(),

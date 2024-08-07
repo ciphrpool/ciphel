@@ -86,7 +86,7 @@ impl Resolve for StringsFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -167,10 +167,7 @@ impl GenerateCode for StringsFn {
     }
 }
 
-pub fn push_string(src:String,
-    stack: &mut Stack,
-    heap: &mut Heap
-)  -> Result<(), RuntimeError> {
+pub fn push_string(src: String, stack: &mut Stack, heap: &mut Heap) -> Result<(), RuntimeError> {
     let len = src.len();
     let cap = align(len as usize) as u64;
     let alloc_size = cap + 16;
@@ -188,9 +185,7 @@ pub fn push_string(src:String,
     /* Write slice */
     let _ = heap.write(address + 16, &data)?;
     /* Push heap address back to stack */
-    let _ = stack
-        .push_with(&address.to_le_bytes())
-        ?;
+    let _ = stack.push_with(&address.to_le_bytes())?;
     Ok(())
 }
 
@@ -284,9 +279,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
                 /* Write slice */
                 let _ = heap.write(address + 16, &data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             StringsCasm::Join(value) => match value {
                 JoinCasm::NoSepFromSlice(opt_len) => {
@@ -301,20 +294,15 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
                     for _ in 0..len {
                         let string_heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                        let string_len_bytes = heap
-                            .read(string_heap_address as usize, 8)
-                            ?;
+                        let string_len_bytes = heap.read(string_heap_address as usize, 8)?;
                         let string_len_bytes =
                             TryInto::<&[u8; 8]>::try_into(string_len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                         let string_len = u64::from_le_bytes(*string_len_bytes);
-                        let string_data = heap
-                            .read(string_heap_address as usize + 16, string_len as usize)
-                            ?;
+                        let string_data =
+                            heap.read(string_heap_address as usize + 16, string_len as usize)?;
 
-                        let _ = heap
-                            .free(string_heap_address as usize - 8)
-                            ?;
+                        let _ = heap.free(string_heap_address as usize - 8)?;
 
                         slice_data.push(string_data);
                     }
@@ -336,9 +324,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
                     /* Write slice */
                     let _ = heap.write(address + 16, &data)?;
 
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        ?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                 }
             },
         }

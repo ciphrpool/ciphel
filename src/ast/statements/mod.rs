@@ -1,4 +1,3 @@
-
 use nom::{
     branch::alt,
     combinator::{eof, map},
@@ -13,9 +12,7 @@ use crate::{semantic::scope::scope::Scope, CompilationError};
 use super::{utils::strings::eater, TryParse};
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{
-        scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf},
     vm::{
         casm::{
             branch::{Call, Goto, Label},
@@ -80,7 +77,7 @@ impl Resolve for Statement {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

@@ -45,9 +45,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
             }
             MemoryAddress::Stack { offset, level } => {
                 if let Offset::FE(stack_idx, heap_idx) = offset {
-                    let heap_address = stack
-                        .read(Offset::FP(*stack_idx), *level, 8)
-                        ?;
+                    let heap_address = stack.read(Offset::FP(*stack_idx), *level, 8)?;
                     let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
@@ -56,9 +54,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
                     program.incr();
                     return Ok(());
                 }
-                let offset = stack
-                    .compute_absolute_address(*offset, *level)
-                    ?;
+                let offset = stack.compute_absolute_address(*offset, *level)?;
                 let data = (offset as u64).to_le_bytes();
                 let _ = stack.push_with(&data)?;
                 program.incr();
@@ -114,9 +110,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateUTF8Char {
                         offset
                     }
                     MemoryAddress::Stack { offset, level } => {
-                        let (_, offset) = stack
-                            .read_utf8(offset, level, 1, 1)
-                            ?;
+                        let (_, offset) = stack.read_utf8(offset, level, 1, 1)?;
                         offset
                     }
                 };
@@ -149,18 +143,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateUTF8Char {
                             .map_err(|_| RuntimeError::Deserialization)?;
                         let len = u64::from_le_bytes(*len_bytes) as usize;
 
-                        let (_, size) = heap
-                            .read_utf8(offset + 16, idx as usize, len)
-                            ?;
+                        let (_, size) = heap.read_utf8(offset + 16, idx as usize, len)?;
                         size
                     }
                     MemoryAddress::Stack { offset, level } => {
                         let Some(len) = len else {
                             return Err(RuntimeError::CodeSegmentation);
                         };
-                        let (_, size) = stack
-                            .read_utf8(offset, level, idx as usize, *len)
-                            ?;
+                        let (_, size) = stack.read_utf8(offset, level, idx as usize, *len)?;
                         size
                     }
                 };

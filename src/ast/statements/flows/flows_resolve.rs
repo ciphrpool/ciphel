@@ -8,7 +8,8 @@ use crate::{
             type_traits::TypeChecking,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-        }, EType, Either, Resolve, SemanticError, TypeOf,
+        },
+        EType, Either, Resolve, SemanticError, TypeOf,
     },
 };
 use std::collections::HashMap;
@@ -17,7 +18,7 @@ impl Resolve for Flow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -38,7 +39,7 @@ impl Resolve for IfStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -80,7 +81,7 @@ impl Resolve for MatchStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -128,7 +129,9 @@ impl Resolve for MatchStat {
                         var.is_declared = true;
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve::<G>(scope, &context, &mut previous_vars)?;
+                    let _ = value
+                        .scope
+                        .resolve::<G>(scope, &context, &mut previous_vars)?;
                 }
                 let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
                 if let Some(exhaustive_cases) = exhaustive_cases {
@@ -175,7 +178,9 @@ impl Resolve for MatchStat {
                         var.is_declared = true;
                     }
                     // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value.scope.resolve::<G>(scope, &context, &mut previous_vars)?;
+                    let _ = value
+                        .scope
+                        .resolve::<G>(scope, &context, &mut previous_vars)?;
                 }
             }
         }
@@ -187,7 +192,7 @@ impl Resolve for TryStat {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -209,7 +214,7 @@ impl Resolve for CallStat {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -224,13 +229,12 @@ impl Resolve for CallStat {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
     use crate::ast::TryParse;
     use crate::p_num;
     use crate::semantic::scope::scope::Scope;
-    
+
     use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {

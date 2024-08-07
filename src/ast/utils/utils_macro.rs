@@ -159,7 +159,9 @@ macro_rules! compile_expression {
         let tid = runtime
             .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -205,7 +207,9 @@ macro_rules! compile_expression_with_type {
         let tid = runtime
             .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -236,7 +240,9 @@ macro_rules! compile_statement {
         let tid = runtime
             .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
         program
             .execute(stack, &mut heap, &mut stdio, &mut engine)
@@ -266,7 +272,9 @@ macro_rules! compile_statement_for_stdout {
         let tid = runtime
             .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -296,7 +304,9 @@ macro_rules! compile_statement_for_string {
         let tid = runtime
             .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
@@ -331,8 +341,10 @@ macro_rules! compile_statement_for_string {
 macro_rules! eval_and_compare {
     ($expr:expr, $expected:expr,$size:ident) => {{
         let mut engine = crate::vm::vm::NoopGameEngine {};
-        
-        let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+
+        let mut expr = Expression::parse($expr.into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
         let _ = expr
@@ -349,13 +361,15 @@ macro_rules! eval_and_compare {
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1,scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap,&mut  stdio,&mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -366,7 +380,10 @@ macro_rules! eval_and_compare {
         )
         .expect("Deserialization should have succeeded");
 
-        assert_eq!(result, $expected, "Result does not match the expected value");
+        assert_eq!(
+            result, $expected,
+            "Result does not match the expected value"
+        );
     }};
 }
 
@@ -374,8 +391,10 @@ macro_rules! eval_and_compare {
 macro_rules! eval_and_compare_bool {
     ($expr:expr, $expected:expr) => {{
         let mut engine = crate::vm::vm::NoopGameEngine {};
-        
-        let mut expr = Expression::parse($expr.into()).expect("Parsing should have succeeded").1;
+
+        let mut expr = Expression::parse($expr.into())
+            .expect("Parsing should have succeeded")
+            .1;
 
         let scope = Scope::new();
         let _ = expr
@@ -392,23 +411,26 @@ macro_rules! eval_and_compare_bool {
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1,scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
             .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime.get_mut(crate::vm::vm::Player::P1,tid).expect("Thread should exist");
+        let (_, stack, program) = runtime
+            .get_mut(crate::vm::vm::Player::P1, tid)
+            .expect("Thread should exist");
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap,&mut  stdio,&mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Bool,
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+        let result =
+            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
+                .expect("Deserialization should have succeeded");
 
-        assert_eq!(result, $expected, "Result does not match the expected value");
+        assert_eq!(
+            result, $expected,
+            "Result does not match the expected value"
+        );
     }};
 }

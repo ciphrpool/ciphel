@@ -1,4 +1,3 @@
-
 use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 
 use super::{ForIterator, ForLoop, Loop, WhileLoop};

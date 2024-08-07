@@ -1,4 +1,3 @@
-
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::{CompatibleWith, Either, SemanticError, TypeOf};
 

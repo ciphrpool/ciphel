@@ -1,7 +1,6 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use crate::semantic::{EType, Either, SemanticError, TypeOf};
-
 
 pub mod st_builder;
 pub mod st_compatible_with;

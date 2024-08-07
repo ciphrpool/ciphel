@@ -3,14 +3,14 @@ use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
 use crate::semantic::scope::var_impl::VarState;
 use crate::semantic::scope::BuildVar;
+use crate::semantic::EType;
 use crate::semantic::{scope::var_impl::Var, Resolve, SemanticError, TypeOf};
-use crate::semantic::{EType};
 
 impl Resolve for Loop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -34,7 +34,7 @@ impl Resolve for ForIterator {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -73,7 +73,7 @@ impl Resolve for ForItem {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -97,7 +97,7 @@ impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -127,7 +127,7 @@ impl Resolve for WhileLoop {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -145,24 +145,20 @@ impl Resolve for WhileLoop {
             return Err(SemanticError::ExpectedBoolean);
         }
         self.scope.to_loop();
-        let _ = self.scope.resolve::<G>(scope, context, &mut Vec::default())?;
+        let _ = self
+            .scope
+            .resolve::<G>(scope, context, &mut Vec::default())?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::TryParse,
         p_num,
-        semantic::{
-            scope::{
-                scope,
-                var_impl::Var,
-            },
-        },
+        semantic::scope::{scope, var_impl::Var},
     };
 
     use super::*;

@@ -3,7 +3,6 @@ pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
 
-
 use crate::{
     ast::{types::Type, utils::strings::ID},
     semantic::{EType, Metadata},

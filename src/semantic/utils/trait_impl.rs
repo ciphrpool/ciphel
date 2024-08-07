@@ -1,4 +1,3 @@
-
 use crate::semantic::scope::scope::Scope;
 use crate::{
     ast::{expressions::data::Data, utils::strings::ID},

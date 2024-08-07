@@ -98,9 +98,7 @@ impl TryParse for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
@@ -159,7 +157,7 @@ mod tests {
                             )))],
                             metadata: Metadata::default(),
                             platform: Default::default(),
-                            is_dynamic_fn : None,
+                            is_dynamic_fn: None,
                         })
                     }))],
                     can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
@@ -207,7 +205,7 @@ mod tests {
                             )))],
                             metadata: Metadata::default(),
                             platform: Default::default(),
-                            is_dynamic_fn : None,
+                            is_dynamic_fn: None,
                         })
                     }))],
                     can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
@@ -251,7 +249,7 @@ mod tests {
                         ))))],
                         metadata: Metadata::default(),
                         platform: Default::default(),
-                        is_dynamic_fn : None,
+                        is_dynamic_fn: None,
                     })
                 }))],
                 can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),

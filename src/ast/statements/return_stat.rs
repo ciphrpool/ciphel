@@ -79,7 +79,7 @@ impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -304,7 +304,8 @@ mod tests {
             .unwrap()
             .to_loop();
 
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
+        let res =
+            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement
@@ -321,7 +322,8 @@ mod tests {
         .unwrap()
         .1;
 
-        let res = return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
+        let res =
+            return_statement.resolve::<crate::vm::vm::NoopGameEngine>(&inner_scope, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let return_type = return_statement

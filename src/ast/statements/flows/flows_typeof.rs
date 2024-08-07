@@ -1,4 +1,3 @@
-
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::BuildStaticType;
@@ -96,7 +95,10 @@ impl TypeOf for TryStat {
 }
 
 impl TypeOf for CallStat {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<crate::semantic::EType, SemanticError>
+    fn type_of(
+        &self,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<crate::semantic::EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

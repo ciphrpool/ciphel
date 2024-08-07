@@ -1,6 +1,4 @@
-use std::{
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use nom::{combinator::map, multi::many0, sequence::delimited};
 

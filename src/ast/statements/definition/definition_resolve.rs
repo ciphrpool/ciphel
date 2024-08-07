@@ -18,7 +18,7 @@ impl Resolve for Definition {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -38,7 +38,7 @@ impl Resolve for TypeDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -73,7 +73,7 @@ impl Resolve for StructDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -93,7 +93,7 @@ impl Resolve for UnionDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -116,7 +116,7 @@ impl Resolve for EnumDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -133,7 +133,7 @@ impl Resolve for FnDef {
     type Output = ();
     type Context = ();
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -192,7 +192,9 @@ impl Resolve for FnDef {
         var.is_declared = true;
         self.scope.set_caller(var.clone());
         let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
-        let _ = self.scope.resolve::<G>(scope, &Some(return_type), &mut vars)?;
+        let _ = self
+            .scope
+            .resolve::<G>(scope, &Some(return_type), &mut vars)?;
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
     }

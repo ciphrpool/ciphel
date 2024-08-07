@@ -1,4 +1,3 @@
-
 use crate::{
     ast::utils::strings::ID,
     semantic::{EType, SemanticError, TypeOf},
@@ -192,7 +191,11 @@ pub trait OperandMerging {
         Err(SemanticError::IncompatibleOperands)
     }
 
-    fn cast<Other>(&self, _other: &Other, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn cast<Other>(
+        &self,
+        _other: &Other,
+        _scope: &std::sync::RwLockReadGuard<Scope>,
+    ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
     {

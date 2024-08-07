@@ -157,16 +157,11 @@ impl TryParse for FnDef {
 #[cfg(test)]
 mod tests {
 
-    use std::{
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{
-            expressions::{
-                data::{Data},
-                Atomic, Expression,
-            },
+            expressions::{data::Data, Atomic, Expression},
             statements::{Return, Statement},
             types::{NumberType, PrimitiveType},
         },

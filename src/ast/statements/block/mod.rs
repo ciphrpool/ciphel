@@ -1,14 +1,13 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
 use crate::{
     arw_write,
     semantic::{
-        scope::{var_impl::Var, ClosureState}, ArcRwLock, Metadata, SemanticError,
+        scope::{var_impl::Var, ClosureState},
+        ArcRwLock, Metadata, SemanticError,
     },
 };
 

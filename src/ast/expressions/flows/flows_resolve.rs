@@ -19,7 +19,7 @@ impl Resolve for ExprFlow {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -48,7 +48,7 @@ impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -88,7 +88,7 @@ impl Resolve for Pattern {
     type Output = Vec<Var>;
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -215,7 +215,7 @@ impl Resolve for PatternExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -244,7 +244,7 @@ impl Resolve for MatchExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -376,7 +376,7 @@ impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -512,7 +512,7 @@ impl Resolve for FCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -537,17 +537,12 @@ impl Resolve for FCall {
 #[cfg(test)]
 mod tests {
 
-    
-
     use crate::{
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
             scope::Scope,
-            static_types::{
-                StaticType,
-                StringType,
-            },
+            static_types::{StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
             var_impl::Var,
         },

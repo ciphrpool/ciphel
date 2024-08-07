@@ -1,4 +1,3 @@
-
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::vm::allocator::heap::Heap;
@@ -59,7 +58,7 @@ impl Resolve for CoreFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

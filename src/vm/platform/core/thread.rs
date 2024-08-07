@@ -82,7 +82,7 @@ impl ThreadFn {
         }
     }
 }
-fn expect_one_u64<G:crate::GameEngineStaticFn>(
+fn expect_one_u64<G: crate::GameEngineStaticFn>(
     params: &mut Vec<Expression>,
     scope: &crate::semantic::ArcRwLock<Scope>,
 ) -> Result<(), SemanticError> {
@@ -107,7 +107,7 @@ impl Resolve for ThreadFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -195,18 +195,14 @@ pub fn sig_spawn(
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if let Ok(tid) = context.request_spawn() {
-        let _ = stack
-            .push_with(&(tid as u64).to_le_bytes())
-            ?;
+        let _ = stack.push_with(&(tid as u64).to_le_bytes())?;
 
         let _ = stack.push_with(&OK_VALUE)?;
         program.incr();
         Ok(())
     } else {
         // Error TooManyThread
-        let _ = stack
-            .push_with(&(0u64).to_le_bytes())
-            ?;
+        let _ = stack.push_with(&(0u64).to_le_bytes())?;
 
         let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();
@@ -226,9 +222,7 @@ pub fn sig_close(
         Ok(())
     } else {
         // Error InvalidTID
-        let _ = stack
-            .push_with(&(0u64).to_le_bytes())
-            ?;
+        let _ = stack.push_with(&(0u64).to_le_bytes())?;
 
         let _ = stack.push_with(&ERROR_VALUE)?;
         program.incr();

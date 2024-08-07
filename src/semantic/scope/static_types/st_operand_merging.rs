@@ -1,9 +1,8 @@
-
 use crate::{
     e_static, p_num,
     semantic::{
-        scope::{type_traits::OperandMerging},
-        CompatibleWith, EType, Either, MergeType, SemanticError, TypeOf,
+        scope::type_traits::OperandMerging, CompatibleWith, EType, Either, MergeType,
+        SemanticError, TypeOf,
     },
 };
 

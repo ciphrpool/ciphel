@@ -1,4 +1,4 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use nom::{
     branch::alt,
@@ -9,11 +9,7 @@ use nom::{
     Parser,
 };
 
-use nom_supreme::{
-    tag::complete::tag,
-    ParserExt,
-};
-
+use nom_supreme::{tag::complete::tag, ParserExt};
 
 use super::{
     io::{PResult, Span},

@@ -1,15 +1,10 @@
 use crate::{
     ast::utils::strings::ID,
     e_static, p_num,
-    semantic::{
-        scope::{type_traits::GetSubTypes},
-        EType, Either, SizeOf,
-    },
+    semantic::{scope::type_traits::GetSubTypes, EType, Either, SizeOf},
 };
 
-use super::{
-    AddrType, PrimitiveType, SliceType, StaticType, StrSliceType, TupleType,
-};
+use super::{AddrType, PrimitiveType, SliceType, StaticType, StrSliceType, TupleType};
 
 impl GetSubTypes for StaticType {
     fn get_nth(&self, n: &usize) -> Option<EType> {

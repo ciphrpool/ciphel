@@ -2,10 +2,7 @@ use num_traits::ToBytes;
 
 use crate::{
     semantic::scope::static_types::NumberType,
-    vm::{
-        allocator::{stack::Stack},
-        vm::RuntimeError,
-    },
+    vm::{allocator::stack::Stack, vm::RuntimeError},
 };
 
 use super::operation::OpPrimitive;

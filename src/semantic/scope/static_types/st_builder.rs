@@ -1,10 +1,6 @@
-
 use crate::{
     ast,
-    semantic::{
-        scope::{BuildStaticType},
-        EType, Either, SemanticError, TypeOf,
-    },
+    semantic::{scope::BuildStaticType, EType, Either, SemanticError, TypeOf},
 };
 
 use super::{

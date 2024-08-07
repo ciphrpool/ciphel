@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
-use crate::{ast::utils::strings::ID, vm::vm::GameEngineStaticFn};
 use crate::semantic::scope::scope::Scope;
+use crate::{ast::utils::strings::ID, vm::vm::GameEngineStaticFn};
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
@@ -154,7 +154,7 @@ pub trait Resolve {
     type Output;
     type Context: Default;
     type Extra: Default;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

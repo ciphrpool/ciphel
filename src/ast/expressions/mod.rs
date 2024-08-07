@@ -1,4 +1,3 @@
-
 use nom::{branch::alt, combinator::map, sequence::delimited};
 
 use crate::{
@@ -92,7 +91,7 @@ impl Resolve for Atomic {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -148,7 +147,7 @@ impl Resolve for Expression {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

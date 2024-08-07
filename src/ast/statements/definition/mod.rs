@@ -1,8 +1,4 @@
-
-
-use crate::{
-    ast::{types::Type, utils::strings::ID},
-};
+use crate::ast::{types::Type, utils::strings::ID};
 
 use super::{block::Block, declaration::TypedVar};
 

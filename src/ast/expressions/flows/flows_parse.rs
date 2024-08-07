@@ -1,8 +1,7 @@
-
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    multi::{separated_list1},
+    multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair},
 };
 
@@ -10,18 +9,14 @@ use crate::{
     ast::{
         expressions::{
             data::{Data, ExprScope, Primitive, StrSlice, Variable},
-            operation::{FnCall},
+            operation::FnCall,
             Atomic, Expression,
         },
         types::Type,
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{
-                parse_id,
-                string_parser::{parse_fstring},
-                wst,
-            },
+            strings::{parse_id, string_parser::parse_fstring, wst},
         },
         TryParse,
     },
@@ -256,7 +251,7 @@ impl TryParse for FCall {
                                 params: vec![expr],
                                 metadata: Metadata::default(),
                                 platform: Default::default(),
-                                is_dynamic_fn : Default::default(),
+                                is_dynamic_fn: Default::default(),
                             }))
                         }
                     })
@@ -269,9 +264,7 @@ impl TryParse for FCall {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
         ast::{

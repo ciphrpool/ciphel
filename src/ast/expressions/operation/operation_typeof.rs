@@ -1,4 +1,3 @@
-
 use crate::{
     arw_read,
     ast::expressions::{
@@ -72,9 +71,10 @@ impl TypeOf for FnCall {
         Self: Sized + Resolve,
     {
         if self.is_dynamic_fn.is_some() {
-            return self.metadata
-            .signature()
-            .ok_or(SemanticError::NotResolvedYet)
+            return self
+                .metadata
+                .signature()
+                .ok_or(SemanticError::NotResolvedYet);
         }
         match self.fn_var.as_ref() {
             Expression::Atomic(Atomic::Data(Data::Variable(Variable { .. }))) => {

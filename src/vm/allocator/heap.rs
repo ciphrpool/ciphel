@@ -8,8 +8,8 @@ use std::{
 
 use num_traits::ToBytes;
 
+use crate::vm::vm::RuntimeError;
 use thiserror::Error;
-use crate::{vm::vm::RuntimeError};
 
 use super::{align, stack::STACK_SIZE};
 

@@ -7,7 +7,7 @@ impl Resolve for Assignation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -33,7 +33,7 @@ impl Resolve for AssignValue {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -80,16 +80,13 @@ impl Resolve for AssignValue {
 
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::TryParse,
         p_num,
-        semantic::{
-            scope::{
-                scope::Scope,
-                var_impl::{Var, VarState},
-            },
+        semantic::scope::{
+            scope::Scope,
+            var_impl::{Var, VarState},
         },
     };
 

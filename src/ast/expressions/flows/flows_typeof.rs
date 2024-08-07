@@ -1,15 +1,9 @@
-
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::StringType;
 use crate::{
     p_num,
-    semantic::{
-        scope::{
-            static_types::{StaticType},
-        },
-        EType, MergeType, Resolve, SemanticError, TypeOf,
-    },
+    semantic::{scope::static_types::StaticType, EType, MergeType, Resolve, SemanticError, TypeOf},
 };
 
 use super::{ExprFlow, FCall, IfExpr, MatchExpr, PatternExpr, TryExpr};

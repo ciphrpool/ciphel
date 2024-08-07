@@ -1,4 +1,3 @@
-
 use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::Scope;
@@ -106,7 +105,7 @@ impl Resolve for StdFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

@@ -1,6 +1,4 @@
-use std::{
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use crate::{semantic::scope::scope::Scope, vm::casm};
 use ulid::Ulid;

@@ -185,7 +185,7 @@ impl Resolve for MathFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -415,14 +415,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
                 let _ = stack.push_with(&E.to_le_bytes())?;
             }
             MathCasm::Inf => {
-                let _ = stack
-                    .push_with(&INFINITY.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&INFINITY.to_le_bytes())?;
             }
             MathCasm::NInf => {
-                let _ = stack
-                    .push_with(&NEG_INFINITY.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&NEG_INFINITY.to_le_bytes())?;
             }
             MathCasm::IsNaN => {
                 let n = OpPrimitive::get_num8::<f64>(stack)?;
@@ -627,22 +623,17 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        f64::{
-            consts::{E, PI},
-            NEG_INFINITY,
-        },
+    use std::f64::{
+        consts::{E, PI},
+        NEG_INFINITY,
     };
 
     use crate::{
-        ast::{
-            expressions::data::{Primitive},
-            statements::Statement,
-            TryParse,
-        }, compile_statement,
+        ast::{expressions::data::Primitive, statements::Statement, TryParse},
+        compile_statement,
         semantic::scope::scope::Scope,
         v_num,
-        vm::vm::{DeserializeFrom},
+        vm::vm::DeserializeFrom,
     };
 
     use super::*;

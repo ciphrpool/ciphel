@@ -5,17 +5,15 @@ use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
 
 use crate::vm::vm::NextItem;
-use crate::{
-    vm::{
-        allocator::stack::UReg,
-        casm::{
-            alloc::StackFrame,
-            branch::{Goto, Label},
-            mem::Mem,
-            Casm, CasmProgram,
-        },
-        vm::{CodeGenerationError, GenerateCode},
+use crate::vm::{
+    allocator::stack::UReg,
+    casm::{
+        alloc::StackFrame,
+        branch::{Goto, Label},
+        mem::Mem,
+        Casm, CasmProgram,
     },
+    vm::{CodeGenerationError, GenerateCode},
 };
 
 use super::{ForLoop, Loop, WhileLoop};
@@ -144,21 +142,17 @@ impl GenerateCode for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::Resolve;
     use crate::{
-        ast::{
-            expressions::data::{Primitive},
-            statements::Statement,
-        },
+        ast::{expressions::data::Primitive, statements::Statement},
         semantic::scope::{
             scope::Scope,
             static_types::{NumberType, PrimitiveType},
         },
-        vm::vm::{DeserializeFrom},
+        vm::vm::DeserializeFrom,
     };
     use crate::{compile_statement, v_num};
 

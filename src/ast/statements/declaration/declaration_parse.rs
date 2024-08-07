@@ -136,7 +136,6 @@ impl TryParse for PatternVar {
 }
 #[cfg(test)]
 mod tests {
-    
 
     use crate::{
         ast::{
@@ -204,7 +203,10 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Declaration::Assigned {
-                left: DeclaredVar::Pattern(PatternVar::Tuple(vec!["x".to_string().into(), "y".to_string().into()])),
+                left: DeclaredVar::Pattern(PatternVar::Tuple(vec![
+                    "x".to_string().into(),
+                    "y".to_string().into()
+                ])),
                 right: AssignValue::Expr(Box::new(Expression::Atomic(Atomic::Data(Data::Tuple(
                     Tuple {
                         value: vec![

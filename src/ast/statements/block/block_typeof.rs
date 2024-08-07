@@ -1,4 +1,3 @@
-
 use super::Block;
 use crate::ast::statements::Statement;
 use crate::semantic::scope::scope::Scope;

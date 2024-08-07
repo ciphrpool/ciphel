@@ -87,78 +87,56 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let length = u64::from_le_bytes(*data);
 
-                let data = heap
-                    .read(heap_address as usize + 16, size * length as usize)
-                    ?;
+                let data = heap.read(heap_address as usize + 16, size * length as usize)?;
 
                 let _ = stack.push_with(&data)?;
-                let _ = stack
-                    .push_with(&length.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&length.to_le_bytes())?;
             }
             Mem::TakeToHeap { size } => {
                 let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
 
                 let data = stack.pop(*size)?;
-                let _ = heap
-                    .write(heap_address as usize, &data.to_vec())
-                    ?;
-                let _ = stack
-                    .push_with(&heap_address.to_le_bytes())
-                    ?;
+                let _ = heap.write(heap_address as usize, &data.to_vec())?;
+                let _ = stack.push_with(&heap_address.to_le_bytes())?;
             }
             Mem::Take { size } => {
                 let address = OpPrimitive::get_num8::<u64>(stack)?;
                 if address < STACK_SIZE as u64 {
                     let data = stack.pop(*size)?.to_owned();
-                    let _ = stack
-                        .write(Offset::SB(address as usize), AccessLevel::General, &data)
-                        ?;
+                    let _ =
+                        stack.write(Offset::SB(address as usize), AccessLevel::General, &data)?;
                 } else {
                     let data = stack.pop(*size)?;
-                    let _ = heap
-                        .write(address as usize, &data.to_vec())
-                        ?;
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        ?;
+                    let _ = heap.write(address as usize, &data.to_vec())?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                 }
             }
             Mem::TakeUTF8Char => {
                 let address = OpPrimitive::get_num8::<u64>(stack)?;
                 let value = OpPrimitive::get_char(stack)?;
                 if address < STACK_SIZE as u64 {
-                    let _ = stack
-                        .write(
-                            Offset::SB(address as usize),
-                            AccessLevel::General,
-                            &value.to_string().as_bytes(),
-                        )
-                        ?;
+                    let _ = stack.write(
+                        Offset::SB(address as usize),
+                        AccessLevel::General,
+                        &value.to_string().as_bytes(),
+                    )?;
                 } else {
-                    let _ = heap
-                        .write(address as usize, &value.to_string().as_bytes().to_vec())
-                        ?;
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        ?;
+                    let _ = heap.write(address as usize, &value.to_string().as_bytes().to_vec())?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                 }
             }
             Mem::TakeToStack { size } => {
                 let stack_address = OpPrimitive::get_num8::<u64>(stack)?;
                 let data = stack.pop(*size)?.to_owned();
-                let _ = stack
-                    .write(
-                        Offset::SB(stack_address as usize),
-                        AccessLevel::General,
-                        &data,
-                    )
-                    ?;
+                let _ = stack.write(
+                    Offset::SB(stack_address as usize),
+                    AccessLevel::General,
+                    &data,
+                )?;
             }
             Mem::Dup(size) => {
                 let data = stack
-                    .read(Offset::ST(-(*size as isize)), AccessLevel::Direct, *size)
-                    ?
+                    .read(Offset::ST(-(*size as isize)), AccessLevel::Direct, *size)?
                     .to_owned();
                 let _ = stack.push_with(&data)?;
             }
@@ -236,36 +214,27 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                     }
                     MemoryAddress::Stack { offset, level } => {
                         if let Offset::FE(stack_idx, heap_udx) = offset {
-                            let heap_address = stack
-                                .read(Offset::FP(stack_idx), level, 8)
-                                ?;
+                            let heap_address = stack.read(Offset::FP(stack_idx), level, 8)?;
                             let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let heap_address = u64::from_le_bytes(*data);
 
-                            let bytes = heap
-                                .read(heap_address as usize + heap_udx, size)
-                                ?;
+                            let bytes = heap.read(heap_address as usize + heap_udx, size)?;
                             bytes
                         } else {
-                            let bytes =
-                                stack.read(offset, level, size)?;
+                            let bytes = stack.read(offset, level, size)?;
                             bytes.to_vec()
                         }
                     }
                 };
                 if to_address < STACK_SIZE as u64 {
-                    let _ = stack
-                        .write(
-                            Offset::SB(to_address as usize),
-                            AccessLevel::General,
-                            &from_data,
-                        )
-                        ?;
+                    let _ = stack.write(
+                        Offset::SB(to_address as usize),
+                        AccessLevel::General,
+                        &from_data,
+                    )?;
                 } else {
-                    let _ = heap
-                        .write(to_address as usize, &from_data)
-                        ?;
+                    let _ = heap.write(to_address as usize, &from_data)?;
                 }
             }
         };

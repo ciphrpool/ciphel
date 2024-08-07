@@ -19,7 +19,8 @@ use crate::{
             static_types::StaticType,
             user_type_impl::{Enum, Union, UserType},
             var_impl::VarState,
-        }, Either, SizeOf,
+        },
+        Either, SizeOf,
     },
     vm::{
         casm::{
@@ -351,15 +352,13 @@ impl GenerateCode for TryStat {
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
 
-    
     use crate::ast::TryParse;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
-    use crate::vm::vm::{DeserializeFrom};
+    use crate::vm::vm::DeserializeFrom;
     use crate::{ast::statements::Statement, semantic::scope::scope::Scope};
     use crate::{compile_statement, v_num};
 

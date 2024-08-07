@@ -100,9 +100,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
         };
 
         let heap_address = OpPrimitive::get_num8::<u64>(stack)? - 8;
-        let address = heap
-            .realloc(heap_address as usize, size)
-            ?;
+        let address = heap.realloc(heap_address as usize, size)?;
         let address = address + 8 /* IMPORTANT : Offset the heap pointer to the start of the allocated block */;
 
         let data = (address as u64).to_le_bytes().to_vec();
@@ -255,9 +253,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                 let _ = stack.clean()?;
 
                 let _ = stack.push_with(&return_data)?;
-                let _ = stack
-                    .push_with(&(return_size as u64).to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&(return_size as u64).to_le_bytes())?;
                 let _ = stack.push_with(&[FLAG_RETURN])?; /* return flag set to true */
 
                 Ok(())
@@ -303,9 +299,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
                         let _ = stack.clean()?;
 
                         let _ = stack.push_with(&return_data)?;
-                        let _ = stack
-                            .push_with(&(return_size as u64).to_le_bytes())
-                            ?;
+                        let _ = stack.push_with(&(return_size as u64).to_le_bytes())?;
                         let _ = stack.push_with(&[FLAG_RETURN])?;
                         /* return flag set to true */
                     }
@@ -417,9 +411,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         if index.unwrap_or(0) >= len as u64 {
                             return Err(RuntimeError::IndexOutOfBound);
                         }
-                        let (bytes, _) = heap
-                            .read_utf8(offset + 16, index.unwrap_or(0) as usize, len)
-                            ?;
+                        let (bytes, _) =
+                            heap.read_utf8(offset + 16, index.unwrap_or(0) as usize, len)?;
 
                         bytes.to_vec()
                     }
@@ -435,45 +428,36 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
             }
             MemoryAddress::Stack { offset, level } => {
                 if let Offset::FE(stack_idx, heap_udx) = offset {
-                    let heap_address = stack
-                        .read(Offset::FP(stack_idx), level, 8)
-                        ?;
+                    let heap_address = stack.read(Offset::FP(stack_idx), level, 8)?;
                     let data = TryInto::<&[u8; 8]>::try_into(heap_address)
                         .map_err(|_| RuntimeError::Deserialization)?;
                     let heap_address = u64::from_le_bytes(*data);
 
                     let data = match self {
                         Access::RuntimeCharUTF8 => {
-                            let (bytes, _) = heap
-                                .read_utf8(heap_address as usize + heap_udx, 0, 1)
-                                ?;
+                            let (bytes, _) =
+                                heap.read_utf8(heap_address as usize + heap_udx, 0, 1)?;
 
                             bytes.to_vec()
                         }
                         Access::RuntimeCharUTF8AtIdx { .. } => {
-                            let len_bytes = heap
-                                .read(heap_address as usize + heap_udx, 8)
-                                ?;
+                            let len_bytes = heap.read(heap_address as usize + heap_udx, 8)?;
                             let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
                                 .map_err(|_| RuntimeError::Deserialization)?;
                             let len = u64::from_le_bytes(*len_bytes) as usize;
                             if index.unwrap_or(0) >= len as u64 {
                                 return Err(RuntimeError::IndexOutOfBound);
                             }
-                            let (bytes, _) = heap
-                                .read_utf8(
-                                    heap_address as usize + heap_udx + 16,
-                                    index.unwrap_or(0) as usize,
-                                    len,
-                                )
-                                ?;
+                            let (bytes, _) = heap.read_utf8(
+                                heap_address as usize + heap_udx + 16,
+                                index.unwrap_or(0) as usize,
+                                len,
+                            )?;
 
                             bytes.to_vec()
                         }
                         _ => {
-                            let bytes = heap
-                                .read(heap_address as usize + heap_udx, size)
-                                ?;
+                            let bytes = heap.read(heap_address as usize + heap_udx, size)?;
                             bytes
                         }
                     };
@@ -485,9 +469,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 
                 let data = match self {
                     Access::RuntimeCharUTF8 => {
-                        let (bytes, _) = stack
-                            .read_utf8(offset, level, 0, 1)
-                            ?;
+                        let (bytes, _) = stack.read_utf8(offset, level, 0, 1)?;
 
                         bytes.to_vec()
                     }
@@ -498,9 +480,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         if index.unwrap_or(0) >= *len as u64 {
                             return Err(RuntimeError::IndexOutOfBound);
                         }
-                        let (bytes, _) = stack
-                            .read_utf8(offset, level, index.unwrap_or(0) as usize, *len)
-                            ?;
+                        let (bytes, _) =
+                            stack.read_utf8(offset, level, index.unwrap_or(0) as usize, *len)?;
 
                         bytes.to_vec()
                     }
@@ -550,9 +531,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
                     return Err(RuntimeError::IndexOutOfBound);
                 }
                 let item_addr = (address as u64 + index * self.item_size as u64) as u64;
-                let _ = stack
-                    .push_with(&item_addr.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&item_addr.to_le_bytes())?;
             } else {
                 return Err(RuntimeError::CodeSegmentation);
             }
@@ -565,9 +544,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
                 return Err(RuntimeError::IndexOutOfBound);
             }
             let item_addr = (address as u64 + 16 + index * self.item_size as u64) as u64;
-            let _ = stack
-                .push_with(&item_addr.to_le_bytes())
-                ?;
+            let _ = stack.push_with(&item_addr.to_le_bytes())?;
         }
 
         program.incr();

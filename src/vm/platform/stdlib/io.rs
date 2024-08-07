@@ -104,7 +104,7 @@ impl Resolve for IOFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -241,13 +241,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
                     /* Write capacity */
                     let _ = heap.write(address + 8, &cap_bytes)?;
                     /* Write slice */
-                    let _ = heap
-                        .write(address + 16, &data.to_vec())
-                        ?;
+                    let _ = heap.write(address + 16, &data.to_vec())?;
 
-                    let _ = stack
-                        .push_with(&address.to_le_bytes())
-                        ?;
+                    let _ = stack.push_with(&address.to_le_bytes())?;
                     program.incr();
                     Ok(())
                 } else {

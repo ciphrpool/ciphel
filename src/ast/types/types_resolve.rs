@@ -11,7 +11,7 @@ impl Resolve for Type {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -46,7 +46,7 @@ impl Resolve for PrimitiveType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -63,7 +63,7 @@ impl Resolve for SliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -81,7 +81,7 @@ impl Resolve for StrSliceType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -99,7 +99,7 @@ impl Resolve for StringType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -117,7 +117,7 @@ impl Resolve for VecType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -135,7 +135,7 @@ impl Resolve for ClosureType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -156,7 +156,7 @@ impl Resolve for Types {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -177,7 +177,7 @@ impl Resolve for TupleType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -195,7 +195,7 @@ impl Resolve for AddrType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -212,7 +212,7 @@ impl Resolve for RangeType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         _scope: &crate::semantic::ArcRwLock<Scope>,
         _context: &Self::Context,
@@ -230,7 +230,7 @@ impl Resolve for MapType {
     type Context = ();
 
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,

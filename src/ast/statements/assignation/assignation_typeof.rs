@@ -1,4 +1,3 @@
-
 use super::{AssignValue, Assignation};
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::BuildStaticType;

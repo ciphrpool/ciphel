@@ -1,16 +1,11 @@
-use std::{
-    sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc,
 };
 
 use num_traits::ToBytes;
 
-use crate::{
-    semantic::{AccessLevel},
-    vm::vm::RuntimeError,
-};
+use crate::{semantic::AccessLevel, vm::vm::RuntimeError};
 use thiserror::Error;
 
 pub const STACK_SIZE: usize = 2024;
