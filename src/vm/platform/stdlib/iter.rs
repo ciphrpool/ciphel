@@ -94,7 +94,7 @@ impl Resolve for IterFn {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Vec<Expression>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -318,13 +318,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    ?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -354,26 +352,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 /* Write capacity */
                 let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap
-                    .write(address + 16, &items_data)
-                    ?;
+                let _ = heap.write(address + 16, &items_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             IterCasm::MapValues {
                 key_size,
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    ?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -401,26 +393,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 /* Write capacity */
                 let _ = heap.write(address + 8, &cap_bytes)?;
                 /* Write data */
-                let _ = heap
-                    .write(address + 16, &values_data)
-                    ?;
+                let _ = heap.write(address + 16, &values_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
             IterCasm::MapKeys {
                 key_size,
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack
-                    .read(
-                        Offset::SB(map_stack_address as usize),
-                        AccessLevel::Direct,
-                        8,
-                    )
-                    ?;
+                let map_heap_address_bytes = stack.read(
+                    Offset::SB(map_stack_address as usize),
+                    AccessLevel::Direct,
+                    8,
+                )?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -450,9 +436,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 /* Write data */
                 let _ = heap.write(address + 16, &keys_data)?;
 
-                let _ = stack
-                    .push_with(&address.to_le_bytes())
-                    ?;
+                let _ = stack.push_with(&address.to_le_bytes())?;
             }
         }
         program.incr();

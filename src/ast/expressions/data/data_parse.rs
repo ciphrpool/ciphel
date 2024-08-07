@@ -1,6 +1,4 @@
-use std::{
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use crate::{
     ast::{
@@ -433,17 +431,13 @@ impl TryParse for Map {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     use crate::{
-        ast::{
-            expressions::{
-                data::Number,
-                operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
-                Atomic,
-            },
+        ast::expressions::{
+            data::Number,
+            operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
+            Atomic,
         },
         semantic::scope::ClosureState,
         v_num,
@@ -977,7 +971,7 @@ mod tests {
                     )))],
                     metadata: Metadata::default(),
                     platform: Default::default(),
-                    is_dynamic_fn : None,
+                    is_dynamic_fn: None,
                 })
                 .into(),
                 index: 1,

@@ -25,7 +25,7 @@ impl Resolve for UnaryOperation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -98,7 +98,7 @@ impl Resolve for TupleAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -138,7 +138,7 @@ impl Resolve for ListAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -177,7 +177,7 @@ impl Resolve for FieldAccess {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -209,9 +209,9 @@ impl Resolve for FieldAccess {
                     else {
                         return Err(SemanticError::UnknownField);
                     };
-                    let _ = self
-                        .field
-                        .resolve::<G>(scope, context, &mut Some(field_type.clone()))?;
+                    let _ =
+                        self.field
+                            .resolve::<G>(scope, context, &mut Some(field_type.clone()))?;
                     let field_type = self
                         .field
                         .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
@@ -232,7 +232,7 @@ impl Resolve for FnCall {
     type Output = ();
     type Context = Option<EType>;
     type Extra = Option<EType>;
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -250,11 +250,9 @@ impl Resolve for FnCall {
                         let return_type = dynamic_fn.resolve(scope, &mut self.params)?;
                         self.metadata.info = crate::semantic::Info::Resolved {
                             context: context.clone(),
-                            signature: Some(
-                                return_type,
-                            ),
+                            signature: Some(return_type),
                         };
-                        return Ok(())
+                        return Ok(());
                     }
                     if let Some(mut api) = Lib::from(&self.lib, id) {
                         let _ = api.resolve::<G>(scope, context, &mut self.params)?;
@@ -305,7 +303,7 @@ impl Resolve for Range {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -339,7 +337,7 @@ impl Resolve for Product {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -435,7 +433,7 @@ impl Resolve for Addition {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -450,14 +448,18 @@ impl Resolve for Addition {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -484,7 +486,7 @@ impl Resolve for Substraction {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -499,14 +501,18 @@ impl Resolve for Substraction {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -534,7 +540,7 @@ impl Resolve for Shift {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -613,7 +619,7 @@ impl Resolve for BitwiseAnd {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -628,14 +634,18 @@ impl Resolve for BitwiseAnd {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -661,7 +671,7 @@ impl Resolve for BitwiseXOR {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -676,14 +686,18 @@ impl Resolve for BitwiseXOR {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -710,7 +724,7 @@ impl Resolve for BitwiseOR {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -725,14 +739,18 @@ impl Resolve for BitwiseOR {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -760,7 +778,7 @@ impl Resolve for Cast {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -792,7 +810,7 @@ impl Resolve for Comparaison {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -907,7 +925,7 @@ impl Resolve for Equation {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -992,7 +1010,7 @@ impl Resolve for LogicalAnd {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -1007,14 +1025,18 @@ impl Resolve for LogicalAnd {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
@@ -1044,7 +1066,7 @@ impl Resolve for LogicalOr {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
-    fn resolve<G:crate::GameEngineStaticFn>(
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         context: &Self::Context,
@@ -1059,14 +1081,18 @@ impl Resolve for LogicalOr {
                 let right_type = self
                     .right
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
                 let _ = value.resolve::<G>(scope, context, &mut None)?;
                 let left_type = self
                     .left
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self.right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
             }
             _ => {
                 let _ = self.left.resolve::<G>(scope, context, &mut None)?;
