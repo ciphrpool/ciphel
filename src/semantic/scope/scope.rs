@@ -343,148 +343,154 @@ impl Scope {
             .state()
             .map_err(|_| CodeGenerationError::ConcurrencyError)?
             .is_closure;
+
         match self {
             Scope::Inner {
                 data,
                 parent,
                 general,
                 ..
-            } => {
-                for (var, offset) in data.vars.iter().rev() {
-                    let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-                    if &borrowed_var.id == id && borrowed_var.is_declared {
-                        return Ok((
-                            var.clone(),
-                            arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
-                            AccessLevel::Direct,
-                        ));
-                    } else {
-                        continue;
-                    }
-                }
-                // The variable is in a parent scope
-                match parent {
-                    Some(parent) => {
-                        let Some(p) = parent.upgrade() else {
-                            return Err(CodeGenerationError::UnresolvedError);
-                        };
-
-                        let borrowed_scope = arw_read!(p, CodeGenerationError::ConcurrencyError)?;
-
-                        match borrowed_scope.access_var(id) {
-                            Ok((var, offset, level)) => {
-                                let borrowed_var =
-                                    arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-                                let level = match level {
-                                    AccessLevel::General => AccessLevel::General,
-                                    AccessLevel::Direct => AccessLevel::Backward(1),
-                                    AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
-                                };
-                                if is_closure == ClosureState::CAPTURING {
-                                    let level = match level {
-                                        AccessLevel::Backward(1) => AccessLevel::Direct,
-                                        AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
-                                        _ => level,
-                                    };
-                                    let offset = {
-                                        let mut idx = 0;
-                                        for env_var in borrowed_scope
-                                            .env_vars()
-                                            .map_err(|_| CodeGenerationError::ConcurrencyError)?
-                                        {
-                                            if env_var.id == borrowed_var.id {
-                                                break;
-                                            }
-                                            idx += env_var.as_ref().type_sig.size_of();
-                                        }
-                                        idx
-                                    };
-                                    let env_offset =
-                                        match self.access_var(&"$ENV".to_string().into()).ok() {
-                                            Some((_, Offset::FP(o), _)) => o,
-                                            _ => return Err(CodeGenerationError::UnresolvedError),
-                                        };
-                                    drop(borrowed_var);
-                                    return Ok((var, Offset::FE(env_offset, offset), level));
-                                } else {
-                                    drop(borrowed_var);
-                                    return Ok((var, offset, level));
-                                }
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                    None => {
-                        let borrowed_scope =
-                            arw_read!(general, CodeGenerationError::ConcurrencyError)?;
-                        let borrowed_scope = borrowed_scope.borrow();
-
-                        match borrowed_scope.access_var(id) {
-                            Ok(var) => return Ok(var),
-                            Err(_) => {}
-                        };
-                    }
-                }
-                return Err(CodeGenerationError::UnresolvedError);
-            }
-            Scope::General { data, .. } => {
-                for (var, offset) in data.vars.iter().rev() {
-                    let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
-                    if &borrowed_var.id == id {
-                        return Ok((
-                            var.clone(),
-                            arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
-                            AccessLevel::General,
-                        ));
-                    }
-                }
-                return Err(CodeGenerationError::UnresolvedError);
-            }
+            } => self.access_var_in_inner(id, is_closure, data, parent, general),
+            Scope::General { data, .. } => self.access_var_in_general(id, data),
         }
     }
 
-    pub fn access_var_in_parent(
+    fn access_var_in_inner(
         &self,
         id: &ID,
+        is_closure: ClosureState,
+        data: &ScopeData,
+        parent: &Option<Weak<RwLock<Scope>>>,
+        general: &ArcRwLock<Scope>,
     ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
-        let _is_closure = self
-            .state()
-            .map_err(|_| CodeGenerationError::ConcurrencyError)?
-            .is_closure;
-        match self {
-            Scope::Inner {
-                parent, general, ..
-            } => match parent {
-                Some(parent) => parent.upgrade().and_then(|p| {
-                    let borrowed_scope = arw_read!(p, SemanticError::ConcurrencyError).ok()?;
-                    match borrowed_scope.access_var(id) {
-                        Ok((var, offset, level)) => {
-                            let level = match level {
-                                AccessLevel::General => AccessLevel::General,
-                                AccessLevel::Direct => AccessLevel::Backward(1),
-                                AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
-                            };
-                            Some((var, offset, level))
-                        }
-                        Err(_) => None,
-                    }
-                }),
-                None => {
-                    if let Some(borrowed_scope) =
-                        arw_read!(general, SemanticError::ConcurrencyError).ok()
-                    {
-                        match borrowed_scope.access_var(id) {
-                            Ok(var) => Some(var),
-                            Err(_) => None,
-                        }
-                    } else {
-                        None
-                    }
-                }
-            }
-            .ok_or(CodeGenerationError::UnresolvedError),
-            Scope::General { .. } => Err(CodeGenerationError::UnresolvedError),
+        if let Some(result) = self.find_var_in_data_for_access(id, data)? {
+            return Ok(result);
         }
+
+        match parent {
+            Some(parent) => self.access_var_in_parent(id, is_closure, parent),
+            None => self.access_var_in_general_scope(id, general),
+        }
+    }
+
+    fn find_var_in_data_for_access(
+        &self,
+        id: &ID,
+        data: &ScopeData,
+    ) -> Result<Option<(ArcRwLock<Var>, Offset, AccessLevel)>, CodeGenerationError> {
+        for (var, offset) in data.vars.iter().rev() {
+            let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
+            if &borrowed_var.id == id && borrowed_var.is_declared {
+                return Ok(Some((
+                    var.clone(),
+                    arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
+                    AccessLevel::Direct,
+                )));
+            }
+        }
+        Ok(None)
+    }
+
+    fn access_var_in_parent(
+        &self,
+        id: &ID,
+        is_closure: ClosureState,
+        parent: &Weak<RwLock<Scope>>,
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let p = parent
+            .upgrade()
+            .ok_or(CodeGenerationError::UnresolvedError)?;
+        let borrowed_scope = arw_read!(p, CodeGenerationError::ConcurrencyError)?;
+
+        let (var, offset, level) = borrowed_scope.access_var(id)?;
+        let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
+
+        let level = self.adjust_access_level(level);
+
+        if is_closure == ClosureState::CAPTURING {
+            self.handle_closure_capturing(borrowed_scope, borrowed_var, var.clone(), level)
+        } else {
+            Ok((var.clone(), offset, level))
+        }
+    }
+
+    fn adjust_access_level(&self, level: AccessLevel) -> AccessLevel {
+        match level {
+            AccessLevel::General => AccessLevel::General,
+            AccessLevel::Direct => AccessLevel::Backward(1),
+            AccessLevel::Backward(l) => AccessLevel::Backward(l + 1),
+        }
+    }
+
+    fn handle_closure_capturing(
+        &self,
+        borrowed_scope: impl std::ops::Deref<Target = Scope>,
+        borrowed_var: impl std::ops::Deref<Target = Var>,
+        var: ArcRwLock<Var>,
+        level: AccessLevel,
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let level = match level {
+            AccessLevel::Backward(1) => AccessLevel::Direct,
+            AccessLevel::Backward(l) => AccessLevel::Backward(l - 1),
+            _ => level,
+        };
+
+        let offset = self.calculate_env_var_offset(&borrowed_scope, &borrowed_var)?;
+        let env_offset = self.get_env_offset()?;
+
+        Ok((var, Offset::FE(env_offset, offset), level))
+    }
+
+    fn calculate_env_var_offset(
+        &self,
+        borrowed_scope: &Scope,
+        borrowed_var: &Var,
+    ) -> Result<usize, CodeGenerationError> {
+        let mut offset = 0;
+        for env_var in borrowed_scope
+            .env_vars()
+            .map_err(|_| CodeGenerationError::ConcurrencyError)?
+        {
+            if env_var.id == borrowed_var.id {
+                break;
+            }
+            offset += env_var.as_ref().type_sig.size_of();
+        }
+        Ok(offset)
+    }
+
+    fn get_env_offset(&self) -> Result<usize, CodeGenerationError> {
+        match self.access_var(&"$ENV".to_string().into()) {
+            Ok((_, Offset::FP(o), _)) => Ok(o),
+            _ => Err(CodeGenerationError::UnresolvedError),
+        }
+    }
+
+    fn access_var_in_general_scope(
+        &self,
+        id: &ID,
+        general: &ArcRwLock<Scope>,
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
+        let borrowed_scope = arw_read!(general, CodeGenerationError::ConcurrencyError)?;
+        borrowed_scope.access_var(id)
+    }
+
+    fn access_var_in_general(
+        &self,
+        id: &ID,
+        data: &ScopeData,
+    ) -> Result<(ArcRwLock<Var>, Offset, AccessLevel), CodeGenerationError> {
+        for (var, offset) in data.vars.iter().rev() {
+            let borrowed_var = arw_read!(var, CodeGenerationError::ConcurrencyError)?;
+            if &borrowed_var.id == id {
+                return Ok((
+                    var.clone(),
+                    arw_read!(offset, CodeGenerationError::ConcurrencyError)?.clone(),
+                    AccessLevel::General,
+                ));
+            }
+        }
+        Err(CodeGenerationError::UnresolvedError)
     }
 
     pub fn capture(&self, var: ArcRwLock<Var>) -> Result<bool, SemanticError> {
