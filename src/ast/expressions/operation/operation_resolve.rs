@@ -19,7 +19,7 @@ use crate::semantic::{
     scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{EType, Info};
-use crate::vm::vm::{GameEngineDynamicFn, Locatable};
+use crate::vm::vm::{DefaultDynamicFn, DynamicFnResolver, Locatable};
 
 impl Resolve for UnaryOperation {
     type Output = ();
@@ -247,7 +247,7 @@ impl Resolve for FnCall {
                 if found.is_err() || self.lib.is_some() {
                     if let Some(mut dynamic_fn) = G::is_dynamic_fn(&self.lib, id) {
                         self.is_dynamic_fn = Some(id.as_str().to_string());
-                        let return_type = dynamic_fn.resolve(scope, &mut self.params)?;
+                        let return_type = dynamic_fn.resolve::<G>(scope, &mut self.params)?;
                         self.metadata.info = crate::semantic::Info::Resolved {
                             context: context.clone(),
                             signature: Some(return_type),

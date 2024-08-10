@@ -287,10 +287,9 @@ impl Scheduler {
                     return Err(e);
                 }
                 Err(e) => {
-                    if thread.program.cursor_is_at_end() {
-                        let _ = thread.state.to(ThreadState::IDLE);
-                    }
-                    /* TODO : error handling */
+                    thread.program.cursor_to_end();
+                    let _ = thread.state.to(ThreadState::IDLE);
+                    
                     return Err(e);
                 }
             }
@@ -325,7 +324,7 @@ impl Scheduler {
         while total_instruction_count < INSTRUCTION_MAX_COUNT {
             for (p1, p2) in runtime.iter_mut() {
                 if let Some(p1) = p1 {
-                    let _ = self.run_minor_frame(
+                    let result = self.run_minor_frame(
                         Player::P1,
                         heap,
                         stdio,
@@ -334,6 +333,9 @@ impl Scheduler {
                         p1_minor_frame_max_count,
                         &mut total_instruction_count,
                     );
+                    if let Err(err) = result {
+                        stdio.print_stderr(engine, &err.to_string())
+                    }
                 }
                 if let Some(p2) = p2 {
                     let _ = self.run_minor_frame(

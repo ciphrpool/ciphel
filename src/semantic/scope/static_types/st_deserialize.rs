@@ -96,7 +96,7 @@ impl Printer for StaticType {
             }
             StaticType::Error => {
                 let _ = instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(
-                    IOCasm::Print(PrintCasm::PrintID("error".to_string().into())),
+                    IOCasm::Print(PrintCasm::PrintError),
                 ))));
                 Ok(())
             }

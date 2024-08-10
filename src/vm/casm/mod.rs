@@ -57,6 +57,9 @@ impl CasmProgram {
     pub fn cursor_is_at_end(&self) -> bool {
         self.cursor == self.main.len()
     }
+    pub fn cursor_to_end(&mut self) {
+        self.cursor = self.main.len()
+    }
     pub fn incr(&mut self) {
         self.cursor += 1;
     }

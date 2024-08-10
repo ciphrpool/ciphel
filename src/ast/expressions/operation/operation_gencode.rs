@@ -435,6 +435,9 @@ impl GenerateCode for super::FnCall {
             .sum();
 
         if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
+            for param in &self.params {
+                let _ = param.gencode(scope, instructions)?;
+            }
             instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
                 dynamic_fn_id.clone(),
             )));

@@ -99,16 +99,16 @@ pub trait Locatable {
     fn most_left_id(&self) -> Option<ID>;
 }
 
-pub trait GameEngineDynamicFn {
-    fn resolve(
+pub trait DynamicFnResolver {
+    fn resolve<G:GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<EType, SemanticError>;
 }
 pub struct DefaultDynamicFn;
-impl GameEngineDynamicFn for DefaultDynamicFn {
-    fn resolve(
+impl DynamicFnResolver for DefaultDynamicFn {
+    fn resolve<G:GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
@@ -125,7 +125,7 @@ pub trait GameEngineStaticFn {
     fn stdin_request(&mut self);
     fn stdcasm_print(&mut self, content: String);
 
-    fn is_dynamic_fn(suffixe: &Option<ID>, id: &ID) -> Option<impl GameEngineDynamicFn> {
+    fn is_dynamic_fn(suffixe: &Option<ID>, id: &ID) -> Option<impl DynamicFnResolver> {
         None::<DefaultDynamicFn>
     }
 
@@ -282,11 +282,20 @@ pub struct TestDynamicGameEngine {
     pub out: String,
 }
 
+
+pub trait DynamicFnProvider {
+    type DynamicFunctions:DynamicFnResolver;
+
+    fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<Self::DynamicFunctions>;
+}
+
+
 #[derive(Debug, Clone)]
 pub struct TestDynamicFnProvider {}
 
-impl TestDynamicFnProvider {
-    fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<TestDynamicFn> {
+impl DynamicFnProvider for TestDynamicFnProvider {
+    type DynamicFunctions = TestDynamicFn;
+    fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<Self::DynamicFunctions> {
         if "dynamic_fn" == id {
             return Some(TestDynamicFn {});
         } else {
@@ -296,8 +305,8 @@ impl TestDynamicFnProvider {
 }
 pub struct TestDynamicFn {}
 
-impl GameEngineDynamicFn for TestDynamicFn {
-    fn resolve(
+impl DynamicFnResolver for TestDynamicFn {
+    fn resolve<G:GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
@@ -351,7 +360,7 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
         }
         Ok(())
     }
-    fn is_dynamic_fn(preffixe: &Option<ID>, id: &ID) -> Option<impl GameEngineDynamicFn> {
+    fn is_dynamic_fn(preffixe: &Option<ID>, id: &ID) -> Option<impl DynamicFnResolver> {
         TestDynamicFnProvider::get_dynamic_fn(preffixe, id.to_string())
     }
     fn name_of_dynamic_fn(

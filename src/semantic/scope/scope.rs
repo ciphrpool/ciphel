@@ -99,7 +99,7 @@ impl Scope {
                 parent,
                 general,
                 data,
-            } => return Err(CompilationError::TransactionError),
+            } => return Err(CompilationError::TransactionError("Cannot open a transaction in an inner scope")),
             Scope::General {
                 data,
                 stack_top,
@@ -119,7 +119,7 @@ impl Scope {
                 parent,
                 general,
                 data,
-            } => return Err(CompilationError::TransactionError),
+            } => return Err(CompilationError::TransactionError("Cannot commit a transaction in an inner scope")),
             Scope::General {
                 data,
                 stack_top,
@@ -141,7 +141,7 @@ impl Scope {
                 parent,
                 general,
                 data,
-            } => return Err(CompilationError::TransactionError),
+            } => return Err(CompilationError::TransactionError("Cannot reject a transaction in an inner scope")),
             Scope::General {
                 data,
                 stack_top,
@@ -163,7 +163,7 @@ impl Scope {
                 parent,
                 general,
                 data,
-            } => return Err(CompilationError::TransactionError),
+            } => return Err(CompilationError::TransactionError("Cannot close a transaction in an inner scope")),
             Scope::General {
                 data,
                 stack_top,

@@ -26,6 +26,8 @@ use crate::{
     },
 };
 
+use super::{ERROR_VALUE, OK_VALUE};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
     Scan,
@@ -75,6 +77,7 @@ pub enum PrintCasm {
     PrintChar,
     PrintBool,
     PrintString,
+    PrintError,
     PrintList {
         length: Option<usize>,
         continue_label: Ulid,
@@ -338,6 +341,15 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
                 let n = n.trim_end_matches(char::from(0));
                 stdio.stdout.push(&format!("\"{}\"", n));
             }
+
+            PrintCasm::PrintError => {
+                let n = OpPrimitive::get_num1::<u8>(stack)?;
+                if n == ERROR_VALUE[0] {
+                    stdio.stdout.push("Error");
+                }else if n == OK_VALUE[0]{
+                    stdio.stdout.push("Ok");
+                }
+            },
             PrintCasm::StdOutBufOpen => {
                 stdio.stdout.spawn_buffer();
             }

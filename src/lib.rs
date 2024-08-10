@@ -31,8 +31,8 @@ pub enum CompilationError {
 
     #[error("Invalid thread id : {0}")]
     InvalidTID(usize),
-    #[error("Transaction Error")]
-    TransactionError,
+    #[error("Transaction Error : {0}")]
+    TransactionError(&'static str),
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +101,7 @@ impl Ciphel {
                 .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
             let _ = borrowed_scope.open_transaction()?;
         }
+        program.in_transaction = TransactionState::OPEN;
 
         let mut statements: Vec<ast::statements::Statement> = parse_statements(src_code.into())?;
         for statement in &mut statements {
@@ -109,7 +110,6 @@ impl Ciphel {
                 .map_err(|e| CompilationError::SemanticError(e))?;
         }
         program.statements_buffer.extend(statements);
-        program.in_transaction = TransactionState::OPEN;
         Ok(())
     }
 
@@ -122,9 +122,9 @@ impl Ciphel {
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
-        dbg!(program.in_transaction);
+        
         if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError);
+            return Err(CompilationError::TransactionError("Cannot commit in a closed transaction"));
         }
         {
             let mut borrowed_scope = scope
@@ -149,7 +149,7 @@ impl Ciphel {
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
         if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError);
+            return Err(CompilationError::TransactionError("Cannot reject in closed transaction"));
         }
         {
             let mut borrowed_scope = scope
@@ -174,7 +174,7 @@ impl Ciphel {
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
         if program.in_transaction != TransactionState::COMMITED {
-            return Err(CompilationError::TransactionError);
+            return Err(CompilationError::TransactionError("Cannot push without a commit"));
         }
         let _ = arw_read!(
             scope,

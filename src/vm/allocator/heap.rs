@@ -410,7 +410,6 @@ impl Heap {
     pub fn alloc(&mut self, size: usize) -> Result<Pointer, HeapError> {
         let aligned_size = BlockData::fit(align(size));
         let Some(block) = self.best_fit(aligned_size)? else {
-            dbg!(aligned_size);
             return Err(HeapError::AllocationError);
         };
         let previous_free_block = block.previous_free();

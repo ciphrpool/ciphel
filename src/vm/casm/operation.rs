@@ -249,13 +249,11 @@ impl OpPrimitive {
     pub fn get_string(stack: &mut Stack, heap: &mut Heap) -> Result<String, RuntimeError> {
         let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
         let data = heap
-            .read(heap_address as usize, 16)
-            .expect("Heap Read should have succeeded");
+            .read(heap_address as usize, 16)?;
         let (length, rest) = extract_u64(&data)?;
         let (_capacity, _rest) = extract_u64(rest)?;
         let data = heap
-            .read(heap_address as usize + 16, length as usize)
-            .expect("Heap Read should have succeeded");
+            .read(heap_address as usize + 16, length as usize)?;
         let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(data.to_string())
     }
