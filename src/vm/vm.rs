@@ -1,4 +1,3 @@
-
 use ulid::Ulid;
 
 use crate::e_static;
@@ -100,7 +99,7 @@ pub trait Locatable {
 }
 
 pub trait DynamicFnResolver {
-    fn resolve<G:GameEngineStaticFn>(
+    fn resolve<G: GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
@@ -108,7 +107,7 @@ pub trait DynamicFnResolver {
 }
 pub struct DefaultDynamicFn;
 impl DynamicFnResolver for DefaultDynamicFn {
-    fn resolve<G:GameEngineStaticFn>(
+    fn resolve<G: GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
@@ -282,13 +281,24 @@ pub struct TestDynamicGameEngine {
     pub out: String,
 }
 
-
 pub trait DynamicFnProvider {
-    type DynamicFunctions:DynamicFnResolver;
+    type DynamicFunctions: DynamicFnResolver;
 
     fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<Self::DynamicFunctions>;
 }
 
+pub trait DynamicFnExecutable {
+    type G: GameEngineStaticFn;
+
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut Self::G,
+    ) -> Result<(), RuntimeError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct TestDynamicFnProvider {}
@@ -306,7 +316,7 @@ impl DynamicFnProvider for TestDynamicFnProvider {
 pub struct TestDynamicFn {}
 
 impl DynamicFnResolver for TestDynamicFn {
-    fn resolve<G:GameEngineStaticFn>(
+    fn resolve<G: GameEngineStaticFn>(
         &mut self,
         scope: &crate::semantic::ArcRwLock<Scope>,
         params: &mut Vec<crate::ast::expressions::Expression>,
