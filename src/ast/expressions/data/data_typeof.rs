@@ -101,7 +101,9 @@ impl TypeOf for Primitive {
                     StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
                         .map(|value| (e_static!(value)))
                 }
-                Number::Unresolved(_) => Err(SemanticError::CantInferType),
+                Number::Unresolved(_) => Err(SemanticError::CantInferType(
+                    "of the given number".to_string(),
+                )),
             },
             Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
                 .map(|value| (e_static!(value))),

@@ -89,7 +89,9 @@ impl TypeOf for FnCall {
 
         let fn_var_type = self.fn_var.type_of(&scope)?;
         let Some(return_type) = fn_var_type.get_return() else {
-            return Err(SemanticError::CantInferType);
+            return Err(SemanticError::CantInferType(format!(
+                "of the return value of this function"
+            )));
         };
 
         Ok(return_type)

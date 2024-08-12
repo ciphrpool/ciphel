@@ -1,50 +1,7 @@
 use nom::{error::ParseError, IResult};
+use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
 
 use super::io::{PResult, Span};
-
-#[derive(Debug)]
-struct CutError<E> {
-    error: E,
-    should_cut: bool,
-}
-
-// Implement ParseError for our custom error type
-impl<E: ParseError<I>, I> ParseError<I> for CutError<E> {
-    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        CutError {
-            error: E::from_error_kind(input, kind),
-            should_cut: false,
-        }
-    }
-
-    fn append(input: I, kind: nom::error::ErrorKind, other: Self) -> Self {
-        CutError {
-            error: E::append(input, kind, other.error),
-            should_cut: other.should_cut,
-        }
-    }
-}
-
-// Our custom cut_after function
-fn cut_after<I, O, E, F>(mut parser: F) -> impl FnMut(I) -> IResult<I, O, CutError<E>>
-where
-    I: Clone,
-    E: ParseError<I>,
-    F: FnMut(I) -> IResult<I, O, E>,
-{
-    move |input: I| match parser(input) {
-        Ok((rem, output)) => Ok((rem, output)),
-        Err(nom::Err::Error(e)) => Err(nom::Err::Error(CutError {
-            error: e,
-            should_cut: true,
-        })),
-        Err(nom::Err::Failure(e)) => Err(nom::Err::Failure(CutError {
-            error: e,
-            should_cut: true,
-        })),
-        Err(nom::Err::Incomplete(n)) => Err(nom::Err::Incomplete(n)),
-    }
-}
 
 pub fn squash<'input, O, F>(
     mut parser: F,
@@ -71,4 +28,102 @@ where
         }
         Err(err) => Err(err),
     }
+}
+
+pub fn generate_error_report(input: &Span, error: &ErrorTree<Span>) -> String {
+    let mut report = String::new();
+
+    fn traverse_error<'a>(
+        input: &Span,
+        error: &'a ErrorTree<Span>,
+        report: &mut String,
+        depth: usize,
+    ) {
+        match error {
+            GenericErrorTree::Base { location, kind } => {
+                add_error_info(input, location, kind, report, depth);
+            }
+            GenericErrorTree::Stack { base, contexts } => {
+                for (ctx_location, ctx) in contexts.iter().rev() {
+                    add_context_info(input, ctx_location, ctx, report, depth);
+                }
+                traverse_error(input, base, report, depth);
+            }
+            GenericErrorTree::Alt(errors) => {
+                for err in errors {
+                    traverse_error(input, err, report, depth);
+                }
+            }
+        }
+    }
+
+    traverse_error(input, error, &mut report, 0);
+    report
+}
+
+pub fn add_error_info(
+    input: &Span,
+    location: &Span,
+    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
+    report: &mut String,
+    depth: usize,
+) {
+    let line = location.location_line();
+    let column = location.get_utf8_column();
+    let snippet = get_error_snippet(input, location);
+    let text = format_error_kind(kind);
+    let indent = "\t".repeat(depth);
+    if text.is_empty() {
+        return;
+    }
+
+    report.push_str(&format!(
+        "{}Error at line {}, column {}:\n",
+        indent, line, column
+    ));
+    report.push_str(&format!("{}  {}\n", indent, snippet));
+    report.push_str(&format!("{}  {}\n\n", indent, text));
+}
+
+pub fn add_context_info(
+    input: &Span,
+    location: &Span,
+    context: &StackContext<&str>,
+    report: &mut String,
+    depth: usize,
+) {
+    let line = location.location_line();
+    let column = location.get_utf8_column();
+    let snippet = get_error_snippet(input, location);
+
+    let indent = "\t".repeat(depth);
+    let text = match context {
+        StackContext::Kind(nom::error::ErrorKind::Many1) => return,
+        StackContext::Kind(_) => context.to_string(),
+        StackContext::Context(text) => text.to_string(),
+    };
+    report.push_str(&format!(
+        "{}Error at line {}, column {}:\n",
+        indent, line, column
+    ));
+    report.push_str(&format!("{}  {}\n", indent, snippet));
+    report.push_str(&format!("{}  {}\n\n", indent, text));
+}
+
+pub fn format_error_kind(
+    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
+) -> String {
+    match kind {
+        BaseErrorKind::Expected(Expectation::Something) => "".to_string(),
+        BaseErrorKind::Expected(expected) => format!("Expected {}", expected),
+        BaseErrorKind::External(err) => format!("{}", err),
+        _ => format!("{:?}", kind),
+    }
+}
+
+pub fn get_error_snippet(input: &Span, location: &Span) -> String {
+    let start = location.location_offset();
+    let end = (start + 20).min(input.len());
+    let snippet = &input[start..end];
+    format!("{:?}", snippet)
 }

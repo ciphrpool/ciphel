@@ -264,7 +264,7 @@ impl GenerateCode for Variable {
             let (var, address, level) =
                 crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
                     .access_var(&self.id)?;
-            // dbg!((&var, &address, &level));
+
             let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
             let var_size = var_type.size_of();
             if var_size == 0 {

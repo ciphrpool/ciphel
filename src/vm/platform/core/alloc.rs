@@ -762,7 +762,9 @@ impl Resolve for AllocFn {
                     let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this vector allocation"
+                    )));
                 }
                 match &context {
                     Some(value) => match value {
@@ -799,7 +801,9 @@ impl Resolve for AllocFn {
                     let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
                 }
                 if context.is_none() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this map allocation"
+                    )));
                 }
                 match &context {
                     Some(value) => match value {
@@ -2209,8 +2213,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                     let bucket_layout =
                         bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                    // dbg!((bucket_idx, &bucket_layout));
-
                     let opt_ptr_key_value =
                         bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
                     match opt_ptr_key_value {
@@ -2299,8 +2301,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                     let bucket_layout =
                         bucket_layout(bucket_address, *key_size, *value_size, heap)?;
-
-                    // dbg!((bucket_idx, &bucket_layout));
 
                     let opt_ptr_key_value =
                         bucket_layout.assign(top_hash, &key_data, *ref_access, heap)?;
@@ -2397,9 +2397,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
 
-                // dbg!(&map_layout);
-                // dbg!((bucket_idx, &bucket_layout));
-
                 let opt_ptr_value = bucket_layout.get(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {
                     Some(ptr_value) => {
@@ -2467,9 +2464,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                     map_layout.ptr_buckets + bucket_idx * map_layout.bucket_size as u64;
 
                 let bucket_layout = bucket_layout(bucket_address, *key_size, *value_size, heap)?;
-
-                // dbg!(&map_layout);
-                // dbg!((bucket_idx, &bucket_layout));
 
                 let opt_ptr_value = bucket_layout.delete(top_hash, &key_data, *ref_access, heap)?;
                 match opt_ptr_value {

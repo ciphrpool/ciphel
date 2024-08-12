@@ -448,9 +448,6 @@ impl Resolve for Closure {
     where
         Self: Sized,
     {
-        // let Some(context) = context else {
-        //     return Err(SemanticError::CantInferType);
-        // };
         match context {
             Some(context) => {
                 for (index, expr) in self.params.iter_mut().enumerate() {
@@ -561,9 +558,12 @@ impl Resolve for ClosureParam {
     {
         match self {
             ClosureParam::Full(var) => var.resolve::<G>(scope, &mut (), &mut ()),
-            ClosureParam::Minimal(_value) => match context {
+            ClosureParam::Minimal(value) => match context {
                 Some(_) => Ok(()),
-                None => Err(SemanticError::CantInferType),
+                None => Err(SemanticError::CantInferType(format!(
+                    "of the parameter {}",
+                    value
+                ))),
             },
         }
     }
@@ -664,11 +664,11 @@ impl Resolve for Struct {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
-            return Err(SemanticError::IncorrectStruct);
+            return Err(SemanticError::IncorrectStruct(self.id.to_string()));
         }
         for (field_name, field_type) in fields_type {
             let Some(field_name) = field_name else {
-                return Err(SemanticError::IncorrectStruct);
+                return Err(SemanticError::IncorrectStruct(self.id.to_string()));
             };
             let Some(expr_field) = self
                 .fields
@@ -676,7 +676,7 @@ impl Resolve for Struct {
                 .find(|(name, _)| name == &field_name)
                 .map(|(_, expr)| expr)
             else {
-                return Err(SemanticError::IncorrectStruct);
+                return Err(SemanticError::IncorrectStruct(self.id.to_string()));
             };
             let _ = field_type.compatible_with(
                 expr_field,
@@ -704,7 +704,10 @@ impl Resolve for Union {
         let user_type = borrowed_scope.find_type(&self.typename)?;
         let variant_type = user_type.get_variant(&self.variant);
         let Some(variant_type) = variant_type else {
-            return Err(SemanticError::CantInferType);
+            return Err(SemanticError::CantInferType(format!(
+                "of {}::{}",
+                self.typename, self.variant
+            )));
         };
         for (field_name, expr) in &mut self.fields {
             let field_context = <EType as GetSubTypes>::get_field(&variant_type, &field_name);
@@ -716,11 +719,11 @@ impl Resolve for Union {
             return Err(SemanticError::ExpectedStruct);
         };
         if self.fields.len() != fields_type.len() {
-            return Err(SemanticError::IncorrectStruct);
+            return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
         }
         for (field_name, field_type) in fields_type {
             let Some(field_name) = field_name else {
-                return Err(SemanticError::IncorrectStruct);
+                return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
             };
             let Some(expr_field) = self
                 .fields
@@ -728,7 +731,7 @@ impl Resolve for Union {
                 .find(|(name, _)| name == &field_name)
                 .map(|(_, expr)| expr)
             else {
-                return Err(SemanticError::IncorrectStruct);
+                return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
             };
             let _ = field_type.compatible_with(
                 expr_field,
@@ -756,7 +759,7 @@ impl Resolve for Enum {
         let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
         let user_type = borrowed_scope.find_type(&self.typename)?;
         let Some(_) = user_type.get_variant(&self.value) else {
-            return Err(SemanticError::IncorrectVariant);
+            return Err(SemanticError::IncorrectVariant(self.value.to_string()));
         };
         resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())

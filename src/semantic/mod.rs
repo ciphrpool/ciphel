@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock};
 
+use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
-use crate::{ast::utils::strings::ID};
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
@@ -19,67 +19,63 @@ pub enum SemanticError {
     #[error("PlatformAPIOverriding")]
     PlatformAPIOverriding,
 
-    #[error("CantReturn")]
-    CantReturn,
-    #[error("CantInferType")]
-    CantInferType,
-    #[error("CantRegisterType")]
-    CantRegisterType,
-    #[error("CantRegisterVar")]
-    CantRegisterVar,
+    #[error("cannot infer type {0}")]
+    CantInferType(String),
 
-    #[error("ExpectedBoolean")]
+    #[error("expected a boolean")]
     ExpectedBoolean,
-    #[error("ExpectedIterable")]
+    #[error("expected something iterable")]
     ExpectedIterable,
-    #[error("ExpectedIndexable")]
+    #[error("expected something indexable")]
     ExpectedIndexable,
-    #[error("ExpectedCallable")]
+    #[error("expected a function")]
     ExpectedCallable,
-    #[error("ExpectedEnum")]
+    #[error("expected an enum")]
     ExpectedEnum,
-    #[error("ExpectedStruct")]
+    #[error("expected a struct")]
     ExpectedStruct,
-    #[error("ExpectedLoop")]
+    #[error("expected to be inside a loop")]
     ExpectedLoop,
-    #[error("ExpectedMovedClosure")]
+    #[error("expected to be inside a moved closure")]
     ExpectedMovedClosure,
-    #[error("ExpectedClosure")]
+    #[error("expected to be inside a closure")]
     ExpectedClosure,
-    #[error("ExpectedLeftExpression")]
+    #[error("expected something assignable")]
     ExpectedLeftExpression,
 
-    #[error("UnknownVar")]
+    #[error("unknown variable : {0}")]
     UnknownVar(ID),
-    #[error("UnknownType")]
+    #[error("unknown type : {0}")]
     UnknownType(ID),
-    #[error("UnknownField")]
+    #[error("unknown field")]
     UnknownField,
 
-    #[error("DoubleInfinitRange")]
+    #[error("cannot have double open range like -∞:+∞")]
     DoubleInfinitRange,
 
-    #[error("IncorrectArguments")]
+    #[error("incorrect function arguments")]
     IncorrectArguments,
-    #[error("IncorrectStruct")]
-    IncorrectStruct,
-    #[error("IncorrectVariant")]
-    IncorrectVariant,
-    #[error("InvalidPattern")]
+    #[error("invalid arguments for struct {0}")]
+    IncorrectStruct(String),
+    #[error("invalid arguments for union {0}")]
+    IncorrectUnion(String),
+    #[error("invalid variant {0}")]
+    IncorrectVariant(String),
+    #[error("invalid pattern")]
     InvalidPattern,
-    #[error("InvalidRange")]
+    #[error("invalid range")]
     InvalidRange,
 
-    #[error("IncompatibleTypes")]
+    #[error("incompatible types")]
     IncompatibleTypes,
-    #[error("IncompatibleOperation")]
+    #[error("incompatible operation")]
     IncompatibleOperation,
-    #[error("IncompatibleOperands")]
+    #[error("incompatible operands")]
     IncompatibleOperands,
 
-    #[error("ConcurrencyError")]
+    #[error("internal compilation error")]
     ConcurrencyError,
-    #[error("Default")]
+    #[error("unexpected error")]
     Default,
 }
 

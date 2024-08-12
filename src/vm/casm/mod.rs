@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use ulid::Ulid;
 
-use crate::ast::statements::Statement;
+use crate::ast::statements::{Statement, WithLine};
 
 use self::{branch::Label, data::Data};
 
@@ -30,7 +30,7 @@ pub enum TransactionState {
 #[derive(Debug, Clone)]
 pub struct CasmProgram {
     pub main: Vec<Casm>,
-    pub statements_buffer: Vec<Statement>,
+    pub statements_buffer: Vec<WithLine<Statement>>,
     pub in_transaction: TransactionState,
     cursor: usize,
     pub labels: HashMap<Ulid, (usize, Box<str>)>,

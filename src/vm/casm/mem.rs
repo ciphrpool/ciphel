@@ -191,8 +191,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
                 let from_address = OpPrimitive::get_num8::<u64>(stack)?;
                 let to_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                // dbg!(to_address, from_address, size);
-
                 let from_address = {
                     if from_address < STACK_SIZE as u64 {
                         MemoryAddress::Stack {

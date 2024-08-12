@@ -56,30 +56,6 @@ impl TryParse for Data {
             )),
             "Expected a valid expression",
         )(input)
-
-        // match &res {
-        //     Ok(_) => res,
-        //     Err(nom::Err::Error(e)) => {
-        //         dbg!("Error", e);
-        //         Err(nom::Err::Error(
-        //             nom_supreme::error::GenericErrorTree::Stack {
-        //                 base: Box::new(nom_supreme::error::GenericErrorTree::Base {
-        //                     location: input,
-        //                     kind: nom_supreme::error::BaseErrorKind::Expected(
-        //                         nom_supreme::error::Expectation::Something,
-        //                     ),
-        //                 }),
-        //                 contexts: vec![(
-        //                     input,
-        //                     nom_supreme::error::StackContext::Context(
-        //                         "Expected a valid expression",
-        //                     ),
-        //                 )],
-        //             },
-        //         ))
-        //     }
-        //     Err(_) => res,
-        // }
     }
 }
 
@@ -205,12 +181,11 @@ impl TryParse for Vector {
         map(
             preceded(
                 wst(platform::utils::lexem::VEC),
-                cut(delimited(
+                delimited(
                     wst(lexem::SQ_BRA_O),
-                    MultiData::parse,
+                    cut(MultiData::parse).context("Invalid vector"),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
-                ))
-                .context("Invalid vector"),
+                ),
             ),
             |value| Vector {
                 capacity: align(*&value.len()),
@@ -371,11 +346,11 @@ impl TryParse for Struct {
                 parse_id,
                 delimited(
                     wst(lexem::BRA_O),
-                    cut(separated_list0(
+                    separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                    )),
-                    cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
+                    ),
+                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
                 ),
             ),
             |(id, value)| Struct {
@@ -452,14 +427,14 @@ impl TryParse for Map {
         map(
             preceded(
                 wst(platform::utils::lexem::MAP),
-                cut(delimited(
+                delimited(
                     wst(lexem::BRA_O),
-                    separated_list1(
+                    cut(separated_list1(
                         wst(lexem::COMA),
                         separated_pair(Expression::parse, wst(lexem::COLON), Expression::parse),
-                    ),
+                    )),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                )),
+                ),
             ),
             |value| Map {
                 fields: value,

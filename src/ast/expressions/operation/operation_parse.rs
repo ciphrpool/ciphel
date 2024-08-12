@@ -243,10 +243,10 @@ impl TryParseOperation for FnCall {
             wst(lexem::PAR_O),
         )))(input)?;
         let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
-            let (remainder, opt_params) = cut(opt(terminated(
+            let (remainder, opt_params) = opt(terminated(
                 separated_list0(wst(lexem::COMA), Expression::parse),
                 wst(lexem::PAR_C),
-            )))(remainder)?;
+            ))(remainder)?;
             (
                 remainder,
                 Some(lib),
@@ -261,9 +261,8 @@ impl TryParseOperation for FnCall {
             let (remainder, left) = FieldAccess::parse(input)?;
             let (remainder, opt_params) = opt(delimited(
                 wst(lexem::PAR_O),
-                cut(separated_list0(wst(lexem::COMA), Expression::parse))
-                    .context("Invalid function call expression"),
-                cut(wst(lexem::PAR_C)),
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
             ))(remainder)?;
             (remainder, None, Box::new(left), opt_params)
         };

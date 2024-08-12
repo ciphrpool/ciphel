@@ -47,7 +47,10 @@ impl Resolve for Declaration {
                     .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
                 let var = <Var as BuildVar>::build_var(&value.id, &var_type);
                 if var_type.is_any() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this variable {}",
+                        value.id
+                    )));
                 }
                 if value.rec {
                     /* update params size */
@@ -159,10 +162,16 @@ impl Resolve for DeclaredVar {
             DeclaredVar::Id(id) => {
                 let mut vars = Vec::with_capacity(1);
                 let Some(var_type) = context else {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this variable {}",
+                        id
+                    )));
                 };
                 if var_type.is_any() {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this variable {}",
+                        id
+                    )));
                 }
 
                 let var = <Var as BuildVar>::build_var(id, var_type);
@@ -213,7 +222,10 @@ impl Resolve for PatternVar {
                         return Err(SemanticError::InvalidPattern);
                     };
                     if field_type.is_any() {
-                        return Err(SemanticError::CantInferType);
+                        return Err(SemanticError::CantInferType(format!(
+                            "of this field {}",
+                            var_name
+                        )));
                     }
                     scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));
                 }
@@ -222,7 +234,7 @@ impl Resolve for PatternVar {
             PatternVar::Tuple(value) => {
                 let mut scope_vars = Vec::with_capacity(value.len());
                 let Some(user_type) = context else {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!("of this tuple")));
                 };
                 let Some(fields) = <EType as GetSubTypes>::get_fields(user_type) else {
                     return Err(SemanticError::InvalidPattern);
@@ -234,7 +246,10 @@ impl Resolve for PatternVar {
                 for (index, (_, field_type)) in fields.iter().enumerate() {
                     let var_name = &value[index];
                     if field_type.is_any() {
-                        return Err(SemanticError::CantInferType);
+                        return Err(SemanticError::CantInferType(format!(
+                            "of this variable {}",
+                            var_name
+                        )));
                     }
 
                     scope_vars.push(<Var as BuildVar>::build_var(var_name, field_type));

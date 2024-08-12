@@ -11,7 +11,10 @@ use self::return_stat::Return;
 use crate::{semantic::scope::scope::Scope, CompilationError};
 
 use super::{
-    utils::{error::squash, strings::eater},
+    utils::{
+        error::{generate_error_report, squash},
+        strings::eater,
+    },
     TryParse,
 };
 use crate::{
@@ -36,6 +39,40 @@ pub mod loops;
 pub mod return_stat;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct WithLine<T> {
+    pub inner: T,
+    pub line: usize,
+}
+
+impl<T: Resolve> Resolve for WithLine<T> {
+    type Output = T::Output;
+    type Context = T::Context;
+    type Extra = T::Extra;
+
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        self.inner.resolve::<G>(scope, context, extra)
+    }
+}
+
+impl<T: GenerateCode> GenerateCode for WithLine<T> {
+    fn gencode(
+        &self,
+        scope: &crate::semantic::ArcRwLock<Scope>,
+        instructions: &mut CasmProgram,
+    ) -> Result<(), CodeGenerationError> {
+        self.inner.gencode(scope, instructions)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Scope(block::Block),
     Flow(flows::Flow),
@@ -46,8 +83,18 @@ pub enum Statement {
     Return(Return),
 }
 
-pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError> {
-    let mut parser = many1(Statement::parse);
+pub fn parse_statements(input: Span) -> Result<Vec<WithLine<Statement>>, CompilationError> {
+    let mut parser = many1(|input| {
+        let (input, statement) = Statement::parse(input)?;
+        let line = input.location_line();
+        Ok((
+            input,
+            WithLine {
+                inner: statement,
+                line: line as usize,
+            },
+        ))
+    });
 
     match parser(input).finish() {
         Ok((remaining, statements)) => {
@@ -67,103 +114,6 @@ pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError>
         }
     }
 }
-fn generate_error_report(input: &Span, error: &ErrorTree<Span>) -> String {
-    let mut report = String::new();
-
-    fn traverse_error<'a>(
-        input: &Span,
-        error: &'a ErrorTree<Span>,
-        report: &mut String,
-        depth: usize,
-    ) {
-        match error {
-            GenericErrorTree::Base { location, kind } => {
-                add_error_info(input, location, kind, report, depth);
-            }
-            GenericErrorTree::Stack { base, contexts } => {
-                for (ctx_location, ctx) in contexts.iter().rev() {
-                    add_context_info(input, ctx_location, ctx, report, depth);
-                }
-                traverse_error(input, base, report, depth);
-            }
-            GenericErrorTree::Alt(errors) => {
-                for err in errors {
-                    traverse_error(input, err, report, depth);
-                }
-            }
-        }
-    }
-
-    traverse_error(input, error, &mut report, 0);
-    report
-}
-
-fn add_error_info(
-    input: &Span,
-    location: &Span,
-    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
-    report: &mut String,
-    depth: usize,
-) {
-    let line = location.location_line();
-    let column = location.get_utf8_column();
-    let snippet = get_error_snippet(input, location);
-    let text = format_error_kind(kind);
-    let indent = "\t".repeat(depth);
-    if text.is_empty() {
-        return;
-    }
-
-    report.push_str(&format!(
-        "{}Error at line {}, column {}:\n",
-        indent, line, column
-    ));
-    report.push_str(&format!("{}  {}\n", indent, snippet));
-    report.push_str(&format!("{}  {}\n\n", indent, text));
-}
-
-fn add_context_info(
-    input: &Span,
-    location: &Span,
-    context: &StackContext<&str>,
-    report: &mut String,
-    depth: usize,
-) {
-    let line = location.location_line();
-    let column = location.get_utf8_column();
-    let snippet = get_error_snippet(input, location);
-
-    let indent = "\t".repeat(depth);
-    let text = match context {
-        StackContext::Kind(nom::error::ErrorKind::Many1) => return,
-        StackContext::Kind(_) => context.to_string(),
-        StackContext::Context(text) => text.to_string(),
-    };
-    report.push_str(&format!(
-        "{}Error at line {}, column {}:\n",
-        indent, line, column
-    ));
-    report.push_str(&format!("{}  {}\n", indent, snippet));
-    report.push_str(&format!("{}  {}\n\n", indent, text));
-}
-
-fn format_error_kind(
-    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
-) -> String {
-    match kind {
-        BaseErrorKind::Expected(Expectation::Something) => "".to_string(),
-        BaseErrorKind::Expected(expected) => format!("Expected {}", expected),
-        BaseErrorKind::External(err) => format!("{}", err),
-        _ => format!("{:?}", kind),
-    }
-}
-
-fn get_error_snippet(input: &Span, location: &Span) -> String {
-    let start = location.location_offset();
-    let end = (start + 20).min(input.len());
-    let snippet = &input[start..end];
-    format!("{:?}", snippet)
-}
 
 impl TryParse for Statement {
     fn parse(input: Span) -> PResult<Self> {
@@ -171,11 +121,11 @@ impl TryParse for Statement {
             alt((
                 map(Return::parse, Statement::Return),
                 map(block::Block::parse, Statement::Scope),
-                map(assignation::Assignation::parse, Statement::Assignation),
-                map(flows::Flow::parse, Statement::Flow),
                 map(declaration::Declaration::parse, Statement::Declaration),
+                map(flows::Flow::parse, Statement::Flow),
                 map(definition::Definition::parse, Statement::Definition),
                 map(loops::Loop::parse, Statement::Loops),
+                map(assignation::Assignation::parse, Statement::Assignation),
             )),
             "expected a valid statements",
         ))(input)

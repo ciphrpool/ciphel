@@ -1,4 +1,4 @@
-use ast::statements::Statement;
+use ast::statements::{self, Statement, WithLine};
 use semantic::SemanticError;
 use vm::{
     allocator::heap::Heap,
@@ -23,11 +23,11 @@ pub enum CompilationError {
     #[error("Parsing Error :\n{0}")]
     ParsingError(String),
 
-    #[error("Semantic Error : {0}")]
-    SemanticError(#[from] SemanticError),
+    #[error("Compilation Error at line {0}:\n{1}")]
+    SemanticError(usize, SemanticError),
 
-    #[error("Code Generation Error : {0}")]
-    CodeGen(#[from] CodeGenerationError),
+    #[error("Compilation Error at line {0}:\n{1}")]
+    CodeGen(usize, CodeGenerationError),
 
     #[error("Invalid thread id : {0}")]
     InvalidTID(usize),
@@ -90,24 +90,25 @@ impl Ciphel {
         player: crate::vm::vm::Player,
         tid: usize,
         src_code: &str,
+        line_offset: usize,
     ) -> Result<(), CompilationError> {
         let (scope, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
         {
-            let mut borrowed_scope = scope
-                .write()
-                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let mut borrowed_scope = scope.write().map_err(|_| {
+                CompilationError::SemanticError(line_offset, SemanticError::ConcurrencyError)
+            })?;
             let _ = borrowed_scope.open_transaction()?;
         }
         program.in_transaction = TransactionState::OPEN;
 
-        let mut statements: Vec<ast::statements::Statement> = parse_statements(src_code.into())?;
+        let mut statements = parse_statements(src_code.into())?;
         for statement in &mut statements {
             let _ = statement
                 .resolve::<G>(scope, &None, &mut ())
-                .map_err(|e| CompilationError::SemanticError(e))?;
+                .map_err(|e| CompilationError::SemanticError(statement.line + line_offset, e))?;
         }
         program.statements_buffer.extend(statements);
         Ok(())
@@ -117,6 +118,7 @@ impl Ciphel {
         &mut self,
         player: crate::vm::vm::Player,
         tid: usize,
+        line_offset: usize,
     ) -> Result<(), CompilationError> {
         let (scope, stack, program) = self
             .runtime
@@ -129,9 +131,9 @@ impl Ciphel {
             ));
         }
         {
-            let mut borrowed_scope = scope
-                .write()
-                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let mut borrowed_scope = scope.write().map_err(|_| {
+                CompilationError::SemanticError(line_offset, SemanticError::ConcurrencyError)
+            })?;
             let _ = borrowed_scope.commit_transaction()?;
             let _ = borrowed_scope.close_transaction()?;
         }
@@ -144,6 +146,7 @@ impl Ciphel {
         &mut self,
         player: crate::vm::vm::Player,
         tid: usize,
+        line_offset: usize,
     ) -> Result<(), CompilationError> {
         let (scope, stack, program) = self
             .runtime
@@ -156,9 +159,9 @@ impl Ciphel {
             ));
         }
         {
-            let mut borrowed_scope = scope
-                .write()
-                .map_err(|_| CompilationError::SemanticError(SemanticError::ConcurrencyError))?;
+            let mut borrowed_scope = scope.write().map_err(|_| {
+                CompilationError::SemanticError(line_offset, SemanticError::ConcurrencyError)
+            })?;
             let _ = borrowed_scope.reject_transaction()?;
             let _ = borrowed_scope.close_transaction()?;
         }
@@ -171,6 +174,7 @@ impl Ciphel {
         &mut self,
         player: crate::vm::vm::Player,
         tid: usize,
+        line_offset: usize,
     ) -> Result<(), CompilationError> {
         let (scope, stack, program) = self
             .runtime
@@ -184,17 +188,17 @@ impl Ciphel {
         }
         let _ = arw_read!(
             scope,
-            CompilationError::SemanticError(SemanticError::ConcurrencyError)
+            CompilationError::SemanticError(line_offset, SemanticError::ConcurrencyError)
         )?
         .update_stack_top(stack.top())
-        .map_err(|e| CompilationError::CodeGen(e))?;
+        .map_err(|e| CompilationError::CodeGen(line_offset, e))?;
 
-        let statements: Vec<Statement> = program.statements_buffer.drain(..).collect();
+        let statements: Vec<WithLine<Statement>> = program.statements_buffer.drain(..).collect();
 
         for statement in statements {
             let _ = statement
                 .gencode(scope, program)
-                .map_err(|e| CompilationError::CodeGen(e))?;
+                .map_err(|e| CompilationError::CodeGen(statement.line + line_offset, e))?;
         }
 
         Ok(())
@@ -216,20 +220,20 @@ impl Ciphel {
         for statement in &mut statements {
             let _ = statement
                 .resolve::<G>(scope, &None, &mut ())
-                .map_err(|e| CompilationError::SemanticError(e))?;
+                .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
         }
 
         let _ = arw_read!(
             scope,
-            CompilationError::SemanticError(SemanticError::ConcurrencyError)
+            CompilationError::SemanticError(0, SemanticError::ConcurrencyError)
         )?
         .update_stack_top(stack.top())
-        .map_err(|e| CompilationError::CodeGen(e))?;
+        .map_err(|e| CompilationError::CodeGen(0, e))?;
 
         for statement in &statements {
             let _ = statement
                 .gencode(scope, program)
-                .map_err(|e| CompilationError::CodeGen(e))?;
+                .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
         }
 
         Ok(())
@@ -382,14 +386,19 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(
+                crate::vm::vm::Player::P1,
+                tid,
+                src,
+                0,
+            )
             .expect("Compilation should have succeeded");
 
         ciphel
-            .commit_transaction(crate::vm::vm::Player::P1, tid)
+            .commit_transaction(crate::vm::vm::Player::P1, tid, 0)
             .expect("Compilation should have succeeded");
         ciphel
-            .push_compilation(crate::vm::vm::Player::P1, tid)
+            .push_compilation(crate::vm::vm::Player::P1, tid, 0)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 
@@ -409,11 +418,16 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(
+                crate::vm::vm::Player::P1,
+                tid,
+                src,
+                0,
+            )
             .expect("Compilation should have succeeded");
 
         ciphel
-            .reject_transaction(crate::vm::vm::Player::P1, tid)
+            .reject_transaction(crate::vm::vm::Player::P1, tid, 0)
             .expect("Compilation should have succeeded");
 
         let src = r##"
@@ -421,14 +435,19 @@ mod tests {
         "##;
 
         ciphel
-            .compile_with_transaction::<StdoutTestGameEngine>(crate::vm::vm::Player::P1, tid, src)
+            .compile_with_transaction::<StdoutTestGameEngine>(
+                crate::vm::vm::Player::P1,
+                tid,
+                src,
+                0,
+            )
             .expect("Compilation should have succeeded");
 
         ciphel
-            .commit_transaction(crate::vm::vm::Player::P1, tid)
+            .commit_transaction(crate::vm::vm::Player::P1, tid, 0)
             .expect("Compilation should have succeeded");
         ciphel
-            .push_compilation(crate::vm::vm::Player::P1, tid)
+            .push_compilation(crate::vm::vm::Player::P1, tid, 0)
             .expect("Compilation should have succeeded");
         ciphel.run(&mut engine).expect("no error should arise");
 

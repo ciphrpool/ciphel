@@ -80,11 +80,7 @@ impl TryParse for Atomic {
         squash(
             alt((
                 map(
-                    delimited(
-                        wst(lexem::PAR_O),
-                        cut(Expression::parse),
-                        cut(wst(lexem::PAR_C)),
-                    ),
+                    delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
                     |value| Atomic::Paren(Box::new(value)),
                 ),
                 map(flows::ExprFlow::parse, Atomic::ExprFlow),

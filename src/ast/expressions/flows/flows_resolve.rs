@@ -122,10 +122,10 @@ impl Resolve for Pattern {
                 let user_type = borrowed_scope.find_type(typename)?;
                 match user_type.as_ref() {
                     UserType::Enum(_) => {}
-                    _ => return Err(SemanticError::IncorrectVariant),
+                    _ => return Err(SemanticError::IncorrectVariant(typename.to_string())),
                 }
                 let Some(_) = user_type.get_variant(value) else {
-                    return Err(SemanticError::IncorrectVariant);
+                    return Err(SemanticError::IncorrectVariant(typename.to_string()));
                 };
                 Ok(Vec::default())
             }
@@ -138,11 +138,14 @@ impl Resolve for Pattern {
                 let user_type = borrowed_scope.find_type(typename)?;
                 match user_type.as_ref() {
                     UserType::Union(_) => {}
-                    _ => return Err(SemanticError::IncorrectVariant),
+                    _ => return Err(SemanticError::IncorrectVariant(typename.to_string())),
                 }
                 let variant_type: Option<EType> = user_type.get_variant(variant);
                 let Some(variant_type) = variant_type else {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of {}::{}",
+                        typename, variant
+                    )));
                 };
                 let mut scope_vars = Vec::with_capacity(vars.len());
                 let Some(fields) = <EType as GetSubTypes>::get_fields(&variant_type) else {
@@ -228,7 +231,7 @@ impl Resolve for PatternExpr {
         for pattern in &mut self.patterns[1..] {
             let vars = pattern.resolve::<G>(scope, &extra, &mut ())?;
             if previous_vars != vars {
-                return Err(SemanticError::IncorrectVariant);
+                return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
             }
         }
         for (_index, var) in previous_vars.iter_mut().enumerate() {
@@ -449,7 +452,9 @@ impl Resolve for TryExpr {
                             return Ok(());
                         }
                     } else {
-                        return Err(SemanticError::CantInferType);
+                        return Err(SemanticError::CantInferType(
+                            "of this try-block".to_string(),
+                        ));
                     }
                 }
                 StaticType::Error => {

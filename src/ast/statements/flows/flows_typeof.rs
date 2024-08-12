@@ -61,7 +61,7 @@ impl TypeOf for MatchStat {
             }
         };
         let Some(pattern_type) = pattern_type else {
-            return Err(SemanticError::CantInferType);
+            return Err(SemanticError::CantInferType(format!("of this pattern")));
         };
         match &self.else_branch {
             Some(else_branch) => {

@@ -248,7 +248,6 @@ mod tests {
             .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
-        // dbg!(&instructions);
         assert!(instructions.len() > 0);
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
@@ -308,7 +307,6 @@ mod tests {
             .gencode(&scope, &mut instructions)
             .expect("Code generation should have succeeded");
 
-        // dbg!(&instructions);
         assert!(instructions.len() > 0);
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();

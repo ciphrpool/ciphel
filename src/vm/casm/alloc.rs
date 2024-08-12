@@ -490,7 +490,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
                         bytes.to_vec()
                     }
                 };
-                // dbg!(&data);
+
                 // Copy data onto stack;
                 let _ = stack.push_with(&data)?;
                 program.incr();

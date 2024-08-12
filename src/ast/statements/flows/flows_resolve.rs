@@ -120,7 +120,7 @@ impl Resolve for MatchStat {
                     for pattern in &mut value.patterns[1..] {
                         let vars = pattern.resolve::<G>(scope, &expr_type, &mut ())?;
                         if previous_vars != vars {
-                            return Err(SemanticError::IncorrectVariant);
+                            return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
                         }
                     }
 
@@ -170,7 +170,7 @@ impl Resolve for MatchStat {
                     for pattern in &mut value.patterns[1..] {
                         let vars = pattern.resolve::<G>(scope, &expr_type, &mut ())?;
                         if previous_vars != vars {
-                            return Err(SemanticError::IncorrectVariant);
+                            return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
                         }
                     }
                     for (_index, var) in previous_vars.iter_mut().enumerate() {

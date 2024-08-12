@@ -19,9 +19,9 @@ use thiserror::Error;
 pub enum CodeGenerationError {
     #[error("Unresolved Error")]
     UnresolvedError,
-    #[error("Concurrency Error")]
+    #[error("internal compilation error")]
     ConcurrencyError,
-    #[error("Default error")]
+    #[error("unexpected error")]
     Default,
 }
 

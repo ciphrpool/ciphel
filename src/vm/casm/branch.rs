@@ -181,7 +181,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::get_bool(stack)?;
-        // dbg!(condition);
+
         let Some(else_label) = program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
         };

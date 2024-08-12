@@ -85,7 +85,10 @@ impl Resolve for ForItem {
         match self {
             ForItem::Id(value) => {
                 let Some(item_type) = context else {
-                    return Err(SemanticError::CantInferType);
+                    return Err(SemanticError::CantInferType(format!(
+                        "of this variable {}",
+                        value
+                    )));
                 };
                 Ok(vec![<Var as BuildVar>::build_var(value, &item_type)])
             }
