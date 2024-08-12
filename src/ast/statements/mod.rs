@@ -1,15 +1,19 @@
 use nom::{
     branch::alt,
     combinator::{eof, map},
-    multi::many0,
+    multi::{many0, many1},
     sequence::terminated,
-    Parser,
+    Finish, Parser,
 };
+use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
 
 use self::return_stat::Return;
 use crate::{semantic::scope::scope::Scope, CompilationError};
 
-use super::{utils::strings::eater, TryParse};
+use super::{
+    utils::{error::squash, strings::eater},
+    TryParse,
+};
 use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf},
@@ -43,34 +47,138 @@ pub enum Statement {
 }
 
 pub fn parse_statements(input: Span) -> Result<Vec<Statement>, CompilationError> {
-    let mut parser = terminated(many0(Statement::parse), eater::ws(eof));
+    let mut parser = many1(Statement::parse);
 
-    match parser.parse(input) {
-        Ok((_, statements)) => Ok(statements),
+    match parser(input).finish() {
+        Ok((remaining, statements)) => {
+            if !remaining.fragment().is_empty() {
+                let error_report = format!(
+                    "Parsing completed, but input remains: {:?}",
+                    remaining.fragment()
+                );
+                Err(CompilationError::ParsingError(error_report))
+            } else {
+                Ok(statements)
+            }
+        }
         Err(e) => {
-            // dbg!(e);
-            Err(CompilationError::ParsingError())
+            let error_report = generate_error_report(&input, &e);
+            Err(CompilationError::ParsingError(error_report))
         }
     }
+}
+fn generate_error_report(input: &Span, error: &ErrorTree<Span>) -> String {
+    let mut report = String::new();
+
+    fn traverse_error<'a>(
+        input: &Span,
+        error: &'a ErrorTree<Span>,
+        report: &mut String,
+        depth: usize,
+    ) {
+        match error {
+            GenericErrorTree::Base { location, kind } => {
+                add_error_info(input, location, kind, report, depth);
+            }
+            GenericErrorTree::Stack { base, contexts } => {
+                for (ctx_location, ctx) in contexts.iter().rev() {
+                    add_context_info(input, ctx_location, ctx, report, depth);
+                }
+                traverse_error(input, base, report, depth);
+            }
+            GenericErrorTree::Alt(errors) => {
+                for err in errors {
+                    traverse_error(input, err, report, depth);
+                }
+            }
+        }
+    }
+
+    traverse_error(input, error, &mut report, 0);
+    report
+}
+
+fn add_error_info(
+    input: &Span,
+    location: &Span,
+    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
+    report: &mut String,
+    depth: usize,
+) {
+    let line = location.location_line();
+    let column = location.get_utf8_column();
+    let snippet = get_error_snippet(input, location);
+    let text = format_error_kind(kind);
+    let indent = "\t".repeat(depth);
+    if text.is_empty() {
+        return;
+    }
+
+    report.push_str(&format!(
+        "{}Error at line {}, column {}:\n",
+        indent, line, column
+    ));
+    report.push_str(&format!("{}  {}\n", indent, snippet));
+    report.push_str(&format!("{}  {}\n\n", indent, text));
+}
+
+fn add_context_info(
+    input: &Span,
+    location: &Span,
+    context: &StackContext<&str>,
+    report: &mut String,
+    depth: usize,
+) {
+    let line = location.location_line();
+    let column = location.get_utf8_column();
+    let snippet = get_error_snippet(input, location);
+
+    let indent = "\t".repeat(depth);
+    let text = match context {
+        StackContext::Kind(nom::error::ErrorKind::Many1) => return,
+        StackContext::Kind(_) => context.to_string(),
+        StackContext::Context(text) => text.to_string(),
+    };
+    report.push_str(&format!(
+        "{}Error at line {}, column {}:\n",
+        indent, line, column
+    ));
+    report.push_str(&format!("{}  {}\n", indent, snippet));
+    report.push_str(&format!("{}  {}\n\n", indent, text));
+}
+
+fn format_error_kind(
+    kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
+) -> String {
+    match kind {
+        BaseErrorKind::Expected(Expectation::Something) => "".to_string(),
+        BaseErrorKind::Expected(expected) => format!("Expected {}", expected),
+        BaseErrorKind::External(err) => format!("{}", err),
+        _ => format!("{:?}", kind),
+    }
+}
+
+fn get_error_snippet(input: &Span, location: &Span) -> String {
+    let start = location.location_offset();
+    let end = (start + 20).min(input.len());
+    let snippet = &input[start..end];
+    format!("{:?}", snippet)
 }
 
 impl TryParse for Statement {
     fn parse(input: Span) -> PResult<Self> {
-        eater::ws(alt((
-            map(Return::parse, |value| Statement::Return(value)),
-            map(block::Block::parse, |value| Statement::Scope(value)),
-            map(flows::Flow::parse, |value| Statement::Flow(value)),
-            map(assignation::Assignation::parse, |value| {
-                Statement::Assignation(value)
-            }),
-            map(declaration::Declaration::parse, |value| {
-                Statement::Declaration(value)
-            }),
-            map(definition::Definition::parse, |value| {
-                Statement::Definition(value)
-            }),
-            map(loops::Loop::parse, |value| Statement::Loops(value)),
-        )))(input)
+        eater::ws(squash(
+            alt((
+                map(Return::parse, Statement::Return),
+                map(block::Block::parse, Statement::Scope),
+                map(assignation::Assignation::parse, Statement::Assignation),
+                map(flows::Flow::parse, Statement::Flow),
+                map(declaration::Declaration::parse, Statement::Declaration),
+                map(definition::Definition::parse, Statement::Definition),
+                map(loops::Loop::parse, Statement::Loops),
+            )),
+            "expected a valid statements",
+        ))(input)
     }
 }
 impl Resolve for Statement {
@@ -128,20 +236,6 @@ impl GenerateCode for Statement {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                // let scope_casm = Rc::new(RefCell::new(CasmProgram::default()));
-                // let _ = value.gencode(block, &scope_casm)?;
-
-                // let scope_casm = scope_casm.take();
-                // let next_instruction_idx =
-                //     instructions.as_ref().borrow().len() + 1 + scope_casm.len();
-                // let mut borrowed = instructions
-                //     .as_ref()
-                //     .try_borrow_mut()
-                //     .map_err(|_| CodeGenerationError::Default)?;
-                // instructions.push(Casm::Data(Data::Serialized {
-                //     data: (next_instruction_idx as u64).to_le_bytes().to_vec(),
-                // }));
-                // borrowed.extend(scope_casm.main);
                 let scope_label = Label::gen();
                 let end_scope_label = Label::gen();
 

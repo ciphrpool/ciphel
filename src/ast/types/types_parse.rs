@@ -6,6 +6,7 @@ use nom::{
 };
 
 use crate::ast::utils::{
+    error::squash,
     io::{PResult, Span},
     lexem,
     numbers::parse_number,
@@ -27,22 +28,25 @@ impl TryParse for Type {
      * Type :=  Primitive | ID | Vec |  Fn  | Slice | Tuple | Unit | Address | Map | Gen
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PrimitiveType::parse, |value| Type::Primitive(value)),
-            map(SliceType::parse, |value| Type::Slice(value)),
-            map(StrSliceType::parse, |value| Type::StrSlice(value)),
-            map(StringType::parse, |value| Type::String(value)),
-            value(Type::Unit, wst(lexem::UUNIT)),
-            value(Type::Any, wst(lexem::ANY)),
-            value(Type::Error, wst(lexem::ERR)),
-            map(VecType::parse, |value| Type::Vec(value)),
-            map(ClosureType::parse, |value| Type::Closure(value)),
-            map(RangeType::parse, |value| Type::Range(value)),
-            map(TupleType::parse, |value| Type::Tuple(value)),
-            map(AddrType::parse, |value| Type::Address(value)),
-            map(MapType::parse, |value| Type::Map(value)),
-            map(parse_id, |value| Type::UserType(value)),
-        ))(input)
+        squash(
+            alt((
+                map(PrimitiveType::parse, |value| Type::Primitive(value)),
+                map(SliceType::parse, |value| Type::Slice(value)),
+                map(StrSliceType::parse, |value| Type::StrSlice(value)),
+                map(StringType::parse, |value| Type::String(value)),
+                value(Type::Unit, wst(lexem::UUNIT)),
+                value(Type::Any, wst(lexem::ANY)),
+                value(Type::Error, wst(lexem::ERR)),
+                map(VecType::parse, |value| Type::Vec(value)),
+                map(ClosureType::parse, |value| Type::Closure(value)),
+                map(RangeType::parse, |value| Type::Range(value)),
+                map(TupleType::parse, |value| Type::Tuple(value)),
+                map(AddrType::parse, |value| Type::Address(value)),
+                map(MapType::parse, |value| Type::Map(value)),
+                map(parse_id, |value| Type::UserType(value)),
+            )),
+            "Expected a valid type",
+        )(input)
     }
 }
 impl TryParse for PrimitiveType {

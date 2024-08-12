@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{cut, map, opt},
     multi::separated_list1,
     sequence::{delimited, pair, preceded, separated_pair},
 };
@@ -14,6 +14,7 @@ use crate::{
         },
         types::Type,
         utils::{
+            error::squash,
             io::{PResult, Span},
             lexem,
             strings::{parse_id, string_parser::parse_fstring, wst},
@@ -62,9 +63,9 @@ impl TryParse for IfExpr {
             pair(
                 pair(
                     delimited(wst(lexem::IF), Expression::parse, wst(lexem::THEN)),
-                    ExprScope::parse,
+                    cut(ExprScope::parse),
                 ),
-                preceded(wst(lexem::ELSE), ExprScope::parse),
+                cut(preceded(wst(lexem::ELSE), ExprScope::parse)),
             ),
             |((condition, then_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
@@ -92,48 +93,32 @@ impl TryParse for Pattern {
      *      | \(  IDs \)
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(Primitive::parse, |value| Pattern::Primitive(value)),
-            map(StrSlice::parse, |value| Pattern::String(value)),
-            map(
-                pair(
-                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                    delimited(
-                        wst(lexem::BRA_O),
-                        separated_list1(wst(lexem::COMA), parse_id),
-                        wst(lexem::BRA_C),
+        squash(
+            alt((
+                map(Primitive::parse, |value| Pattern::Primitive(value)),
+                map(StrSlice::parse, |value| Pattern::String(value)),
+                map(
+                    pair(
+                        separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                        delimited(
+                            wst(lexem::BRA_O),
+                            separated_list1(wst(lexem::COMA), parse_id),
+                            wst(lexem::BRA_C),
+                        ),
                     ),
+                    |((typename, variant), vars)| Pattern::Union {
+                        typename,
+                        variant,
+                        vars,
+                    },
                 ),
-                |((typename, variant), vars)| Pattern::Union {
-                    typename,
-                    variant,
-                    vars,
-                },
-            ),
-            map(
-                separated_pair(parse_id, wst(lexem::SEP), parse_id),
-                |(typename, value)| Pattern::Enum { typename, value },
-            ),
-            // map(
-            //     pair(
-            //         parse_id,
-            //         delimited(
-            //             wst(lexem::BRA_O),
-            //             separated_list1(wst(lexem::COMA), parse_id),
-            //             wst(lexem::BRA_C),
-            //         ),
-            //     ),
-            //     |(typename, vars)| Pattern::Struct { typename, vars },
-            // ),
-            // map(
-            //     delimited(
-            //         wst(lexem::PAR_O),
-            //         separated_list1(wst(lexem::COMA), parse_id),
-            //         wst(lexem::PAR_C),
-            //     ),
-            //     |value| Pattern::Tuple(value),
-            // ),
-        ))(input)
+                map(
+                    separated_pair(parse_id, wst(lexem::SEP), parse_id),
+                    |(typename, value)| Pattern::Enum { typename, value },
+                ),
+            )),
+            "Expected a valid pattern",
+        )(input)
     }
 }
 
@@ -173,8 +158,8 @@ impl TryParse for MatchExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::MATCH), Expression::parse),
-                delimited(
+                preceded(wst(lexem::MATCH), cut(Expression::parse)),
+                cut(delimited(
                     wst(lexem::BRA_O),
                     pair(
                         separated_list1(wst(lexem::COMA), PatternExpr::parse),
@@ -187,7 +172,7 @@ impl TryParse for MatchExpr {
                         )),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(expr, (patterns, else_branch))| MatchExpr {
                 expr: Box::new(expr),

@@ -1,4 +1,8 @@
-use nom::{branch::alt, combinator::map, sequence::delimited};
+use nom::{
+    branch::alt,
+    combinator::{cut, map},
+    sequence::delimited,
+};
 
 use crate::{
     ast::{
@@ -24,7 +28,7 @@ use self::operation::{
     Substraction, TupleAccess, UnaryOperation,
 };
 
-use super::TryParse;
+use super::{utils::error::squash, TryParse};
 
 pub mod data;
 pub mod flows;
@@ -73,17 +77,22 @@ impl TryParse for Atomic {
      * | Error
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(wst(lexem::PAR_O), Expression::parse, wst(lexem::PAR_C)),
-                |value| Atomic::Paren(Box::new(value)),
-            ),
-            map(flows::ExprFlow::parse, |value| Atomic::ExprFlow(value)),
-            map(data::Data::parse, |value| Atomic::Data(value)),
-            map(operation::UnaryOperation::parse, |value| {
-                Atomic::UnaryOperation(value)
-            }),
-        ))(input)
+        squash(
+            alt((
+                map(
+                    delimited(
+                        wst(lexem::PAR_O),
+                        cut(Expression::parse),
+                        cut(wst(lexem::PAR_C)),
+                    ),
+                    |value| Atomic::Paren(Box::new(value)),
+                ),
+                map(flows::ExprFlow::parse, Atomic::ExprFlow),
+                map(data::Data::parse, Atomic::Data),
+                map(operation::UnaryOperation::parse, Atomic::UnaryOperation),
+            )),
+            "Expected a valid expression",
+        )(input)
     }
 }
 

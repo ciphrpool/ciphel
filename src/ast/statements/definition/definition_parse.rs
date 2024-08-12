@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::{map, opt},
+    combinator::{cut, map, opt},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, tuple},
 };
@@ -9,6 +9,7 @@ use crate::ast::{
     statements::{block::Block, declaration::TypedVar},
     types::Type,
     utils::{
+        error::squash,
         io::{PResult, Span},
         lexem,
         strings::{parse_id, wst},
@@ -20,10 +21,13 @@ use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
 impl TryParse for Definition {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(TypeDef::parse, |value| Definition::Type(value)),
-            map(FnDef::parse, |value| Definition::Fn(value)),
-        ))(input)
+        squash(
+            alt((
+                map(TypeDef::parse, |value| Definition::Type(value)),
+                map(FnDef::parse, |value| Definition::Fn(value)),
+            )),
+            "Expected a type definition (a struct, enum or union) or a static function definition",
+        )(input)
     }
 }
 
@@ -50,14 +54,14 @@ impl TryParse for StructDef {
         map(
             pair(
                 preceded(wst(lexem::STRUCT), parse_id),
-                delimited(
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Type::parse),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, fields)| StructDef { id, fields },
         )(input)
@@ -77,7 +81,7 @@ impl TryParse for UnionDef {
         map(
             pair(
                 preceded(wst(lexem::UNION), parse_id),
-                delimited(
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
@@ -94,7 +98,7 @@ impl TryParse for UnionDef {
                         ),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, variants)| UnionDef { id, variants },
         )(input)
@@ -114,11 +118,11 @@ impl TryParse for EnumDef {
         map(
             pair(
                 preceded(wst(lexem::ENUM), parse_id),
-                delimited(
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(wst(lexem::COMA), parse_id),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |(id, values)| EnumDef { id, values },
         )(input)
@@ -136,12 +140,12 @@ impl TryParse for FnDef {
         map(
             tuple((
                 preceded(wst(lexem::FN), parse_id),
-                delimited(
+                cut(delimited(
                     wst(lexem::PAR_O),
                     separated_list0(wst(lexem::COMA), TypedVar::parse),
                     wst(lexem::PAR_C),
-                ),
-                preceded(wst(lexem::ARROW), Type::parse),
+                )),
+                cut(preceded(wst(lexem::ARROW), Type::parse)),
                 Block::parse,
             )),
             |(id, params, ret, scope)| FnDef {

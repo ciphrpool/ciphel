@@ -7,6 +7,7 @@ use crate::{
         statements::{declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
+            error::squash,
             io::{PResult, Span},
             lexem,
             numbers::{parse_float, parse_number},
@@ -23,11 +24,12 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    combinator::{map, opt, value},
+    combinator::{cut, map, opt, value},
     multi::{separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair},
     Parser,
 };
+use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
     Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
@@ -35,22 +37,49 @@ use super::{
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(Primitive::parse, |value| Data::Primitive(value)),
-            map(StrSlice::parse, |value| Data::StrSlice(value)),
-            map(Slice::parse, |value| Data::Slice(value)),
-            map(Vector::parse, |value| Data::Vec(value)),
-            map(Closure::parse, |value| Data::Closure(value)),
-            map(Tuple::parse, |value| Data::Tuple(value)),
-            map(Address::parse, |value| Data::Address(value)),
-            map(PtrAccess::parse, |value| Data::PtrAccess(value)),
-            value(Data::Unit, wst(lexem::UNIT)),
-            map(Map::parse, |value| Data::Map(value)),
-            map(Struct::parse, |value| Data::Struct(value)),
-            map(Union::parse, |value| Data::Union(value)),
-            map(Enum::parse, |value| Data::Enum(value)),
-            map(Variable::parse, |value| Data::Variable(value)),
-        ))(input)
+        squash(
+            alt((
+                map(Primitive::parse, |value| Data::Primitive(value)),
+                map(StrSlice::parse, |value| Data::StrSlice(value)),
+                map(Slice::parse, |value| Data::Slice(value)),
+                map(Vector::parse, |value| Data::Vec(value)),
+                map(Closure::parse, |value| Data::Closure(value)),
+                map(Tuple::parse, |value| Data::Tuple(value)),
+                map(Address::parse, |value| Data::Address(value)),
+                map(PtrAccess::parse, |value| Data::PtrAccess(value)),
+                value(Data::Unit, wst(lexem::UNIT)),
+                map(Map::parse, |value| Data::Map(value)),
+                map(Struct::parse, |value| Data::Struct(value)),
+                map(Union::parse, |value| Data::Union(value)),
+                map(Enum::parse, |value| Data::Enum(value)),
+                map(Variable::parse, |value| Data::Variable(value)),
+            )),
+            "Expected a valid expression",
+        )(input)
+
+        // match &res {
+        //     Ok(_) => res,
+        //     Err(nom::Err::Error(e)) => {
+        //         dbg!("Error", e);
+        //         Err(nom::Err::Error(
+        //             nom_supreme::error::GenericErrorTree::Stack {
+        //                 base: Box::new(nom_supreme::error::GenericErrorTree::Base {
+        //                     location: input,
+        //                     kind: nom_supreme::error::BaseErrorKind::Expected(
+        //                         nom_supreme::error::Expectation::Something,
+        //                     ),
+        //                 }),
+        //                 contexts: vec![(
+        //                     input,
+        //                     nom_supreme::error::StackContext::Context(
+        //                         "Expected a valid expression",
+        //                     ),
+        //                 )],
+        //             },
+        //         ))
+        //     }
+        //     Err(_) => res,
+        // }
     }
 }
 
@@ -137,8 +166,8 @@ impl TryParse for Slice {
         map(
             delimited(
                 wst(lexem::SQ_BRA_O),
-                MultiData::parse,
-                preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
+                cut(MultiData::parse).context("Invalid slice"),
+                cut(preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C))),
             ),
             |value| Slice {
                 value,
@@ -176,11 +205,12 @@ impl TryParse for Vector {
         map(
             preceded(
                 wst(platform::utils::lexem::VEC),
-                delimited(
+                cut(delimited(
                     wst(lexem::SQ_BRA_O),
                     MultiData::parse,
                     preceded(opt(wst(lexem::COMA)), wst(lexem::SQ_BRA_C)),
-                ),
+                ))
+                .context("Invalid vector"),
             ),
             |value| Vector {
                 capacity: align(*&value.len()),
@@ -197,8 +227,8 @@ impl TryParse for Tuple {
         map(
             delimited(
                 wst(lexem::PAR_O),
-                MultiData::parse,
-                preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C)),
+                cut(MultiData::parse).context("Invalid tuple"),
+                cut(preceded(opt(wst(lexem::COMA)), wst(lexem::PAR_C))),
             ),
             |value| Tuple {
                 value,
@@ -233,7 +263,7 @@ impl TryParse for Closure {
                         wst(lexem::PAR_C),
                     ),
                 ),
-                preceded(wst(lexem::ARROW), ExprScope::parse),
+                preceded(wst(lexem::ARROW), cut(ExprScope::parse)).context("Invalid closure"),
             ),
             |((state, params), scope)| Closure {
                 params,
@@ -292,10 +322,16 @@ impl TryParse for Address {
      * Addr := &DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ADDR), Atomic::parse), |value| Address {
-            value: value.into(),
-            metadata: Metadata::default(),
-        })(input)
+        map(
+            preceded(
+                wst(lexem::ADDR),
+                cut(Atomic::parse).context("Invalid address"),
+            ),
+            |value| Address {
+                value: value.into(),
+                metadata: Metadata::default(),
+            },
+        )(input)
     }
 }
 
@@ -307,12 +343,16 @@ impl TryParse for PtrAccess {
      * Addr := -DATA
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(preceded(wst(lexem::ACCESS), Atomic::parse), |value| {
-            PtrAccess {
+        map(
+            preceded(
+                wst(lexem::ACCESS),
+                cut(Atomic::parse).context("Invalid pointer access"),
+            ),
+            |value| PtrAccess {
                 value: value.into(),
                 metadata: Metadata::default(),
-            }
-        })(input)
+            },
+        )(input)
     }
 }
 
@@ -331,11 +371,11 @@ impl TryParse for Struct {
                 parse_id,
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list0(
+                    cut(separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                    ),
-                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
+                    )),
+                    cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
             |(id, value)| Struct {
@@ -362,11 +402,11 @@ impl TryParse for Union {
                 separated_pair(parse_id, wst(lexem::SEP), parse_id),
                 delimited(
                     wst(lexem::BRA_O),
-                    separated_list0(
+                    cut(separated_list0(
                         wst(lexem::COMA),
                         separated_pair(parse_id, wst(lexem::COLON), Expression::parse),
-                    ),
-                    preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
+                    )),
+                    cut(preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C))),
                 ),
             ),
             |((typename, name), value)| Union {
@@ -412,14 +452,14 @@ impl TryParse for Map {
         map(
             preceded(
                 wst(platform::utils::lexem::MAP),
-                delimited(
+                cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
                         wst(lexem::COMA),
                         separated_pair(Expression::parse, wst(lexem::COLON), Expression::parse),
                     ),
                     preceded(opt(wst(lexem::COMA)), wst(lexem::BRA_C)),
-                ),
+                )),
             ),
             |value| Map {
                 fields: value,

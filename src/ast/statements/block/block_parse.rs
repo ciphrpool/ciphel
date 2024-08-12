@@ -1,6 +1,10 @@
 use std::sync::{Arc, RwLock};
 
-use nom::{combinator::map, multi::many0, sequence::delimited};
+use nom::{
+    combinator::{cut, map},
+    multi::many0,
+    sequence::delimited,
+};
 
 use crate::{
     ast::{
@@ -22,8 +26,8 @@ impl TryParse for Block {
         map(
             delimited(
                 wst(lexem::BRA_O),
-                many0(Statement::parse),
-                wst(lexem::BRA_C),
+                cut(many0(Statement::parse)),
+                cut(wst(lexem::BRA_C)),
             ),
             |value| Block {
                 instructions: value,

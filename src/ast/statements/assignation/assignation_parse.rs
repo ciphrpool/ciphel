@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    combinator::map,
+    combinator::{cut, map},
     sequence::{separated_pair, terminated},
 };
 use nom_supreme::ParserExt;
@@ -30,7 +30,11 @@ impl TryParse for Assignation {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            separated_pair(Expression::parse, wst(lexem::EQUAL), AssignValue::parse),
+            separated_pair(
+                Expression::parse,
+                wst(lexem::EQUAL),
+                cut(AssignValue::parse),
+            ),
             |(left, right)| Assignation { left, right },
         )(input)
     }

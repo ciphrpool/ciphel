@@ -176,7 +176,7 @@ pub fn parse_id(input: Span) -> PResult<ID> {
             };
             if is_in_lexem {
                 Err(nom::Err::Error(nom::error::Error::new(
-                    "id",
+                    id.as_str().to_string(),
                     nom::error::ErrorKind::AlphaNumeric,
                 )))
             } else {
@@ -216,6 +216,7 @@ pub mod string_parser {
         Parser,
     };
     use nom_supreme::tag::complete::tag;
+    use nom_supreme::ParserExt;
 
     use super::eater::ml_comment;
     fn unicode(input: Span) -> PResult<char> {
@@ -291,7 +292,9 @@ pub mod string_parser {
             nom::character::complete::char('"'),
             build_string,
             nom::character::complete::char('"'),
-        )(input)
+        )
+        .context("Invalid string")
+        .parse(input)
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]

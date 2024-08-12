@@ -1,13 +1,15 @@
 use nom::{
     branch::alt,
-    combinator::map,
+    combinator::{cut, map},
     sequence::{pair, preceded, tuple},
 };
+use nom_supreme::ParserExt;
 
 use crate::ast::{
     expressions::Expression,
     statements::{block::Block, declaration::PatternVar},
     utils::{
+        error::squash,
         io::{PResult, Span},
         lexem,
         strings::{parse_id, wst},
@@ -28,13 +30,16 @@ impl TryParse for Loop {
      *      | loop Scope
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(preceded(wst(lexem::LOOP), Block::parse), |scope| {
-                Loop::Loop(Box::new(scope))
-            }),
-            map(ForLoop::parse, |value| Loop::For(value)),
-            map(WhileLoop::parse, |value| Loop::While(value)),
-        ))(input)
+        squash(
+            alt((
+                map(preceded(wst(lexem::LOOP), Block::parse), |scope| {
+                    Loop::Loop(Box::new(scope))
+                }),
+                map(ForLoop::parse, |value| Loop::For(value)),
+                map(WhileLoop::parse, |value| Loop::While(value)),
+            )),
+            "Expected a loop, while or for loop",
+        )(input)
     }
 }
 
@@ -46,10 +51,13 @@ impl TryParse for ForIterator {
 
 impl TryParse for ForItem {
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(PatternVar::parse, |value| ForItem::Pattern(value)),
-            map(parse_id, |value| ForItem::Id(value)),
-        ))(input)
+        squash(
+            alt((
+                map(PatternVar::parse, |value| ForItem::Pattern(value)),
+                map(parse_id, |value| ForItem::Id(value)),
+            )),
+            "Expected a valid item in for-loop",
+        )(input)
     }
 }
 
@@ -65,9 +73,9 @@ impl TryParse for ForLoop {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FOR), ForItem::parse),
-                preceded(wst(lexem::IN), ForIterator::parse),
-                Block::parse,
+                preceded(wst(lexem::FOR), cut(ForItem::parse)),
+                cut(preceded(wst(lexem::IN), ForIterator::parse)),
+                cut(Block::parse).context("Invalid block in for-loop statement"),
             )),
             |(item, iterator, scope)| ForLoop {
                 item,
@@ -87,7 +95,10 @@ impl TryParse for WhileLoop {
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
-            pair(preceded(wst(lexem::WHILE), Expression::parse), Block::parse),
+            pair(
+                preceded(wst(lexem::WHILE), cut(Expression::parse)),
+                cut(Block::parse).context("Invalid block in while-loop statement"),
+            ),
             |(condition, scope)| WhileLoop {
                 condition: Box::new(condition),
                 scope: Box::new(scope),

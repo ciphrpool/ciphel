@@ -1,3 +1,4 @@
+use crate::ast::utils::error::squash;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::Info;
 
@@ -21,6 +22,7 @@ use crate::{
     },
 };
 use nom::branch::alt;
+use nom::combinator::cut;
 use nom::sequence::terminated;
 use nom::{
     combinator::{map, opt},
@@ -49,30 +51,33 @@ impl TryParse for Return {
      *      | Λ
      */
     fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(
-                delimited(
-                    wst(lexem::RETURN),
-                    opt(Expression::parse),
-                    wst(lexem::SEMI_COLON),
-                ),
-                |value| match value {
-                    Some(expr) => Return::Expr {
-                        expr: Box::new(expr),
-                        metadata: Metadata::default(),
+        squash(
+            alt((
+                map(
+                    delimited(
+                        wst(lexem::RETURN),
+                        cut(opt(Expression::parse)),
+                        cut(wst(lexem::SEMI_COLON)),
+                    ),
+                    |value| match value {
+                        Some(expr) => Return::Expr {
+                            expr: Box::new(expr),
+                            metadata: Metadata::default(),
+                        },
+                        None => Return::Unit,
                     },
-                    None => Return::Unit,
-                },
-            ),
-            map(
-                terminated(wst(lexem::BREAK), wst(lexem::SEMI_COLON)),
-                |_| Return::Break,
-            ),
-            map(
-                terminated(wst(lexem::CONTINUE), wst(lexem::SEMI_COLON)),
-                |_| Return::Continue,
-            ),
-        ))(input)
+                ),
+                map(
+                    terminated(wst(lexem::BREAK), cut(wst(lexem::SEMI_COLON))),
+                    |_| Return::Break,
+                ),
+                map(
+                    terminated(wst(lexem::CONTINUE), cut(wst(lexem::SEMI_COLON))),
+                    |_| Return::Continue,
+                ),
+            )),
+            "Expected a return, break or continue statement",
+        )(input)
     }
 }
 impl Resolve for Return {

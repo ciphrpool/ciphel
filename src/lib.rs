@@ -1,4 +1,4 @@
-use ast::statements::{Statement};
+use ast::statements::Statement;
 use semantic::SemanticError;
 use vm::{
     allocator::heap::Heap,
@@ -20,8 +20,8 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 pub enum CompilationError {
-    #[error("Parsing Error")]
-    ParsingError(),
+    #[error("Parsing Error :\n{0}")]
+    ParsingError(String),
 
     #[error("Semantic Error : {0}")]
     SemanticError(#[from] SemanticError),
@@ -122,9 +122,11 @@ impl Ciphel {
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
-        
+
         if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError("Cannot commit in a closed transaction"));
+            return Err(CompilationError::TransactionError(
+                "Cannot commit in a closed transaction",
+            ));
         }
         {
             let mut borrowed_scope = scope
@@ -149,7 +151,9 @@ impl Ciphel {
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
         if program.in_transaction == TransactionState::CLOSE {
-            return Err(CompilationError::TransactionError("Cannot reject in closed transaction"));
+            return Err(CompilationError::TransactionError(
+                "Cannot reject in closed transaction",
+            ));
         }
         {
             let mut borrowed_scope = scope
@@ -174,7 +178,9 @@ impl Ciphel {
             .map_err(|_| CompilationError::InvalidTID(tid))?;
 
         if program.in_transaction != TransactionState::COMMITED {
-            return Err(CompilationError::TransactionError("Cannot push without a commit"));
+            return Err(CompilationError::TransactionError(
+                "Cannot push without a commit",
+            ));
         }
         let _ = arw_read!(
             scope,
@@ -247,7 +253,7 @@ impl Ciphel {
 
 #[cfg(test)]
 mod tests {
-    use vm::vm::{StdoutTestGameEngine};
+    use vm::vm::StdoutTestGameEngine;
 
     use self::vm::vm::{DbgGameEngine, NoopGameEngine};
 

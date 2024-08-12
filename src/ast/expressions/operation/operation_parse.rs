@@ -2,11 +2,11 @@ use nom::{
     branch::alt,
     bytes::complete::take_while_m_n,
     character::complete::digit1,
-    combinator::{map, opt, peek, value},
+    combinator::{cut, map, opt, peek, value},
     multi::separated_list0,
     sequence::{delimited, pair, preceded, terminated, tuple},
 };
-use nom_supreme::error::ErrorTree;
+use nom_supreme::{error::ErrorTree, ParserExt};
 
 use crate::{
     ast::{
@@ -37,18 +37,26 @@ impl TryParse for UnaryOperation {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(preceded(wst(lexem::MINUS), Expression::parse), |value| {
-                UnaryOperation::Minus {
+            map(
+                preceded(
+                    wst(lexem::MINUS),
+                    cut(Expression::parse).context("Invalid negation expression"),
+                ),
+                |value| UnaryOperation::Minus {
                     value: Box::new(value),
                     metadata: Metadata::default(),
-                }
-            }),
-            map(preceded(wst(lexem::NEGATION), Expression::parse), |value| {
-                UnaryOperation::Not {
+                },
+            ),
+            map(
+                preceded(
+                    wst(lexem::NEGATION),
+                    cut(Expression::parse).context("Invalid not expression"),
+                ),
+                |value| UnaryOperation::Not {
                     value: Box::new(value),
                     metadata: Metadata::default(),
-                }
-            }),
+                },
+            ),
         ))(input)
     }
 }
@@ -64,7 +72,7 @@ impl TryParseOperation for TupleAccess {
     where
         Self: Sized,
     {
-        let (remainder, left) = map(Atomic::parse, |res| Expression::Atomic(res))(input)?;
+        let (remainder, left) = map(Atomic::parse, Expression::Atomic)(input)?;
         let (_, peeked_result) = opt(peek(preceded(
             wst(lexem::DOT),
             take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
@@ -104,8 +112,8 @@ impl TryParseOperation for ListAccess {
         let (remainder, left) = TupleAccess::parse(input)?;
         let (remainder, index) = opt(delimited(
             wst(lexem::SQ_BRA_O),
-            Expression::parse,
-            wst(lexem::SQ_BRA_C),
+            cut(Expression::parse.context("Invalid list accessing expression")),
+            cut(wst(lexem::SQ_BRA_C)),
         ))(remainder)?;
 
         if let Some(index) = index {
@@ -154,7 +162,8 @@ impl TryParseOperation for FieldAccess {
                     }),
                 ));
             }
-            let (remainder, right) = FieldAccess::parse(remainder)?;
+            let (remainder, right) =
+                cut(FieldAccess::parse.context("Invalid field accessing expression"))(remainder)?;
             Ok((
                 remainder,
                 Expression::FieldAccess(FieldAccess {
@@ -234,10 +243,10 @@ impl TryParseOperation for FnCall {
             wst(lexem::PAR_O),
         )))(input)?;
         let (remainder, lib, fn_var, opt_params) = if let Some((lib, _, func, _)) = opt_libcall {
-            let (remainder, opt_params) = opt(terminated(
+            let (remainder, opt_params) = cut(opt(terminated(
                 separated_list0(wst(lexem::COMA), Expression::parse),
                 wst(lexem::PAR_C),
-            ))(remainder)?;
+            )))(remainder)?;
             (
                 remainder,
                 Some(lib),
@@ -252,8 +261,9 @@ impl TryParseOperation for FnCall {
             let (remainder, left) = FieldAccess::parse(input)?;
             let (remainder, opt_params) = opt(delimited(
                 wst(lexem::PAR_O),
-                separated_list0(wst(lexem::COMA), Expression::parse),
-                wst(lexem::PAR_C),
+                cut(separated_list0(wst(lexem::COMA), Expression::parse))
+                    .context("Invalid function call expression"),
+                cut(wst(lexem::PAR_C)),
             ))(remainder)?;
             (remainder, None, Box::new(left), opt_params)
         };
@@ -335,7 +345,8 @@ impl TryParseOperation for Range {
         let (remainder, op) = opt(pair(wst(lexem::RANGE_SEP), opt(wst(lexem::EQUAL))))(remainder)?;
 
         if let Some((_, inclusive)) = op {
-            let (remainder, upper) = LogicalOr::parse(remainder)?;
+            let (remainder, upper) =
+                cut(LogicalOr::parse.context("Invalid range expression"))(remainder)?;
             let lower = Box::new(left);
             let upper = Box::new(upper);
             Ok((
@@ -376,7 +387,8 @@ impl TryParseOperation for Product {
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Product::parse(remainder)?;
+            let (remainder, right) =
+                cut(Product::parse.context("Invalid product (*,/,%) expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -426,7 +438,8 @@ impl TryParseOperation for Addition {
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Addition::parse(remainder)?;
+            let (remainder, right) =
+                cut(Addition::parse.context("Invalid addition (+,-) expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -470,7 +483,8 @@ impl TryParseOperation for Shift {
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = Shift::parse(remainder)?;
+            let (remainder, right) =
+                cut(Shift::parse.context("Invalid shift ( >> , << ) expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -506,7 +520,8 @@ impl TryParseOperation for BitwiseAnd {
         let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = BitwiseAnd::parse(remainder)?;
+            let (remainder, right) =
+                cut(BitwiseAnd::parse.context("Invalid bitwise and expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -535,7 +550,8 @@ impl TryParseOperation for BitwiseXOR {
         let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = BitwiseXOR::parse(remainder)?;
+            let (remainder, right) =
+                cut(BitwiseXOR::parse.context("Invalid bitwise xor expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -564,7 +580,8 @@ impl TryParseOperation for BitwiseOR {
         let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = BitwiseOR::parse(remainder)?;
+            let (remainder, right) =
+                cut(BitwiseOR::parse.context("Invalid bitwise or expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -593,7 +610,8 @@ impl TryParseOperation for Cast {
         let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = Type::parse(remainder)?;
+            let (remainder, right) =
+                cut(Type::parse.context("Invalid type casting expression"))(remainder)?;
             Ok((
                 remainder,
                 Expression::Cast(Cast {
@@ -636,7 +654,10 @@ impl TryParseOperation for Comparaison {
         )))(remainder)?;
 
         if let Some(op) = op {
-            let (remainder, right) = BitwiseOR::parse(remainder)?;
+            let (remainder, right) = cut(BitwiseOR::parse
+                .context("Invalid comparaison ( == , != , <=, >=, <, >) expression"))(
+                remainder
+            )?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -696,7 +717,8 @@ impl TryParseOperation for LogicalAnd {
         let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = LogicalAnd::parse(remainder)?;
+            let (remainder, right) =
+                cut(LogicalAnd::parse.context("Invalid and expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
@@ -725,7 +747,8 @@ impl TryParseOperation for LogicalOr {
         let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
 
         if let Some(_op) = op {
-            let (remainder, right) = LogicalOr::parse(remainder)?;
+            let (remainder, right) =
+                cut(LogicalOr::parse.context("Invalid or expression"))(remainder)?;
             let left = Box::new(left);
             let right = Box::new(right);
             Ok((
