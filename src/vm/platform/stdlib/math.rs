@@ -133,6 +133,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
             MathCasm::IsInf => stdio.push_casm_lib(engine, "isinf"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::EXTREME
+    }
 }
 
 impl MathFn {

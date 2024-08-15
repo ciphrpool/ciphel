@@ -1,3 +1,6 @@
+use alloc::CheckIndex;
+use branch::{BranchIf, BranchTable};
+use locate::LocateUTF8Char;
 use std::collections::HashMap;
 use ulid::Ulid;
 
@@ -273,6 +276,30 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
             Casm::Switch(value) => value.name(stdio, program, engine),
             Casm::Try(value) => value.name(stdio, program, engine),
             Casm::Pop(n) => stdio.push_casm(engine, &format!("pop {n}")),
+        }
+    }
+
+    fn weight(&self) -> vm::CasmWeight {
+        match self {
+            Casm::Platform(value) => <platform::LibCasm as CasmMetadata<G>>::weight(value),
+            Casm::StackFrame(value) => <alloc::StackFrame as CasmMetadata<G>>::weight(value),
+            Casm::Alloc(value) => <alloc::Alloc as CasmMetadata<G>>::weight(value),
+            Casm::Realloc(value) => <alloc::Realloc as CasmMetadata<G>>::weight(value),
+            Casm::Free(value) => <alloc::Free as CasmMetadata<G>>::weight(value),
+            Casm::Mem(value) => <mem::Mem as CasmMetadata<G>>::weight(value),
+            Casm::Operation(value) => <operation::Operation as CasmMetadata<G>>::weight(value),
+            Casm::Data(value) => <Data as CasmMetadata<G>>::weight(value),
+            Casm::Access(value) => <alloc::Access as CasmMetadata<G>>::weight(value),
+            Casm::AccessIdx(value) => <CheckIndex as CasmMetadata<G>>::weight(value),
+            Casm::Locate(value) => <locate::Locate as CasmMetadata<G>>::weight(value),
+            Casm::If(value) => <BranchIf as CasmMetadata<G>>::weight(value),
+            Casm::Try(value) => <branch::BranchTry as CasmMetadata<G>>::weight(value),
+            Casm::LocateUTF8Char(value) => <LocateUTF8Char as CasmMetadata<G>>::weight(value),
+            Casm::Label(value) => <Label as CasmMetadata<G>>::weight(value),
+            Casm::Call(value) => <branch::Call as CasmMetadata<G>>::weight(value),
+            Casm::Goto(value) => <branch::Goto as CasmMetadata<G>>::weight(value),
+            Casm::Switch(value) => <BranchTable as CasmMetadata<G>>::weight(value),
+            Casm::Pop(value) => vm::CasmWeight::LOW,
         }
     }
 }

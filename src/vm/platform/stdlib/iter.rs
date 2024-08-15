@@ -57,6 +57,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
             IterCasm::MapKeys { .. } => stdio.push_casm_lib(engine, "keys"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::HIGH
+    }
 }
 
 impl IterFn {

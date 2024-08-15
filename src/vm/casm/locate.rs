@@ -78,6 +78,12 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateUTF8Char {
             LocateUTF8Char::RuntimeAtIdx { .. } => stdio.push_casm(engine, "addr_utf8_at"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            LocateUTF8Char::RuntimeNext => crate::vm::vm::CasmWeight::LOW,
+            LocateUTF8Char::RuntimeAtIdx { len } => crate::vm::vm::CasmWeight::MEDIUM,
+        }
+    }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for LocateUTF8Char {
     fn execute(

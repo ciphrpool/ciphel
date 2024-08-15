@@ -21,7 +21,7 @@ use super::{
     vm::{CasmMetadata, Executable, GameEngineStaticFn, Player, Runtime, RuntimeError, Tid},
 };
 
-const INSTRUCTION_MAX_COUNT: usize = 20;
+pub const INSTRUCTION_MAX_COUNT: usize = 64;
 
 #[derive(Debug, Clone, Copy)]
 pub enum WaitingStatus {
@@ -174,8 +174,8 @@ impl Scheduler {
             }
             let return_status = thread.program.evaluate(|program, instruction| {
                 instruction.name(stdio, program, engine);
-                thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
-                *total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
+                thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
+                *total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
                 match instruction.execute(
                     program,
                     &mut thread.stack,

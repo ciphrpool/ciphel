@@ -68,6 +68,25 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
             Mem::TakeUTF8Char => stdio.push_casm(engine, "take_utf8_char"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Mem::MemCopy => crate::vm::vm::CasmWeight::MEDIUM,
+            Mem::Dup(_) => crate::vm::vm::CasmWeight::ZERO,
+            Mem::DumpRegisters => crate::vm::vm::CasmWeight::LOW,
+            Mem::RecoverRegisters => crate::vm::vm::CasmWeight::LOW,
+            Mem::SetReg(_, _) => crate::vm::vm::CasmWeight::LOW,
+            Mem::GetReg(_) => crate::vm::vm::CasmWeight::LOW,
+            Mem::AddReg(_, _) => crate::vm::vm::CasmWeight::LOW,
+            Mem::SubReg(_, _) => crate::vm::vm::CasmWeight::LOW,
+            Mem::CloneFromSmartPointer(_) => crate::vm::vm::CasmWeight::HIGH,
+            Mem::LabelOffset(_) => crate::vm::vm::CasmWeight::LOW,
+            Mem::TakeToHeap { size } => crate::vm::vm::CasmWeight::LOW,
+            Mem::TakeToStack { size } => crate::vm::vm::CasmWeight::LOW,
+            Mem::Take { size } => crate::vm::vm::CasmWeight::LOW,
+            Mem::TakeUTF8Char => crate::vm::vm::CasmWeight::LOW,
+        }
+    }
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
