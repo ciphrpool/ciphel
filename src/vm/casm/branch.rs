@@ -31,6 +31,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Label {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         stdio.push_casm_label(engine, &self.name);
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
+    }
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for Label {
@@ -66,6 +69,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
             }
             Call::Stack => stdio.push_casm(engine, "call"),
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 
@@ -132,6 +138,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Goto {
             None => stdio.push_casm(engine, "goto"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
+    }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for Goto {
     fn execute(
@@ -172,6 +181,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchIf {
             .unwrap_or("".to_string().into())
             .to_string();
         stdio.push_casm(engine, &format!("else {label}"));
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
@@ -260,6 +272,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
                 stdio.push_casm(engine, &format!("table {table_label} {else_label}"));
             }
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 
@@ -403,6 +418,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTry {
             }
             BranchTry::EndTry => stdio.push_casm(engine, &format!("try_end")),
         }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {

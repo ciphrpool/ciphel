@@ -40,6 +40,12 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
             CoreCasm::Thread(value) => value.name(stdio, program, engine),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            CoreCasm::Alloc(value) => <AllocCasm as CasmMetadata<G>>::weight(value),
+            CoreCasm::Thread(value) => <ThreadCasm as CasmMetadata<G>>::weight(value),
+        }
+    }
 }
 
 impl CoreFn {

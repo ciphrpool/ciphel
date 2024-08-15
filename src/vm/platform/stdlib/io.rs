@@ -53,6 +53,15 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
             IOCasm::RequestScan => stdio.push_casm_lib(engine, "rscan"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            IOCasm::Print(_) => crate::vm::vm::CasmWeight::ZERO,
+            IOCasm::Flush(_) => crate::vm::vm::CasmWeight::EXTREME,
+            IOCasm::Scan => crate::vm::vm::CasmWeight::HIGH,
+            IOCasm::RequestScan => crate::vm::vm::CasmWeight::EXTREME,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

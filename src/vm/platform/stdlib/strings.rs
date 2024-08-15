@@ -58,6 +58,9 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringsCasm {
             StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::HIGH
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]

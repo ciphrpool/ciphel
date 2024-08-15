@@ -8,7 +8,7 @@ use crate::vm::{
     vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::CasmProgram;
+use super::{alloc::ALLOC_SIZE_THRESHOLD, CasmProgram};
 struct HexSlice<'a>(&'a [u8]);
 
 impl<'a> fmt::Display for HexSlice<'a> {
@@ -53,6 +53,19 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
                 let arr = arr.join(", ");
                 stdio.push_casm(engine, &format!("labels {}", arr))
             }
+        }
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Data::Serialized { data } => {
+                if data.len() > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::LOW
+                }
+            }
+            Data::Dump { data } => crate::vm::vm::CasmWeight::ZERO,
+            Data::Table { data } => crate::vm::vm::CasmWeight::ZERO,
         }
     }
 }

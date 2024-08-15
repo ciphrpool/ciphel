@@ -44,7 +44,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LibCasm {
             LibCasm::Engine(fn_id) => G::name_of_dynamic_fn(fn_id.clone(), stdio, program, engine),
         }
     }
-    fn weight(&self) -> usize {
+    fn weight(&self) -> super::vm::CasmWeight {
         match self {
             LibCasm::Core(value) => <CoreCasm as CasmMetadata<G>>::weight(value),
             LibCasm::Std(value) => <StdCasm as CasmMetadata<G>>::weight(value),

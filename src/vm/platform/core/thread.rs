@@ -55,6 +55,17 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for ThreadCasm {
             ThreadCasm::Join => stdio.push_casm_lib(engine, "join"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            ThreadCasm::Spawn => crate::vm::vm::CasmWeight::MAX,
+            ThreadCasm::Close => crate::vm::vm::CasmWeight::HIGH,
+            ThreadCasm::Exit => crate::vm::vm::CasmWeight::ZERO,
+            ThreadCasm::Wait => crate::vm::vm::CasmWeight::HIGH,
+            ThreadCasm::Wake => crate::vm::vm::CasmWeight::HIGH,
+            ThreadCasm::Sleep => crate::vm::vm::CasmWeight::HIGH,
+            ThreadCasm::Join => crate::vm::vm::CasmWeight::HIGH,
+        }
+    }
 }
 impl ThreadFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {

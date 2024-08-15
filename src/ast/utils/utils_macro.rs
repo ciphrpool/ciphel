@@ -165,7 +165,7 @@ macro_rules! compile_expression {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -213,7 +213,7 @@ macro_rules! compile_expression_with_type {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -245,7 +245,7 @@ macro_rules! compile_statement {
             .expect("Thread should exist");
         program.merge(instructions);
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = crate::clear_stack!(memory);
@@ -278,7 +278,7 @@ macro_rules! compile_statement_for_stdout {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let output = engine.out;
         output
@@ -310,7 +310,7 @@ macro_rules! compile_statement_for_string {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -369,7 +369,7 @@ macro_rules! eval_and_compare {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -419,7 +419,7 @@ macro_rules! eval_and_compare_bool {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);

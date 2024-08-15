@@ -18,6 +18,8 @@ use crate::{
 
 use super::CasmProgram;
 
+pub const ALLOC_SIZE_THRESHOLD: usize = STACK_SIZE / 10;
+
 #[derive(Debug, Clone)]
 pub enum Alloc {
     Heap { size: Option<usize> },
@@ -32,6 +34,25 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
                 Some(n) => stdio.push_casm(engine, &format!("halloc {n}")),
             },
             Alloc::Stack { size } => stdio.push_casm(engine, &format!("salloc {size}")),
+        }
+    }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Alloc::Heap { size } => {
+                if size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::MEDIUM
+                }
+            }
+            Alloc::Stack { size } => {
+                if *size > ALLOC_SIZE_THRESHOLD {
+                    crate::vm::vm::CasmWeight::EXTREME
+                } else {
+                    crate::vm::vm::CasmWeight::MEDIUM
+                }
+            }
         }
     }
 }
@@ -80,6 +101,14 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
         match self.size {
             Some(n) => stdio.push_casm(engine, &format!("realloc {n}")),
             None => stdio.push_casm(engine, "realloc"),
+        }
+    }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        if self.size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
+            crate::vm::vm::CasmWeight::EXTREME
+        } else {
+            crate::vm::vm::CasmWeight::MEDIUM
         }
     }
 }
@@ -153,7 +182,6 @@ pub enum StackFrame {
 }
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StackFrame {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, "free");
         match self {
             StackFrame::Clean => stdio.push_casm(engine, "clean"),
             StackFrame::SoftClean => stdio.push_casm(engine, "soft_clean"),
@@ -169,6 +197,19 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StackFrame {
                 true => stdio.push_casm(engine, "transfer_loop"),
                 false => stdio.push_casm(engine, "transfer"),
             },
+        }
+    }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            StackFrame::Clean => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::SoftClean => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::Break => crate::vm::vm::CasmWeight::LOW,
+            StackFrame::Continue => crate::vm::vm::CasmWeight::LOW,
+            StackFrame::OpenWindow => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::CloseWindow => crate::vm::vm::CasmWeight::ZERO,
+            StackFrame::Return { .. } => crate::vm::vm::CasmWeight::MEDIUM,
+            StackFrame::Transfer { .. } => crate::vm::vm::CasmWeight::ZERO,
         }
     }
 }
@@ -338,6 +379,15 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
             },
             Access::RuntimeCharUTF8 => stdio.push_casm(engine, "ld_utf8"),
             Access::RuntimeCharUTF8AtIdx { .. } => stdio.push_casm(engine, "ld_utf8_at"),
+        }
+    }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            Access::Static { address, size } => crate::vm::vm::CasmWeight::LOW,
+            Access::Runtime { size } => crate::vm::vm::CasmWeight::LOW,
+            Access::RuntimeCharUTF8 => crate::vm::vm::CasmWeight::LOW,
+            Access::RuntimeCharUTF8AtIdx { len } => crate::vm::vm::CasmWeight::MEDIUM,
         }
     }
 }
@@ -515,6 +565,9 @@ pub struct CheckIndex {
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CheckIndex {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         stdio.push_casm(engine, "chidx");
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
     }
 }
 

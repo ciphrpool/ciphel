@@ -68,6 +68,18 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StdCasm {
             StdCasm::Ok => stdio.push_casm_lib(engine, "ok"),
         }
     }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            StdCasm::IO(value) => <IOCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::Math(value) => <MathCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::Strings(value) => <StringsCasm as CasmMetadata<G>>::weight(value),
+            StdCasm::AssertBool => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::AssertErr => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Error => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Ok => crate::vm::vm::CasmWeight::LOW,
+            StdCasm::Iter(value) => <IterCasm as CasmMetadata<G>>::weight(value),
+        }
+    }
 }
 
 impl StdFn {

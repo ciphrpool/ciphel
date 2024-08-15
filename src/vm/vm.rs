@@ -149,7 +149,7 @@ pub trait GameEngineStaticFn {
         unimplemented!("This engine does not have dynamic functions")
     }
 
-    fn weight_of_dynamic_fn(fn_id: String) -> usize {
+    fn weight_of_dynamic_fn(fn_id: String) -> CasmWeight {
         unimplemented!("This engine does not have dynamic functions")
     }
 
@@ -385,8 +385,8 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
     ) {
         stdio.push_casm_lib(engine, &fn_id);
     }
-    fn weight_of_dynamic_fn(fn_id: String) -> usize {
-        1
+    fn weight_of_dynamic_fn(fn_id: String) -> CasmWeight {
+        CasmWeight::LOW
     }
 }
 
@@ -402,10 +402,49 @@ pub trait Executable<G: GameEngineStaticFn> {
     ) -> Result<(), RuntimeError>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CasmWeight {
+    #[default]
+    ZERO,
+    MAX,
+    CUSTOM(usize),
+
+    LOW,
+    MEDIUM,
+    HIGH,
+    EXTREME,
+}
+
+impl CasmWeight {
+    pub fn mult(&self, c: usize) -> usize {
+        match self {
+            CasmWeight::ZERO => todo!(),
+            CasmWeight::MAX => todo!(),
+            CasmWeight::CUSTOM(_) => todo!(),
+            CasmWeight::LOW => todo!(),
+            CasmWeight::MEDIUM => todo!(),
+            CasmWeight::HIGH => todo!(),
+            CasmWeight::EXTREME => todo!(),
+        }
+    }
+
+    pub fn get(&self) -> usize {
+        match self {
+            CasmWeight::ZERO => 0,
+            CasmWeight::MAX => super::scheduler::INSTRUCTION_MAX_COUNT,
+            CasmWeight::CUSTOM(w) => *w,
+            CasmWeight::LOW => 1,
+            CasmWeight::MEDIUM => 2,
+            CasmWeight::HIGH => 4,
+            CasmWeight::EXTREME => 8,
+        }
+    }
+}
+
 pub trait CasmMetadata<G: GameEngineStaticFn> {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G);
-    fn weight(&self) -> usize {
-        1
+    fn weight(&self) -> CasmWeight {
+        CasmWeight::LOW
     }
 }
 

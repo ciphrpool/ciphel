@@ -277,6 +277,36 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
             AllocCasm::StringFromChar => stdio.push_casm_lib(engine, "string"),
         }
     }
+
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        match self {
+            AllocCasm::AppendChar => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::AppendItem(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::AppendStrSlice(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::AppendString => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendItemFromSlice { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendItemFromVec { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendStringFromSlice { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ExtendStringFromVec => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Insert { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::InsertAndForward { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Get { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::DeleteVec(_) => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::DeleteMapKey { .. } => crate::vm::vm::CasmWeight::MEDIUM,
+            AllocCasm::ClearVec(_) => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ClearString(_) => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::ClearMap { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Len => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::Cap => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::CapMap => crate::vm::vm::CasmWeight::LOW,
+            AllocCasm::Vec { item_size } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::VecWithCapacity { item_size } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::Map { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::MapWithCapacity { .. } => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::StringFromSlice => crate::vm::vm::CasmWeight::HIGH,
+            AllocCasm::StringFromChar => crate::vm::vm::CasmWeight::MEDIUM,
+        }
+    }
 }
 
 impl AllocFn {
@@ -3131,7 +3161,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3189,7 +3219,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3238,7 +3268,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3308,7 +3338,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3548,7 +3578,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 0);
@@ -3592,7 +3622,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         assert_eq!(heap.allocated_size(), 16);
@@ -3651,7 +3681,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3721,7 +3751,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3814,7 +3844,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3860,7 +3890,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3911,7 +3941,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -3982,7 +4012,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4037,7 +4067,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4107,7 +4137,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4184,7 +4214,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4241,7 +4271,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4292,7 +4322,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4368,7 +4398,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -4434,7 +4464,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
