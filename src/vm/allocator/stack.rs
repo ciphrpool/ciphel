@@ -5,7 +5,7 @@ use std::sync::{
 
 use num_traits::ToBytes;
 
-use crate::{semantic::AccessLevel};
+use crate::semantic::AccessLevel;
 use thiserror::Error;
 
 pub const STACK_SIZE: usize = 2024;

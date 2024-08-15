@@ -114,12 +114,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LibCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            LibCasm::Core(value) => value.execute(program, stack, heap, stdio, engine),
-            LibCasm::Std(value) => value.execute(program, stack, heap, stdio, engine),
+            LibCasm::Core(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            LibCasm::Std(value) => value.execute(program, stack, heap, stdio, engine, tid),
             LibCasm::Engine(fn_id) => {
-                G::execute_dynamic_fn(fn_id.clone(), program, stack, heap, stdio, engine)
+                G::execute_dynamic_fn(fn_id.clone(), program, stack, heap, stdio, engine, tid)
             }
         }
     }
@@ -168,7 +169,7 @@ mod tests {
         program.merge(instructions);
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let output = engine.out;
         assert_eq!(&output, "Hello World from Dynamic function");

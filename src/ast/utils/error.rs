@@ -30,7 +30,7 @@ where
     }
 }
 
-pub fn generate_error_report(input: &Span, error: &ErrorTree<Span>) -> String {
+pub fn generate_error_report(input: &Span, error: &ErrorTree<Span>, line_offset: usize) -> String {
     let mut report = String::new();
 
     fn traverse_error<'a>(
@@ -38,26 +38,27 @@ pub fn generate_error_report(input: &Span, error: &ErrorTree<Span>) -> String {
         error: &'a ErrorTree<Span>,
         report: &mut String,
         depth: usize,
+        line_offset: usize,
     ) {
         match error {
             GenericErrorTree::Base { location, kind } => {
-                add_error_info(input, location, kind, report, depth);
+                add_error_info(input, location, kind, report, depth, line_offset);
             }
             GenericErrorTree::Stack { base, contexts } => {
                 for (ctx_location, ctx) in contexts.iter().rev() {
-                    add_context_info(input, ctx_location, ctx, report, depth);
+                    add_context_info(input, ctx_location, ctx, report, depth, line_offset);
                 }
-                traverse_error(input, base, report, depth);
+                traverse_error(input, base, report, depth, line_offset);
             }
             GenericErrorTree::Alt(errors) => {
                 for err in errors {
-                    traverse_error(input, err, report, depth);
+                    traverse_error(input, err, report, depth, line_offset);
                 }
             }
         }
     }
 
-    traverse_error(input, error, &mut report, 0);
+    traverse_error(input, error, &mut report, 0, line_offset);
     report
 }
 
@@ -67,8 +68,9 @@ pub fn add_error_info(
     kind: &BaseErrorKind<&str, Box<dyn std::error::Error + Send + Sync>>,
     report: &mut String,
     depth: usize,
+    line_offset: usize,
 ) {
-    let line = location.location_line();
+    let line = location.location_line() + line_offset as u32;
     let column = location.get_utf8_column();
     let snippet = get_error_snippet(input, location);
     let text = format_error_kind(kind);
@@ -91,8 +93,9 @@ pub fn add_context_info(
     context: &StackContext<&str>,
     report: &mut String,
     depth: usize,
+    line_offset: usize,
 ) {
-    let line = location.location_line();
+    let line = location.location_line() + line_offset as u32;
     let column = location.get_utf8_column();
     let snippet = get_error_snippet(input, location);
 

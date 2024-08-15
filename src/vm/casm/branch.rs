@@ -41,6 +41,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Label {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         program.incr();
         Ok(())
@@ -76,6 +77,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let (param_size, function_offset) = match self {
             Call::From { label, param_size } => {
@@ -139,6 +141,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Goto {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self.label {
             Some(label) => {
@@ -179,6 +182,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let condition = OpPrimitive::get_bool(stack)?;
 
@@ -267,6 +271,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             BranchTable::Swith {
@@ -408,6 +413,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             BranchTry::StartTry { else_label } => {

@@ -34,6 +34,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match &self.address {
             MemoryAddress::Heap { offset } => {
@@ -86,6 +87,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateUTF8Char {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         program.incr();
         match self {

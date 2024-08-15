@@ -135,6 +135,7 @@ pub trait GameEngineStaticFn {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut Self,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         unimplemented!("This engine does not have dynamic functions")
     }
@@ -297,6 +298,7 @@ pub trait DynamicFnExecutable {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut Self::G,
+        tid: usize,
     ) -> Result<(), RuntimeError>;
 }
 
@@ -333,6 +335,7 @@ impl<G: GameEngineStaticFn> Executable<G> for TestDynamicFn {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         stdio.stdout.push("\"Hello World from Dynamic function\"");
         stdio.stdout.flush(engine);
@@ -364,9 +367,10 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut Self,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None, fn_id) {
-            dynamic_fn.execute(program, stack, heap, stdio, engine)?;
+            dynamic_fn.execute(program, stack, heap, stdio, engine, tid)?;
         }
         Ok(())
     }
@@ -394,6 +398,7 @@ pub trait Executable<G: GameEngineStaticFn> {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError>;
 }
 

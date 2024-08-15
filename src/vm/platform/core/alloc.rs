@@ -1944,6 +1944,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             AllocCasm::AppendChar => {

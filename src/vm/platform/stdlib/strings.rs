@@ -197,6 +197,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             StringsCasm::ToStr(value) => {

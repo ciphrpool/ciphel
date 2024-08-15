@@ -104,10 +104,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine),
-            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine),
+            CoreCasm::Alloc(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine, tid),
         }
     }
 }

@@ -311,6 +311,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             IterCasm::MapItems {

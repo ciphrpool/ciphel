@@ -6,17 +6,16 @@ use std::{
     },
 };
 
-
 use crate::vm::{
     casm::Casm,
-    platform::{
-        core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
+    platform::core::thread::{
+        sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake,
     },
     vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
 };
 
 use super::{
-    allocator::{heap::Heap},
+    allocator::heap::Heap,
     platform::core::thread::sig_wait_stdin,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, GameEngineStaticFn, Player, Runtime, RuntimeError, Tid},
@@ -177,7 +176,14 @@ impl Scheduler {
                 instruction.name(stdio, program, engine);
                 thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
                 *total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction);
-                match instruction.execute(program, &mut thread.stack, heap, stdio, engine) {
+                match instruction.execute(
+                    program,
+                    &mut thread.stack,
+                    heap,
+                    stdio,
+                    engine,
+                    thread.tid,
+                ) {
                     Ok(_) => Ok(()),
                     Err(RuntimeError::Signal(signal)) => match signal {
                         Signal::SPAWN => sig_spawn(context, program, &mut thread.stack),
@@ -289,7 +295,7 @@ impl Scheduler {
                 Err(e) => {
                     thread.program.cursor_to_end();
                     let _ = thread.state.to(ThreadState::IDLE);
-                    
+
                     return Err(e);
                 }
             }

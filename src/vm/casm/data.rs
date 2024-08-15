@@ -64,6 +64,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             Data::Serialized { data } => {

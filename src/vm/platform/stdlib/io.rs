@@ -212,9 +212,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            IOCasm::Print(print) => print.execute(program, stack, heap, stdio, engine),
+            IOCasm::Print(print) => print.execute(program, stack, heap, stdio, engine, tid),
             IOCasm::Flush(ln) => {
                 if *ln {
                     stdio.stdout.flushln(engine);
@@ -272,6 +273,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             PrintCasm::PrintID(id) => {
@@ -346,10 +348,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
                 let n = OpPrimitive::get_num1::<u8>(stack)?;
                 if n == ERROR_VALUE[0] {
                     stdio.stdout.push("Error");
-                }else if n == OK_VALUE[0]{
+                } else if n == OK_VALUE[0] {
                     stdio.stdout.push("Ok");
                 }
-            },
+            }
             PrintCasm::StdOutBufOpen => {
                 stdio.stdout.spawn_buffer();
             }
@@ -395,7 +397,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
                                 }
                             }
                             _ => {
-                                let _ = instruction.execute(program, stack, heap, stdio, engine)?;
+                                let _ = instruction
+                                    .execute(program, stack, heap, stdio, engine, tid)?;
                             }
                         }
                     }

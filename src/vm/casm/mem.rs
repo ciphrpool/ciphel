@@ -78,6 +78,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             Mem::CloneFromSmartPointer(size) => {

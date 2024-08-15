@@ -406,6 +406,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             MathCasm::Pi => {

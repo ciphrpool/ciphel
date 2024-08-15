@@ -43,6 +43,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
@@ -90,6 +91,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let size = match self.size {
             Some(size) => size,
@@ -125,6 +127,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let address = OpPrimitive::get_num8::<u64>(stack)? - 8;
         if address < STACK_SIZE as u64 {
@@ -182,6 +185,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StackFrame {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             StackFrame::Break => {
@@ -346,6 +350,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let index = match self {
             Access::RuntimeCharUTF8AtIdx { .. } => Some(OpPrimitive::get_num8::<u64>(stack)?),
@@ -521,6 +526,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         let index = OpPrimitive::get_num8::<u64>(stack)?;
         let address = OpPrimitive::get_num8::<u64>(stack)?;

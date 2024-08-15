@@ -83,7 +83,10 @@ pub enum Statement {
     Return(Return),
 }
 
-pub fn parse_statements(input: Span) -> Result<Vec<WithLine<Statement>>, CompilationError> {
+pub fn parse_statements(
+    input: Span,
+    line_offset: usize,
+) -> Result<Vec<WithLine<Statement>>, CompilationError> {
     let mut parser = many1(|input| {
         let (input, statement) = Statement::parse(input)?;
         let line = input.location_line();
@@ -91,7 +94,7 @@ pub fn parse_statements(input: Span) -> Result<Vec<WithLine<Statement>>, Compila
             input,
             WithLine {
                 inner: statement,
-                line: line as usize,
+                line: line as usize + line_offset,
             },
         ))
     });
@@ -109,7 +112,7 @@ pub fn parse_statements(input: Span) -> Result<Vec<WithLine<Statement>>, Compila
             }
         }
         Err(e) => {
-            let error_report = generate_error_report(&input, &e);
+            let error_report = generate_error_report(&input, &e, line_offset);
             Err(CompilationError::ParsingError(error_report))
         }
     }

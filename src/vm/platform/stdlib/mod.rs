@@ -214,12 +214,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
         heap: &mut Heap,
         stdio: &mut StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
-            StdCasm::IO(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Math(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine),
-            StdCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine),
+            StdCasm::IO(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Math(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            StdCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine, tid),
             StdCasm::AssertBool => {
                 let condition = OpPrimitive::get_bool(stack)?;
                 program.incr();

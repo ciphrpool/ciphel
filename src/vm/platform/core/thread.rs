@@ -1,4 +1,3 @@
-
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
@@ -10,9 +9,7 @@ use crate::vm::platform::stdlib::{ERROR_VALUE, OK_VALUE};
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 use crate::vm::scheduler::{SchedulerContext, WaitingStatus};
-use crate::vm::vm::{
-    CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid,
-};
+use crate::vm::vm::{CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid};
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, Resolve, SemanticError},
@@ -346,6 +343,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,
         engine: &mut G,
+        tid: usize,
     ) -> Result<(), RuntimeError> {
         match self {
             ThreadCasm::Spawn => Err(RuntimeError::Signal(Signal::SPAWN)),
@@ -374,10 +372,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
 #[cfg(test)]
 mod tests {
     use crate::{
-        vm::vm::{
-            NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine,
-            MAX_THREAD_COUNT,
-        },
+        vm::vm::{NoopGameEngine, StdoutTestGameEngine, ThreadTestGameEngine, MAX_THREAD_COUNT},
         Ciphel,
     };
 

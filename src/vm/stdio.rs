@@ -39,7 +39,7 @@ impl StdIO {
         engine.stdcasm_print(format!("{content} :"));
     }
 
-    pub fn print_stderr<G:GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+    pub fn print_stderr<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
         engine.stderr_print(format!("Error : {content}"));
     }
 }
