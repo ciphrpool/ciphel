@@ -1,3 +1,5 @@
+use std::usize;
+
 use ulid::Ulid;
 
 use crate::e_static;
@@ -74,6 +76,10 @@ pub enum RuntimeError {
     AssertError,
     #[error("ConcurrencyError")]
     ConcurrencyError,
+
+    #[error("NotEnoughEnergy")]
+    NotEnoughEnergy,
+
     #[error("Default")]
     Default,
 }
@@ -155,6 +161,14 @@ pub trait GameEngineStaticFn {
 
     fn spawn(&mut self, tid: Tid) {}
     fn close(&mut self, tid: Tid) {}
+
+    fn get_player_energy(&mut self) -> usize {
+        usize::MAX
+    }
+
+    fn consume_energy(&mut self,casm_weight:usize) -> Result<(),RuntimeError> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -486,6 +500,7 @@ pub enum ThreadState {
     SLEEPING(usize), // remaining maf until awakening
     ACTIVE,
     COMPLETED,
+    STARVED,
 }
 
 impl ThreadState {
@@ -496,10 +511,14 @@ impl ThreadState {
             ThreadState::SLEEPING(_) => true,
             ThreadState::ACTIVE => false,
             ThreadState::COMPLETED => true,
+            ThreadState::STARVED => true,
         }
     }
 
-    pub fn init_maf(&mut self, program_at_end: bool) {
+    pub fn init_maf<G: crate::GameEngineStaticFn>(&mut self, 
+        engine: &mut G,
+        program: &CasmProgram) {
+        let program_at_end = program.cursor_is_at_end();
         match self {
             ThreadState::IDLE => {
                 if !program_at_end {
@@ -521,6 +540,12 @@ impl ThreadState {
                 }
             }
             ThreadState::COMPLETED => {}
+            ThreadState::STARVED => {
+                let weight = program.current_instruction_weight::<G>();
+                if engine.get_player_energy() >= weight {
+                    *self = ThreadState::ACTIVE
+                }
+            }
         }
     }
 
@@ -532,6 +557,7 @@ impl ThreadState {
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
                 ThreadState::COMPLETED => dest,
+                ThreadState::STARVED => dest,
             },
             ThreadState::WAITING => match dest {
                 ThreadState::IDLE => dest,
@@ -541,8 +567,9 @@ impl ThreadState {
                 }
                 ThreadState::ACTIVE => dest,
                 ThreadState::COMPLETED => dest,
+                ThreadState::STARVED => dest,
             },
-            ThreadState::SLEEPING(_) => match self {
+            ThreadState::SLEEPING(_) => match dest {
                 ThreadState::IDLE => dest,
                 ThreadState::WAITING => {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
@@ -550,15 +577,17 @@ impl ThreadState {
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
                 ThreadState::COMPLETED => dest,
+                ThreadState::STARVED => dest,
             },
-            ThreadState::ACTIVE => match self {
+            ThreadState::ACTIVE => match dest {
                 ThreadState::IDLE => dest,
                 ThreadState::WAITING => dest,
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
                 ThreadState::COMPLETED => dest,
+                ThreadState::STARVED => dest,
             },
-            ThreadState::COMPLETED => match self {
+            ThreadState::COMPLETED => match dest {
                 ThreadState::IDLE => {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
@@ -572,6 +601,17 @@ impl ThreadState {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
                 ThreadState::COMPLETED => dest,
+                ThreadState::STARVED =>  {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                },
+            },
+            ThreadState::STARVED => match dest {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED => dest,
+                ThreadState::STARVED => dest,
             },
         };
         *self = dest;

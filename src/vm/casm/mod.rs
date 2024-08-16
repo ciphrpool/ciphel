@@ -12,7 +12,7 @@ use super::{
     allocator::{heap::Heap, stack::Stack},
     platform,
     stdio::StdIO,
-    vm::{self, CasmMetadata, Executable, RuntimeError, Signal},
+    vm::{self, CasmMetadata, Executable, GameEngineStaticFn, RuntimeError, Signal},
 };
 pub mod alloc;
 pub mod branch;
@@ -152,6 +152,14 @@ impl CasmProgram {
     pub fn len(&self) -> usize {
         self.main.len()
     }
+
+    pub fn current_instruction_weight<G:GameEngineStaticFn>(&self) -> usize {
+        match self.main.get(self.cursor) {
+            Some(instruction) => <Casm as CasmMetadata<G>>::weight(instruction).get(),
+            None => 0,
+        }
+    }
+
     pub fn evaluate(
         &mut self,
         callback: impl FnOnce(&mut Self, &Casm) -> Result<(), vm::RuntimeError>,

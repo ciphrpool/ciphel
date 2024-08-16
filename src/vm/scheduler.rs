@@ -155,7 +155,7 @@ impl Scheduler {
     ) -> Result<(), RuntimeError> {
         let mut thread_instruction_count = 0;
 
-        thread.state.init_maf(thread.program.cursor_is_at_end());
+        thread.state.init_maf(engine,&thread.program);
 
         match self.wake_waiting_threads(player, &mut thread.state, &thread.tid)? {
             Some(ControlFlow::Continue(_)) => return Ok(()),
@@ -174,8 +174,12 @@ impl Scheduler {
             }
             let return_status = thread.program.evaluate(|program, instruction| {
                 instruction.name(stdio, program, engine);
-                thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
-                *total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
+                let weight = <Casm as CasmMetadata<G>>::weight(instruction).get();
+
+                engine.consume_energy(weight)?;
+
+                thread_instruction_count += weight;
+                *total_instruction_count += weight;
                 match instruction.execute(
                     program,
                     &mut thread.stack,
@@ -340,11 +344,14 @@ impl Scheduler {
                         &mut total_instruction_count,
                     );
                     if let Err(err) = result {
-                        stdio.print_stderr(engine, &err.to_string())
+                        stdio.print_stderr(engine, &err.to_string());
+                        if let RuntimeError::NotEnoughEnergy = err {
+                            let _ = p1.state.to(ThreadState::STARVED);
+                        }
                     }
                 }
                 if let Some(p2) = p2 {
-                    let _ = self.run_minor_frame(
+                    let result = self.run_minor_frame(
                         Player::P2,
                         heap,
                         stdio,
@@ -353,6 +360,12 @@ impl Scheduler {
                         p2_minor_frame_max_count,
                         &mut total_instruction_count,
                     );
+                    if let Err(err) = result {
+                        stdio.print_stderr(engine, &err.to_string());
+                        if let RuntimeError::NotEnoughEnergy = err {
+                            let _ = p2.state.to(ThreadState::STARVED);
+                        }
+                    }
                 }
             }
 
