@@ -153,7 +153,7 @@ impl CasmProgram {
         self.main.len()
     }
 
-    pub fn current_instruction_weight<G:GameEngineStaticFn>(&self) -> usize {
+    pub fn current_instruction_weight<G: GameEngineStaticFn>(&self) -> usize {
         match self.main.get(self.cursor) {
             Some(instruction) => <Casm as CasmMetadata<G>>::weight(instruction).get(),
             None => 0,

@@ -286,6 +286,9 @@ impl Block {
             return Err(HeapError::InvalidPointer);
         };
         let block_header = BlockHeader::read(block_start);
+        if offset + block_header.size as usize > HEAP_SIZE {
+            return Err(HeapError::ReadError);
+        }
         let block_data = if block_header.allocated {
             BlockData::Allocated
         } else {

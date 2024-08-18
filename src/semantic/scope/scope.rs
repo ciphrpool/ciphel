@@ -161,8 +161,8 @@ impl Scope {
                 transaction_data,
             } => {
                 if *in_transaction {
-                    data.vars.clear();
-                    data.types.clear();
+                    transaction_data.vars.clear();
+                    transaction_data.types.clear();
                 }
                 Ok(())
             }
@@ -342,13 +342,13 @@ impl Scope {
             })
         };
 
-        find_in_data(data)
-            .or_else(|| {
-                in_transaction
-                    .then(|| find_in_data(transaction_data))
-                    .flatten()
-            })
-            .ok_or_else(|| SemanticError::UnknownVar(id.clone()))
+        if in_transaction {
+            find_in_data(transaction_data)
+                .or_else(|| find_in_data(data))
+                .ok_or_else(|| SemanticError::UnknownVar(id.clone()))
+        } else {
+            find_in_data(data).ok_or_else(|| SemanticError::UnknownVar(id.clone()))
+        }
     }
 
     pub fn access_var(
