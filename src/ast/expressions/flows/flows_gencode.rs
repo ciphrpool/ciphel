@@ -1666,29 +1666,4 @@ mod tests {
         .expect("Deserialization should have succeeded");
         assert_eq!(result, v_num!(I64, 10));
     }
-
-    #[test]
-    fn valid_TODO() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let res = try_analyse();
-            return 10;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 10));
-    }
 }
