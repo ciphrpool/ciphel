@@ -100,7 +100,9 @@ impl GenerateCode for IfStat {
         }
         // let _ = self.then_branch.gencode(block, &instructions)?;
         let _ = inner_block_gencode(scope, &self.then_branch, None, false, false, instructions)?;
-
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_if_label),
+        }));
         for pair in self
             .else_if_branches
             .iter()
@@ -117,6 +119,9 @@ impl GenerateCode for IfStat {
             }));
             // let _ = scope_1.gencode(block, instructions)?;
             let _ = inner_block_gencode(scope, &scope_1, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
         if let Some((cond, s)) = &self.else_if_branches.last() {
             instructions.push_label_id(
@@ -129,11 +134,17 @@ impl GenerateCode for IfStat {
             }));
             // let _ = s.gencode(block, instructions)?;
             let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
 
         if let Some(s) = &self.else_branch {
             instructions.push_label_id(else_label.unwrap(), "else".to_string().into());
             let _ = inner_block_gencode(scope, &s, None, false, false, instructions)?;
+            instructions.push(Casm::Goto(Goto {
+                label: Some(end_if_label),
+            }));
         }
 
         instructions.push_label_id(end_if_label, "end_if".to_string().into());
@@ -453,6 +464,36 @@ mod tests {
         assert_eq!(result, v_num!(I64, 69));
     }
 
+    #[test]
+    fn robustness_if_else() {
+        let mut statement = Statement::parse(
+            r##"
+        let x = {
+            let var = 1;
+            if var == 1 {
+                var = 420;
+            } else {
+                var = 69;
+            }
+
+            return var;
+        };
+
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+
+        let data = compile_statement!(statement);
+
+        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+            &PrimitiveType::Number(NumberType::I64),
+            &data,
+        )
+        .expect("Deserialization should have succeeded");
+        assert_eq!(result, v_num!(I64, 420));
+    }
     #[test]
     fn valid_match_primitive() {
         let mut statement = Statement::parse(
