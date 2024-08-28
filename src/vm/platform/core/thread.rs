@@ -302,7 +302,7 @@ pub fn sig_exit(
     state: &mut ThreadState,
     waiting_list: &mut Vec<WaitingStatus>,
 ) -> Result<(), RuntimeError> {
-    let _ = state.to(ThreadState::COMPLETED);
+    let _ = state.to(ThreadState::EXITED);
     context.request_close(tid)?;
     let idx_tid_list: Vec<(usize, usize)> = waiting_list
         .iter()

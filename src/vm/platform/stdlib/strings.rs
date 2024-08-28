@@ -262,7 +262,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
                         format!("{}", n)
                     }
                     ToStrCasm::ToStrString => {
-                        let n = OpPrimitive::get_string(stack, heap)?;
+                        let (n, _) = OpPrimitive::get_string(stack, heap)?;
                         format!("{}", n)
                     }
                 };

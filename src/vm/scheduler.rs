@@ -103,8 +103,6 @@ pub struct Scheduler {
     p2_context: SchedulerContext,
     p1_waiting_list: Arc<Mutex<Vec<WaitingStatus>>>,
     p2_waiting_list: Arc<Mutex<Vec<WaitingStatus>>>,
-    p1_minor_frame_max_count: Arc<AtomicUsize>,
-    p2_minor_frame_max_count: Arc<AtomicUsize>,
 }
 
 impl Scheduler {
@@ -114,24 +112,10 @@ impl Scheduler {
             p2_waiting_list: Default::default(),
             p1_context: SchedulerContext::new(),
             p2_context: SchedulerContext::new(),
-            p1_minor_frame_max_count: Arc::new(AtomicUsize::new(INSTRUCTION_MAX_COUNT)),
-            p2_minor_frame_max_count: Arc::new(AtomicUsize::new(INSTRUCTION_MAX_COUNT)),
         }
     }
 
     pub fn prepare(&mut self, runtime: &mut Runtime) {
-        if runtime.p1_manager.thread_count() != 0 {
-            self.p1_minor_frame_max_count.as_ref().store(
-                INSTRUCTION_MAX_COUNT / runtime.p1_manager.thread_count(),
-                Ordering::Release,
-            );
-        }
-        if runtime.p2_manager.thread_count() != 0 {
-            self.p2_minor_frame_max_count.as_ref().store(
-                INSTRUCTION_MAX_COUNT / runtime.p2_manager.thread_count(),
-                Ordering::Release,
-            );
-        }
         self.p1_context.threads = runtime.p1_manager.alive();
         self.p1_context.wakingup_tid = [false; MAX_THREAD_COUNT];
         self.p1_context.spawned_tid = [false; MAX_THREAD_COUNT];
@@ -150,32 +134,38 @@ impl Scheduler {
         stdio: &mut StdIO,
         engine: &mut G,
         thread: &mut Thread,
-        minor_frame_max_count: usize,
-        total_instruction_count: &mut usize,
     ) -> Result<(), RuntimeError> {
-        let mut thread_instruction_count = 0;
-
-        thread.state.init_maf(thread.program.cursor_is_at_end());
+        thread.state.init_mif(engine, &thread.program);
 
         match self.wake_waiting_threads(player, &mut thread.state, &thread.tid)? {
-            Some(ControlFlow::Continue(_)) => return Ok(()),
-            Some(ControlFlow::Break(_)) => return Ok(()),
-            None => {}
+            ControlFlow::Continue(_) => {}
+            ControlFlow::Break(weight) => {
+                thread.current_maf_instruction_count += weight;
+                if thread.current_maf_instruction_count >= INSTRUCTION_MAX_COUNT {
+                    thread.state.to(ThreadState::COMPLETED_MAF);
+                }
+                return Ok(());
+            }
         }
+
         let context = match player {
             Player::P1 => &mut self.p1_context,
             Player::P2 => &mut self.p2_context,
         };
         stdio.push_casm_info(engine, &format!("MINOR FRAME ::tid {0}\n", thread.tid));
-        while thread_instruction_count < minor_frame_max_count {
+        while thread.current_maf_instruction_count < INSTRUCTION_MAX_COUNT {
             if thread.program.cursor_is_at_end() {
                 let _ = thread.state.to(ThreadState::IDLE);
                 break;
             }
             let return_status = thread.program.evaluate(|program, instruction| {
                 instruction.name(stdio, program, engine);
-                thread_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
-                *total_instruction_count += <Casm as CasmMetadata<G>>::weight(instruction).get();
+                let weight = <Casm as CasmMetadata<G>>::weight(instruction).get();
+
+                engine.consume_energy(weight)?;
+
+                thread.current_maf_instruction_count += weight;
+
                 match instruction.execute(
                     program,
                     &mut thread.stack,
@@ -273,6 +263,7 @@ impl Scheduler {
                     }
                 }
             });
+
             match return_status {
                 Ok(_) => {
                     if thread.program.cursor_is_at_end() {
@@ -299,6 +290,9 @@ impl Scheduler {
                     return Err(e);
                 }
             }
+            if thread.current_maf_instruction_count >= INSTRUCTION_MAX_COUNT {
+                thread.state.to(ThreadState::COMPLETED_MAF);
+            }
         }
         Ok(())
     }
@@ -310,15 +304,6 @@ impl Scheduler {
         stdio: &mut StdIO,
         engine: &mut G,
     ) -> Result<(), RuntimeError> {
-        let p1_minor_frame_max_count = self
-            .p1_minor_frame_max_count
-            .as_ref()
-            .load(Ordering::Acquire);
-        let p2_minor_frame_max_count = self
-            .p2_minor_frame_max_count
-            .as_ref()
-            .load(Ordering::Acquire);
-
         // Wake thread waiting on stdin
         self.wake_for_stdin(Player::P1, runtime, stdio, engine)?;
         self.wake_for_stdin(Player::P2, runtime, stdio, engine)?;
@@ -326,33 +311,37 @@ impl Scheduler {
         let info = runtime.tid_info();
         stdio.push_casm_info(engine, &format!("MAJOR FRAME START : {info}"));
 
-        let mut total_instruction_count = 0;
-        while total_instruction_count < INSTRUCTION_MAX_COUNT {
+        for (p1, p2) in runtime.iter_mut() {
+            if let Some(p1) = p1 {
+                p1.state.init_maf(engine, &p1.program);
+                p1.current_maf_instruction_count = 0;
+            }
+
+            if let Some(p2) = p2 {
+                p2.state.init_maf(engine, &p2.program);
+                p2.current_maf_instruction_count = 0;
+            }
+        }
+
+        loop {
             for (p1, p2) in runtime.iter_mut() {
                 if let Some(p1) = p1 {
-                    let result = self.run_minor_frame(
-                        Player::P1,
-                        heap,
-                        stdio,
-                        engine,
-                        p1,
-                        p1_minor_frame_max_count,
-                        &mut total_instruction_count,
-                    );
+                    let result = self.run_minor_frame(Player::P1, heap, stdio, engine, p1);
                     if let Err(err) = result {
-                        stdio.print_stderr(engine, &err.to_string())
+                        stdio.print_stderr(engine, &err.to_string());
+                        if let RuntimeError::NotEnoughEnergy = err {
+                            let _ = p1.state.to(ThreadState::STARVED);
+                        }
                     }
                 }
                 if let Some(p2) = p2 {
-                    let _ = self.run_minor_frame(
-                        Player::P2,
-                        heap,
-                        stdio,
-                        engine,
-                        p2,
-                        p2_minor_frame_max_count,
-                        &mut total_instruction_count,
-                    );
+                    let result = self.run_minor_frame(Player::P2, heap, stdio, engine, p2);
+                    if let Err(err) = result {
+                        stdio.print_stderr(engine, &err.to_string());
+                        if let RuntimeError::NotEnoughEnergy = err {
+                            let _ = p2.state.to(ThreadState::STARVED);
+                        }
+                    }
                 }
             }
 
@@ -511,59 +500,64 @@ impl Scheduler {
         player: crate::vm::vm::Player,
         state: &mut ThreadState,
         tid: &usize,
-    ) -> Result<Option<ControlFlow<(), ()>>, RuntimeError> {
-        if ThreadState::IDLE == *state || ThreadState::COMPLETED == *state {
-            // Wake up all threads that are waiting on tid
-            let mut waiting_list = match player {
-                Player::P1 => self
-                    .p1_waiting_list
-                    .as_ref()
-                    .lock()
-                    .map_err(|_| RuntimeError::ConcurrencyError)?,
+    ) -> Result<ControlFlow<usize, ()>, RuntimeError> {
+        match *state {
+            ThreadState::IDLE | ThreadState::EXITED => {
+                // Wake up all threads that are waiting on tid
+                let mut waiting_list = match player {
+                    Player::P1 => self
+                        .p1_waiting_list
+                        .as_ref()
+                        .lock()
+                        .map_err(|_| RuntimeError::ConcurrencyError)?,
 
-                Player::P2 => self
-                    .p2_waiting_list
-                    .as_ref()
-                    .lock()
-                    .map_err(|_| RuntimeError::ConcurrencyError)?,
-            };
-            let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
-                .iter()
-                .enumerate()
-                .filter(|(_, status)| match status {
-                    WaitingStatus::Join {
-                        to_be_completed_tid,
-                        ..
-                    } => *to_be_completed_tid == *tid,
-                    WaitingStatus::ForStdin(_) => false,
-                })
-                .map(|(idx, status)| {
-                    (
-                        idx,
-                        match status {
-                            WaitingStatus::Join { join_tid, .. } => *join_tid,
-                            WaitingStatus::ForStdin(id) => *id, // unreachable,
-                        },
-                    )
-                })
-                .collect();
-            idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
+                    Player::P2 => self
+                        .p2_waiting_list
+                        .as_ref()
+                        .lock()
+                        .map_err(|_| RuntimeError::ConcurrencyError)?,
+                };
+                let mut idx_tid_list: Vec<(usize, usize)> = waiting_list
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, status)| match status {
+                        WaitingStatus::Join {
+                            to_be_completed_tid,
+                            ..
+                        } => *to_be_completed_tid == *tid,
+                        WaitingStatus::ForStdin(_) => false,
+                    })
+                    .map(|(idx, status)| {
+                        (
+                            idx,
+                            match status {
+                                WaitingStatus::Join { join_tid, .. } => *join_tid,
+                                WaitingStatus::ForStdin(id) => *id, // unreachable,
+                            },
+                        )
+                    })
+                    .collect();
+                idx_tid_list.sort_by(|left, right| left.0.cmp(&right.0));
 
-            let context = match player {
-                Player::P1 => &mut self.p1_context,
-                Player::P2 => &mut self.p2_context,
-            };
-            for (idx, tid) in idx_tid_list.iter().rev() {
-                waiting_list.remove(*idx);
-                context.request_wake(*tid)?;
+                let context = match player {
+                    Player::P1 => &mut self.p1_context,
+                    Player::P2 => &mut self.p2_context,
+                };
+                for (idx, tid) in idx_tid_list.iter().rev() {
+                    waiting_list.remove(*idx);
+                    context.request_wake(*tid)?;
+                }
+                drop(waiting_list);
+                //if idx_tid_list.len() > 0 {
+                //    return Ok(ControlFlow::Break(0));
+                //}
+                return Ok(ControlFlow::Break(INSTRUCTION_MAX_COUNT));
             }
-            drop(waiting_list);
-            if idx_tid_list.len() > 0 {
-                return Ok(Some(ControlFlow::Break(())));
-            }
-            return Ok(Some(ControlFlow::Continue(())));
-        } else {
-            return Ok(None);
+            ThreadState::WAITING => return Ok(ControlFlow::Break(0)),
+            ThreadState::SLEEPING(_) => return Ok(ControlFlow::Break(0)),
+            ThreadState::COMPLETED_MAF => return Ok(ControlFlow::Break(0)),
+            ThreadState::ACTIVE => return Ok(ControlFlow::Continue(())),
+            ThreadState::STARVED => return Ok(ControlFlow::Break(INSTRUCTION_MAX_COUNT)),
         }
     }
 }

@@ -261,7 +261,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine,tid)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);
@@ -320,7 +320,7 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
 
         program
-            .execute(stack, &mut heap, &mut stdio, &mut engine,tid)
+            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("Execution should have succeeded");
         let memory = stack;
         let data = clear_stack!(memory);

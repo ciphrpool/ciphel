@@ -1,3 +1,5 @@
+use std::usize;
+
 use ulid::Ulid;
 
 use crate::e_static;
@@ -74,6 +76,10 @@ pub enum RuntimeError {
     AssertError,
     #[error("ConcurrencyError")]
     ConcurrencyError,
+
+    #[error("NotEnoughEnergy")]
+    NotEnoughEnergy,
+
     #[error("Default")]
     Default,
 }
@@ -155,6 +161,14 @@ pub trait GameEngineStaticFn {
 
     fn spawn(&mut self, tid: Tid) {}
     fn close(&mut self, tid: Tid) {}
+
+    fn get_player_energy(&mut self) -> usize {
+        usize::MAX
+    }
+
+    fn consume_energy(&mut self, casm_weight: usize) -> Result<(), RuntimeError> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -285,7 +299,7 @@ pub struct TestDynamicGameEngine {
 pub trait DynamicFnProvider {
     type DynamicFunctions: DynamicFnResolver;
 
-    fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<Self::DynamicFunctions>;
+    fn get_dynamic_fn(prefix: &Option<ID>, id: &str) -> Option<Self::DynamicFunctions>;
 }
 
 pub trait DynamicFnExecutable {
@@ -307,7 +321,7 @@ pub struct TestDynamicFnProvider {}
 
 impl DynamicFnProvider for TestDynamicFnProvider {
     type DynamicFunctions = TestDynamicFn;
-    fn get_dynamic_fn(prefix: &Option<ID>, id: String) -> Option<Self::DynamicFunctions> {
+    fn get_dynamic_fn(prefix: &Option<ID>, id: &str) -> Option<Self::DynamicFunctions> {
         if "dynamic_fn" == id {
             return Some(TestDynamicFn {});
         } else {
@@ -369,13 +383,13 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
         engine: &mut Self,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None, fn_id) {
+        if let Some(dynamic_fn) = TestDynamicFnProvider::get_dynamic_fn(&None, &fn_id) {
             dynamic_fn.execute(program, stack, heap, stdio, engine, tid)?;
         }
         Ok(())
     }
     fn is_dynamic_fn(preffixe: &Option<ID>, id: &ID) -> Option<impl DynamicFnResolver> {
-        TestDynamicFnProvider::get_dynamic_fn(preffixe, id.to_string())
+        TestDynamicFnProvider::get_dynamic_fn(preffixe, id.to_string().as_str())
     }
     fn name_of_dynamic_fn(
         fn_id: String,
@@ -485,7 +499,9 @@ pub enum ThreadState {
     WAITING,
     SLEEPING(usize), // remaining maf until awakening
     ACTIVE,
-    COMPLETED,
+    COMPLETED_MAF,
+    STARVED,
+    EXITED,
 }
 
 impl ThreadState {
@@ -495,11 +511,18 @@ impl ThreadState {
             ThreadState::WAITING => true,
             ThreadState::SLEEPING(_) => true,
             ThreadState::ACTIVE => false,
-            ThreadState::COMPLETED => true,
+            ThreadState::COMPLETED_MAF => true,
+            ThreadState::STARVED => true,
+            ThreadState::EXITED => true,
         }
     }
 
-    pub fn init_maf(&mut self, program_at_end: bool) {
+    pub fn init_maf<G: crate::GameEngineStaticFn>(
+        &mut self,
+        engine: &mut G,
+        program: &CasmProgram,
+    ) {
+        let program_at_end = program.cursor_is_at_end();
         match self {
             ThreadState::IDLE => {
                 if !program_at_end {
@@ -520,7 +543,52 @@ impl ThreadState {
                     *self = ThreadState::IDLE
                 }
             }
-            ThreadState::COMPLETED => {}
+            ThreadState::COMPLETED_MAF => {
+                if !program_at_end {
+                    *self = ThreadState::ACTIVE
+                } else {
+                    *self = ThreadState::IDLE
+                }
+            }
+            ThreadState::EXITED => {}
+            ThreadState::STARVED => {
+                let weight = program.current_instruction_weight::<G>();
+                if engine.get_player_energy() >= weight {
+                    *self = ThreadState::ACTIVE
+                }
+            }
+        }
+    }
+
+    pub fn init_mif<G: crate::GameEngineStaticFn>(
+        &mut self,
+        engine: &mut G,
+        program: &CasmProgram,
+    ) {
+        let program_at_end = program.cursor_is_at_end();
+        match self {
+            ThreadState::IDLE => {
+                if !program_at_end {
+                    *self = ThreadState::ACTIVE
+                }
+            }
+            ThreadState::WAITING => {}
+            ThreadState::SLEEPING(0) => {
+                if !program_at_end {
+                    *self = ThreadState::ACTIVE
+                } else {
+                    *self = ThreadState::IDLE
+                }
+            }
+            ThreadState::SLEEPING(n) => {}
+            ThreadState::ACTIVE => {
+                if program_at_end {
+                    *self = ThreadState::IDLE
+                }
+            }
+            ThreadState::COMPLETED_MAF => {}
+            ThreadState::EXITED => {}
+            ThreadState::STARVED => {}
         }
     }
 
@@ -531,7 +599,9 @@ impl ThreadState {
                 ThreadState::WAITING => dest,
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
-                ThreadState::COMPLETED => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
             },
             ThreadState::WAITING => match dest {
                 ThreadState::IDLE => dest,
@@ -540,25 +610,40 @@ impl ThreadState {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
                 ThreadState::ACTIVE => dest,
-                ThreadState::COMPLETED => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
             },
-            ThreadState::SLEEPING(_) => match self {
+            ThreadState::SLEEPING(_) => match dest {
                 ThreadState::IDLE => dest,
                 ThreadState::WAITING => {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
-                ThreadState::COMPLETED => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
             },
-            ThreadState::ACTIVE => match self {
+            ThreadState::ACTIVE => match dest {
                 ThreadState::IDLE => dest,
                 ThreadState::WAITING => dest,
                 ThreadState::SLEEPING(_) => dest,
                 ThreadState::ACTIVE => dest,
-                ThreadState::COMPLETED => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
             },
-            ThreadState::COMPLETED => match self {
+            ThreadState::COMPLETED_MAF => match dest {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
+            },
+            ThreadState::EXITED => match dest {
                 ThreadState::IDLE => {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
@@ -571,7 +656,20 @@ impl ThreadState {
                 ThreadState::ACTIVE => {
                     return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
                 }
-                ThreadState::COMPLETED => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::EXITED => dest,
+                ThreadState::STARVED => {
+                    return Err(RuntimeError::InvalidThreadStateTransition(*self, dest))
+                }
+            },
+            ThreadState::STARVED => match dest {
+                ThreadState::IDLE => dest,
+                ThreadState::WAITING => dest,
+                ThreadState::SLEEPING(_) => dest,
+                ThreadState::ACTIVE => dest,
+                ThreadState::COMPLETED_MAF => dest,
+                ThreadState::STARVED => dest,
+                ThreadState::EXITED => dest,
             },
         };
         *self = dest;
@@ -586,6 +684,7 @@ pub struct Thread {
     pub stack: Stack,
     pub program: CasmProgram,
     pub tid: Tid,
+    pub current_maf_instruction_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -663,6 +762,7 @@ impl PlayerThreadsManager {
             program,
             tid,
             state: ThreadState::IDLE,
+            current_maf_instruction_count: 0,
         });
         engine.spawn(tid);
         Ok(tid)
@@ -689,6 +789,7 @@ impl PlayerThreadsManager {
             program,
             tid,
             state: ThreadState::IDLE,
+            current_maf_instruction_count: 0,
         });
         engine.spawn(tid);
         Ok(())
@@ -720,6 +821,7 @@ impl PlayerThreadsManager {
             program,
             tid,
             state: ThreadState::IDLE,
+            current_maf_instruction_count: 0,
         });
         Ok(tid)
     }
