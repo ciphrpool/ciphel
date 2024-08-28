@@ -17,7 +17,7 @@ use crate::{
             error::squash,
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, string_parser::parse_fstring, wst},
+            strings::{parse_id, string_parser::parse_fstring, wst, wst_closed},
         },
         TryParse,
     },
@@ -62,10 +62,14 @@ impl TryParse for IfExpr {
         map(
             pair(
                 pair(
-                    delimited(wst(lexem::IF), Expression::parse, wst(lexem::THEN)),
+                    delimited(
+                        wst_closed(lexem::IF),
+                        Expression::parse,
+                        wst_closed(lexem::THEN),
+                    ),
                     cut(ExprScope::parse),
                 ),
-                cut(preceded(wst(lexem::ELSE), ExprScope::parse)),
+                cut(preceded(wst_closed(lexem::ELSE), ExprScope::parse)),
             ),
             |((condition, then_branch), else_branch)| IfExpr {
                 condition: Box::new(condition),
@@ -127,7 +131,7 @@ impl TryParse for PatternExpr {
         map(
             separated_pair(
                 preceded(
-                    wst(lexem::CASE),
+                    wst_closed(lexem::CASE),
                     separated_list1(wst(lexem::BAR), Pattern::parse),
                 ),
                 wst(lexem::BIGARROW),
@@ -158,7 +162,7 @@ impl TryParse for MatchExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::MATCH), cut(Expression::parse)),
+                preceded(wst_closed(lexem::MATCH), cut(Expression::parse)),
                 cut(delimited(
                     wst(lexem::BRA_O),
                     pair(
@@ -166,7 +170,7 @@ impl TryParse for MatchExpr {
                         opt(preceded(
                             wst(lexem::COMA),
                             preceded(
-                                wst(lexem::ELSE),
+                                wst_closed(lexem::ELSE),
                                 preceded(wst(lexem::BIGARROW), ExprScope::parse),
                             ),
                         )),
@@ -194,8 +198,8 @@ impl TryParse for TryExpr {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::TRY), ExprScope::parse),
-                opt(preceded(wst(lexem::ELSE), ExprScope::parse)),
+                preceded(wst_closed(lexem::TRY), ExprScope::parse),
+                opt(preceded(wst_closed(lexem::ELSE), ExprScope::parse)),
             ),
             |(try_branch, else_branch)| TryExpr {
                 try_branch,

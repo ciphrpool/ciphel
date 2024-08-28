@@ -12,7 +12,7 @@ use crate::ast::{
         error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -53,7 +53,7 @@ impl TryParse for StructDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::STRUCT), parse_id),
+                preceded(wst_closed(lexem::STRUCT), parse_id),
                 cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list0(
@@ -80,7 +80,7 @@ impl TryParse for UnionDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::UNION), parse_id),
+                preceded(wst_closed(lexem::UNION), parse_id),
                 cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(
@@ -117,7 +117,7 @@ impl TryParse for EnumDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::ENUM), parse_id),
+                preceded(wst_closed(lexem::ENUM), parse_id),
                 cut(delimited(
                     wst(lexem::BRA_O),
                     separated_list1(wst(lexem::COMA), parse_id),
@@ -139,7 +139,7 @@ impl TryParse for FnDef {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FN), parse_id),
+                preceded(wst_closed(lexem::FN), parse_id),
                 cut(delimited(
                     wst(lexem::PAR_O),
                     separated_list0(wst(lexem::COMA), TypedVar::parse),

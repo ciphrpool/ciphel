@@ -12,7 +12,7 @@ use crate::ast::{
         error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -32,7 +32,7 @@ impl TryParse for Loop {
     fn parse(input: Span) -> PResult<Self> {
         squash(
             alt((
-                map(preceded(wst(lexem::LOOP), Block::parse), |scope| {
+                map(preceded(wst_closed(lexem::LOOP), Block::parse), |scope| {
                     Loop::Loop(Box::new(scope))
                 }),
                 map(ForLoop::parse, |value| Loop::For(value)),
@@ -73,8 +73,8 @@ impl TryParse for ForLoop {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                preceded(wst(lexem::FOR), cut(ForItem::parse)),
-                cut(preceded(wst(lexem::IN), ForIterator::parse)),
+                preceded(wst_closed(lexem::FOR), cut(ForItem::parse)),
+                cut(preceded(wst_closed(lexem::IN), ForIterator::parse)),
                 cut(Block::parse).context("Invalid block in for-loop statement"),
             )),
             |(item, iterator, scope)| ForLoop {
@@ -96,7 +96,7 @@ impl TryParse for WhileLoop {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::WHILE), cut(Expression::parse)),
+                preceded(wst_closed(lexem::WHILE), cut(Expression::parse)),
                 cut(Block::parse).context("Invalid block in while-loop statement"),
             ),
             |(condition, scope)| WhileLoop {

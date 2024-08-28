@@ -14,7 +14,7 @@ use crate::{
             strings::{
                 parse_id,
                 string_parser::{parse_char, parse_string},
-                wst,
+                wst, wst_closed,
             },
         },
         TryParse,
@@ -47,7 +47,7 @@ impl TryParse for Data {
                 map(Tuple::parse, |value| Data::Tuple(value)),
                 map(Address::parse, |value| Data::Address(value)),
                 map(PtrAccess::parse, |value| Data::PtrAccess(value)),
-                value(Data::Unit, wst(lexem::UNIT)),
+                value(Data::Unit, wst_closed(lexem::UNIT)),
                 map(Map::parse, |value| Data::Map(value)),
                 map(Struct::parse, |value| Data::Struct(value)),
                 map(Union::parse, |value| Data::Union(value)),
@@ -115,14 +115,15 @@ impl TryParse for Primitive {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            map(pair(parse_float, opt(wst(lexem::FLOAT))), |(value, _)| {
-                Primitive::Number(super::Number::F64(value as f64).into())
-            }),
+            map(
+                pair(parse_float, opt(wst_closed(lexem::FLOAT))),
+                |(value, _)| Primitive::Number(super::Number::F64(value as f64).into()),
+            ),
             map(Number::parse, |value| Primitive::Number(value.into())),
             map(
                 alt((
-                    value(true, wst(lexem::TRUE)),
-                    value(false, wst(lexem::FALSE)),
+                    value(true, wst_closed(lexem::TRUE)),
+                    value(false, wst_closed(lexem::FALSE)),
                 )),
                 |value| Primitive::Bool(value),
             ),
@@ -231,7 +232,7 @@ impl TryParse for Closure {
         map(
             pair(
                 pair(
-                    opt(wst(lexem::MOVE)),
+                    opt(wst_closed(lexem::MOVE)),
                     delimited(
                         wst(lexem::PAR_O),
                         separated_list0(wst(lexem::COMA), ClosureParam::parse),

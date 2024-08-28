@@ -1,7 +1,7 @@
 use crate::ast::{
     expressions::operation::{operation_parse::TryParseOperation, FnCall},
     statements::block::Block,
-    utils::error::squash,
+    utils::{error::squash, strings::wst_closed},
     TryParse,
 };
 use nom::{
@@ -49,7 +49,7 @@ impl TryParse for IfStat {
             pair(
                 pair(
                     preceded(
-                        wst(lexem::IF),
+                        wst_closed(lexem::IF),
                         cut(Expression::parse).context("Invalid condition"),
                     ),
                     cut(Block::parse).context("Invalid block in if statement"),
@@ -57,13 +57,13 @@ impl TryParse for IfStat {
                 pair(
                     many0(pair(
                         preceded(
-                            pair(wst(lexem::ELSE), wst(lexem::IF)),
+                            pair(wst_closed(lexem::ELSE), wst_closed(lexem::IF)),
                             cut(Expression::parse).context("Invalid condition"),
                         ),
                         cut(Block::parse).context("Invalid block in else if statement"),
                     )),
                     opt(preceded(
-                        wst(lexem::ELSE),
+                        wst_closed(lexem::ELSE),
                         cut(Block::parse).context("Invalid block in else statement"),
                     )),
                 ),
@@ -89,13 +89,13 @@ impl TryParse for MatchStat {
     fn parse(input: Span) -> PResult<Self> {
         map(
             pair(
-                preceded(wst(lexem::MATCH), cut(Expression::parse)),
+                preceded(wst_closed(lexem::MATCH), cut(Expression::parse)),
                 delimited(
                     cut(wst(lexem::BRA_O)),
                     cut(pair(
                         many1(PatternStat::parse),
                         opt(preceded(
-                            wst(lexem::ELSE),
+                            wst_closed(lexem::ELSE),
                             preceded(
                                 wst(lexem::BIGARROW),
                                 cut(Block::parse).context("Invalid block in else statement"),
@@ -125,9 +125,9 @@ impl TryParse for PatternStat {
         map(
             separated_pair(
                 preceded(
-                    wst(lexem::CASE),
+                    wst_closed(lexem::CASE),
                     separated_list1(
-                        wst(lexem::BAR),
+                        wst_closed(lexem::BAR),
                         Pattern::parse.context("Invalid pattern in match statement"),
                     ),
                 ),
@@ -153,11 +153,11 @@ impl TryParse for TryStat {
         map(
             pair(
                 preceded(
-                    wst(lexem::TRY),
+                    wst_closed(lexem::TRY),
                     cut(Block::parse).context("Invalid block in try statement"),
                 ),
                 opt(preceded(
-                    wst(lexem::ELSE),
+                    wst_closed(lexem::ELSE),
                     cut(Block::parse).context("Invalid block in else statement"),
                 )),
             ),

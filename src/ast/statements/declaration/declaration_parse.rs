@@ -13,7 +13,7 @@ use crate::ast::{
         error::squash,
         io::{PResult, Span},
         lexem,
-        strings::{parse_id, wst},
+        strings::{parse_id, wst, wst_closed},
     },
     TryParse,
 };
@@ -30,7 +30,7 @@ impl TryParse for Declaration {
      */
     fn parse(input: Span) -> PResult<Self> {
         preceded(
-            wst(lexem::LET),
+            wst_closed(lexem::LET),
             cut(alt((
                 map(
                     terminated(
@@ -58,7 +58,7 @@ impl TryParse for TypedVar {
     fn parse(input: Span) -> PResult<Self> {
         map(
             separated_pair(
-                pair(opt(wst(lexem::REC)), parse_id),
+                pair(opt(wst_closed(lexem::REC)), parse_id),
                 wst(lexem::COLON),
                 Type::parse.context("Invalid type"),
             ),

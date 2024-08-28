@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use nom::{
     branch::alt,
-    character::complete::{alpha1, alphanumeric1},
-    combinator::{map_res, recognize, value},
+    character::complete::{alpha1, alphanumeric1, anychar},
+    combinator::{map_res, not, peek, recognize, value, verify},
     multi::many0_count,
-    sequence::pair,
+    sequence::{pair, terminated},
     Parser,
 };
 
@@ -38,14 +38,14 @@ pub mod eater {
         io::{PError, PResult, Span},
         lexem,
     };
-
+    #[inline]
     pub fn cmt<'input, F, O>(inner: F) -> impl FnMut(Span<'input>) -> PResult<O>
     where
         F: Parser<Span<'input>, O, PError<'input>>,
     {
         delimited(ml_comment, inner, ml_comment)
     }
-
+    #[inline]
     fn sl_comment(input: Span) -> PResult<()> {
         value(
             (), // Output is thrown away.
@@ -55,24 +55,7 @@ pub mod eater {
             ),
         )(input)
     }
-
-    // pub fn ml_comment(input: Span) -> PResult<()> {
-    //     value(
-    //         (),
-    //         many0(alt((
-    //             value(
-    //                 (),
-    //                 tuple((
-    //                     delimited(multispace0, tag(lexem::ML_OP_COMMENT), multispace0),
-    //                     take_until(lexem::ML_CL_COMMENT),
-    //                     delimited(multispace0, tag(lexem::ML_CL_COMMENT), multispace0),
-    //                 )),
-    //             ),
-    //             sl_comment,
-    //         ))),
-    //     )(input)
-    // }
-
+    #[inline]
     pub fn ml_comment(input: Span) -> PResult<()> {
         value(
             (),
@@ -94,6 +77,7 @@ pub mod eater {
         )(input)
     }
 
+    #[inline]
     pub fn ws<'input, F, O>(inner: F) -> impl FnMut(Span<'input>) -> PResult<O>
     where
         F: Parser<Span<'input>, O, PError<'input>>,
@@ -191,7 +175,22 @@ pub fn parse_id(input: Span) -> PResult<ID> {
 pub fn wst<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
     move |input: Span| value((), eater::ws(tag(lexem)))(input)
 }
-
+pub fn keyword<'input>(kw: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
+    move |input: Span| {
+        value(
+            (),
+            terminated(
+                tag(kw),
+                peek(not(verify(anychar, |c: &char| {
+                    c.is_ascii_alphanumeric() || *c == '_'
+                }))),
+            ),
+        )(input)
+    }
+}
+pub fn wst_closed<'input>(lexem: &'static str) -> impl FnMut(Span<'input>) -> PResult<()> {
+    move |input: Span| value((), eater::ws(keyword(lexem)))(input)
+}
 /*
  * @desc Parse Escaped String and Character
  *

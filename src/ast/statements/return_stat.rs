@@ -1,4 +1,5 @@
 use crate::ast::utils::error::squash;
+use crate::ast::utils::strings::wst_closed;
 use crate::semantic::scope::scope::Scope;
 use crate::semantic::Info;
 
@@ -55,7 +56,7 @@ impl TryParse for Return {
             alt((
                 map(
                     delimited(
-                        wst(lexem::RETURN),
+                        wst_closed(lexem::RETURN),
                         cut(opt(Expression::parse)),
                         cut(wst(lexem::SEMI_COLON)),
                     ),
@@ -68,11 +69,11 @@ impl TryParse for Return {
                     },
                 ),
                 map(
-                    terminated(wst(lexem::BREAK), cut(wst(lexem::SEMI_COLON))),
+                    terminated(wst_closed(lexem::BREAK), cut(wst(lexem::SEMI_COLON))),
                     |_| Return::Break,
                 ),
                 map(
-                    terminated(wst(lexem::CONTINUE), cut(wst(lexem::SEMI_COLON))),
+                    terminated(wst_closed(lexem::CONTINUE), cut(wst(lexem::SEMI_COLON))),
                     |_| Return::Continue,
                 ),
             )),

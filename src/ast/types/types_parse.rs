@@ -10,7 +10,7 @@ use crate::ast::utils::{
     io::{PResult, Span},
     lexem,
     numbers::parse_number,
-    strings::{parse_id, wst},
+    strings::{parse_id, wst, wst_closed},
 };
 
 use crate::ast::TryParse;
@@ -34,9 +34,9 @@ impl TryParse for Type {
                 map(SliceType::parse, |value| Type::Slice(value)),
                 map(StrSliceType::parse, |value| Type::StrSlice(value)),
                 map(StringType::parse, |value| Type::String(value)),
-                value(Type::Unit, wst(lexem::UUNIT)),
-                value(Type::Any, wst(lexem::ANY)),
-                value(Type::Error, wst(lexem::ERR)),
+                value(Type::Unit, wst_closed(lexem::UUNIT)),
+                value(Type::Any, wst_closed(lexem::ANY)),
+                value(Type::Error, wst_closed(lexem::ERR)),
                 map(VecType::parse, |value| Type::Vec(value)),
                 map(ClosureType::parse, |value| Type::Closure(value)),
                 map(RangeType::parse, |value| Type::Range(value)),
@@ -59,8 +59,8 @@ impl TryParse for PrimitiveType {
     fn parse(input: Span) -> PResult<Self> {
         alt((
             map(NumberType::parse, |num| PrimitiveType::Number(num)),
-            value(PrimitiveType::Char, wst(lexem::CHAR)),
-            value(PrimitiveType::Bool, wst(lexem::BOOL)),
+            value(PrimitiveType::Char, wst_closed(lexem::CHAR)),
+            value(PrimitiveType::Bool, wst_closed(lexem::BOOL)),
         ))(input)
     }
 }
@@ -74,17 +74,17 @@ impl TryParse for NumberType {
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
-            value(NumberType::U8, wst(lexem::U8)),
-            value(NumberType::U16, wst(lexem::U16)),
-            value(NumberType::U32, wst(lexem::U32)),
-            value(NumberType::U64, wst(lexem::U64)),
-            value(NumberType::U128, wst(lexem::U128)),
-            value(NumberType::I8, wst(lexem::I8)),
-            value(NumberType::I16, wst(lexem::I16)),
-            value(NumberType::I32, wst(lexem::I32)),
-            value(NumberType::I64, wst(lexem::I64)),
-            value(NumberType::I128, wst(lexem::I128)),
-            value(NumberType::F64, wst(lexem::FLOAT)),
+            value(NumberType::U8, wst_closed(lexem::U8)),
+            value(NumberType::U16, wst_closed(lexem::U16)),
+            value(NumberType::U32, wst_closed(lexem::U32)),
+            value(NumberType::U64, wst_closed(lexem::U64)),
+            value(NumberType::U128, wst_closed(lexem::U128)),
+            value(NumberType::I8, wst_closed(lexem::I8)),
+            value(NumberType::I16, wst_closed(lexem::I16)),
+            value(NumberType::I32, wst_closed(lexem::I32)),
+            value(NumberType::I64, wst_closed(lexem::I64)),
+            value(NumberType::I128, wst_closed(lexem::I128)),
+            value(NumberType::F64, wst_closed(lexem::FLOAT)),
         ))(input)
     }
 }
@@ -140,7 +140,7 @@ impl TryParse for StringType {
      * String := string
      */
     fn parse(input: Span) -> PResult<Self> {
-        value(StringType(), wst(lexem::STRING))(input)
+        value(StringType(), wst_closed(lexem::STRING))(input)
     }
 }
 
@@ -154,7 +154,7 @@ impl TryParse for VecType {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(lexem::UVEC),
+                wst_closed(lexem::UVEC),
                 delimited(wst(lexem::LESSER), Type::parse, wst(lexem::GREATER)),
             ),
             |value| VecType(Box::new(value)),
@@ -172,7 +172,7 @@ impl TryParse for ClosureType {
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                pair(opt(wst(lexem::DYN)), wst(lexem::FN)),
+                pair(opt(wst_closed(lexem::DYN)), wst_closed(lexem::FN)),
                 delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
                 wst(lexem::ARROW),
                 Type::parse,
@@ -226,7 +226,7 @@ impl TryParse for RangeType {
         alt((
             map(
                 preceded(
-                    wst(lexem::RANGE_E),
+                    wst_closed(lexem::RANGE_E),
                     delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
                 ),
                 |num| RangeType {
@@ -236,7 +236,7 @@ impl TryParse for RangeType {
             ),
             map(
                 preceded(
-                    wst(lexem::RANGE_I),
+                    wst_closed(lexem::RANGE_I),
                     delimited(wst(lexem::LE), NumberType::parse, wst(lexem::GE)),
                 ),
                 |num| RangeType {
@@ -272,7 +272,7 @@ impl TryParse for MapType {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(lexem::UMAP),
+                wst_closed(lexem::UMAP),
                 delimited(
                     wst(lexem::LESSER),
                     separated_pair(Type::parse, wst(lexem::COMA), Type::parse),
