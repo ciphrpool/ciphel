@@ -632,6 +632,24 @@ mod tests {
     }
 
     #[test]
+    fn robustness_print_vec() {
+        let mut statement = Statement::parse(
+            r##"
+            let _ = {
+                println(vec[1,2,3,4]);
+                println("Hello World");
+                return ();
+            };
+        "##
+            .into(),
+        )
+        .expect("Parsing should have succeeded")
+        .1;
+        let output = compile_statement_for_stdout!(statement);
+        assert_eq!(&output, "Hello World\n");
+    }
+
+    #[test]
     fn valid_print_vec_complex() {
         let mut statement = Statement::parse(
             r##"

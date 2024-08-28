@@ -61,7 +61,7 @@ impl OutBuffer {
         match self {
             OutBuffer::Stack(stack) => match stack.last_mut() {
                 Some(head) => head.push(word.to_owned()),
-                None => {}
+                None => or.push_str(word),
             },
             OutBuffer::Empty => or.push_str(word),
         }
@@ -85,9 +85,15 @@ impl OutBuffer {
                             stack.push(head.into_iter().rev().collect::<Vec<String>>().join(""));
                             None
                         }
-                        None => Some(head.into_iter().rev().collect::<Vec<String>>().join("")),
+                        None => {
+                            *self = OutBuffer::Empty;
+                            Some(head.into_iter().rev().collect::<Vec<String>>().join(""))
+                        }
                     },
-                    None => None,
+                    None => {
+                        *self = OutBuffer::Empty;
+                        None
+                    }
                 }
             }
             OutBuffer::Empty => None,
@@ -103,9 +109,15 @@ impl OutBuffer {
                             stack.push(head.join(""));
                             None
                         }
-                        None => Some(head.join("")),
+                        None => {
+                            *self = OutBuffer::Empty;
+                            Some(head.join(""))
+                        }
                     },
-                    None => None,
+                    None => {
+                        *self = OutBuffer::Empty;
+                        None
+                    }
                 }
             }
             OutBuffer::Empty => None,
