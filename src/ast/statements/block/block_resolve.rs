@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use super::Block;
 
 use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::type_traits::TypeChecking;
 use crate::{arw_read, arw_write, resolve_metadata};
 
 use crate::semantic::scope::var_impl::{Var, VarState};
@@ -50,10 +51,18 @@ impl Resolve for Block {
 
         let return_type =
             self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = context.compatible_with(
-            &return_type,
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
+
+        if !return_type.is_unit() {
+            let _ = context
+                .compatible_with(
+                    &return_type,
+                    &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                )
+                .map_err(|e| {
+                    dbg!(return_type);
+                    e
+                })?;
+        }
         resolve_metadata!(self.metadata.info, self, scope, context);
 
         Ok(())
