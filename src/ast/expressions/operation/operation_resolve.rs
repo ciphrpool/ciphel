@@ -325,8 +325,30 @@ impl Resolve for Range {
             None => None,
         };
 
-        let _ = self.lower.resolve::<G>(scope, &inner_context, &mut None)?;
-        let _ = self.upper.resolve::<G>(scope, &inner_context, &mut None)?;
+        match (self.lower.as_mut(), self.upper.as_mut()) {
+            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
+                let _ = value.resolve::<G>(scope, context, &mut None)?;
+                let upper_type = self
+                    .upper
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = self
+                    .lower
+                    .resolve::<G>(scope, &Some(upper_type), &mut None)?;
+            }
+            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
+                let _ = value.resolve::<G>(scope, context, &mut None)?;
+                let lower_type = self
+                    .lower
+                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = self
+                    .upper
+                    .resolve::<G>(scope, &Some(lower_type), &mut None)?;
+            }
+            _ => {
+                let _ = self.lower.resolve::<G>(scope, context, &mut None)?;
+                let _ = self.upper.resolve::<G>(scope, context, &mut None)?;
+            }
+        }
 
         let _ = resolve_metadata!(self.metadata.info, self, scope, context);
         Ok(())
