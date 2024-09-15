@@ -2,10 +2,10 @@ use std::usize;
 
 use ulid::Ulid;
 
-use crate::e_static;
 use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::{ArcRwLock, EType, SemanticError};
-use crate::{ast::utils::strings::ID, semantic::scope::scope::Scope};
+use crate::semantic::{EType, SemanticError};
+use crate::{ast::utils::strings::ID, semantic::scope::scope::ScopeManager};
+use crate::{e_static, semantic};
 
 use super::{
     allocator::{
@@ -21,8 +21,10 @@ use thiserror::Error;
 pub enum CodeGenerationError {
     #[error("Unresolved Error")]
     UnresolvedError,
-    #[error("internal compilation error")]
-    ConcurrencyError,
+    #[error("unlocatale expression")]
+    Unlocatable,
+    #[error("unaccessible expression")]
+    Unaccessible,
     #[error("unexpected error")]
     Default,
 }
@@ -47,6 +49,9 @@ pub enum RuntimeError {
     StackError(#[from] StackError),
     #[error("HeapError : {0}")]
     HeapError(#[from] HeapError),
+
+    #[error("MEMORY VIOLATION")]
+    MemoryViolation,
     // VTableError(VTableError),
     #[error("Deserialization")]
     Deserialization,
@@ -84,30 +89,52 @@ pub enum RuntimeError {
     Default,
 }
 
+#[derive(Debug, Clone)]
+pub struct CodeGenerationContext {
+    pub return_label: Option<Ulid>,
+    pub break_label: Option<Ulid>,
+    pub continue_label: Option<Ulid>,
+}
+
+impl Default for CodeGenerationContext {
+    fn default() -> Self {
+        Self {
+            return_label: Default::default(),
+            break_label: Default::default(),
+            continue_label: Default::default(),
+        }
+    }
+}
+
 pub trait GenerateCode {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError>;
 }
 
-pub trait Locatable {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError>;
+// pub trait Locatable {
+//     fn locate(
+//         &self,
+//         scope: &mut semantic::scope::scope::ScopeManager,
+//         scope_id: Option<u128>,
+//         instructions: &mut CasmProgram,
+//         context: &crate::vm::vm::CodeGenerationContext,
+//     ) -> Result<(), CodeGenerationError>;
 
-    fn is_assignable(&self) -> bool;
+//     fn is_assignable(&self) -> bool;
 
-    fn most_left_id(&self) -> Option<ID>;
-}
+//     fn most_left_id(&self) -> Option<ID>;
+// }
 
 pub trait DynamicFnResolver {
     fn resolve<G: GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope: &mut semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<EType, SemanticError>;
 }
@@ -115,7 +142,8 @@ pub struct DefaultDynamicFn;
 impl DynamicFnResolver for DefaultDynamicFn {
     fn resolve<G: GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope: &mut semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<EType, SemanticError> {
         Ok(e_static!(StaticType::Unit))
@@ -207,7 +235,9 @@ impl GameEngineStaticFn for StdoutTestGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {}
+    fn stdcasm_print(&mut self, content: String) {
+        // println!("{}", content);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -334,7 +364,8 @@ pub struct TestDynamicFn {}
 impl DynamicFnResolver for TestDynamicFn {
     fn resolve<G: GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope: &mut semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         params: &mut Vec<crate::ast::expressions::Expression>,
     ) -> Result<EType, SemanticError> {
         Ok(e_static!(StaticType::Unit))
@@ -469,20 +500,6 @@ pub trait DeserializeFrom {
 
 pub trait Printer {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
-}
-
-pub trait NextItem {
-    fn init_address(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
-
-    fn init_index(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
-
-    fn build_item(
-        &self,
-        instructions: &mut CasmProgram,
-        end_label: Ulid,
-    ) -> Result<(), CodeGenerationError>;
-
-    fn next(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 }
 
 pub const MAX_THREAD_COUNT: usize = 4;
@@ -680,7 +697,7 @@ impl ThreadState {
 #[derive(Debug, Clone)]
 pub struct Thread {
     pub state: ThreadState,
-    pub scope: ArcRwLock<Scope>,
+    pub scope: ScopeManager,
     pub stack: Stack,
     pub program: CasmProgram,
     pub tid: Tid,
@@ -749,7 +766,7 @@ impl PlayerThreadsManager {
             return Err(RuntimeError::TooManyThread);
         }
 
-        let scope = Scope::new();
+        let scope = ScopeManager::default();
         let program = CasmProgram::default();
         let stack = Stack::new();
         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
@@ -779,7 +796,7 @@ impl PlayerThreadsManager {
         if tid >= MAX_THREAD_COUNT {
             return Err(RuntimeError::InvalidTID(tid));
         }
-        let scope = Scope::new();
+        let scope = ScopeManager::default();
         let program = CasmProgram::default();
         let stack = Stack::new();
 
@@ -809,7 +826,7 @@ impl PlayerThreadsManager {
         Ok(())
     }
 
-    pub fn spawn_with_scope(&mut self, scope: ArcRwLock<Scope>) -> Result<usize, RuntimeError> {
+    pub fn spawn_with_scope(&mut self, scope: ScopeManager) -> Result<usize, RuntimeError> {
         let program = CasmProgram::default();
         let stack = Stack::new();
         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
@@ -883,7 +900,7 @@ impl Runtime {
     pub fn spawn_with_scope(
         &mut self,
         player: Player,
-        scope: ArcRwLock<Scope>,
+        scope: ScopeManager,
     ) -> Result<usize, RuntimeError> {
         match player {
             Player::P1 => self.p1_manager.spawn_with_scope(scope),
@@ -897,7 +914,7 @@ impl Runtime {
         tid: Tid,
     ) -> Result<
         (
-            &'runtime mut ArcRwLock<Scope>,
+            &'runtime mut ScopeManager,
             &'runtime mut Stack,
             &mut CasmProgram,
         ),

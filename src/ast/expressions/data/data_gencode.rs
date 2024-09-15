@@ -1,19 +1,17 @@
 use num_traits::ToBytes;
 
-use crate::arw_read;
-use crate::semantic::scope::scope::Scope;
+use crate::ast::expressions::locate::Locatable;
+use crate::semantic;
+use crate::semantic::scope::scope::{self, ScopeManager};
+use crate::semantic::scope::static_types::{MapType, SliceType, StaticType, TupleType};
 use crate::semantic::AccessLevel;
-use crate::vm::allocator::stack::Offset;
 use crate::vm::platform::core::alloc::{AllocCasm, DerefHashing};
 use crate::vm::platform::core::CoreCasm;
 use crate::vm::platform::LibCasm;
-use crate::vm::vm::Locatable;
+use crate::vm::vm::CodeGenerationContext;
 use crate::{
     ast::utils::strings::ID,
-    semantic::{
-        scope::{type_traits::GetSubTypes, user_type_impl::UserType},
-        Either, SizeOf,
-    },
+    semantic::{scope::user_type_impl::UserType, EType, SizeOf},
     vm::{
         allocator::{align, MemoryAddress},
         casm::{
@@ -29,118 +27,122 @@ use crate::{
 };
 
 use super::{
-    Address, Closure, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
-    Struct, Tuple, Union, Variable, Vector,
+    Address, Closure, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice, Struct,
+    Tuple, Union, Variable, Vector,
 };
 
 impl GenerateCode for Data {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Data::Primitive(value) => value.gencode(scope, instructions),
-            Data::Slice(value) => value.gencode(scope, instructions),
-            Data::Vec(value) => value.gencode(scope, instructions),
-            Data::Closure(value) => value.gencode(scope, instructions),
-            Data::Tuple(value) => value.gencode(scope, instructions),
-            Data::Address(value) => value.gencode(scope, instructions),
-            Data::PtrAccess(value) => value.gencode(scope, instructions),
-            Data::Variable(value) => value.gencode(scope, instructions),
+            Data::Primitive(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Slice(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Vec(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Closure(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Tuple(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Address(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::PtrAccess(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Variable(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.gencode(scope, instructions),
-            Data::Struct(value) => value.gencode(scope, instructions),
-            Data::Union(value) => value.gencode(scope, instructions),
-            Data::Enum(value) => value.gencode(scope, instructions),
-            Data::StrSlice(value) => value.gencode(scope, instructions),
+            Data::Map(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Struct(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Union(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Enum(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::StrSlice(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }
 
-impl Locatable for Data {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            Data::Variable(Variable {
-                id,
-                from_field,
-                metadata,
-            }) => {
-                if *from_field {
-                    Ok(())
-                } else {
-                    let (var, address, level) =
-                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
-                            .access_var(id)?;
+// impl Locatable for Data {
+//     fn locate(
+//         &self,
+//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+//         scope_id: Option<u128>,
+//         instructions: &mut CasmProgram,
+//         context: &crate::vm::vm::CodeGenerationContext,
+//     ) -> Result<(), CodeGenerationError> {
+//         match self {
+//             Data::Variable(Variable {
+//                 name,
+//                 state,
+//                 metadata,
+//             }) => {
+//                 if *from_field {
+//                     Ok(())
+//                 } else {
+//                     let (var, address, level) = scope_manager.access_var(id)?;
 
-                    let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
-                    let _var_size = var_type.size_of();
+//                     let var_type = &var.type_sig;
+//                     let _var_size = var_type.size_of();
 
-                    instructions.push(Casm::Locate(Locate {
-                        address: MemoryAddress::Stack {
-                            offset: address,
-                            level,
-                        },
-                    }));
-                    Ok(())
-                }
-            }
-            Data::PtrAccess(PtrAccess { value, .. }) => {
-                let _ = value.gencode(scope, instructions)?;
-                Ok(())
-            }
-            _ => {
-                let _ = self.gencode(scope, instructions)?;
-                let Some(value_type) = self.signature() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                instructions.push(Casm::Locate(Locate {
-                    address: MemoryAddress::Stack {
-                        offset: Offset::ST(-(value_type.size_of() as isize)),
-                        level: AccessLevel::Direct,
-                    },
-                }));
-                Ok(())
-            }
-        }
-    }
+//                     instructions.push(Casm::Locate(Locate {
+//                         address: MemoryAddress::Stack {
+//                             offset: address,
+//                             level,
+//                         },
+//                     }));
+//                     Ok(())
+//                 }
+//             }
+//             Data::PtrAccess(PtrAccess { value, .. }) => {
+//                 let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
+//                 Ok(())
+//             }
+//             _ => {
+//                 let _ = self.gencode(scope_manager, scope_id, instructions, context)?;
+//                 let Some(value_type) = self.signature() else {
+//                     return Err(CodeGenerationError::UnresolvedError);
+//                 };
+//                 instructions.push(Casm::Locate(Locate {
+//                     address: MemoryAddress::Stack {
+//                         offset: Offset::ST(-(value_type.size_of() as isize)),
+//                         level: AccessLevel::Direct,
+//                     },
+//                 }));
+//                 Ok(())
+//             }
+//         }
+//     }
 
-    fn is_assignable(&self) -> bool {
-        match self {
-            Data::Variable(_) => true,
-            Data::PtrAccess(_) => true,
-            Data::Primitive(_) => false,
-            Data::Slice(_) => false,
-            Data::StrSlice(_) => false,
-            Data::Vec(_) => false,
-            Data::Closure(_) => false,
-            Data::Tuple(_) => false,
-            Data::Address(_) => false,
-            Data::Unit => false,
-            Data::Map(_) => false,
-            Data::Struct(_) => false,
-            Data::Union(_) => false,
-            Data::Enum(_) => false,
-        }
-    }
+//     fn is_assignable(&self) -> bool {
+//         match self {
+//             Data::Variable(_) => true,
+//             Data::PtrAccess(_) => true,
+//             Data::Primitive(_) => false,
+//             Data::Slice(_) => false,
+//             Data::StrSlice(_) => false,
+//             Data::Vec(_) => false,
+//             Data::Closure(_) => false,
+//             Data::Tuple(_) => false,
+//             Data::Address(_) => false,
+//             Data::Unit => false,
+//             Data::Map(_) => false,
+//             Data::Struct(_) => false,
+//             Data::Union(_) => false,
+//             Data::Enum(_) => false,
+//         }
+//     }
 
-    fn most_left_id(&self) -> Option<ID> {
-        match self {
-            Data::Variable(Variable { id, metadata, .. }) => Some(id.clone()),
-            _ => None,
-        }
-    }
-}
+//     fn most_left_id(&self) -> Option<ID> {
+//         match self {
+//             Data::Variable(Variable { name, metadata, .. }) => Some(name.clone()),
+//             _ => None,
+//         }
+//     }
+// }
 
 impl GenerateCode for Number {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             super::Number::U8(data) => data::Data::Serialized {
@@ -186,8 +188,10 @@ impl GenerateCode for Number {
 impl GenerateCode for Primitive {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let casm = match self {
             Primitive::Number(data) => match data {
@@ -245,69 +249,47 @@ impl GenerateCode for Primitive {
 impl GenerateCode for Variable {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        if self.from_field {
-            let Some(var_type) = self.metadata.signature() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            let var_size = var_type.size_of();
-            if var_size == 0 {
-                return Ok(());
-            }
-            instructions.push(Casm::Access(Access::Runtime {
-                size: Some(var_size),
-            }));
-            Ok(())
-        } else {
-            let (var, address, level) =
-                crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
-                    .access_var(&self.id)?;
+        let Some(super::VariableState::Variable { id }) = &self.state else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Ok(crate::semantic::scope::scope::Variable {
+            ctype,
+            address,
+            state,
+            ..
+        }) = scope_manager.find_var_by_id(*id, scope_id)
+        else {
+            return Err(CodeGenerationError::Unlocatable);
+        };
+        let Ok(address) = (address.clone()).try_into() else {
+            return Err(CodeGenerationError::Unlocatable);
+        };
 
-            let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
-            let var_size = var_type.size_of();
-            if var_size == 0 {
-                return Ok(());
-            }
-            instructions.push(Casm::Access(Access::Static {
-                address: MemoryAddress::Stack {
-                    offset: address,
-                    level,
-                },
-                size: var_size,
-            }));
+        instructions.push(Casm::Access(Access::Static {
+            address,
+            size: ctype.size_of(),
+        }));
 
-            Ok(())
-        }
+        Ok(())
     }
 }
 
 impl GenerateCode for Slice {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-
-        let _item_size = {
-            let Some(item_type) = signature.get_item() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            item_type.size_of()
-        };
-        // // Push the size of the slice
-        // let bytes = (self.value.len() as u64).to_le_bytes().as_slice().to_vec();
-        // offset += bytes.len();
-        // instructions.push(Casm::Data(Data::Serialized { data: bytes }));
-
         for element in &self.value {
-            let _ = element.gencode(scope, instructions)?;
+            let _ = element.gencode(scope_manager, scope_id, instructions, context)?;
         }
-
         Ok(())
     }
 }
@@ -315,40 +297,40 @@ impl GenerateCode for Slice {
 impl GenerateCode for StrSlice {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let str_bytes: Box<[u8]> = self.value.as_bytes().into();
-        let size = (&str_bytes).len() as u64;
-        instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-        let padding = self.padding;
-        if padding > 0 {
-            instructions.push(Casm::Data(data::Data::Serialized {
-                data: vec![0; padding].into(),
-            }));
-        }
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (size + padding as u64).to_le_bytes().into(),
-        }));
-        Ok(())
+        todo!()
+        // let str_bytes: Box<[u8]> = self.value.as_bytes().into();
+        // let size = (&str_bytes).len() as u64;
+        // instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
+        // let padding = self.padding;
+        // if padding > 0 {
+        //     instructions.push(Casm::Data(data::Data::Serialized {
+        //         data: vec![0; padding].into(),
+        //     }));
+        // }
+        // instructions.push(Casm::Data(data::Data::Serialized {
+        //     data: (size + padding as u64).to_le_bytes().into(),
+        // }));
+        // Ok(())
     }
 }
 
 impl GenerateCode for Vector {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
+        let Some(EType::Static(StaticType::Vec(item_type))) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let item_size = {
-            let Some(item_type) = signature.get_item() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            item_type.size_of()
-        };
+        let item_size = item_type.size_of();
 
         let len_bytes = (self.length as u64).to_le_bytes().as_slice().into();
         let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().into();
@@ -359,7 +341,7 @@ impl GenerateCode for Vector {
         instructions.push(Casm::Data(data::Data::Serialized { data: cap_bytes }));
 
         for element in &self.value {
-            let _ = element.gencode(scope, instructions)?;
+            let _ = element.gencode(scope_manager, scope_id, instructions, context)?;
         }
 
         // Copy data on stack to heap at address
@@ -383,123 +365,128 @@ impl GenerateCode for Vector {
 impl GenerateCode for Tuple {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
+        let Some(EType::Static(StaticType::Tuple(TupleType(tuple_types)))) =
+            self.metadata.signature()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        for (idx, element) in self.value.iter().enumerate() {
-            let _item_size = {
-                let Some(item_type) =
-                    // <EType as GetSubTypes>::get_nth(signature, &idx)
-                    signature.get_nth(&idx)
-                else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                item_type.size_of()
-            };
-            let _ = element.gencode(scope, instructions)?;
+        for (expr, expr_type) in self.value.iter().zip(tuple_types) {
+            let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
         }
         Ok(())
-    }
-}
-
-impl GenerateCode for ExprScope {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        match self {
-            ExprScope::Scope(value) => value.gencode(scope, instructions),
-            ExprScope::Expr(value) => value.gencode(scope, instructions),
-        }
     }
 }
 
 impl GenerateCode for Closure {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let end_closure = Label::gen();
+        todo!()
+        // let end_closure = Label::gen();
+        // let return_label = Label::gen();
 
-        instructions.push(Casm::Goto(Goto {
-            label: Some(end_closure),
-        }));
+        // instructions.push(Casm::Goto(Goto {
+        //     label: Some(end_closure),
+        // }));
 
-        let closure_label = instructions.push_label("fn_closure".into());
-        let _ = self.scope.gencode(scope, instructions);
-        instructions.push_label_id(end_closure, "end_closure".into());
+        // let closure_label = instructions.push_label("fn_closure".into());
+        // let _ = self.scope.gencode(
+        //     scope_manager,
+        //     scope_id,
+        //     instructions,
+        //     &CodeGenerationContext {
+        //         return_label: Some(return_label),
+        //         ..Default::default()
+        //     },
+        // );
+        // let Some(return_size) = self.scope.signature().map(|t| t.size_of()) else {
+        //     return Err(CodeGenerationError::UnresolvedError);
+        // };
+        // // Function epilogue
+        // instructions.push_label_id(return_label, "function_epilogue".to_string().into());
+        // instructions.push(Casm::StackFrame(StackFrame::ReturnV2 {
+        //     return_size,
+        //     label: None,
+        // }));
 
-        instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
+        // instructions.push_label_id(end_closure, "end_closure".into());
 
-        if self.closed {
-            /* Load env and store in the heap */
-            let mut alloc_size = 16;
-            let mut env_size = 0;
+        // instructions.push(Casm::Mem(Mem::LabelOffset(closure_label)));
 
-            let binding = self
-                .scope
-                .scope()
-                .map_err(|_| CodeGenerationError::UnresolvedError)?;
-            let inner_scope = binding.as_ref();
+        // if self.closed {
+        //     /* Load env and store in the heap */
+        //     let mut alloc_size = 16;
+        //     let mut env_size = 0;
 
-            for var in inner_scope
-                .try_read()
-                .map_err(|_| CodeGenerationError::ConcurrencyError)?
-                .env_vars()
-                .map_err(|_| CodeGenerationError::ConcurrencyError)?
-            {
-                let var_type = &var.type_sig;
-                let var_size = var_type.size_of();
-                alloc_size += var_size;
-                env_size += var_size;
-            }
+        //     let binding = self
+        //         .scope
+        //         .scope()
+        //         .map_err(|_| CodeGenerationError::UnresolvedError)?;
+        //     let inner_scope = binding.as_ref();
 
-            // Load Env Size
-            instructions.push(Casm::Data(data::Data::Serialized {
-                data: env_size.to_le_bytes().into(),
-            }));
-            let outer_scope = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
-            // Load Env variables
-            for var in inner_scope
-                .try_read()
-                .map_err(|_| CodeGenerationError::ConcurrencyError)?
-                .env_vars()
-                .map_err(|_| CodeGenerationError::ConcurrencyError)?
-            {
-                let (var, address, level) = outer_scope.access_var(&var.id)?;
-                let var_type = &arw_read!(var, CodeGenerationError::ConcurrencyError)?.type_sig;
-                let var_size = var_type.size_of();
-                instructions.push(Casm::Access(Access::Static {
-                    address: MemoryAddress::Stack {
-                        offset: address,
-                        level: level,
-                    },
-                    size: var_size,
-                }));
-            }
-            instructions.push(Casm::Alloc(Alloc::Heap {
-                size: Some(alloc_size),
-            }));
-            instructions.push(Casm::Mem(Mem::TakeToHeap { size: alloc_size }));
-        }
+        //     for var in inner_scope
+        //         .try_read()
+        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
+        //         .env_vars()
+        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
+        //     {
+        //         let var_type = &var.type_sig;
+        //         let var_size = var_type.size_of();
+        //         alloc_size += var_size;
+        //         env_size += var_size;
+        //     }
 
-        Ok(())
+        //     // Load Env Size
+        //     instructions.push(Casm::Data(data::Data::Serialized {
+        //         data: env_size.to_le_bytes().into(),
+        //     }));
+        //     let outer_scope = scope_manager;
+        //     // Load Env variables
+        //     for var in inner_scope
+        //         .try_read()
+        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
+        //         .env_vars()
+        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
+        //     {
+        //         let (var, address, level) = outer_scope.access_var(&var.id)?;
+        //         let var_type = &var.type_sig;
+        //         let var_size = var_type.size_of();
+        //         instructions.push(Casm::Access(Access::Static {
+        //             address: MemoryAddress::Stack {
+        //                 offset: address,
+        //                 level: level,
+        //             },
+        //             size: var_size,
+        //         }));
+        //     }
+        //     instructions.push(Casm::Alloc(Alloc::Heap {
+        //         size: Some(alloc_size),
+        //     }));
+        //     instructions.push(Casm::Mem(Mem::TakeToHeap { size: alloc_size }));
+        // }
+
+        // Ok(())
     }
 }
 
 impl GenerateCode for Address {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        // let _ = rec_addr_gencode(&self.value, scope, instructions)?;
-        let _ = self.value.locate(scope, instructions)?;
+        let _ = self.value.locate(scope_manager, scope_id, instructions)?;
         Ok(())
     }
 }
@@ -507,10 +494,14 @@ impl GenerateCode for Address {
 impl GenerateCode for PtrAccess {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = self.value.gencode(scope, instructions)?;
+        let _ = self
+            .value
+            .gencode(scope_manager, scope_id, instructions, context)?;
         let mut size = self
             .metadata
             .signature()
@@ -532,31 +523,33 @@ impl GenerateCode for PtrAccess {
 impl GenerateCode for Struct {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
+        let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Either::User(struct_type) = signature else {
+        let Some(UserType::Struct(crate::semantic::scope::user_type_impl::Struct { id, fields })) =
+            scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let UserType::Struct(struct_type) = struct_type.as_ref() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        for (field_id, field) in &struct_type.fields {
-            let field_size = field.size_of();
+
+        for (field_id, field_type) in fields {
+            let field_size = field_type.size_of();
 
             let Some(field_expr) = self
                 .fields
                 .iter()
-                .find(|(id, _)| id == field_id)
+                .find(|(id, _)| *id == field_id)
                 .map(|(_, e)| e)
             else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
 
-            let _ = field_expr.gencode(scope, instructions)?;
+            let _ = field_expr.gencode(scope_manager, scope_id, instructions, context)?;
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
@@ -572,16 +565,18 @@ impl GenerateCode for Struct {
 impl GenerateCode for Union {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
+        let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Either::User(union_type) = signature else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let UserType::Union(union_type) = union_type.as_ref() else {
+        let Some(UserType::Union(
+            ref union_type @ crate::semantic::scope::user_type_impl::Union { ref variants, .. },
+        )) = scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
@@ -610,7 +605,7 @@ impl GenerateCode for Union {
                 return Err(CodeGenerationError::UnresolvedError);
             };
 
-            let _ = field_expr.gencode(scope, instructions)?;
+            let _ = field_expr.gencode(scope_manager, scope_id, instructions, context)?;
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
@@ -642,21 +637,21 @@ impl GenerateCode for Union {
 impl GenerateCode for Enum {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(signature) = self.metadata.signature() else {
+        let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Either::User(enum_type) = signature else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let UserType::Enum(enum_type) = enum_type.as_ref() else {
+        let Some(UserType::Enum(crate::semantic::scope::user_type_impl::Enum { values, .. })) =
+            scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        let Some(index) = enum_type
-            .values
+        let Some(index) = values
             .iter()
             .enumerate()
             .find(|(_, id)| id == &&self.value)
@@ -675,21 +670,22 @@ impl GenerateCode for Enum {
 impl GenerateCode for Map {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());
-        let Some(map_type) = self.metadata.signature() else {
+        let Some(EType::Static(StaticType::Map(MapType {
+            keys_type,
+            values_type,
+        }))) = self.metadata.signature()
+        else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(key_type) = map_type.get_key() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(value_type) = map_type.get_item() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let key_size = key_type.size_of();
-        let value_size = value_type.size_of();
+
+        let key_size = keys_type.size_of();
+        let value_size = values_type.size_of();
         instructions.push(Casm::Data(data::Data::Serialized {
             data: cap.to_le_bytes().into(),
         }));
@@ -701,14 +697,14 @@ impl GenerateCode for Map {
         ))));
 
         for (key, value) in &self.fields {
-            let _ = key.gencode(scope, instructions)?;
-            let _ = value.gencode(scope, instructions)?;
+            let _ = key.gencode(scope_manager, scope_id, instructions, context)?;
+            let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
 
             instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Alloc(
                 AllocCasm::InsertAndForward {
                     key_size,
                     value_size,
-                    ref_access: DerefHashing::from(&map_type),
+                    ref_access: DerefHashing::Default,
                 },
             ))));
         }
@@ -736,7 +732,7 @@ mod tests {
         compile_expression_with_type, compile_statement, e_static, p_num,
         semantic::{
             scope::{
-                scope::Scope,
+                scope::ScopeManager,
                 static_types::{PrimitiveType, SliceType, StrSliceType, TupleType, VecType},
                 user_type_impl,
             },
@@ -874,6 +870,7 @@ mod tests {
             y : 69i32
         }
         "##,
+            "Point",
             user_type
         );
         let result: Struct = user_type
@@ -914,6 +911,7 @@ mod tests {
             y : 69
         }
         "##,
+            "Point",
             user_type
         );
         let result: Struct = user_type
@@ -970,6 +968,7 @@ mod tests {
             r##"
             Geo::Point { x : 2, y : 8}
         "##,
+            "Geo",
             user_type
         );
         let result: Union = user_type
@@ -1011,6 +1010,7 @@ mod tests {
             r##"
             Geo::Point
         "##,
+            "Geo",
             user_type
         );
         let result: Enum =
@@ -1053,15 +1053,20 @@ mod tests {
             .1;
 
         // Create a new block.
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         // Perform semantic check.
-        expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+        expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
-        expr.gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
+        expr.gencode(
+            &mut scope_manager,
+            None,
+            &mut instructions,
+            &crate::vm::vm::CodeGenerationContext::default(),
+        )
+        .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
 
@@ -1069,7 +1074,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

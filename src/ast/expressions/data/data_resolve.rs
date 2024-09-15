@@ -1,21 +1,22 @@
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
-    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
+    Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::expressions::Atomic;
-use crate::semantic::scope::scope::Scope;
+use crate::ast::statements::block::BlockCommonApi;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{
-    AddrType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType, VecType,
+    AddrType, ClosureType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType,
+    VecType,
 };
-use crate::semantic::scope::type_traits::GetSubTypes;
-use crate::semantic::scope::var_impl::VarState;
-use crate::semantic::scope::{BuildVar, ClosureState};
+use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::scope::ClosureState;
 use crate::semantic::{
-    scope::{static_types::StaticType, var_impl::Var},
-    CompatibleWith, Either, Resolve, SemanticError, TypeOf,
+    scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{EType, Info, MergeType};
-use crate::{arw_read, e_static, resolve_metadata};
+use crate::semantic::{Info, MergeType, ResolveFromStruct, SizeOf};
+use crate::vm::allocator::align;
+use crate::{e_static, semantic};
 
 impl Resolve for Data {
     type Output = ();
@@ -23,7 +24,8 @@ impl Resolve for Data {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -31,20 +33,36 @@ impl Resolve for Data {
         Self: Sized,
     {
         match self {
-            Data::Primitive(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Slice(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Vec(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Closure(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Tuple(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Address(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::PtrAccess(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Variable(value) => value.resolve::<G>(scope, context, extra),
+            Data::Primitive(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Slice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Closure(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Tuple(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Address(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::PtrAccess(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Variable(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Data::Unit => Ok(()),
-            Data::Map(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Struct(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Union(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::Enum(value) => value.resolve::<G>(scope, context, &mut ()),
-            Data::StrSlice(value) => value.resolve::<G>(scope, context, &mut ()),
+            Data::Map(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Struct(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Union(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Enum(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::StrSlice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+        }
+    }
+}
+
+impl ResolveFromStruct for Data {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Data::Variable(value) => {
+                value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
+            }
+            _ => Err(SemanticError::UnknownField),
         }
     }
 }
@@ -55,34 +73,64 @@ impl Resolve for Variable {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        match extra {
-            Some(extra) => {
-                self.from_field = true;
-                self.metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(extra.clone()),
-                };
-            }
-            None => {
-                let var =
-                    crate::arw_read!(scope, SemanticError::ConcurrencyError)?.find_var(&self.id)?;
-                let var_type = arw_read!(var, SemanticError::ConcurrencyError)?
-                    .type_sig
-                    .clone();
+        let var = scope_manager.find_var_by_name(&self.name, scope_id)?;
+        self.state
+            .insert(super::VariableState::Variable { id: var.id });
+        let var_type = var.ctype.clone();
 
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(var_type),
+        };
+        Ok(())
+    }
+}
+
+impl ResolveFromStruct for Variable {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        let UserType::Struct(struct_type @ semantic::scope::user_type_impl::Struct { .. }) =
+            scope_manager.find_type_by_id(struct_id, scope_id)?
+        else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+
+        let mut found = false;
+        let mut offset = 0;
+
+        for (field_name, field_type) in struct_type.fields.iter() {
+            if *field_name == self.name {
+                found = true;
+                self.state.insert(super::VariableState::Field {
+                    offset,
+                    size: align(field_type.size_of()),
+                });
                 self.metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(var_type),
+                    context: Some(EType::User {
+                        id: struct_id,
+                        size: struct_type.size_of(),
+                    }),
+                    signature: Some(field_type.clone()),
                 };
             }
+            offset += align(field_type.size_of())
         }
+        if !found {
+            return Err(SemanticError::UnknownField);
+        }
+
         Ok(())
     }
 }
@@ -93,7 +141,8 @@ impl Resolve for Primitive {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -103,10 +152,10 @@ impl Resolve for Primitive {
         match context {
             Some(context_type) => {
                 match context_type {
-                    Either::Static(value) => {
+                    EType::Static(value) => {
                         if let Primitive::Number(n) = self {
                             if let Number::Unresolved(v) = n {
-                                match value.as_ref() {
+                                match value {
                                     StaticType::Primitive(PrimitiveType::Number(value)) => {
                                         match value {
                                             NumberType::U8 => {
@@ -173,11 +222,12 @@ impl Resolve for Primitive {
                             }
                         }
                     }
-                    Either::User(_) => {}
+                    EType::User { .. } => {}
                 }
                 let _ = context_type.compatible_with(
-                    self,
-                    &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                    &self.type_of(scope_manager, scope_id)?,
+                    &scope_manager,
+                    scope_id,
                 )?;
                 Ok(())
             }
@@ -198,7 +248,8 @@ impl Resolve for Slice {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -207,60 +258,66 @@ impl Resolve for Slice {
     {
         match context {
             Some(rcontext) => match rcontext {
-                Either::Static(rcontext) => match rcontext.as_ref() {
-                    StaticType::Slice(SliceType { size, item_type }) => {
-                        let item_type = item_type.as_ref().clone();
-                        let sitem_type = &Some(item_type.clone());
-                        if self.value.len() > *size {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                        for value in &mut self.value {
-                            let _ = value.resolve::<G>(scope, sitem_type, &mut None)?;
-                            let _ = item_type.compatible_with(
-                                value,
-                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                            )?;
-                        }
-
-                        {
-                            self.metadata.info = Info::Resolved {
-                                context: context.clone(),
-                                signature: Some(e_static!(StaticType::Slice(SliceType {
-                                    size: *size,
-                                    item_type: Box::new(item_type),
-                                }))),
-                            };
-                        }
-                        Ok(())
+                EType::Static(StaticType::Slice(SliceType { size, item_type })) => {
+                    let item_type = item_type.as_ref().clone();
+                    let sitem_type = &Some(item_type.clone());
+                    if self.value.len() > *size {
+                        return Err(SemanticError::IncompatibleTypes);
                     }
-                    _ => Err(SemanticError::IncompatibleTypes),
-                },
-                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+                    for value in &mut self.value {
+                        let _ =
+                            value.resolve::<G>(scope_manager, scope_id, sitem_type, &mut None)?;
+                        let _ = item_type.compatible_with(
+                            &value.type_of(scope_manager, scope_id)?,
+                            &scope_manager,
+                            scope_id,
+                        )?;
+                    }
+
+                    {
+                        self.metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(e_static!(StaticType::Slice(SliceType {
+                                size: *size,
+                                item_type: Box::new(item_type),
+                            }))),
+                        };
+                    }
+                    Ok(())
+                }
+                _ => Err(SemanticError::IncompatibleTypes),
             },
             None => {
-                let mut item_type = e_static!(StaticType::Any);
-                for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope, &None, &mut None)?;
-                    item_type = item_type.merge(
-                        value,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                if self.value.is_empty() {
+                    return Err(SemanticError::CantInferType(
+                        "of an empty array".to_string(),
+                    ));
+                }
+                let _ = self.value[0].resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let item_type = self.value[0].type_of(scope_manager, scope_id)?;
+
+                for value in &mut self.value[1..] {
+                    let _ = value.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        &Some(item_type.clone()),
+                        &mut None,
+                    )?;
+                    let _ = item_type.compatible_with(
+                        &value.type_of(scope_manager, scope_id)?,
+                        &scope_manager,
+                        scope_id,
                     )?;
                 }
 
-                let sitem_type = Some(item_type.clone());
-                for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope, &sitem_type, &mut None)?;
-                }
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(e_static!(StaticType::Slice(SliceType {
+                        size: self.value.len(),
+                        item_type: Box::new(item_type),
+                    }))),
+                };
 
-                {
-                    self.metadata.info = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(e_static!(StaticType::Slice(SliceType {
-                            size: self.value.len(),
-                            item_type: Box::new(item_type),
-                        }))),
-                    };
-                }
                 Ok(())
             }
         }
@@ -273,7 +330,8 @@ impl Resolve for StrSlice {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -282,7 +340,7 @@ impl Resolve for StrSlice {
     {
         match context {
             Some(context_type) => match context_type {
-                Either::Static(value) => match value.as_ref() {
+                EType::Static(value) => match value {
                     StaticType::StrSlice(StrSliceType { size }) => {
                         if *size < self.value.len() {
                             return Err(SemanticError::IncompatibleTypes);
@@ -292,11 +350,14 @@ impl Resolve for StrSlice {
                     }
                     _ => return Err(SemanticError::IncompatibleTypes),
                 },
-                Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+                EType::User { .. } => return Err(SemanticError::IncompatibleTypes),
             },
             None => {}
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
     }
 }
@@ -307,7 +368,8 @@ impl Resolve for Vector {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -316,54 +378,57 @@ impl Resolve for Vector {
     {
         match context {
             Some(rcontext) => match rcontext {
-                Either::Static(rcontext) => match rcontext.as_ref() {
-                    StaticType::Vec(VecType(item_type)) => {
-                        let item_type = item_type.as_ref().clone();
-                        let sitem_type = &Some(item_type.clone());
+                EType::Static(StaticType::Vec(VecType(item_type))) => {
+                    let item_type = item_type.as_ref().clone();
+                    let sitem_type = &Some(item_type.clone());
 
-                        for value in &mut self.value {
-                            let _ = value.resolve::<G>(scope, sitem_type, &mut None)?;
-                            let _ = item_type.compatible_with(
-                                value,
-                                &&crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                            )?;
-                        }
-
-                        {
-                            self.metadata.info = Info::Resolved {
-                                context: context.clone(),
-                                signature: Some(e_static!(StaticType::Vec(VecType(Box::new(
-                                    item_type
-                                ),)))),
-                            };
-                        }
-                        Ok(())
+                    for value in &mut self.value {
+                        let _ =
+                            value.resolve::<G>(scope_manager, scope_id, sitem_type, &mut None)?;
+                        let _ = item_type.compatible_with(
+                            &value.type_of(scope_manager, scope_id)?,
+                            &scope_manager,
+                            scope_id,
+                        )?;
                     }
-                    _ => Err(SemanticError::IncompatibleTypes),
-                },
-                Either::User(_) => Err(SemanticError::IncompatibleTypes),
-            },
-            None => {
-                let mut item_type = e_static!(StaticType::Any);
-                for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope, &None, &mut None)?;
-                    item_type = item_type.merge(
-                        value,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                    )?;
-                }
 
-                let sitem_type = Some(item_type.clone());
-                for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope, &sitem_type, &mut None)?;
-                }
-
-                {
                     self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Vec(VecType(Box::new(item_type),)))),
                     };
+
+                    Ok(())
                 }
+                _ => Err(SemanticError::IncompatibleTypes),
+            },
+            None => {
+                if self.value.is_empty() {
+                    return Err(SemanticError::CantInferType(
+                        "of an empty array".to_string(),
+                    ));
+                }
+                let _ = self.value[0].resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let item_type = self.value[0].type_of(scope_manager, scope_id)?;
+
+                for value in &mut self.value[1..] {
+                    let _ = value.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        &Some(item_type.clone()),
+                        &mut None,
+                    )?;
+                    let _ = item_type.compatible_with(
+                        &value.type_of(scope_manager, scope_id)?,
+                        &scope_manager,
+                        scope_id,
+                    )?;
+                }
+
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(e_static!(StaticType::Vec(VecType(Box::new(item_type),)))),
+                };
+
                 Ok(())
             }
         }
@@ -375,7 +440,8 @@ impl Resolve for Tuple {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -384,43 +450,41 @@ impl Resolve for Tuple {
     {
         match context {
             Some(rcontext) => match rcontext {
-                Either::Static(rcontext) => match rcontext.as_ref() {
-                    StaticType::Tuple(TupleType(values_type)) => {
-                        if values_type.len() != self.value.len() {
-                            return Err(SemanticError::IncompatibleTypes);
-                        }
-                        for (value, value_type) in self.value.iter_mut().zip(values_type) {
-                            let _ =
-                                value.resolve::<G>(scope, &Some(value_type.clone()), &mut None)?;
-                            let _ = value_type.compatible_with(
-                                value,
-                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                            )?;
-                        }
-
-                        {
-                            self.metadata.info = Info::Resolved {
-                                context: context.clone(),
-                                signature: Some(e_static!(StaticType::Tuple(TupleType(
-                                    values_type.clone()
-                                )))),
-                            };
-                        }
-                        Ok(())
+                EType::Static(StaticType::Tuple(TupleType(values_type))) => {
+                    if values_type.len() != self.value.len() {
+                        return Err(SemanticError::IncompatibleTypes);
                     }
-                    _ => Err(SemanticError::IncompatibleTypes),
-                },
-                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+                    for (value, value_type) in self.value.iter_mut().zip(values_type) {
+                        let _ = value.resolve::<G>(
+                            scope_manager,
+                            scope_id,
+                            &Some(value_type.clone()),
+                            &mut None,
+                        )?;
+                        let _ = value_type.compatible_with(
+                            &value.type_of(scope_manager, scope_id)?,
+                            &scope_manager,
+                            scope_id,
+                        )?;
+                    }
+
+                    {
+                        self.metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(e_static!(StaticType::Tuple(TupleType(
+                                values_type.clone()
+                            )))),
+                        };
+                    }
+                    Ok(())
+                }
+                _ => Err(SemanticError::IncompatibleTypes),
             },
             None => {
                 let mut values_type = Vec::new();
                 for value in &mut self.value {
-                    let _ = value.resolve::<G>(scope, &None, &mut None)?;
-                    values_type.push(
-                        value.type_of(
-                            &(crate::arw_read!(scope, SemanticError::ConcurrencyError))?,
-                        )?,
-                    );
+                    let _ = value.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                    values_type.push(value.type_of(&scope_manager, scope_id)?);
                 }
 
                 {
@@ -441,115 +505,72 @@ impl Resolve for Closure {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
+        let inner_scope = self.scope.init_from_parent(scope_manager, scope_id)?;
+
         match context {
             Some(context) => {
-                for (index, expr) in self.params.iter_mut().enumerate() {
-                    let param_context = <EType as GetSubTypes>::get_nth(context, &index);
-                    let _ = expr.resolve::<G>(scope, &param_context, &mut ())?;
+                let EType::Static(StaticType::Closure(ClosureType {
+                    params,
+                    ret,
+                    closed,
+                    scope_params_size,
+                })) = context
+                else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                for (param, expected_param) in self.params.iter_mut().zip(params) {
+                    let _ = param.resolve::<G>(
+                        scope_manager,
+                        Some(inner_scope),
+                        &Some(expected_param.clone()),
+                        &mut (),
+                    )?;
                 }
+
+                let _ = self.scope.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(ret.as_ref().clone()),
+                    &mut (),
+                )?;
             }
             None => {
-                for (_index, expr) in self.params.iter_mut().enumerate() {
-                    let _ = expr.resolve::<G>(scope, &None, &mut ())?;
+                for param in self.params.iter_mut() {
+                    let _ = param.resolve::<G>(scope_manager, Some(inner_scope), &None, &mut ())?;
                 }
+
+                let _ = self
+                    .scope
+                    .resolve::<G>(scope_manager, scope_id, &None, &mut ())?;
             }
         }
-        let borrowed_scope = &crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
-        let mut vars = self
-            .params
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, param)| {
-                param.type_of(borrowed_scope).ok().map(|p| {
-                    (
-                        idx,
-                        match param {
-                            ClosureParam::Full(var) => &var.id,
-                            ClosureParam::Minimal(id) => id,
-                        },
-                        p,
-                    )
-                })
-            })
-            .map(|(index, id, param)| {
-                let param_type = match context {
-                    Some(context) => <EType as GetSubTypes>::get_nth(context, &index),
-                    None => Some(param),
-                };
-                let mut var = <Var as BuildVar>::build_var(id, &param_type.unwrap());
-                var.state = VarState::Parameter;
-                var.is_declared = true;
-                var
-            })
-            .collect::<Vec<Var>>();
 
-        let context_return = match context {
-            Some(context) => <EType as GetSubTypes>::get_return(context),
-            None => None,
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(&scope_manager, scope_id)?),
         };
-        if self.closed {
-            let _ = self.scope.to_capturing(ClosureState::CAPTURING);
-        } else {
-            let _ = self.scope.to_capturing(ClosureState::NOT_CAPTURING);
-        }
 
-        let _ = self.scope.resolve::<G>(scope, &context_return, &mut vars)?;
-        if !self.closed
-            && self
-                .scope
-                .scope()?
-                .try_read()
-                .map_err(|_| SemanticError::ConcurrencyError)?
-                .env_vars()?
-                .len()
-                > 0
-        {
-            return Err(SemanticError::ExpectedMovedClosure);
-        }
-        {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(
-                    self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
-                ),
-            };
-        }
         Ok(())
     }
 }
-impl Resolve for ExprScope {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = Vec<Var>;
-    fn resolve<G: crate::GameEngineStaticFn>(
-        &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError>
-    where
-        Self: Sized,
-    {
-        match self {
-            ExprScope::Scope(value) => value.resolve::<G>(scope, context, extra),
-            ExprScope::Expr(value) => value.resolve::<G>(scope, context, extra),
-        }
-    }
-}
+
 impl Resolve for ClosureParam {
     type Output = ();
     type Context = Option<EType>;
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -557,9 +578,21 @@ impl Resolve for ClosureParam {
         Self: Sized,
     {
         match self {
-            ClosureParam::Full(var) => var.resolve::<G>(scope, &mut (), &mut ()),
+            ClosureParam::Full(var) => {
+                var.resolve::<G>(scope_manager, scope_id, &mut (), &mut ());
+                let var_type = var.type_of(scope_manager, scope_id)?;
+                let _ = scope_manager.register_parameter(&var.name, var_type.clone(), scope_id)?;
+
+                if let Some(context) = context {
+                    let _ = context.compatible_with(&var_type, scope_manager, scope_id)?;
+                }
+                Ok(())
+            }
             ClosureParam::Minimal(value) => match context {
-                Some(_) => Ok(()),
+                Some(context) => {
+                    let _ = scope_manager.register_parameter(&value, context.clone(), scope_id)?;
+                    Ok(())
+                }
                 None => Err(SemanticError::CantInferType(format!(
                     "of the parameter {}",
                     value
@@ -574,7 +607,8 @@ impl Resolve for Address {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -587,8 +621,13 @@ impl Resolve for Address {
             Atomic::Paren(_) => {}
             Atomic::ExprFlow(_) => return Err(SemanticError::IncompatibleTypes),
         }
-        let _ = self.value.resolve::<G>(scope, context, &mut None)?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        let _ = self
+            .value
+            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
     }
 }
@@ -598,21 +637,22 @@ impl Resolve for PtrAccess {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.value.resolve::<G>(scope, context, &mut None)?;
-
-        let address_type = self
+        let _ = self
             .value
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+
+        let address_type = self.value.type_of(&scope_manager, scope_id)?;
 
         match &address_type {
-            Either::Static(value) => match value.as_ref() {
+            EType::Static(value) => match value {
                 StaticType::Address(AddrType(sub)) => {
                     self.metadata.info = Info::Resolved {
                         context: context.clone(),
@@ -643,47 +683,46 @@ impl Resolve for Struct {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let borrowed_scope = &crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
-        let user_type = borrowed_scope.find_type(&self.id)?;
-        let user_type =
-            user_type.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        for (ref field_name, expr) in &mut self.fields {
-            let field_context = <EType as GetSubTypes>::get_field(&user_type, &field_name);
-
-            let _ = expr.resolve::<G>(scope, &field_context, &mut None)?;
-        }
-
-        let Some(fields_type) = <EType as GetSubTypes>::get_fields(&user_type) else {
+        let UserType::Struct(semantic::scope::user_type_impl::Struct { fields, .. }) =
+            scope_manager.find_type_by_name(&self.id, scope_id)?.clone()
+        else {
             return Err(SemanticError::ExpectedStruct);
         };
-        if self.fields.len() != fields_type.len() {
+
+        if fields.len() != self.fields.len() {
             return Err(SemanticError::IncorrectStruct(self.id.to_string()));
         }
-        for (field_name, field_type) in fields_type {
-            let Some(field_name) = field_name else {
-                return Err(SemanticError::IncorrectStruct(self.id.to_string()));
+
+        for (ref field_name, expr) in &mut self.fields {
+            let Some((_, field_type)) = fields.iter().find(|(n, _)| *n == *field_name) else {
+                return Err(SemanticError::UnknownField);
             };
-            let Some(expr_field) = self
-                .fields
-                .iter()
-                .find(|(name, _)| name == &field_name)
-                .map(|(_, expr)| expr)
-            else {
-                return Err(SemanticError::IncorrectStruct(self.id.to_string()));
-            };
+
+            let _ = expr.resolve::<G>(
+                scope_manager,
+                scope_id,
+                &Some(field_type.clone()),
+                &mut None,
+            )?;
             let _ = field_type.compatible_with(
-                expr_field,
-                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                &expr.type_of(scope_manager, scope_id)?,
+                &scope_manager,
+                scope_id,
             )?;
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
     }
 }
@@ -693,52 +732,54 @@ impl Resolve for Union {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
-        let user_type = borrowed_scope.find_type(&self.typename)?;
-        let variant_type = user_type.get_variant(&self.variant);
-        let Some(variant_type) = variant_type else {
-            return Err(SemanticError::CantInferType(format!(
-                "of {}::{}",
-                self.typename, self.variant
-            )));
-        };
-        for (field_name, expr) in &mut self.fields {
-            let field_context = <EType as GetSubTypes>::get_field(&variant_type, &field_name);
-
-            let _ = expr.resolve::<G>(scope, &field_context, &mut None)?;
-        }
-
-        let Some(fields_type) = <EType as GetSubTypes>::get_fields(&variant_type) else {
+        let UserType::Union(semantic::scope::user_type_impl::Union { variants, .. }) =
+            scope_manager
+                .find_type_by_name(&self.typename, scope_id)?
+                .clone()
+        else {
             return Err(SemanticError::ExpectedStruct);
         };
-        if self.fields.len() != fields_type.len() {
-            return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
+
+        let Some((_, semantic::scope::user_type_impl::Struct { fields, .. })) =
+            variants.iter().find(|(n, _)| *n == self.variant)
+        else {
+            return Err(SemanticError::UnknownField);
+        };
+
+        if fields.len() != self.fields.len() {
+            return Err(SemanticError::IncorrectStruct(self.variant.to_string()));
         }
-        for (field_name, field_type) in fields_type {
-            let Some(field_name) = field_name else {
-                return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
+
+        for (ref field_name, expr) in &mut self.fields {
+            let Some((_, field_type)) = fields.iter().find(|(n, _)| *n == *field_name) else {
+                return Err(SemanticError::UnknownField);
             };
-            let Some(expr_field) = self
-                .fields
-                .iter()
-                .find(|(name, _)| name == &field_name)
-                .map(|(_, expr)| expr)
-            else {
-                return Err(SemanticError::IncorrectUnion(self.typename.to_string()));
-            };
+
+            let _ = expr.resolve::<G>(
+                scope_manager,
+                scope_id,
+                &Some(field_type.clone()),
+                &mut None,
+            )?;
             let _ = field_type.compatible_with(
-                expr_field,
-                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                &expr.type_of(scope_manager, scope_id)?,
+                &scope_manager,
+                scope_id,
             )?;
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
     }
 }
@@ -749,22 +790,29 @@ impl Resolve for Enum {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
-        let user_type = borrowed_scope.find_type(&self.typename)?;
-        let Some(_) = user_type.get_variant(&self.value) else {
-            return Err(SemanticError::IncorrectVariant(self.value.to_string()));
+        let UserType::Enum(semantic::scope::user_type_impl::Enum { values, .. }) = scope_manager
+            .find_type_by_name(&self.typename, scope_id)?
+            .clone()
+        else {
+            return Err(SemanticError::ExpectedStruct);
         };
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        let Some(_) = values.iter().find(|n| **n == *self.value) else {
+            return Err(SemanticError::UnknownField);
+        };
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
-        // user_type.compatible_with(&(&self.typename, &self.value), block)?;
-        // Ok(())
     }
 }
 
@@ -774,7 +822,8 @@ impl Resolve for Map {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -783,65 +832,68 @@ impl Resolve for Map {
     {
         match context {
             Some(rcontext) => match rcontext {
-                Either::Static(rcontext) => match rcontext.as_ref() {
-                    StaticType::Map(MapType {
-                        keys_type,
-                        values_type,
-                    }) => {
-                        let key_type = keys_type.as_ref().clone();
-                        let skey_type = &Some(key_type);
-                        let value_type = values_type.as_ref().clone();
-                        let svalue_type = &Some(value_type);
+                EType::Static(StaticType::Map(MapType {
+                    keys_type,
+                    values_type,
+                })) => {
+                    let key_type = keys_type.as_ref().clone();
+                    let skey_type = &Some(key_type);
+                    let value_type = values_type.as_ref().clone();
+                    let svalue_type = &Some(value_type);
 
-                        for (key, value) in &mut self.fields {
-                            let _ = key.resolve::<G>(scope, skey_type, &mut None)?;
-                            let _ = keys_type.compatible_with(
-                                key,
-                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                            )?;
-                            let _ = value.resolve::<G>(scope, svalue_type, &mut None)?;
-                            let _ = values_type.compatible_with(
-                                value,
-                                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                            )?;
-                        }
-
-                        {
-                            self.metadata.info = Info::Resolved {
-                                context: context.clone(),
-                                signature: Some(e_static!(StaticType::Map(MapType {
-                                    keys_type: keys_type.clone(),
-                                    values_type: values_type.clone(),
-                                }))),
-                            };
-                        }
-                        Ok(())
+                    for (key, value) in &mut self.fields {
+                        let _ = key.resolve::<G>(scope_manager, scope_id, skey_type, &mut None)?;
+                        let _ = keys_type.compatible_with(
+                            &key.type_of(scope_manager, scope_id)?,
+                            &scope_manager,
+                            scope_id,
+                        )?;
+                        let _ =
+                            value.resolve::<G>(scope_manager, scope_id, svalue_type, &mut None)?;
+                        let _ = values_type.compatible_with(
+                            &value.type_of(scope_manager, scope_id)?,
+                            &scope_manager,
+                            scope_id,
+                        )?;
                     }
-                    _ => Err(SemanticError::IncompatibleTypes),
-                },
-                Either::User(_) => Err(SemanticError::IncompatibleTypes),
+
+                    {
+                        self.metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(e_static!(StaticType::Map(MapType {
+                                keys_type: keys_type.clone(),
+                                values_type: values_type.clone(),
+                            }))),
+                        };
+                    }
+                    Ok(())
+                }
+                _ => Err(SemanticError::IncompatibleTypes),
             },
             None => {
                 let mut keys_type = e_static!(StaticType::Any);
                 let mut values_type = e_static!(StaticType::Any);
                 for (key, value) in &mut self.fields {
-                    let _ = key.resolve::<G>(scope, &None, &mut None)?;
+                    let _ = key.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
                     keys_type = keys_type.merge(
-                        key,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        &key.type_of(scope_manager, scope_id)?,
+                        &scope_manager,
+                        scope_id,
                     )?;
-                    let _ = value.resolve::<G>(scope, &None, &mut None)?;
+                    let _ = value.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
                     values_type = values_type.merge(
-                        value,
-                        &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+                        &value.type_of(scope_manager, scope_id)?,
+                        &scope_manager,
+                        scope_id,
                     )?;
                 }
 
                 let skeys_type = Some(keys_type.clone());
                 let svalues_type = Some(values_type.clone());
                 for (key, value) in &mut self.fields {
-                    let _ = key.resolve::<G>(scope, &skeys_type, &mut None)?;
-                    let _ = value.resolve::<G>(scope, &svalues_type, &mut None)?;
+                    let _ = key.resolve::<G>(scope_manager, scope_id, &skeys_type, &mut None)?;
+                    let _ =
+                        value.resolve::<G>(scope_manager, scope_id, &svalues_type, &mut None)?;
                 }
 
                 {
@@ -863,17 +915,15 @@ impl Resolve for Map {
 mod tests {
 
     use crate::{
-        arw_write,
         ast::{expressions::Expression, TryParse},
         p_num,
         semantic::scope::{
-            scope::Scope,
+            scope::ScopeManager,
             static_types::{
                 AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
                 TupleType, VecType,
             },
             user_type_impl::{self, UserType},
-            var_impl::Var,
         },
     };
 
@@ -885,12 +935,21 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res =
-            primitive.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &Some(p_num!(I64)), &mut ());
+        let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &Some(p_num!(I64)),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -898,11 +957,12 @@ mod tests {
         let mut primitive = Primitive::parse("1".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let res = primitive.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
             &mut (),
@@ -916,13 +976,19 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let res = string.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::StrSlice(StrSliceType {
                     size: "Hello World".len(),
                 })
@@ -938,13 +1004,19 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Slice(SliceType {
                     size: 2,
                     item_type: Box::new(p_num!(I64)),
@@ -961,11 +1033,12 @@ mod tests {
         let mut string = StrSlice::parse(r##""Hello World""##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Primitive(PrimitiveType::Bool).into(),
             )),
             &mut (),
@@ -977,14 +1050,15 @@ mod tests {
         let mut slice = Slice::parse("[1,2]".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let res = slice.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Slice(SliceType {
                     size: 2,
-                    item_type: Box::new(Either::Static(
+                    item_type: Box::new(EType::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                 })
@@ -1001,13 +1075,19 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Vec(VecType(Box::new(p_num!(I64)))).into(),
             )),
             &mut (),
@@ -1020,12 +1100,13 @@ mod tests {
         let mut vector = Vector::parse("vec[1,2,3]".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let res = vector.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
-                StaticType::Vec(VecType(Box::new(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
+                StaticType::Vec(VecType(Box::new(EType::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 ))))
                 .into(),
@@ -1040,21 +1121,17 @@ mod tests {
         let mut variable = Variable::parse("x".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable_type =
-            variable.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap());
+        let variable_type = variable.type_of(&scope_manager, None);
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(p_num!(I64), variable_type);
@@ -1064,17 +1141,14 @@ mod tests {
         let mut variable = Variable::parse("x[10]".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -1082,17 +1156,14 @@ mod tests {
         let mut variable = Variable::parse("x[10 + 10]".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: Either::Static(StaticType::Vec(VecType(Box::new(p_num!(I64)))).into()),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
     #[test]
@@ -1100,23 +1171,23 @@ mod tests {
         let mut variable = Expression::parse("x[\"Test\"]".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: Either::Static(
-                    StaticType::Map(MapType {
-                        keys_type: Box::new(e_static!(StaticType::String(StringType()))),
-                        values_type: Box::new(p_num!(I64)),
-                    })
-                    .into(),
-                ),
-                is_declared: false,
-            })
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_var(
+                "x",
+                EType::Static(StaticType::Map(MapType {
+                    keys_type: Box::new(e_static!(StaticType::String(StringType()))),
+                    values_type: Box::new(p_num!(I64)),
+                })),
+                None,
+            )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
     #[test]
@@ -1124,23 +1195,23 @@ mod tests {
         let mut variable = Expression::parse("x.0".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: Either::Static(
-                    StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64)])).into(),
-                ),
-                is_declared: false,
-            })
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_var(
+                "x",
+                EType::Static(StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64)]))),
+                None,
+            )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable_type =
-            variable.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap());
+        let variable_type = variable.type_of(&scope_manager, None);
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(p_num!(I64), variable_type);
@@ -1150,35 +1221,40 @@ mod tests {
         let mut variable = Expression::parse("point.x".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "point".to_string().into(),
-                type_sig: Either::User(
-                    UserType::Struct(
-                        user_type_impl::Struct {
-                            id: "Point".to_string().into(),
-                            fields: {
-                                let mut res = Vec::new();
-                                res.push(("x".to_string().into(), p_num!(U64)));
-                                res.push(("y".to_string().into(), p_num!(U64)));
-                                res
-                            },
-                        }
-                        .into(),
-                    )
-                    .into(),
-                ),
-                is_declared: false,
-            })
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+
+        // EType::User(UserType::Struct(
+        //     user_type_impl::Struct {
+        //         id: "Point".to_string().into(),
+        //         fields: {
+        //             let mut res = Vec::new();
+        //             res.push(("x".to_string().into(), p_num!(U64)));
+        //             res.push(("y".to_string().into(), p_num!(U64)));
+        //             res
+        //         },
+        //     }
+        //     .into(),
+        // ))
+
+        let _ = scope_manager
+            .register_var(
+                "point",
+                EType::User {
+                    id: todo!(),
+                    size: todo!(),
+                },
+                None,
+            )
             .unwrap();
-        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let res = variable.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let variable_type =
-            variable.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap());
+        let variable_type = variable.type_of(&scope_manager, None);
         assert!(variable_type.is_ok());
         let variable_type = variable_type.unwrap();
         assert_eq!(p_num!(U64), variable_type)
@@ -1189,25 +1265,21 @@ mod tests {
         let mut address = Address::parse("&x".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = address.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = address.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let address_type =
-            address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap());
+        let address_type = address.type_of(&scope_manager, None);
         assert!(address_type.is_ok());
         let address_type = address_type.unwrap();
         assert_eq!(
-            Either::Static(StaticType::Address(AddrType(Box::new(p_num!(I64)))).into()),
+            EType::Static(StaticType::Address(AddrType(Box::new(p_num!(I64)))).into()),
             address_type
         )
     }
@@ -1217,13 +1289,19 @@ mod tests {
         let mut tuple = Tuple::parse("(1,'a')".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Tuple(TupleType(vec![
                     p_num!(I64),
                     e_static!(StaticType::Primitive(PrimitiveType::Char)),
@@ -1240,10 +1318,11 @@ mod tests {
         let mut tuple = Tuple::parse("(1,2)".into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Tuple(TupleType(vec![
                     p_num!(I64),
                     e_static!(StaticType::Primitive(PrimitiveType::Char)),
@@ -1255,8 +1334,9 @@ mod tests {
         assert!(res.is_err());
 
         let res = tuple.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Tuple(TupleType(vec![p_num!(I64), p_num!(I64), p_num!(I64)])).into(),
             )),
             &mut (),
@@ -1269,13 +1349,15 @@ mod tests {
         let mut map = Map::parse(r##"map{string("x"):2,string("y"):6}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let res = map.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            map.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Map(MapType {
                     keys_type: Box::new(e_static!(StaticType::String(StringType()))),
                     values_type: Box::new(p_num!(I64)),
@@ -1292,14 +1374,15 @@ mod tests {
         let mut map = Map::parse(r##"map{"x":2,"y":6}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Map(MapType {
                     keys_type: Box::new(e_static!(StaticType::String(StringType()))),
-                    values_type: Box::new(Either::Static(
+                    values_type: Box::new(EType::Static(
                         StaticType::Primitive(PrimitiveType::Bool).into(),
                     )),
                 })
@@ -1310,8 +1393,9 @@ mod tests {
         assert!(res.is_err());
 
         let res = map.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(Either::Static(
+            &mut scope_manager,
+            None,
+            &Some(EType::Static(
                 StaticType::Map(MapType {
                     keys_type: Box::new(p_num!(I64)),
                     values_type: Box::new(p_num!(I64)),
@@ -1328,11 +1412,10 @@ mod tests {
         let mut object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
             .register_type(
-                &"Point".to_string().into(),
+                "Point",
                 UserType::Struct(user_type_impl::Struct {
                     id: "Point".to_string().into(),
                     fields: {
@@ -1342,10 +1425,16 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -1354,13 +1443,17 @@ mod tests {
         let mut object = Struct::parse(r##"Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let _ = scope_manager
             .register_type(
-                &"Point".to_string().into(),
+                "Point",
                 UserType::Struct(user_type_impl::Struct {
                     id: "Point".to_string().into(),
                     fields: {
@@ -1373,10 +1466,16 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 
@@ -1385,11 +1484,10 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
             .register_type(
-                &"Geo".to_string().into(),
+                "Geo",
                 UserType::Union(user_type_impl::Union {
                     id: "Geo".to_string().into(),
                     variants: {
@@ -1418,10 +1516,16 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -1430,15 +1534,19 @@ mod tests {
         let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
 
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let _ = scope_manager
             .register_type(
-                &"Geo".to_string().into(),
+                "Geo",
                 UserType::Union(user_type_impl::Union {
                     id: "Geo".to_string().into(),
                     variants: {
@@ -1451,7 +1559,7 @@ mod tests {
                                     ("x".to_string().into(), p_num!(U64)),
                                     (
                                         "y".to_string().into(),
-                                        Either::Static(
+                                        EType::Static(
                                             StaticType::Primitive(PrimitiveType::Char).into(),
                                         ),
                                     ),
@@ -1461,18 +1569,29 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
         let mut object = Union::parse(r##"Geo::Axe { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
 
         let mut object = Union::parse(r##"Geo::Point { x : 2, y : 8}"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 
@@ -1481,11 +1600,10 @@ mod tests {
         let mut object = Enum::parse(r##"Geo::Point"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
             .register_type(
-                &"Geo".to_string().into(),
+                "Geo",
                 UserType::Enum(user_type_impl::Enum {
                     id: "Geo".to_string().into(),
                     values: {
@@ -1494,9 +1612,15 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -1505,11 +1629,10 @@ mod tests {
         let mut object = Enum::parse(r##"Geo::Point"##.into())
             .expect("Parsing should have succeeded")
             .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
             .register_type(
-                &"Geo".to_string().into(),
+                "Geo",
                 UserType::Enum(user_type_impl::Enum {
                     id: "Geo".to_string().into(),
                     values: {
@@ -1518,9 +1641,15 @@ mod tests {
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
-        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let res = object.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_err());
     }
 }

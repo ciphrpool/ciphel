@@ -1,6 +1,6 @@
 use crate::{
     ast::{types::Type, utils::strings::ID},
-    semantic::{ArcRwLock, Metadata},
+    semantic::Metadata,
     vm::platform::Lib,
 };
 
@@ -32,6 +32,7 @@ pub struct FieldAccess {
 pub struct TupleAccess {
     pub var: Box<Expression>,
     pub index: usize,
+    pub offset: Option<usize>,
     pub metadata: Metadata,
 }
 
@@ -48,7 +49,7 @@ pub struct FnCall {
     pub fn_var: Box<Expression>,
     pub params: Vec<Expression>,
     pub metadata: Metadata,
-    pub platform: ArcRwLock<Option<Lib>>,
+    pub platform: Option<Lib>,
     pub is_dynamic_fn: Option<String>,
 }
 

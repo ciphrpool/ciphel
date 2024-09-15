@@ -4,7 +4,7 @@ use crate::{
     ast::{
         self,
         expressions::{Atomic, Expression},
-        statements::{declaration::TypedVar, return_stat::Return, Statement},
+        statements::{block::ClosureBlock, declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
             error::squash,
@@ -32,8 +32,8 @@ use nom::{
 use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, MultiData, Number, Primitive,
-    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, Map, MultiData, Number, Primitive, PtrAccess,
+    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -67,13 +67,13 @@ impl TryParse for Variable {
      * Variable := ID
      */
     fn parse(input: Span) -> PResult<Self> {
-        let (remainder, id) = parse_id(input)?;
+        let (remainder, name) = parse_id(input)?;
         Ok((
             remainder,
             Variable {
-                id,
-                from_field: false,
+                name,
                 metadata: Metadata::default(),
+                state: None,
             },
         ))
     }
@@ -239,7 +239,7 @@ impl TryParse for Closure {
                         wst(lexem::PAR_C),
                     ),
                 ),
-                preceded(wst(lexem::ARROW), cut(ExprScope::parse)).context("Invalid closure"),
+                preceded(wst(lexem::ARROW), cut(ClosureBlock::parse)).context("Invalid closure"),
             ),
             |((state, params), scope)| Closure {
                 params,
@@ -248,30 +248,6 @@ impl TryParse for Closure {
                 metadata: Metadata::default(),
             },
         )(input)
-    }
-}
-
-impl TryParse for ExprScope {
-    fn parse(input: Span) -> PResult<Self> {
-        alt((
-            map(ast::statements::block::Block::parse, |value| {
-                ExprScope::Scope(value)
-            }),
-            map(Expression::parse, |value| {
-                ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(value),
-                        metadata: Metadata::default(),
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None,
-                })
-            }),
-        ))(input)
     }
 }
 
@@ -577,24 +553,18 @@ mod tests {
                     ClosureParam::Minimal("y".to_string().into())
                 ],
                 closed: false,
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
+                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                    Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
+                                name: "x".to_string().into(),
+                                metadata: Metadata::default(),
+                                state: None,
                             }
                         )))),
                         metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
+                    }
+                )]),
                 metadata: Metadata::default()
             },
             value
@@ -614,24 +584,18 @@ mod tests {
                     ClosureParam::Minimal("y".to_string().into())
                 ],
                 closed: true,
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
+                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                    Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
+                                name: "x".to_string().into(),
+                                metadata: Metadata::default(),
+                                state: None,
                             }
                         )))),
                         metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
+                    }
+                )]),
                 metadata: Metadata::default()
             },
             value
@@ -646,32 +610,26 @@ mod tests {
         assert_eq!(
             Closure {
                 params: vec![ClosureParam::Full(TypedVar {
-                    id: "x".to_string().into(),
+                    name: "x".to_string(),
+                    id: None,
                     signature: ast::types::Type::Primitive(ast::types::PrimitiveType::Number(
                         NumberType::U64
                     )),
-                    rec: false,
                 }),],
                 closed: false,
 
-                scope: ExprScope::Expr(ast::statements::block::Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
+                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                    Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
-                                id: "x".to_string().into(),
-                                from_field: false,
-                                metadata: Metadata::default()
+                                name: "x".to_string().into(),
+                                metadata: Metadata::default(),
+                                state: None,
                             }
                         )))),
                         metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None
-                }),
+                    }
+                )]),
                 metadata: Metadata::default()
             },
             value
@@ -704,9 +662,9 @@ mod tests {
         assert_eq!(
             Address {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
-                    from_field: false,
-                    metadata: Metadata::default()
+                    name: "x".to_string().into(),
+                    metadata: Metadata::default(),
+                    state: None,
                 }))
                 .into(),
                 metadata: Metadata::default()
@@ -723,9 +681,9 @@ mod tests {
         assert_eq!(
             PtrAccess {
                 value: Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
-                    from_field: false,
-                    metadata: Metadata::default()
+                    name: "x".to_string().into(),
+                    metadata: Metadata::default(),
+                    state: None,
                 }))
                 .into(),
                 metadata: Metadata::default()
@@ -848,9 +806,9 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                id: "x".to_string().into(),
+                name: "x".to_string().into(),
                 metadata: Metadata::default(),
-                from_field: false.into()
+                state: None,
             }))),
             value
         );
@@ -861,9 +819,9 @@ mod tests {
         assert_eq!(
             Expression::ListAccess(ListAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                     Unresolved, 3
@@ -879,14 +837,14 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".to_string().into(),
+                    name: "y".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 metadata: Metadata::default()
             }),
@@ -898,20 +856,20 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::FieldAccess(FieldAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".to_string().into(),
+                        name: "y".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "z".to_string().into(),
+                        name: "z".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     metadata: Metadata::default()
                 })),
@@ -925,15 +883,15 @@ mod tests {
         assert_eq!(
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "x".to_string().into(),
+                    name: "x".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 field: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "y".to_string().into(),
+                        name: "y".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
@@ -951,9 +909,9 @@ mod tests {
             Expression::FieldAccess(FieldAccess {
                 var: Box::new(Expression::ListAccess(ListAccess {
                     var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
+                        name: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false.into()
+                        state: None,
                     })))),
                     index: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
                         Unresolved, 3
@@ -961,9 +919,9 @@ mod tests {
                     metadata: Metadata::default()
                 })),
                 field: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "y".to_string().into(),
+                    name: "y".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false.into()
+                    state: None,
                 })))),
                 metadata: Metadata::default()
             }),
@@ -978,9 +936,9 @@ mod tests {
                 var: Expression::FnCall(FnCall {
                     lib: None,
                     fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "f".to_string().into(),
+                        name: "f".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false,
+                        state: None,
                     })))),
                     params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
                         Primitive::Number(Number::Unresolved(10).into())
@@ -991,6 +949,7 @@ mod tests {
                 })
                 .into(),
                 index: 1,
+                offset: None,
                 metadata: Metadata::default()
             }),
             value

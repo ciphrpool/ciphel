@@ -5,17 +5,13 @@ use crate::{
     e_static,
     semantic::{
         scope::{
-            scope::Scope,
+            scope::ScopeManager,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, EType, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{
-            align,
-            heap::Heap,
-            stack::{Offset, Stack},
-        },
+        allocator::{align, heap::Heap, stack::Stack},
         casm::{operation::OpPrimitive, Casm, CasmProgram},
         platform::{core::alloc::map_impl, utils::lexem, LibCasm},
         stdio::StdIO,
@@ -66,7 +62,7 @@ impl IterFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::STD {
+                if *suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -99,7 +95,8 @@ impl Resolve for IterFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -113,11 +110,10 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve::<G>(scope, &None, &mut None)?;
-                let mut map_type =
-                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -125,7 +121,7 @@ impl Resolve for IterFn {
                 }
 
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Map(MapType {
                             keys_type,
                             values_type,
@@ -162,11 +158,10 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve::<G>(scope, &None, &mut None)?;
-                let mut map_type =
-                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -174,7 +169,7 @@ impl Resolve for IterFn {
                 }
 
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Map(MapType {
                             keys_type,
                             values_type,
@@ -206,11 +201,10 @@ impl Resolve for IterFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let map = &mut extra[0];
-                let _ = map.resolve::<G>(scope, &None, &mut None)?;
-                let mut map_type =
-                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -218,7 +212,7 @@ impl Resolve for IterFn {
                 }
 
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Map(MapType {
                             keys_type,
                             values_type,
@@ -246,7 +240,11 @@ impl Resolve for IterFn {
 }
 
 impl TypeOf for IterFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -267,8 +265,10 @@ impl TypeOf for IterFn {
 impl GenerateCode for IterFn {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IterFn::MapItems {
@@ -322,11 +322,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -365,11 +361,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -406,11 +398,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
                 value_size,
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);

@@ -3,42 +3,42 @@ use crate::{
     semantic::{EType, SemanticError, TypeOf},
 };
 
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 
-pub trait GetSubTypes {
-    fn get_nth(&self, _n: &usize) -> Option<EType> {
-        None
-    }
-    fn get_field(&self, _field_id: &ID) -> Option<EType> {
-        None
-    }
-    fn get_variant(&self, _variant: &ID) -> Option<EType> {
-        None
-    }
-    fn get_item(&self) -> Option<EType> {
-        None
-    }
-    fn get_key(&self) -> Option<EType> {
-        None
-    }
-    fn get_length(&self) -> Option<usize> {
-        None
-    }
-    fn get_return(&self) -> Option<EType> {
-        None
-    }
-    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
-        None
-    }
+// pub trait GetSubTypes {
+//     fn get_nth(&self, _n: &usize) -> Option<EType> {
+//         None
+//     }
+//     fn get_field(&self, _field_id: &ID) -> Option<EType> {
+//         None
+//     }
+//     fn get_variant(&self, _variant: &ID) -> Option<EType> {
+//         None
+//     }
+//     fn get_item(&self) -> Option<EType> {
+//         None
+//     }
+//     fn get_key(&self) -> Option<EType> {
+//         None
+//     }
+//     fn get_length(&self) -> Option<usize> {
+//         None
+//     }
+//     fn get_return(&self) -> Option<EType> {
+//         None
+//     }
+//     fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
+//         None
+//     }
 
-    fn get_field_offset(&self, _field_id: &ID) -> Option<usize> {
-        None
-    }
+//     fn get_field_offset(&self, _field_id: &ID) -> Option<usize> {
+//         None
+//     }
 
-    fn get_inline_field_offset(&self, _index: usize) -> Option<usize> {
-        None
-    }
-}
+//     fn get_inline_field_offset(&self, _index: usize) -> Option<usize> {
+//         None
+//     }
+// }
 pub trait IsEnum {
     fn is_enum(&self) -> bool {
         false
@@ -97,7 +97,8 @@ pub trait OperandMerging {
     fn merge_substraction<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -113,7 +114,8 @@ pub trait OperandMerging {
     fn merge_product<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -127,7 +129,8 @@ pub trait OperandMerging {
     fn merge_addition<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -141,7 +144,8 @@ pub trait OperandMerging {
     fn merge_shift<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -155,7 +159,8 @@ pub trait OperandMerging {
     fn merge_bitwise_and<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -169,7 +174,8 @@ pub trait OperandMerging {
     fn merge_bitwise_xor<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -183,7 +189,8 @@ pub trait OperandMerging {
     fn merge_bitwise_or<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -194,7 +201,8 @@ pub trait OperandMerging {
     fn cast<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -208,7 +216,8 @@ pub trait OperandMerging {
     fn merge_comparaison<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -222,7 +231,8 @@ pub trait OperandMerging {
     fn merge_equation<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -236,7 +246,8 @@ pub trait OperandMerging {
     fn merge_logical_and<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,
@@ -250,7 +261,8 @@ pub trait OperandMerging {
     fn merge_logical_or<Other>(
         &self,
         _other: &Other,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<EType, SemanticError>
     where
         Other: TypeOf,

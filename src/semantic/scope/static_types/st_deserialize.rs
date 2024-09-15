@@ -8,7 +8,7 @@ use crate::{
         },
         utils::lexem,
     },
-    semantic::{scope::static_types::StaticType, EType, Either, Info, Metadata, SizeOf},
+    semantic::{scope::static_types::StaticType, EType, Info, Metadata, SizeOf},
     vm::{
         casm::{branch::Label, mem::Mem, Casm, CasmProgram},
         platform::{
@@ -315,7 +315,7 @@ impl DeserializeFrom for VecType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Arc::new(StaticType::Vec(self.clone())))),
+                    signature: Some(EType::Static(StaticType::Vec(self.clone()))),
                 },
             },
             length: length as usize,
@@ -362,7 +362,7 @@ impl DeserializeFrom for StringType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Arc::new(StaticType::String(self.clone())))),
+                    signature: Some(EType::Static(StaticType::String(self.clone()))),
                 },
             },
         })
@@ -391,7 +391,7 @@ impl DeserializeFrom for StrSliceType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Arc::new(StaticType::StrSlice(self.clone())))),
+                    signature: Some(EType::Static(StaticType::StrSlice(self.clone()))),
                 },
             },
         })
@@ -429,7 +429,7 @@ impl DeserializeFrom for TupleType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Arc::new(StaticType::Tuple(self.clone())))),
+                    signature: Some(EType::Static(StaticType::Tuple(self.clone()))),
                 },
             },
         })
@@ -488,7 +488,7 @@ impl DeserializeFrom for SliceType {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::Static(Arc::new(StaticType::Slice(self.clone())))),
+                    signature: Some(EType::Static(StaticType::Slice(self.clone()))),
                 },
             },
         })
@@ -543,7 +543,7 @@ impl Printer for SliceType {
 //             metadata: Metadata {
 //                 info: Rc::new(RefCell::new(Info::Resolved {
 //                     context: None,
-//                     signature: Some(Either::Static(Rc::new(StaticType::Range(self.clone())))),
+//                     signature: Some(EType::Static(Rc::new(StaticType::Range(self.clone())))),
 //                 })),
 //             },
 //         })

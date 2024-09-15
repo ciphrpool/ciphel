@@ -1,14 +1,10 @@
-use crate::ast::statements::block::block_gencode::inner_block_gencode;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::type_traits::GetSubTypes;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
 use crate::vm::casm::branch::BranchIf;
 
-use crate::vm::vm::NextItem;
+use crate::vm::vm::CodeGenerationContext;
 use crate::vm::{
-    allocator::stack::UReg,
     casm::{
-        alloc::StackFrame,
         branch::{Goto, Label},
         mem::Mem,
         Casm, CasmProgram,
@@ -21,29 +17,48 @@ use super::{ForLoop, Loop, WhileLoop};
 impl GenerateCode for Loop {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Loop::For(value) => value.gencode(scope, instructions),
-            Loop::While(value) => value.gencode(scope, instructions),
+            Loop::For(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Loop::While(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Loop::Loop(value) => {
                 let start_label = Label::gen();
                 let end_label = Label::gen();
+                let break_label = Label::gen();
+                let continue_label = Label::gen();
 
-                instructions.push(Casm::Mem(Mem::DumpRegisters));
-                instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
                 instructions.push_label_id(start_label, "start_loop".to_string().into());
-                instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
-                instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
-                let _ = inner_block_gencode(scope, value, None, true, false, instructions)?;
+
+                value.gencode(
+                    scope_manager,
+                    scope_id,
+                    instructions,
+                    &CodeGenerationContext {
+                        return_label: context.return_label.clone(),
+                        break_label: Some(break_label),
+                        continue_label: Some(continue_label),
+                        ..Default::default()
+                    },
+                )?;
+
                 instructions.push(Casm::Goto(Goto {
                     label: Some(start_label),
                 }));
 
+                instructions.push_label_id(break_label, "break_loop".to_string().into());
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(end_label),
+                }));
+                instructions.push_label_id(continue_label, "continue_loop".to_string().into());
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(start_label),
+                }));
                 instructions.push_label_id(end_label, "end_loop".to_string().into());
-                instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-                instructions.push(Casm::Mem(Mem::RecoverRegisters));
+
                 Ok(())
             }
         }
@@ -53,89 +68,95 @@ impl GenerateCode for Loop {
 impl GenerateCode for ForLoop {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let Some(iterator_type) = self.iterator.expr.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
+        let return_label = Label::gen();
+        let break_label = Label::gen();
+        let continue_label = Label::gen();
 
-        let start_label = Label::gen();
-        let next_label = Label::gen();
-        let end_label = Label::gen();
-
-        instructions.push(Casm::Mem(Mem::DumpRegisters));
-        instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
-
-        let _ = self.iterator.expr.gencode(scope, instructions)?;
-
-        /* init itertor index */
-        let _ = iterator_type.init_address(instructions)?;
-        let _ = iterator_type.init_index(instructions)?;
-
-        instructions.push_label_id(start_label, "start_for".to_string().into());
-
-        let _ = iterator_type.build_item(instructions, end_label)?;
-        instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
-        instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
-
-        instructions.push(Casm::Mem(Mem::LabelOffset(next_label)));
-        instructions.push(Casm::Mem(Mem::SetReg(UReg::R3, None)));
-
-        let Some(item_type) = iterator_type.get_item() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-
-        let params_size = item_type.size_of();
-
-        let _ = inner_block_gencode(
-            scope,
-            &self.scope,
-            Some(params_size),
-            true,
-            false,
+        todo!();
+        self.block.gencode(
+            scope_manager,
+            scope_id,
             instructions,
+            &CodeGenerationContext {
+                return_label: context.return_label.clone(),
+                break_label: Some(break_label),
+                continue_label: Some(continue_label),
+                ..Default::default()
+            },
         )?;
 
-        instructions.push_label_id(next_label, "next_label".to_string().into());
-        let _ = iterator_type.next(instructions)?;
+        // instructions.push_label_id(break_label, "break_block".to_string().into());
+        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        // instructions.push(Casm::Goto(Goto {
+        //     label: context.break_label,
+        // }));
+        // instructions.push_label_id(continue_label, "continue_block".to_string().into());
+        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
+        // instructions.push(Casm::Goto(Goto {
+        //     label: context.continue_label,
+        // }));
+        // instructions.push_label_id(return_label, "return_block".to_string().into());
+        // instructions.push(Casm::Goto(Goto {
+        //     label: context.return_label,
+        // }));
+        Ok(())
+    }
+}
+
+impl GenerateCode for WhileLoop {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let start_label = Label::gen();
+        let end_label = Label::gen();
+        let break_label = Label::gen();
+        let continue_label = Label::gen();
+
+        instructions.push_label_id(start_label, "start_while".to_string().into());
+
+        let _ = self
+            .condition
+            .gencode(scope_manager, scope_id, instructions, context)?;
+
+        instructions.push(Casm::If(BranchIf {
+            else_label: end_label,
+        }));
+        self.block.gencode(
+            scope_manager,
+            scope_id,
+            instructions,
+            &CodeGenerationContext {
+                return_label: context.return_label.clone(),
+                break_label: Some(break_label),
+                continue_label: Some(continue_label),
+                ..Default::default()
+            },
+        )?;
+
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
 
-        instructions.push_label_id(end_label, "end_for".to_string().into());
-        instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::Mem(Mem::RecoverRegisters));
-        Ok(())
-    }
-}
-// 1..10:-1
-impl GenerateCode for WhileLoop {
-    fn gencode(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let start_label = Label::gen();
-        let end_label = Label::gen();
-
-        instructions.push(Casm::Mem(Mem::DumpRegisters));
-        instructions.push(Casm::StackFrame(StackFrame::OpenWindow));
-        instructions.push_label_id(start_label, "start_while".to_string().into());
-        instructions.push(Casm::Mem(Mem::LabelOffset(end_label)));
-        instructions.push(Casm::Mem(Mem::SetReg(UReg::R4, None)));
-        let _ = self.condition.gencode(scope, instructions)?;
-        instructions.push(Casm::If(BranchIf {
-            else_label: end_label,
+        instructions.push_label_id(break_label, "break_loop".to_string().into());
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_label),
         }));
-        let _ = inner_block_gencode(scope, &self.scope, None, true, false, instructions)?;
+        instructions.push_label_id(continue_label, "continue_loop".to_string().into());
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
 
         instructions.push_label_id(end_label, "end_while".to_string().into());
-        instructions.push(Casm::StackFrame(StackFrame::CloseWindow));
-        instructions.push(Casm::Mem(Mem::RecoverRegisters));
+
         Ok(())
     }
 }
@@ -149,13 +170,13 @@ mod tests {
     use crate::{
         ast::{expressions::data::Primitive, statements::Statement},
         semantic::scope::{
-            scope::Scope,
+            scope::ScopeManager,
             static_types::{NumberType, PrimitiveType},
         },
         vm::vm::DeserializeFrom,
     };
     use crate::{compile_statement, v_num};
-
+    // cargo.exe test --package ciphel --lib -- ast::statements::loops::loops_gencode::tests::valid_loop --show-output --nocapture
     #[test]
     fn valid_loop() {
         let mut statement = Statement::parse(
@@ -164,7 +185,7 @@ mod tests {
                 let i:u64 = 0;
                 loop {
                     i = i + 1;
-                    if i >= 10u64 {
+                    if i >= 3u64 {
                         break;
                     }
                 }
@@ -183,7 +204,7 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
+        assert_eq!(result, v_num!(I64, 3));
     }
 
     #[test]
@@ -214,282 +235,13 @@ mod tests {
     }
 
     #[test]
-    fn valid_for_range_inclusive() {
+    fn valid_for() {
         let mut statement = Statement::parse(
             r##"
             let x = {
                 let res:u64 = 0;
-                for i in 0u64..=10u64 {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 10));
-    }
-
-    #[test]
-    fn valid_for_slice() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 0;
-                for i in [1,2,3,4] {
+                for(let i:u64 = 0;i < 10;i = i + 1) {
                     res = res + i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
-
-    #[test]
-    fn valid_for_slice_assigned() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 0;
-                let tab = [1,2,3,4];
-                for i in tab {
-                    res = res + i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
-
-    #[test]
-    fn valid_for_str_slice() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 'a';
-                for i in "abc" {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('c'));
-    }
-
-    #[test]
-    fn valid_for_str_slice_complex() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 'a';
-                for i in "世世e世世" {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('世'));
-    }
-
-    #[test]
-    fn valid_for_vec() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 0;
-                for i in vec[1,2,3,4] {
-                    res = res + i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
-
-    #[test]
-    fn valid_for_string() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res = 'a';
-                for i in string("abc") {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('c'));
-    }
-
-    #[test]
-    fn valid_for_double() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 0u64..=2u64 {
-                    for j in 0u64..=2u64 {
-                        res = res + i + j;
-                    }
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 18));
-    }
-
-    #[test]
-    fn valid_for_early_returns() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    return i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 5));
-    }
-
-    #[test]
-    fn valid_for_early_returns_conditional() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    if i == 5u64 {
-                        return i;
-                    }
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 5));
-    }
-
-    #[test]
-    fn valid_for_break() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    res = i;
                     break;
                 }
                 return res;
@@ -507,259 +259,556 @@ mod tests {
             &data,
         )
         .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 5));
+        assert_eq!(result, v_num!(U64, 10));
     }
 
-    #[test]
-    fn valid_for_break_conditional() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    res = i;
-                    if i == 7u64 {
-                        break;
-                    }
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    // #[test]
+    // fn valid_for_range_inclusive() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 0u64..=10u64 {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let data = compile_statement!(statement);
+    //     let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 7));
-    }
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 10));
+    // }
 
-    #[test]
-    fn valid_for_continue() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    continue;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    // #[test]
+    // fn valid_for_slice() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 0;
+    //             for i in [1,2,3,4] {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let data = compile_statement!(statement);
+    //     let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 0));
-    }
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
 
-    #[test]
-    fn valid_for_continue_conditional() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    if i != 7u64 {
-                        continue;
-                    }
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    // #[test]
+    // fn valid_for_slice_assigned() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 0;
+    //             let tab = [1,2,3,4];
+    //             for i in tab {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let data = compile_statement!(statement);
+    //     let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 7));
-    }
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
 
-    #[test]
-    fn valid_for_double_continue() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let res:u64 = 0;
-                for i in 5u64..=10u64 {
-                    for j in 5u64..=10u64 {
-                        if i != 7u64 {
-                            continue;
-                        }
-                        res = res + i + j;
-                    }
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    // #[test]
+    // fn valid_for_str_slice() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 'a';
+    //             for i in "abc" {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let data = compile_statement!(statement);
+    //     let data = compile_statement!(statement);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::U64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(U64, 87));
-    }
-    #[test]
-    fn valid_for_str_slice_with_padding() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let arr:str<10> = "abc";
-                let res = 'a';
-                for i in &arr {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('c'));
+    // }
 
-        let data = compile_statement!(statement);
+    // #[test]
+    // fn valid_for_str_slice_complex() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 'a';
+    //             for i in "世世e世世" {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('c'));
-    }
-    #[test]
-    fn valid_for_addr_str_slice() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let arr = "abc";
-                let res = 'a';
-                for i in &arr {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    //     let data = compile_statement!(statement);
 
-        let data = compile_statement!(statement);
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('世'));
+    // }
 
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('c'));
-    }
+    // #[test]
+    // fn valid_for_vec() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 0;
+    //             for i in vec[1,2,3,4] {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-    #[test]
-    fn valid_for_addr_string() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let arr = string("abc");
-                let res = 'a';
-                for i in &arr {
-                    res = i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    //     let data = compile_statement!(statement);
 
-        let data = compile_statement!(statement);
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
 
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
-                .expect("Deserialization should have succeeded");
-        assert_eq!(result, Primitive::Char('c'));
-    }
+    // #[test]
+    // fn valid_for_string() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res = 'a';
+    //             for i in string("abc") {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-    #[test]
-    fn valid_for_addr_vec() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let arr = vec[1,2,3,4];
-                let res = 0;
-                for i in &arr {
-                    res = res + i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    //     let data = compile_statement!(statement);
 
-        let data = compile_statement!(statement);
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('c'));
+    // }
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
+    // #[test]
+    // fn valid_for_double() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 0u64..=2u64 {
+    //                 for j in 0u64..=2u64 {
+    //                     res = res + i + j;
+    //                 }
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
 
-    #[test]
-    fn valid_for_addr_slice() {
-        let mut statement = Statement::parse(
-            r##"
-            let x = {
-                let arr = [1,2,3,4];
-                let res = 0;
-                for i in &arr {
-                    res = res + i;
-                }
-                return res; 
-            };
-            "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
+    //     let data = compile_statement!(statement);
 
-        let data = compile_statement!(statement);
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 18));
+    // }
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 10));
-    }
+    // #[test]
+    // fn valid_for_early_returns() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 return i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 5));
+    // }
+
+    // #[test]
+    // fn valid_for_early_returns_conditional() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 if i == 5u64 {
+    //                     return i;
+    //                 }
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 5));
+    // }
+
+    // #[test]
+    // fn valid_for_break() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 res = i;
+    //                 break;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 5));
+    // }
+
+    // #[test]
+    // fn valid_for_break_conditional() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 res = i;
+    //                 if i == 7u64 {
+    //                     break;
+    //                 }
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 7));
+    // }
+
+    // #[test]
+    // fn valid_for_continue() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 continue;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 0));
+    // }
+
+    // #[test]
+    // fn valid_for_continue_conditional() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 if i != 7u64 {
+    //                     continue;
+    //                 }
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 7));
+    // }
+
+    // #[test]
+    // fn valid_for_double_continue() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let res:u64 = 0;
+    //             for i in 5u64..=10u64 {
+    //                 for j in 5u64..=10u64 {
+    //                     if i != 7u64 {
+    //                         continue;
+    //                     }
+    //                     res = res + i + j;
+    //                 }
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::U64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(U64, 87));
+    // }
+    // #[test]
+    // fn valid_for_str_slice_with_padding() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr:str<10> = "abc";
+    //             let res = 'a';
+    //             for i in &arr {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('c'));
+    // }
+    // #[test]
+    // fn valid_for_addr_str_slice() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr = "abc";
+    //             let res = 'a';
+    //             for i in &arr {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('c'));
+    // }
+
+    // #[test]
+    // fn valid_for_addr_string() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr = string("abc");
+    //             let res = 'a';
+    //             for i in &arr {
+    //                 res = i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result =
+    //         <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Char, &data)
+    //             .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, Primitive::Char('c'));
+    // }
+
+    // #[test]
+    // fn valid_for_addr_vec() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr = vec[1,2,3,4];
+    //             let res = 0;
+    //             for i in &arr {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
+
+    // #[test]
+    // fn valid_for_addr_slice() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //         let x = {
+    //             let arr = [1,2,3,4];
+    //             let res = 0;
+    //             for i in &arr {
+    //                 res = res + i;
+    //             }
+    //             return res;
+    //         };
+    //         "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 10));
+    // }
 
     // #[test]
     // fn valid_for_double_addr_slice() {

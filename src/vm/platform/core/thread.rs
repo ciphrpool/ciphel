@@ -1,18 +1,18 @@
 use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
-use crate::semantic::{Either, TypeOf};
+use crate::semantic::{EType, TypeOf};
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
-use crate::vm::platform::stdlib::{ERROR_VALUE, OK_VALUE};
+use crate::vm::platform::stdlib::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
 use crate::vm::platform::utils::lexem;
 use crate::vm::platform::LibCasm;
 use crate::vm::scheduler::{SchedulerContext, WaitingStatus};
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Resolve, SemanticError},
+    semantic::{Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -71,7 +71,7 @@ impl ThreadFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::CORE {
+                if *suffixe != lexem::CORE {
                     return None;
                 }
             }
@@ -91,7 +91,8 @@ impl ThreadFn {
 }
 fn expect_one_u64<G: crate::GameEngineStaticFn>(
     params: &mut Vec<Expression>,
-    scope: &crate::semantic::ArcRwLock<Scope>,
+    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+    scope_id: Option<u128>,
 ) -> Result<(), SemanticError> {
     if params.len() != 1 {
         return Err(SemanticError::IncorrectArguments);
@@ -99,10 +100,10 @@ fn expect_one_u64<G: crate::GameEngineStaticFn>(
 
     let size = &mut params[0];
 
-    let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
-    let size_type = size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+    let _ = size.resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+    let size_type = size.type_of(&scope_manager, scope_id)?;
     match &size_type {
-        Either::Static(value) => match value.as_ref() {
+        EType::Static(value) => match value {
             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
             _ => return Err(SemanticError::IncorrectArguments),
         },
@@ -116,7 +117,8 @@ impl Resolve for ThreadFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -133,21 +135,25 @@ impl Resolve for ThreadFn {
                 }
                 Ok(())
             }
-            ThreadFn::Close => expect_one_u64::<G>(extra, scope),
+            ThreadFn::Close => expect_one_u64::<G>(extra, scope_manager, scope_id),
             ThreadFn::Wait => {
                 if extra.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 Ok(())
             }
-            ThreadFn::Wake => expect_one_u64::<G>(extra, scope),
-            ThreadFn::Sleep => expect_one_u64::<G>(extra, scope),
-            ThreadFn::Join => expect_one_u64::<G>(extra, scope),
+            ThreadFn::Wake => expect_one_u64::<G>(extra, scope_manager, scope_id),
+            ThreadFn::Sleep => expect_one_u64::<G>(extra, scope_manager, scope_id),
+            ThreadFn::Join => expect_one_u64::<G>(extra, scope_manager, scope_id),
         }
     }
 }
 impl TypeOf for ThreadFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -166,8 +172,10 @@ impl TypeOf for ThreadFn {
 impl GenerateCode for ThreadFn {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             ThreadFn::Spawn => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
@@ -204,14 +212,14 @@ pub fn sig_spawn(
     if let Ok(tid) = context.request_spawn() {
         let _ = stack.push_with(&(tid as u64).to_le_bytes())?;
 
-        let _ = stack.push_with(&OK_VALUE)?;
+        let _ = stack.push_with(&OK_SLICE)?;
         program.incr();
         Ok(())
     } else {
         // Error TooManyThread
         let _ = stack.push_with(&(0u64).to_le_bytes())?;
 
-        let _ = stack.push_with(&ERROR_VALUE)?;
+        let _ = stack.push_with(&ERROR_SLICE)?;
         program.incr();
         Err(RuntimeError::TooManyThread)
     }
@@ -224,14 +232,14 @@ pub fn sig_close(
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_close(tid).is_ok() {
-        let _ = stack.push_with(&OK_VALUE)?;
+        let _ = stack.push_with(&OK_SLICE)?;
         program.incr();
         Ok(())
     } else {
         // Error InvalidTID
         let _ = stack.push_with(&(0u64).to_le_bytes())?;
 
-        let _ = stack.push_with(&ERROR_VALUE)?;
+        let _ = stack.push_with(&ERROR_SLICE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(tid))
     }
@@ -250,11 +258,11 @@ pub fn sig_wake(
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_wake(tid).is_ok() {
-        let _ = stack.push_with(&OK_VALUE)?;
+        let _ = stack.push_with(&OK_SLICE)?;
         program.incr();
         Ok(())
     } else {
-        let _ = stack.push_with(&ERROR_VALUE)?;
+        let _ = stack.push_with(&ERROR_SLICE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(tid))
     }
@@ -287,11 +295,11 @@ pub fn sig_join(
         });
         let _ = stack.push_with(&[true as u8])?;
 
-        let _ = stack.push_with(&OK_VALUE)?;
+        let _ = stack.push_with(&OK_SLICE)?;
         program.incr();
         Err(RuntimeError::Signal(Signal::JOIN(join_tid)))
     } else {
-        let _ = stack.push_with(&ERROR_VALUE)?;
+        let _ = stack.push_with(&ERROR_SLICE)?;
         program.incr();
         Err(RuntimeError::InvalidTID(join_tid))
     }

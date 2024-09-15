@@ -88,6 +88,7 @@ impl TryParseOperation for TupleAccess {
                         Expression::TupleAccess(TupleAccess {
                             var: Box::new(left),
                             index,
+                            offset: None,
                             metadata: Metadata::default(),
                         }),
                     ));
@@ -158,6 +159,7 @@ impl TryParseOperation for FieldAccess {
                     Expression::TupleAccess(TupleAccess {
                         var: Box::new(left),
                         index,
+                        offset: None,
                         metadata: Metadata::default(),
                     }),
                 ));
@@ -198,9 +200,9 @@ impl FnCall {
                 remainder,
                 Some(lib),
                 Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: func,
+                    name: func,
                     metadata: Metadata::default(),
-                    from_field: false,
+                    state: None,
                 })))),
                 opt_params,
             )
@@ -251,9 +253,9 @@ impl TryParseOperation for FnCall {
                 remainder,
                 Some(lib),
                 Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: func,
+                    name: func,
                     metadata: Metadata::default(),
-                    from_field: false,
+                    state: None,
                 })))),
                 opt_params,
             )
@@ -299,6 +301,7 @@ impl TryParseOperation for FnCall {
                         Expression::TupleAccess(TupleAccess {
                             var: Box::new(left),
                             index,
+                            offset: None,
                             metadata: Metadata::default(),
                         }),
                     ));
@@ -1203,15 +1206,15 @@ mod tests {
             Expression::FnCall(FnCall {
                 lib: None,
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".to_string().into(),
+                    name: "f".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false,
+                    state: None,
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
+                        name: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false,
+                        state: None,
                     }))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::Unresolved(10).into()
@@ -1234,15 +1237,15 @@ mod tests {
             Expression::FnCall(FnCall {
                 lib: Some("core".to_string().into()),
                 fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                    id: "f".to_string().into(),
+                    name: "f".to_string().into(),
                     metadata: Metadata::default(),
-                    from_field: false,
+                    state: None,
                 })))),
                 params: vec![
                     Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        id: "x".to_string().into(),
+                        name: "x".to_string().into(),
                         metadata: Metadata::default(),
-                        from_field: false,
+                        state: None,
                     }))),
                     Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
                         Number::Unresolved(10).into()

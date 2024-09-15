@@ -1,69 +1,229 @@
 use std::sync::atomic::Ordering;
 
-use super::Block;
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
 
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::static_types::StaticType;
 use crate::semantic::scope::type_traits::TypeChecking;
-use crate::{arw_read, arw_write, resolve_metadata};
 
-use crate::semantic::scope::var_impl::{Var, VarState};
 use crate::semantic::{CompatibleWith, EType, TypeOf};
 use crate::semantic::{Resolve, SemanticError};
 
 impl Resolve for Block {
-    //type Output = ArcMutex;
     type Output = ();
     type Context = Option<EType>;
-    type Extra = Vec<Var>;
+    type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let mut inner_scope = Scope::spawn(scope, extra.clone())?;
-        {
-            if self.is_loop.load(Ordering::Acquire) {
-                let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_loop();
+        if self.scope.is_none() {
+            let inner_scope = scope_manager.spawn(scope_id)?;
+            self.scope = Some(inner_scope)
+        }
+
+        for instruction in &mut self.statements {
+            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+        }
+
+        // let return_type = self.type_of(&scope_manager, scope_id)?;
+
+        let return_types = scope_manager
+            .scope_types
+            .get(&self.scope.ok_or(SemanticError::NotResolvedYet)?)
+            .cloned()
+            .unwrap_or(vec![EType::Static(StaticType::Unit)]);
+
+        let mut scope_type = EType::Static(StaticType::Unit);
+        for return_type in return_types.into_iter() {
+            if scope_type == EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type = return_type;
+                continue;
             }
-            let mut borrowed_caller = arw_write!(self.caller, SemanticError::ConcurrencyError)?;
-            if let Some(caller) = borrowed_caller.as_mut() {
-                caller.state = VarState::Parameter;
-                let _ = arw_write!(inner_scope, SemanticError::ConcurrencyError)?
-                    .register_var(caller.clone())?;
+            if scope_type != EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type.compatible_with(&return_type, scope_manager, scope_id)?;
             }
-            let can_capture = arw_read!(self.can_capture, SemanticError::ConcurrencyError)?.clone();
-            let _ =
-                arw_write!(inner_scope, SemanticError::ConcurrencyError)?.to_closure(can_capture);
         }
 
-        for instruction in &mut self.instructions {
-            let _ = instruction.resolve::<G>(&mut inner_scope, context, &mut ())?;
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(scope_type),
+        };
+
+        Ok(())
+    }
+}
+
+impl Resolve for FunctionBlock {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        if self.scope.is_none() {
+            let inner_scope = scope_manager.spawn(scope_id)?;
+            self.scope = Some(inner_scope)
         }
-        // {
-        //     inner_scope.as_ref().borrow_mut().capture_needed_vars();
-        // }
 
-        self.inner_scope.replace(inner_scope);
-
-        let return_type =
-            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-
-        if !return_type.is_unit() {
-            let _ = context
-                .compatible_with(
-                    &return_type,
-                    &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-                )
-                .map_err(|e| {
-                    dbg!(return_type);
-                    e
-                })?;
+        for instruction in &mut self.statements {
+            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+
+        // let return_type = self.type_of(&scope_manager, scope_id)?;
+
+        let return_types = scope_manager
+            .scope_types
+            .get(&self.scope.ok_or(SemanticError::NotResolvedYet)?)
+            .cloned()
+            .unwrap_or(vec![EType::Static(StaticType::Unit)]);
+
+        let mut scope_type = EType::Static(StaticType::Unit);
+        for return_type in return_types.into_iter() {
+            if scope_type == EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type = return_type;
+                continue;
+            }
+            if scope_type != EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type.compatible_with(&return_type, scope_manager, scope_id)?;
+            }
+        }
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(scope_type),
+        };
+
+        Ok(())
+    }
+}
+
+impl Resolve for ClosureBlock {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        if self.scope.is_none() {
+            let inner_scope = scope_manager.spawn(scope_id)?;
+            self.scope = Some(inner_scope)
+        }
+
+        for instruction in &mut self.statements {
+            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+        }
+
+        // let return_type = self.type_of(&scope_manager, scope_id)?;
+
+        let return_types = scope_manager
+            .scope_types
+            .get(&self.scope.ok_or(SemanticError::NotResolvedYet)?)
+            .cloned()
+            .unwrap_or(vec![EType::Static(StaticType::Unit)]);
+
+        let mut scope_type = EType::Static(StaticType::Unit);
+        for return_type in return_types.into_iter() {
+            if scope_type == EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type = return_type;
+                continue;
+            }
+            if scope_type != EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type.compatible_with(&return_type, scope_manager, scope_id)?;
+            }
+        }
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(scope_type),
+        };
+
+        Ok(())
+    }
+}
+
+impl Resolve for ExprBlock {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        if self.scope.is_none() {
+            let inner_scope = scope_manager.spawn(scope_id)?;
+            self.scope = Some(inner_scope)
+        }
+
+        for instruction in &mut self.statements {
+            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+        }
+
+        // let return_type = self.type_of(&scope_manager, scope_id)?;
+
+        let return_types = scope_manager
+            .scope_types
+            .get(&self.scope.ok_or(SemanticError::NotResolvedYet)?)
+            .cloned()
+            .unwrap_or(vec![EType::Static(StaticType::Unit)]);
+
+        let mut scope_type = EType::Static(StaticType::Unit);
+        for return_type in return_types.into_iter() {
+            if scope_type == EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type = return_type;
+                continue;
+            }
+            if scope_type != EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type.compatible_with(&return_type, scope_manager, scope_id)?;
+            }
+        }
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(scope_type),
+        };
 
         Ok(())
     }
@@ -72,7 +232,6 @@ impl Resolve for Block {
 #[cfg(test)]
 mod tests {
     use crate::{
-        arw_read,
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{scope, static_types::StaticType},
@@ -93,35 +252,33 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res =
-            expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut Vec::default());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.clone().unwrap();
+        let res_scope = expr_scope.scope.unwrap();
 
-        let binding = arw_read!(res_scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"x".to_string().into())
-            .unwrap();
-        let var_x = binding.read().unwrap();
-        let x_type = var_x
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
-        let binding = arw_read!(res_scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"y".to_string().into())
-            .unwrap();
-        let var_y = binding.read().unwrap();
-        let y_type = var_y
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        let var_y = scope_manager
+            .find_var_by_name("y", Some(res_scope))
+            .expect("variable should declared");
+        let y_type = var_y.ctype.clone();
 
         assert_eq!(p_num!(I64), x_type);
         assert_eq!(p_num!(I64), y_type);
 
         let res = expr_scope
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
         assert_eq!(e_static!(StaticType::Unit), res)
     }
 
@@ -140,18 +297,33 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
         let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(p_num!(I64)),
-            &mut Vec::default(),
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.clone().unwrap();
+        let res_scope = expr_scope.scope.unwrap();
+
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        let var_y = scope_manager
+            .find_var_by_name("y", Some(res_scope))
+            .expect("variable should declared");
+        let y_type = var_y.ctype.clone();
+
+        assert_eq!(p_num!(I64), x_type);
+        assert_eq!(p_num!(I64), y_type);
 
         let res = expr_scope
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
         assert_eq!(p_num!(I64), res)
     }
 
@@ -174,18 +346,33 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
         let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(p_num!(I64)),
-            &mut Vec::default(),
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.clone().unwrap();
+        let res_scope = expr_scope.scope.unwrap();
+
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        let var_y = scope_manager
+            .find_var_by_name("y", Some(res_scope))
+            .expect("variable should declared");
+        let y_type = var_y.ctype.clone();
+
+        assert_eq!(p_num!(I64), x_type);
+        assert_eq!(p_num!(I64), y_type);
 
         let res = expr_scope
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
         assert_eq!(p_num!(I64), res);
 
         let mut expr_scope = Block::parse(
@@ -205,19 +392,34 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
         let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(p_num!(I64)),
-            &mut Vec::default(),
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.clone().unwrap();
+        let res_scope = expr_scope.scope.unwrap();
+
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        let var_y = scope_manager
+            .find_var_by_name("y", Some(res_scope))
+            .expect("variable should declared");
+        let y_type = var_y.ctype.clone();
+
+        assert_eq!(p_num!(I64), x_type);
+        assert_eq!(p_num!(I64), y_type);
 
         let res = expr_scope
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
-        assert_eq!(p_num!(I64), res)
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
+        assert_eq!(p_num!(I64), res);
     }
 
     #[test]
@@ -235,18 +437,27 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
         let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(p_num!(I64)),
-            &mut Vec::default(),
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);
-        let res_scope = expr_scope.inner_scope.clone().unwrap();
+        let res_scope = expr_scope.scope.unwrap();
+
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        assert_eq!(p_num!(I64), x_type);
 
         let res = expr_scope
-            .type_of(&arw_read!(res_scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
         assert_eq!(p_num!(I64), res)
     }
 
@@ -267,12 +478,27 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
         let res = expr_scope.resolve::<crate::vm::vm::NoopGameEngine>(
-            &scope,
-            &Some(p_num!(I64)),
-            &mut Vec::default(),
+            &mut scope_manager,
+            None,
+            &None,
+            &mut (),
         );
-        assert!(res.is_err());
+        assert!(res.is_ok(), "{:?}", res);
+        let res_scope = expr_scope.scope.unwrap();
+
+        let var_x = scope_manager
+            .find_var_by_name("x", Some(res_scope))
+            .expect("variable should declared");
+        let x_type = var_x.ctype.clone();
+
+        assert_eq!(p_num!(I64), x_type);
+
+        let res = expr_scope
+            .metadata
+            .signature()
+            .expect("Block should be resolved");
+        assert_eq!(EType::Static(StaticType::Unit), res)
     }
 }

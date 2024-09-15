@@ -1,7 +1,7 @@
 use crate::{
     semantic::{
         scope::static_types::{st_deserialize::extract_u64, NumberType, PrimitiveType, StaticType},
-        EType, Either, SizeOf,
+        EType, SizeOf,
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack},
@@ -20,7 +20,6 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Operation {
     pub kind: OperationKind,
-    // pub result: OpPrimitive,
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
@@ -146,32 +145,21 @@ impl TryInto<OpPrimitive> for EType {
 
     fn try_into(self) -> Result<OpPrimitive, Self::Error> {
         match self {
-            Either::Static(value) => match value.as_ref() {
+            EType::Static(value) => match value {
                 StaticType::Primitive(value) => match value {
-                    PrimitiveType::Number(value) => Ok(OpPrimitive::Number(*value)),
+                    PrimitiveType::Number(value) => Ok(OpPrimitive::Number(value)),
                     PrimitiveType::Char => Ok(OpPrimitive::Char),
                     PrimitiveType::Bool => Ok(OpPrimitive::Bool),
                 },
                 StaticType::StrSlice(StrSliceType) => Ok(OpPrimitive::String),
                 _ => Err(CodeGenerationError::UnresolvedError),
             },
-            Either::User(_) => Err(CodeGenerationError::UnresolvedError),
+            EType::User { .. } => Err(CodeGenerationError::UnresolvedError),
         }
     }
 }
 
 impl OpPrimitive {
-    // pub fn get_float(memory: &Memory) -> Result<f64, RuntimeError> {
-    //     let data = memory
-    //         .stack
-    //         .pop(PrimitiveType::Float.size_of())
-    //         ?;
-
-    //     let data = TryInto::<&[u8; 8]>::try_into(data.as_slice())
-    //         .map_err(|_| RuntimeError::Deserialization)?;
-    //     Ok(f64::from_le_bytes(*data))
-    // }
-
     pub fn name(&self) -> &'static str {
         match self {
             OpPrimitive::Number(num) => match num {
@@ -1106,7 +1094,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
 
 #[cfg(test)]
 mod tests {
-    use crate::{semantic::scope::scope::Scope, vm::vm::Runtime};
+    use crate::{semantic::scope::scope::ScopeManager, vm::vm::Runtime};
 
     use super::*;
 
@@ -1198,7 +1186,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1222,7 +1213,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1245,7 +1239,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1268,7 +1265,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1291,7 +1291,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1314,7 +1317,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1337,7 +1343,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1360,7 +1369,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1383,7 +1395,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1406,7 +1421,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1429,7 +1447,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1452,7 +1473,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1474,7 +1498,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1495,7 +1522,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1518,7 +1548,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1541,7 +1574,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1564,7 +1600,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1587,7 +1626,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1607,7 +1649,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1627,7 +1672,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -1648,7 +1696,10 @@ mod tests {
         let mut engine = crate::vm::vm::NoopGameEngine {};
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, Scope::new())
+            .spawn_with_scope(
+                crate::vm::vm::Player::P1,
+                crate::semantic::scope::scope::ScopeManager::default(),
+            )
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, mut program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

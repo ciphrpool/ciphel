@@ -3,99 +3,132 @@ use std::sync::{
     Arc,
 };
 
-use crate::{
-    arw_write,
-    semantic::{
-        scope::{var_impl::Var, ClosureState},
-        ArcRwLock, Metadata, SemanticError,
-    },
-};
+use crate::semantic::{scope::ClosureState, Metadata, SemanticError};
 
 use super::Statement;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 
 pub mod block_gencode;
 pub mod block_parse;
 pub mod block_resolve;
 pub mod block_typeof;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Block {
-    pub instructions: Vec<Statement>,
-    pub inner_scope: Option<ArcRwLock<Scope>>,
-    pub can_capture: ArcRwLock<ClosureState>,
-    pub is_loop: Arc<AtomicBool>,
-    pub caller: ArcRwLock<Option<Var>>,
+    pub statements: Vec<Statement>,
+    pub scope: Option<u128>,
     pub metadata: Metadata,
 }
 
-impl PartialEq for Block {
-    fn eq(&self, other: &Self) -> bool {
-        self.instructions == other.instructions
-            && self
-                .can_capture
-                .read()
-                .map(|value| value.clone())
-                .ok()
-                .unwrap_or(ClosureState::DEFAULT)
-                == other
-                    .can_capture
-                    .read()
-                    .map(|value| value.clone())
-                    .ok()
-                    .unwrap_or(ClosureState::DEFAULT)
-            && self.is_loop.load(std::sync::atomic::Ordering::Acquire)
-                == other.is_loop.load(std::sync::atomic::Ordering::Acquire)
-            && self
-                .caller
-                .read()
-                .map(|value| value.clone())
-                .ok()
-                .unwrap_or(None)
-                == other
-                    .caller
-                    .read()
-                    .map(|value| value.clone())
-                    .ok()
-                    .unwrap_or(None)
-            && self.metadata == other.metadata
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionBlock {
+    pub statements: Vec<Statement>,
+    pub scope: Option<u128>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosureBlock {
+    pub statements: Vec<Statement>,
+    pub scope: Option<u128>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExprBlock {
+    pub statements: Vec<Statement>,
+    pub scope: Option<u128>,
+    pub metadata: Metadata,
+}
+
+pub trait BlockCommonApi {
+    fn init_from_parent(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        parent_scope_id: Option<u128>,
+    ) -> Result<u128, SemanticError>;
+}
+
+impl FunctionBlock {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Self {
+            metadata: Metadata::default(),
+            statements,
+            scope: None,
+        }
+    }
+}
+impl BlockCommonApi for FunctionBlock {
+    fn init_from_parent(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        parent_scope_id: Option<u128>,
+    ) -> Result<u128, SemanticError> {
+        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        self.scope = Some(inner_scope);
+        Ok(inner_scope)
+    }
+}
+
+impl ClosureBlock {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Self {
+            metadata: Metadata::default(),
+            statements,
+            scope: None,
+        }
+    }
+}
+impl BlockCommonApi for ClosureBlock {
+    fn init_from_parent(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        parent_scope_id: Option<u128>,
+    ) -> Result<u128, SemanticError> {
+        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        self.scope = Some(inner_scope);
+        Ok(inner_scope)
+    }
+}
+
+impl ExprBlock {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Self {
+            metadata: Metadata::default(),
+            statements,
+            scope: None,
+        }
+    }
+}
+impl BlockCommonApi for ExprBlock {
+    fn init_from_parent(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        parent_scope_id: Option<u128>,
+    ) -> Result<u128, SemanticError> {
+        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        self.scope = Some(inner_scope);
+        Ok(inner_scope)
     }
 }
 
 impl Block {
-    pub fn scope(&self) -> Result<ArcRwLock<Scope>, SemanticError> {
-        match &self.inner_scope {
-            Some(inner) => Ok(inner.clone()),
-            None => Err(SemanticError::NotResolvedYet),
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Self {
+            metadata: Metadata::default(),
+            statements,
+            scope: None,
         }
     }
-
-    // pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
-    //     match self.inner_scope.borrow().as_ref() {
-    //         Some(inner) => Ok(inner.as_ref().borrow().env_vars()),
-    //         None => Err(SemanticError::NotResolvedYet),
-    //     }
-    // }
-
-    // // pub fn parameters_size(&self) -> Result<usize, SemanticError> {
-    // //     match self.inner_scope.borrow().as_ref() {
-    // //         Some(inner) => Ok(inner.as_ref().borrow().parameters_size()),
-    // //         None => Err(SemanticError::NotResolvedYet),
-    // //     }
-    // // }
-    pub fn set_caller(&self, caller: Var) -> Result<(), SemanticError> {
-        let mut self_caller = arw_write!(self.caller, SemanticError::ConcurrencyError)?;
-        *self_caller = Some(caller);
-        Ok(())
-    }
-
-    pub fn to_capturing(&self, state: ClosureState) -> Result<(), SemanticError> {
-        let mut can_capture = arw_write!(self.can_capture, SemanticError::ConcurrencyError)?;
-        *can_capture = state;
-        Ok(())
-    }
-
-    pub fn to_loop(&self) {
-        self.is_loop.store(true, Ordering::Release);
+}
+impl BlockCommonApi for Block {
+    fn init_from_parent(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        parent_scope_id: Option<u128>,
+    ) -> Result<u128, SemanticError> {
+        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        self.scope = Some(inner_scope);
+        Ok(inner_scope)
     }
 }

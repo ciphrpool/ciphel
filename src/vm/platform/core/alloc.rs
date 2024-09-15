@@ -4,7 +4,7 @@ use crate::{
     ast::utils::strings::ID,
     err_tuple,
     semantic::scope::{
-        scope::Scope,
+        scope::ScopeManager,
         static_types::{MapType, SliceType},
         type_traits::TypeChecking,
     },
@@ -12,7 +12,7 @@ use crate::{
         allocator::{heap::Heap, stack::Stack},
         platform::{
             core::alloc::map_impl::{bucket_idx, bucket_layout, hash_of, map_layout, top_hash},
-            stdlib::{ERROR_VALUE, OK_VALUE},
+            stdlib::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE},
         },
         stdio::StdIO,
         vm::CasmMetadata,
@@ -25,14 +25,13 @@ use crate::{
     ast::expressions::Expression,
     e_static, p_num,
     semantic::{
-        scope::{
-            static_types::{AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType},
-            type_traits::GetSubTypes,
+        scope::static_types::{
+            AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
         },
-        AccessLevel, EType, Either, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        AccessLevel, EType, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
-        allocator::{align, stack::Offset},
+        allocator::align,
         casm::{
             alloc::{Access, Alloc, Free},
             data::Data,
@@ -143,15 +142,15 @@ pub enum DerefHashing {
     Default,
 }
 
-impl From<&Either> for DerefHashing {
-    fn from(value: &Either) -> Self {
+impl From<&EType> for DerefHashing {
+    fn from(value: &EType) -> Self {
         match value {
-            Either::Static(tmp) => match tmp.as_ref() {
+            EType::Static(tmp) => match tmp {
                 StaticType::String(_) => DerefHashing::String,
                 StaticType::Vec(VecType(item_subtype)) => DerefHashing::Vec(item_subtype.size_of()),
                 _ => DerefHashing::Default,
             },
-            Either::User(_) => DerefHashing::Default,
+            EType::User { .. } => DerefHashing::Default,
         }
     }
 }
@@ -313,7 +312,7 @@ impl AllocFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::CORE {
+                if *suffixe != lexem::CORE {
                     return None;
                 }
             }
@@ -383,7 +382,8 @@ impl Resolve for AllocFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -399,37 +399,35 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let item = &mut second_part[0];
 
-                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
-                let mut vector_type =
-                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = vector.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut vector_type = vector.type_of(&scope_manager, scope_id)?;
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                    EType::Static(value) => match value {
+                        StaticType::Address(AddrType(sub)) => vector_type = *sub.clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
 
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Vec(_) => {
-                            let item_type = vector_type.get_item();
+                    EType::Static(value) => match value {
+                        StaticType::Vec(VecType(item_type)) => {
+                            let item_type = item_type.as_ref();
                             *append_kind = AppendKind::Vec;
-                            let _ = item.resolve::<G>(scope, &item_type, &mut None)?;
-                            let Some(item_type) = item_type else {
-                                return Err(SemanticError::IncorrectArguments);
-                            };
+                            let _ = item.resolve::<G>(
+                                scope_manager,
+                                scope_id,
+                                &Some(item_type.clone()),
+                                &mut None,
+                            )?;
                             *item_size = item_type.size_of();
                             Ok(())
                         }
                         StaticType::String(_) => {
-                            let _ = item.resolve::<G>(scope, &None, &mut None)?;
-                            let item_type = item.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?;
+                            let _ = item.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                            let item_type = item.type_of(&scope_manager, scope_id)?;
                             match &item_type {
-                                Either::Static(value) => match value.as_ref() {
+                                EType::Static(value) => match value {
                                     StaticType::Primitive(PrimitiveType::Char) => {
                                         *append_kind = AppendKind::Char;
                                     }
@@ -463,32 +461,29 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let items = &mut second_part[0];
 
-                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
-                let mut vector_type =
-                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = vector.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut vector_type = vector.type_of(&scope_manager, scope_id)?;
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                    EType::Static(value) => match value {
+                        StaticType::Address(AddrType(sub)) => vector_type = *sub.clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Vec(_) => {
-                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
-                            let items_type = items.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?;
+                            let _ =
+                                items.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                            let items_type = items.type_of(&scope_manager, scope_id)?;
 
                             match items_type {
-                                Either::Static(value) => match value.as_ref() {
+                                EType::Static(value) => match value {
                                     StaticType::Slice(SliceType {
                                         size: len,
                                         item_type,
                                     }) => {
-                                        *extend_kind = ExtendKind::VecFromSlice(*len);
+                                        *extend_kind = ExtendKind::VecFromSlice(len);
 
                                         *item_size = item_type.size_of();
                                         Ok(())
@@ -504,26 +499,28 @@ impl Resolve for AllocFn {
                             }
                         }
                         StaticType::String(_) => {
-                            let _ = items.resolve::<G>(scope, &None, &mut None)?;
-                            let items_type = items.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?;
+                            let _ =
+                                items.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                            let items_type = items.type_of(&scope_manager, scope_id)?;
 
                             match items_type {
-                                Either::Static(value) => match value.as_ref() {
+                                EType::Static(value) => match value {
                                     StaticType::Slice(SliceType {
                                         size: len,
                                         item_type,
                                     }) => {
-                                        if !item_type.is_string() {
+                                        if EType::Static(StaticType::String(StringType()))
+                                            != *item_type
+                                        {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
-                                        *extend_kind = ExtendKind::StringFromSlice(*len);
+                                        *extend_kind = ExtendKind::StringFromSlice(len);
                                         Ok(())
                                     }
                                     StaticType::Vec(VecType(item_type)) => {
-                                        if !item_type.is_string() {
+                                        if EType::Static(StaticType::String(StringType()))
+                                            != *item_type
+                                        {
                                             return Err(SemanticError::IncorrectArguments);
                                         }
                                         *extend_kind = ExtendKind::StringFromVec;
@@ -555,43 +552,44 @@ impl Resolve for AllocFn {
                 let key = &mut second_part[0];
                 let item = &mut third_part[0];
 
-                let _ = map.resolve::<G>(scope, &None, &mut None)?;
-                let mut map_type =
-                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
+                    EType::Static(value) => match value {
+                        StaticType::Address(AddrType(sub)) => map_type = *sub.clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
 
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Map(MapType {
                             keys_type,
                             values_type,
                         }) => {
                             let _ = key.resolve::<G>(
-                                scope,
-                                &Some(keys_type.as_ref().clone()),
+                                scope_manager,
+                                scope_id,
+                                &Some(*keys_type.clone()),
                                 &mut None,
                             )?;
                             let _ = item.resolve::<G>(
-                                scope,
-                                &Some(values_type.as_ref().clone()),
+                                scope_manager,
+                                scope_id,
+                                &Some(*values_type.clone()),
                                 &mut None,
                             )?;
 
                             match keys_type.as_ref() {
-                                Either::Static(tmp) => match tmp.as_ref() {
+                                EType::Static(tmp) => match tmp {
                                     StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
                                         *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
-                                Either::User(_) => {}
+                                EType::User { .. } => {}
                             }
                             *value_size = values_type.size_of();
                             *key_size = keys_type.size_of();
@@ -616,44 +614,44 @@ impl Resolve for AllocFn {
                 let map = &mut first_part[0];
                 let key = &mut second_part[0];
 
-                let _ = map.resolve::<G>(scope, &None, &mut None)?;
-                let mut map_type =
-                    map.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = map.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut map_type = map.type_of(&scope_manager, scope_id)?;
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Address(AddrType(sub)) => map_type = sub.as_ref().clone(),
+                    EType::Static(value) => match value {
+                        StaticType::Address(AddrType(sub)) => map_type = *sub.clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
 
                 match &map_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Map(MapType {
                             keys_type,
                             values_type,
                         }) => {
                             let _ = key.resolve::<G>(
-                                scope,
-                                &Some(keys_type.as_ref().clone()),
+                                scope_manager,
+                                scope_id,
+                                &Some(*keys_type.clone()),
                                 &mut None,
                             )?;
                             *value_size = values_type.size_of();
                             *key_size = keys_type.size_of();
 
                             match keys_type.as_ref() {
-                                Either::Static(tmp) => match tmp.as_ref() {
+                                EType::Static(tmp) => match tmp {
                                     StaticType::String(_) => *ref_access = DerefHashing::String,
                                     StaticType::Vec(VecType(item_subtype)) => {
                                         *ref_access = DerefHashing::Vec(item_subtype.size_of())
                                     }
                                     _ => {}
                                 },
-                                Either::User(_) => {}
+                                EType::User { .. } => {}
                             }
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
-                                signature: Some(values_type.as_ref().clone()),
+                                signature: Some(*values_type.clone()),
                             };
                             Ok(())
                         }
@@ -675,27 +673,28 @@ impl Resolve for AllocFn {
                 let vector = &mut first_part[0];
                 let index = &mut second_part[0];
 
-                let _ = vector.resolve::<G>(scope, &None, &mut None)?;
-                let mut vector_type =
-                    vector.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = vector.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let mut vector_type = vector.type_of(&scope_manager, scope_id)?;
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Address(AddrType(sub)) => vector_type = sub.as_ref().clone(),
+                    EType::Static(value) => match value {
+                        StaticType::Address(AddrType(sub)) => vector_type = *sub.clone(),
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
 
                 match &vector_type {
-                    Either::Static(value) => match value.as_ref() {
-                        StaticType::Vec(_) => {
-                            let _ = index.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
-                            let index_type = index.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?;
+                    EType::Static(value) => match value {
+                        StaticType::Vec(VecType(item_type)) => {
+                            let _ = index.resolve::<G>(
+                                scope_manager,
+                                scope_id,
+                                &Some(p_num!(U64)),
+                                &mut None,
+                            )?;
+                            let index_type = index.type_of(&scope_manager, scope_id)?;
                             match &index_type {
-                                Either::Static(value) => match value.as_ref() {
+                                EType::Static(value) => match value {
                                     StaticType::Primitive(PrimitiveType::Number(
                                         NumberType::U64,
                                     )) => {}
@@ -703,11 +702,9 @@ impl Resolve for AllocFn {
                                 },
                                 _ => return Err(SemanticError::IncorrectArguments),
                             }
-                            let item_type = vector_type.get_item();
+                            let item_type = item_type.as_ref().clone();
                             *delete_kind = DeleteKind::Vec;
-                            let Some(item_type) = item_type else {
-                                return Err(SemanticError::IncorrectArguments);
-                            };
+
                             *value_size = item_type.size_of();
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
@@ -720,7 +717,7 @@ impl Resolve for AllocFn {
                             values_type,
                         }) => {
                             match keys_type.as_ref() {
-                                Either::Static(tmp) => match tmp.as_ref() {
+                                EType::Static(tmp) => match tmp {
                                     StaticType::String(_) => {
                                         *delete_kind = DeleteKind::Map(DerefHashing::String)
                                     }
@@ -733,21 +730,22 @@ impl Resolve for AllocFn {
                                         *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                     }
                                 },
-                                Either::User(_) => {
+                                EType::User { .. } => {
                                     *delete_kind = DeleteKind::Map(DerefHashing::Default);
                                 }
                             }
 
                             let _ = index.resolve::<G>(
-                                scope,
-                                &Some(keys_type.as_ref().clone()),
+                                scope_manager,
+                                scope_id,
+                                &Some(*keys_type.clone()),
                                 &mut None,
                             )?;
                             *value_size = values_type.size_of();
                             *key_size = keys_type.size_of();
                             metadata.info = Info::Resolved {
                                 context: context.clone(),
-                                signature: Some(values_type.as_ref().clone()),
+                                signature: Some(*values_type.clone()),
                             };
                             Ok(())
                         }
@@ -763,11 +761,10 @@ impl Resolve for AllocFn {
 
                 let address = &mut extra[0];
 
-                let _ = address.resolve::<G>(scope, &None, &mut None)?;
-                let address_type =
-                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let address_type = address.type_of(&scope_manager, scope_id)?;
                 match &address_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(AddrType(_)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -789,7 +786,12 @@ impl Resolve for AllocFn {
                     *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
+                    let _ = param.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        &Some(p_num!(U64)),
+                        &mut None,
+                    )?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType(format!(
@@ -798,11 +800,11 @@ impl Resolve for AllocFn {
                 }
                 match &context {
                     Some(value) => match value {
-                        Either::Static(value) => match value.as_ref() {
+                        EType::Static(value) => match value {
                             StaticType::Vec(VecType(item)) => *item_size = item.size_of(),
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
-                        Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+                        EType::User { .. } => return Err(SemanticError::IncompatibleTypes),
                     },
                     None => unreachable!(),
                 }
@@ -828,7 +830,12 @@ impl Resolve for AllocFn {
                     *with_capacity = false;
                 }
                 for param in extra {
-                    let _ = param.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
+                    let _ = param.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        &Some(p_num!(U64)),
+                        &mut None,
+                    )?;
                 }
                 if context.is_none() {
                     return Err(SemanticError::CantInferType(format!(
@@ -837,7 +844,7 @@ impl Resolve for AllocFn {
                 }
                 match &context {
                     Some(value) => match value {
-                        Either::Static(value) => match value.as_ref() {
+                        EType::Static(value) => match value {
                             StaticType::Map(MapType {
                                 keys_type,
                                 values_type,
@@ -847,7 +854,7 @@ impl Resolve for AllocFn {
                             }
                             _ => return Err(SemanticError::IncompatibleTypes),
                         },
-                        Either::User(_) => return Err(SemanticError::IncompatibleTypes),
+                        EType::User { .. } => return Err(SemanticError::IncompatibleTypes),
                     },
                     None => unreachable!(),
                 }
@@ -863,11 +870,10 @@ impl Resolve for AllocFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve::<G>(scope, &None, &mut None)?;
-                let param_type =
-                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let param_type = param.type_of(&scope_manager, scope_id)?;
                 match param_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::StrSlice(slice) => {
                             *from_char = false;
                             *len = slice.size_of();
@@ -879,7 +885,7 @@ impl Resolve for AllocFn {
                             return Err(SemanticError::IncorrectArguments);
                         }
                     },
-                    Either::User(_) => {
+                    EType::User { .. } => {
                         return Err(SemanticError::IncorrectArguments);
                     }
                 }
@@ -892,11 +898,11 @@ impl Resolve for AllocFn {
 
                 let size = &mut extra[0];
 
-                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
-                let size_type =
-                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ =
+                    size.resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+                let size_type = size.type_of(&scope_manager, scope_id)?;
                 match &size_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -910,11 +916,10 @@ impl Resolve for AllocFn {
                 }
                 let address = &mut extra[0];
 
-                let _ = address.resolve::<G>(scope, &None, &mut None)?;
-                let address_type =
-                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let address_type = address.type_of(&scope_manager, scope_id)?;
                 match &address_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
                         StaticType::Map(_) => {}
@@ -930,12 +935,11 @@ impl Resolve for AllocFn {
                 }
                 let address = &mut extra[0];
 
-                let _ = address.resolve::<G>(scope, &None, &mut None)?;
-                let address_type =
-                    address.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = address.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let address_type = address.type_of(&scope_manager, scope_id)?;
                 *for_map = false;
                 match &address_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
                         StaticType::Map(_) => {
@@ -953,9 +957,8 @@ impl Resolve for AllocFn {
                 }
                 let param = &mut extra[0];
 
-                let _ = param.resolve::<G>(scope, &None, &mut None)?;
-                let param_type =
-                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let param_type = param.type_of(&scope_manager, scope_id)?;
 
                 *size = param_type.size_of();
 
@@ -973,14 +976,12 @@ impl Resolve for AllocFn {
                 let src = &mut second_part[0];
                 let size = &mut third_part[0];
 
-                let _ = dest.resolve::<G>(scope, &None, &mut None)?;
-                let _ = src.resolve::<G>(scope, &None, &mut None)?;
-                let dest_type =
-                    dest.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let src_type =
-                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = dest.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = src.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let dest_type = dest.type_of(&scope_manager, scope_id)?;
+                let src_type = src.type_of(&scope_manager, scope_id)?;
                 match &dest_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(_) => {}
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
@@ -990,7 +991,7 @@ impl Resolve for AllocFn {
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
                 match &src_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(_) => {}
                         StaticType::String(_) => {}
                         StaticType::Vec(_) => {}
@@ -999,11 +1000,11 @@ impl Resolve for AllocFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                let _ = size.resolve::<G>(scope, &Some(p_num!(U64)), &mut None)?;
-                let size_type =
-                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ =
+                    size.resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+                let size_type = size.type_of(&scope_manager, scope_id)?;
                 match &size_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Primitive(PrimitiveType::Number(NumberType::U64)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -1022,24 +1023,20 @@ impl Resolve for AllocFn {
 
                 let src = &mut extra[0];
 
-                let _ = src.resolve::<G>(scope, &None, &mut None)?;
-                let src_type =
-                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = src.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let src_type = src.type_of(&scope_manager, scope_id)?;
 
                 match &src_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Address(AddrType(inner)) => match inner.as_ref() {
-                            Either::Static(value) => match value.as_ref() {
+                            EType::Static(value) => match value {
                                 StaticType::String(_) => {
                                     *clear_kind = ClearKind::String;
                                     *item_size = 1;
                                 }
-                                StaticType::Vec(_) => {
+                                StaticType::Vec(VecType(item_type)) => {
                                     *clear_kind = ClearKind::Vec;
-                                    let item_type = src_type.get_item();
-                                    let Some(item_type) = item_type else {
-                                        return Err(SemanticError::IncorrectArguments);
-                                    };
+                                    let item_type = item_type.as_ref();
                                     *item_size = item_type.size_of();
                                 }
                                 StaticType::Map(MapType {
@@ -1048,8 +1045,8 @@ impl Resolve for AllocFn {
                                 }) => {
                                     *clear_kind = ClearKind::Map;
 
-                                    *item_size = values_type.as_ref().size_of();
-                                    *key_size = keys_type.as_ref().size_of();
+                                    *item_size = values_type.size_of();
+                                    *key_size = keys_type.size_of();
                                 }
                                 _ => return Err(SemanticError::IncorrectArguments),
                             },
@@ -1067,7 +1064,11 @@ impl Resolve for AllocFn {
     }
 }
 impl TypeOf for AllocFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -1107,8 +1108,10 @@ impl TypeOf for AllocFn {
 impl GenerateCode for AllocFn {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             AllocFn::Append {
@@ -1984,11 +1987,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 let item_len = chara.len();
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2038,8 +2037,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 )?;
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -2056,11 +2054,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2119,8 +2113,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 )?;
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -2136,11 +2129,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 let _ = heap.free(item_heap_address as usize - 8)?;
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2182,8 +2171,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 )?;
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -2220,11 +2208,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2408,11 +2392,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2435,12 +2415,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                         let _ = stack.push_with(&value_data)?;
                         // push NO_ERROR
-                        let _ = stack.push_with(&OK_VALUE)?;
+                        let _ = stack.push_with(&OK_SLICE)?;
                     }
                     None => {
                         let _ = stack.push_with(&vec![0u8; *value_size])?;
                         // push ERROR
-                        let _ = stack.push_with(&ERROR_VALUE)?;
+                        let _ = stack.push_with(&ERROR_SLICE)?;
                     }
                 }
             }
@@ -2476,11 +2456,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let map_heap_address = u64::from_le_bytes(*map_heap_address_bytes);
@@ -2509,12 +2485,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                         let _ = stack.push_with(&value_data)?;
                         // push NO_ERROR
-                        let _ = stack.push_with(&OK_VALUE)?;
+                        let _ = stack.push_with(&OK_SLICE)?;
                     }
                     None => {
                         let _ = stack.push_with(&vec![0u8; *value_size])?;
                         // push ERROR
-                        let _ = stack.push_with(&ERROR_VALUE)?;
+                        let _ = stack.push_with(&ERROR_SLICE)?;
                     }
                 }
             }
@@ -2522,11 +2498,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                 let index = OpPrimitive::get_num8::<u64>(stack)?;
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
 
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
@@ -2571,12 +2543,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
                     // Push deleted item and error
                     let _ = stack.push_with(&deleted_item_data)?;
                     // Push no error
-                    let _ = stack.push_with(&OK_VALUE)?;
+                    let _ = stack.push_with(&OK_SLICE)?;
                 } else {
                     // Push zeroes and error
                     let _ = stack.push_with(&vec![0; item_size as usize])?;
                     // Push no error
-                    let _ = stack.push_with(&ERROR_VALUE)?;
+                    let _ = stack.push_with(&ERROR_SLICE)?;
                 }
             }
             AllocCasm::Vec { item_size } | AllocCasm::VecWithCapacity { item_size } => {
@@ -2726,11 +2698,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
             AllocCasm::ClearVec(item_size) | AllocCasm::ClearString(item_size) => {
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
 
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
@@ -2759,11 +2727,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
             } => {
                 let map_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let map_heap_address_bytes = stack.read(
-                    Offset::SB(map_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let map_heap_address_bytes = stack.read(map_stack_address as usize, 8)?;
 
                 let map_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(map_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
@@ -2780,11 +2744,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2835,8 +2795,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -2856,11 +2815,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2911,8 +2866,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -2935,11 +2889,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -2990,8 +2940,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -3025,11 +2974,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 let vec_stack_address = OpPrimitive::get_num8::<u64>(stack)?;
 
-                let vec_heap_address_bytes = stack.read(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
-                    8,
-                )?;
+                let vec_heap_address_bytes = stack.read(vec_stack_address as usize, 8)?;
                 let vec_heap_address_bytes = TryInto::<&[u8; 8]>::try_into(vec_heap_address_bytes)
                     .map_err(|_| RuntimeError::Deserialization)?;
                 let vec_heap_address = u64::from_le_bytes(*vec_heap_address_bytes);
@@ -3080,8 +3025,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 
                 /* Update vector pointer */
                 let _ = stack.write(
-                    Offset::SB(vec_stack_address as usize),
-                    AccessLevel::Direct,
+                    vec_stack_address as usize,
                     &new_vec_heap_address.to_le_bytes(),
                 )?;
             }
@@ -3104,7 +3048,7 @@ mod tests {
             TryParse,
         },
         clear_stack, compile_statement, compile_statement_for_string,
-        semantic::scope::scope::Scope,
+        semantic::scope::scope::ScopeManager,
         v_num,
         vm::vm::{DeserializeFrom, Runtime},
     };
@@ -3137,14 +3081,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3152,7 +3101,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3195,14 +3144,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3210,7 +3164,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3244,14 +3198,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3259,7 +3218,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3314,14 +3273,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3329,7 +3293,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3554,14 +3518,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3569,7 +3538,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3598,14 +3567,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3613,7 +3587,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3657,14 +3631,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3672,7 +3651,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3727,14 +3706,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3742,7 +3726,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3820,14 +3804,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3835,7 +3824,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3866,14 +3855,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3881,7 +3875,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3917,14 +3911,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -3932,7 +3931,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -3988,14 +3987,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4003,7 +4007,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4043,14 +4047,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4058,7 +4067,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4113,14 +4122,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4128,7 +4142,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4190,14 +4204,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4205,7 +4224,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4247,14 +4266,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4262,7 +4286,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4298,14 +4322,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4313,7 +4342,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4374,14 +4403,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4389,7 +4423,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -4440,14 +4474,19 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
@@ -4455,7 +4494,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

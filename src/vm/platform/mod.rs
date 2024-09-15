@@ -7,7 +7,7 @@ use self::{
     core::{CoreCasm, CoreFn},
     stdlib::{StdCasm, StdFn},
 };
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 
 use super::{
     allocator::{heap::Heap, stack::Stack},
@@ -71,25 +71,30 @@ impl Resolve for Lib {
     type Extra = Vec<Expression>;
     fn resolve<GE: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            Lib::Core(value) => value.resolve::<GE>(scope, context, extra),
-            Lib::Std(value) => value.resolve::<GE>(scope, context, extra),
+            Lib::Core(value) => value.resolve::<GE>(scope_manager, scope_id, context, extra),
+            Lib::Std(value) => value.resolve::<GE>(scope_manager, scope_id, context, extra),
         }
     }
 }
 
 impl TypeOf for Lib {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Lib::Core(value) => value.type_of(scope),
-            Lib::Std(value) => value.type_of(scope),
+            Lib::Core(value) => value.type_of(scope_manager, scope_id),
+            Lib::Std(value) => value.type_of(scope_manager, scope_id),
         }
     }
 }
@@ -97,12 +102,14 @@ impl TypeOf for Lib {
 impl GenerateCode for Lib {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            Lib::Core(value) => value.gencode(scope, instructions),
-            Lib::Std(value) => value.gencode(scope, instructions),
+            Lib::Core(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Lib::Std(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }
@@ -147,21 +154,31 @@ mod tests {
             dynamic_fn_provider: crate::vm::vm::TestDynamicFnProvider {},
             out: String::new(),
         };
-        let scope = crate::semantic::scope::scope::Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::TestDynamicGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::TestDynamicGameEngine>(
+                &mut scope_manager,
+                None,
+                &None,
+                &mut (),
+            )
             .expect("Resolution should have succeeded");
         // Code generation.
         let mut instructions = crate::vm::casm::CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0, "No instructions generated");
         // Execute the instructions.
         let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

@@ -1,16 +1,13 @@
 use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
-use crate::arw_write;
-use crate::e_static;
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::var_impl::VarState;
-use crate::semantic::scope::BuildStaticType;
+use crate::ast::statements::block::BlockCommonApi;
+use crate::semantic::scope::scope::ScopeState;
+use crate::semantic::scope::static_types::FnType;
 use crate::semantic::scope::BuildUserType;
-use crate::semantic::scope::BuildVar;
 use crate::semantic::EType;
 use crate::semantic::SizeOf;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType, var_impl::Var},
+    scope::{static_types::StaticType, user_type_impl::UserType},
     Resolve, SemanticError, TypeOf,
 };
 
@@ -20,7 +17,8 @@ impl Resolve for Definition {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -28,8 +26,8 @@ impl Resolve for Definition {
         Self: Sized,
     {
         match self {
-            Definition::Type(value) => value.resolve::<G>(scope, &(), &mut ()),
-            Definition::Fn(value) => value.resolve::<G>(scope, &(), &mut ()),
+            Definition::Type(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
+            Definition::Fn(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
         }
     }
 }
@@ -40,7 +38,8 @@ impl Resolve for TypeDef {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -48,9 +47,9 @@ impl Resolve for TypeDef {
         Self: Sized,
     {
         let _ = match self {
-            TypeDef::Struct(value) => value.resolve::<G>(scope, context, extra),
-            TypeDef::Union(value) => value.resolve::<G>(scope, context, extra),
-            TypeDef::Enum(value) => value.resolve::<G>(scope, context, extra),
+            TypeDef::Struct(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            TypeDef::Union(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            TypeDef::Enum(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
         }?;
         let id = match &self {
             TypeDef::Struct(value) => &value.id,
@@ -58,13 +57,9 @@ impl Resolve for TypeDef {
             TypeDef::Enum(value) => &value.id,
         };
 
-        let type_def = UserType::build_usertype(
-            self,
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
+        let type_def = UserType::build_usertype(self, &scope_manager, scope_id)?;
 
-        let mut borrowed_scope = arw_write!(scope, SemanticError::ConcurrencyError)?;
-        let _ = borrowed_scope.register_type(id, type_def)?;
+        let _ = scope_manager.register_type(id, type_def, scope_id)?;
         Ok(())
     }
 }
@@ -75,7 +70,8 @@ impl Resolve for StructDef {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -83,7 +79,7 @@ impl Resolve for StructDef {
         Self: Sized,
     {
         for (_, type_siq) in &mut self.fields {
-            let _ = type_siq.resolve::<G>(scope, context, extra)?;
+            let _ = type_siq.resolve::<G>(scope_manager, scope_id, context, extra)?;
         }
         Ok(())
     }
@@ -95,7 +91,8 @@ impl Resolve for UnionDef {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -104,7 +101,7 @@ impl Resolve for UnionDef {
     {
         for (_, variant) in &mut self.variants {
             for (_, type_sig) in variant {
-                let _ = type_sig.resolve::<G>(scope, context, extra);
+                let _ = type_sig.resolve::<G>(scope_manager, scope_id, context, extra);
             }
         }
 
@@ -118,7 +115,8 @@ impl Resolve for EnumDef {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -135,7 +133,8 @@ impl Resolve for FnDef {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -143,58 +142,42 @@ impl Resolve for FnDef {
         Self: Sized,
     {
         for value in &mut self.params {
-            let _ = value.resolve::<G>(scope, context, extra)?;
+            let _ = value.resolve::<G>(scope_manager, scope_id, context, extra)?;
         }
 
-        let _ = self.ret.resolve::<G>(scope, context, extra)?;
-        let return_type = self
+        let _ = self
             .ret
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+        let return_type = self.ret.type_of(&scope_manager, scope_id)?;
 
-        let borrowed_scope = crate::arw_read!(scope, SemanticError::ConcurrencyError)?;
+        let inner_scope = self.scope.init_from_parent(scope_manager, scope_id)?;
+        scope_manager
+            .scope_states
+            .insert(inner_scope, ScopeState::Function);
 
-        let mut vars = self
-            .params
-            .iter()
-            .filter_map(|param| {
-                param
-                    .type_of(&borrowed_scope)
-                    .ok()
-                    .map(|p| (param.id.clone(), p))
-            })
-            .enumerate()
-            .map(|(_index, (id, param))| {
-                let mut var = <Var as BuildVar>::build_var(&id, &param);
-                var.state = VarState::Parameter;
-                var.is_declared = true;
-                var
-            })
-            .collect::<Vec<Var>>();
-        drop(borrowed_scope);
-        // convert to FnType -> GOAL : Retrieve function type signature
-        let params = {
-            let mut params = Vec::with_capacity(self.params.len());
-            for p in &self.params {
-                params.push(p.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?);
-            }
-            params
-        };
-        let static_type: StaticType = StaticType::build_fn(
-            &params,
-            &self
-                .ret
-                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
-            params.iter().map(|p| p.size_of()).sum::<usize>() + 8,
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
-        let fn_type_sig = e_static!(static_type);
-        let mut var = <Var as BuildVar>::build_var(&self.id, &fn_type_sig);
-        var.is_declared = true;
-        self.scope.set_caller(var.clone());
-        let _ = arw_write!(scope, SemanticError::ConcurrencyError)?.register_var(var)?;
+        let mut param_types = Vec::with_capacity(self.params.len());
+        for arg in &self.params {
+            let argtype = arg.type_of(scope_manager, scope_id)?;
+            param_types.push(argtype.clone());
+            let _ =
+                scope_manager.register_parameter(arg.name.as_str(), argtype, Some(inner_scope))?;
+        }
+
+        let param_total_size = param_types.iter().map(|t| t.size_of()).sum();
+
+        let fn_type_sig = EType::Static(StaticType::StaticFn(FnType {
+            params: param_types,
+            ret: Box::new(return_type.clone()),
+            scope_params_size: param_total_size,
+        }));
+
+        let id = scope_manager.register_var(self.name.as_str(), fn_type_sig, scope_id)?;
+        self.id.insert(id);
+
         let _ = self
             .scope
-            .resolve::<G>(scope, &Some(return_type), &mut vars)?;
+            .resolve::<G>(scope_manager, scope_id, &Some(return_type), &mut ())?;
+
         //let _ = return_type.compatible_with(&self.block, &block.borrow())?;
         Ok(())
     }
@@ -204,16 +187,13 @@ impl Resolve for FnDef {
 mod tests {
 
     use crate::{
-        arw_read,
         ast::TryParse,
         e_static, p_num,
         semantic::scope::{
             scope,
             static_types::{FnType, StaticType, StringType},
             user_type_impl::{Enum, Struct, Union, UserType},
-            var_impl::Var,
         },
-        vm::vm::CodeGenerationError,
     };
 
     use super::*;
@@ -231,26 +211,28 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_type(&"Point".to_string().into())
-            .unwrap();
+        let res_type = scope_manager.find_type_by_name(&"Point", None).unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
-                id: "Point".to_string().into(),
+                id: "Point".to_string(),
                 fields: {
                     let mut res = Vec::new();
-                    res.push(("x".to_string().into(), p_num!(I64)));
-                    res.push(("y".to_string().into(), p_num!(I64)));
+                    res.push(("x".to_string(), p_num!(I64)));
+                    res.push(("y".to_string(), p_num!(I64)));
                     res
                 },
             }),
-            res_type.as_ref().clone()
+            res_type.clone()
         )
         .into()
     }
@@ -268,65 +250,55 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
+        let mut scope_manager = scope::ScopeManager::default();
+        let point_id = scope_manager
             .register_type(
-                &"Point".to_string().into(),
+                "Point",
                 UserType::Struct(Struct {
-                    id: "Point".to_string().into(),
+                    id: "Point".to_string(),
                     fields: {
                         let mut res = Vec::new();
-                        res.push(("x".to_string().into(), p_num!(U64)));
-                        res.push(("y".to_string().into(), p_num!(U64)));
+                        res.push(("x".to_string(), p_num!(U64)));
+                        res.push(("y".to_string(), p_num!(U64)));
                         res
                     },
                 }),
+                None,
             )
             .unwrap();
-        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_type(&"Line".to_string().into())
-            .unwrap();
+        let res_type = scope_manager.find_type_by_name(&"Line", None).unwrap();
 
         assert_eq!(
             UserType::Struct(Struct {
-                id: "Line".to_string().into(),
+                id: "Line".to_string(),
                 fields: {
                     let mut res = Vec::new();
                     res.push((
-                        "start".to_string().into(),
-                        crate::semantic::Either::User(
-                            UserType::Struct(Struct {
-                                id: "Point".to_string().into(),
-                                fields: vec![
-                                    ("x".to_string().into(), p_num!(U64)),
-                                    ("y".to_string().into(), p_num!(U64)),
-                                ],
-                            })
-                            .into(),
-                        ),
+                        "start".to_string(),
+                        crate::semantic::EType::User {
+                            id: point_id,
+                            size: res_type.size_of(),
+                        },
                     ));
                     res.push((
-                        "end".to_string().into(),
-                        crate::semantic::Either::User(
-                            UserType::Struct(Struct {
-                                id: "Point".to_string().into(),
-                                fields: vec![
-                                    ("x".to_string().into(), p_num!(U64)),
-                                    ("y".to_string().into(), p_num!(U64)),
-                                ],
-                            })
-                            .into(),
-                        ),
+                        "end".to_string(),
+                        crate::semantic::EType::User {
+                            id: point_id,
+                            size: res_type.size_of(),
+                        },
                     ));
                     res
                 },
             }),
-            res_type.as_ref().clone()
+            res_type.clone()
         )
     }
 
@@ -348,39 +320,41 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .find_type(&"Geo".to_string().into())
-            .unwrap();
+        let res_type = scope_manager.find_type_by_name(&"Geo", None).unwrap();
 
         assert_eq!(
             UserType::Union(Union {
-                id: "Geo".to_string().into(),
+                id: "Geo".to_string(),
                 variants: {
                     let mut res = Vec::new();
                     res.push((
-                        "Point".to_string().into(),
+                        "Point".to_string(),
                         Struct {
-                            id: "Point".to_string().into(),
+                            id: "Point".to_string(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push(("x".to_string().into(), p_num!(U64)));
-                                res.push(("y".to_string().into(), p_num!(U64)));
+                                res.push(("x".to_string(), p_num!(U64)));
+                                res.push(("y".to_string(), p_num!(U64)));
                                 res
                             },
                         },
                     ));
                     res.push((
-                        "Axe".to_string().into(),
+                        "Axe".to_string(),
                         Struct {
-                            id: "Axe".to_string().into(),
+                            id: "Axe".to_string(),
                             fields: {
                                 let mut res = Vec::new();
-                                res.push(("x".to_string().into(), p_num!(U64)));
+                                res.push(("x".to_string(), p_num!(U64)));
                                 res
                             },
                         },
@@ -388,7 +362,7 @@ mod tests {
                     res
                 },
             }),
-            res_type.as_ref().clone()
+            res_type.clone()
         )
     }
 
@@ -404,25 +378,27 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = type_def.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let res_type = arw_read!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .find_type(&"Geo".to_string().into())
-            .unwrap();
+        let res_type = scope_manager.find_type_by_name(&"Geo", None).unwrap();
 
         assert_eq!(
             UserType::Enum(Enum {
-                id: "Geo".to_string().into(),
+                id: "Geo".to_string(),
                 values: {
                     let mut res = Vec::new();
-                    res.push("Point".to_string().into());
+                    res.push("Point".to_string());
                     res
                 },
             }),
-            res_type.as_ref().clone()
+            res_type.clone()
         )
     }
 
@@ -440,25 +416,28 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"main".to_string().into())
+        let function_var = scope_manager
+            .find_var_by_name("main", None)
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().read().unwrap();
-        let function_type = &function_var.type_sig;
+        let function_type = &function_var.ctype;
 
         assert_eq!(
             *function_type,
-            crate::semantic::Either::Static(
+            crate::semantic::EType::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(e_static!(StaticType::Unit)),
-                    scope_params_size: 8,
+                    scope_params_size: 0,
                 })
                 .into()
             )
@@ -479,52 +458,38 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"main".to_string().into())
+        let function_var = scope_manager
+            .find_var_by_name(&"main", None)
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().read().unwrap();
-        let function_type = &function_var.type_sig;
+        let function_type = &function_var.ctype;
 
         assert_eq!(
             *function_type,
-            crate::semantic::Either::Static(
+            crate::semantic::EType::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![p_num!(U64), e_static!(StaticType::String(StringType()))],
                     ret: Box::new(e_static!(StaticType::Unit)),
-                    scope_params_size: 24,
+                    scope_params_size: 16,
                 })
                 .into()
             )
         );
 
         let function_scope = function.scope;
-        let binding = arw_read!(
-            function_scope.inner_scope.clone().unwrap(),
-            SemanticError::ConcurrencyError
-        )
-        .unwrap()
-        .find_var(&"x".to_string().into())
-        .unwrap();
-        let x_type = binding.read().unwrap();
-        assert_eq!(p_num!(U64), x_type.type_sig);
-        let binding = arw_read!(
-            function_scope.inner_scope.clone().unwrap(),
-            SemanticError::ConcurrencyError
-        )
-        .unwrap()
-        .find_var(&"text".to_string().into())
-        .unwrap();
-        let text_type = binding.read().unwrap();
-        assert_eq!(
-            e_static!(StaticType::String(StringType())),
-            text_type.type_sig
-        );
+        let x_var = scope_manager.find_var_by_name(&"x", None).unwrap();
+        assert_eq!(p_num!(U64), x_var.ctype);
+        let text_var = scope_manager.find_var_by_name(&"text", None).unwrap();
+        assert_eq!(e_static!(StaticType::String(StringType())), text_var.ctype);
     }
 
     #[test]
@@ -542,21 +507,24 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"main".to_string().into())
+        let function_var = scope_manager
+            .find_var_by_name(&"main", None)
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().read().unwrap();
-        let function_type = &function_var.type_sig;
+        let function_type = &function_var.ctype;
 
         assert_eq!(
             *function_type,
-            crate::semantic::Either::Static(
+            crate::semantic::EType::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),
@@ -581,40 +549,19 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
 
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
+        let _ = scope_manager
+            .register_var("x", p_num!(I64), None)
             .expect("registering vars should succeed");
 
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
-
-        // let captured_vars = function
-        //     .env
-        //     .as_ref()
-        //     .borrow()
-        //     .clone()
-        //     .values()
-        //     .cloned()
-        //     .map(|(v, _)| v.as_ref().clone())
-        //     .collect::<Vec<Var>>();
-        // assert_eq!(
-        //     captured_vars,
-        //     vec![Var {
-        //         id: "x".to_string().into(),
-        //         state: VarState::Local,
-        //         type_sig: Either::Static(
-        //             StaticType::Primitive(PrimitiveType::Number(NumberType::I64)).into()
-        //         ),
-        //     }]
-        // )
     }
 
     #[test]
@@ -632,48 +579,21 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
+        let mut scope_manager = scope::ScopeManager::default();
 
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(U64),
-                is_declared: false,
-            })
+        let _ = scope_manager
+            .register_var("x", p_num!(I64), None)
             .expect("registering vars should succeed");
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "y".to_string().into(),
-                type_sig: p_num!(U64),
-                is_declared: false,
-            })
+        let _ = scope_manager
+            .register_var("y", p_num!(I64), None)
             .expect("registering vars should succeed");
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
-
-        // let captured_vars = function
-        //     .env
-        //     .as_ref()
-        //     .borrow()
-        //     .clone()
-        //     .values()
-        //     .cloned()
-        //     .map(|(v, _)| v.as_ref().clone())
-        //     .collect::<Vec<Var>>();
-        // assert_eq!(
-        //     captured_vars,
-        //     vec![Var {
-        //         id: "x".to_string().into(),
-        //         state: VarState::Local,
-        //         type_sig: Either::Static(
-        //             StaticType::Primitive(PrimitiveType::Number(NumberType::U64)).into()
-        //         ),
-        //     }]
-        // )
     }
 
     #[test]
@@ -691,25 +611,28 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = scope::Scope::new();
-        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &(), &mut ());
+        let mut scope_manager = scope::ScopeManager::default();
+        let res = function.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &(),
+            &mut (),
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let function_var = arw_read!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .find_var(&"main".to_string().into())
+        let function_var = scope_manager
+            .find_var_by_name(&"main", None)
             .unwrap()
             .clone();
-        let function_var = function_var.as_ref().read().unwrap();
-        let function_type = &function_var.type_sig;
+        let function_type = &function_var.ctype;
 
         assert_eq!(
             *function_type,
-            crate::semantic::Either::Static(
+            crate::semantic::EType::Static(
                 StaticType::StaticFn(FnType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),
-                    scope_params_size: 8,
+                    scope_params_size: 0,
                 })
                 .into()
             )

@@ -1,6 +1,9 @@
 use crate::ast::{types::Type, utils::strings::ID};
 
-use super::{block::Block, declaration::TypedVar};
+use super::{
+    block::{Block, FunctionBlock},
+    declaration::TypedVar,
+};
 
 pub mod definition_gencode;
 pub mod definition_parse;
@@ -40,8 +43,9 @@ pub struct EnumDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    id: ID,
+    name: String,
+    id: Option<u64>,
     params: Vec<TypedVar>,
     ret: Box<Type>,
-    scope: Block,
+    scope: FunctionBlock,
 }

@@ -6,7 +6,10 @@ use nom::{
 };
 
 use crate::ast::{
-    statements::{block::Block, declaration::TypedVar},
+    statements::{
+        block::{Block, FunctionBlock},
+        declaration::TypedVar,
+    },
     types::Type,
     utils::{
         error::squash,
@@ -145,11 +148,15 @@ impl TryParse for FnDef {
                     separated_list0(wst(lexem::COMA), TypedVar::parse),
                     wst(lexem::PAR_C),
                 )),
-                cut(preceded(wst(lexem::ARROW), Type::parse)),
-                Block::parse,
+                map(
+                    opt(cut(preceded(wst(lexem::ARROW), Type::parse))),
+                    |opt_return_type| opt_return_type.unwrap_or(Type::Unit),
+                ),
+                FunctionBlock::parse,
             )),
-            |(id, params, ret, scope)| FnDef {
-                id,
+            |(name, params, ret, scope)| FnDef {
+                name,
+                id: None,
                 params,
                 ret: Box::new(ret),
                 scope,
@@ -166,7 +173,7 @@ mod tests {
     use crate::{
         ast::{
             expressions::{data::Data, Atomic, Expression},
-            statements::{Return, Statement},
+            statements::{block::FunctionBlock, Return, Statement},
             types::{NumberType, PrimitiveType},
         },
         semantic::{scope::ClosureState, Metadata},
@@ -281,27 +288,20 @@ mod tests {
         let value = res.unwrap().1;
         assert_eq!(
             FnDef {
-                id: "f".to_string().into(),
+                name: "f".to_string(),
+                id: None,
                 params: vec![TypedVar {
-                    id: "x".to_string().into(),
-                    rec: false,
+                    name: "x".to_string(),
+                    id: None,
                     signature: Type::Primitive(PrimitiveType::Number(NumberType::U64))
                 }],
                 ret: Box::new(Type::Primitive(PrimitiveType::Number(NumberType::U64))),
-                scope: Block {
-                    metadata: Metadata::default(),
-                    instructions: vec![Statement::Return(Return::Expr {
-                        expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))),
-                        metadata: Metadata::default()
-                    })],
-                    can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                    is_loop: Default::default(),
-
-                    caller: Default::default(),
-                    inner_scope: None,
-                }
+                scope: FunctionBlock::new(vec![Statement::Return(Return::Expr {
+                    expr: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
+                        Unresolved, 10
+                    ))))),
+                    metadata: Metadata::default()
+                })])
             },
             value
         );

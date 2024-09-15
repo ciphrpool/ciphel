@@ -6,9 +6,9 @@ use std::f64::NEG_INFINITY;
 use num_traits::ToBytes;
 
 use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
-use crate::semantic::{Either, TypeOf};
+use crate::semantic::{EType, TypeOf};
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
@@ -21,7 +21,7 @@ use crate::vm::vm::CasmMetadata;
 use crate::vm::vm::{Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Resolve, SemanticError},
+    semantic::{Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -142,7 +142,7 @@ impl MathFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::STD {
+                if *suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -190,7 +190,8 @@ impl Resolve for MathFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -229,12 +230,11 @@ impl Resolve for MathFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let n = &mut extra[0];
-                let _ = n.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
-                let n_type =
-                    n.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = n.resolve::<G>(scope_manager, scope_id, &Some(p_num!(F64)), &mut None)?;
+                let n_type = n.type_of(&scope_manager, scope_id)?;
 
                 match &n_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         &StaticType::Primitive(PrimitiveType::Number(NumberType::F64)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -252,16 +252,14 @@ impl Resolve for MathFn {
                 let x = &mut first_part[0];
                 let y = &mut second_part[0];
 
-                let _ = x.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
-                let _ = y.resolve::<G>(scope, &Some(p_num!(F64)), &mut None)?;
+                let _ = x.resolve::<G>(scope_manager, scope_id, &Some(p_num!(F64)), &mut None)?;
+                let _ = y.resolve::<G>(scope_manager, scope_id, &Some(p_num!(F64)), &mut None)?;
 
-                let x_type =
-                    x.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let y_type =
-                    y.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let x_type = x.type_of(&scope_manager, scope_id)?;
+                let y_type = y.type_of(&scope_manager, scope_id)?;
 
                 match &x_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         &StaticType::Primitive(PrimitiveType::Number(NumberType::F64)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -269,7 +267,7 @@ impl Resolve for MathFn {
                 }
 
                 match &y_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         &StaticType::Primitive(PrimitiveType::Number(NumberType::F64)) => {}
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -282,7 +280,11 @@ impl Resolve for MathFn {
     }
 }
 impl TypeOf for MathFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -298,8 +300,10 @@ impl TypeOf for MathFn {
 impl GenerateCode for MathFn {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             MathFn::Ceil => Ok(instructions.push(Casm::Platform(LibCasm::Std(
@@ -635,7 +639,7 @@ mod tests {
     use crate::{
         ast::{expressions::data::Primitive, statements::Statement, TryParse},
         compile_statement,
-        semantic::scope::scope::Scope,
+        semantic::scope::scope::ScopeManager,
         v_num,
         vm::vm::DeserializeFrom,
     };

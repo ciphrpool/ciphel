@@ -90,7 +90,7 @@ pub mod eater {
     }
 }
 
-pub type ID = Arc<String>;
+pub type ID = String;
 
 /*
  * @desc Parse Identifier
@@ -164,7 +164,7 @@ pub fn parse_id(input: Span) -> PResult<ID> {
                     nom::error::ErrorKind::AlphaNumeric,
                 )))
             } else {
-                Ok(Arc::new(id))
+                Ok(id)
             }
         },
     ))

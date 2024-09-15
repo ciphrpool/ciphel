@@ -1,46 +1,47 @@
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, ExprScope, Map, Number, Primitive, PtrAccess,
-    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
+    Struct, Tuple, Union, Variable, Vector,
 };
-use crate::ast::types::{NumberType, PrimitiveType, StrSliceType};
+use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::static_types::{self, StaticType};
 
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::static_types::StaticType;
-use crate::semantic::scope::var_impl::VarState;
-use crate::{arw_read, e_static};
-
-use crate::semantic::scope::BuildStaticType;
-use crate::semantic::{EType, SizeOf};
-use crate::semantic::{Either, Resolve, SemanticError, TypeOf};
+use crate::semantic::SizeOf;
+use crate::semantic::{EType, Resolve, SemanticError, TypeOf};
 
 impl TypeOf for Data {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Data::Primitive(value) => value.type_of(&scope),
-            Data::Slice(value) => value.type_of(&scope),
-            Data::Vec(value) => value.type_of(&scope),
-            Data::Closure(value) => value.type_of(&scope),
-            Data::Tuple(value) => value.type_of(&scope),
-            Data::Address(value) => value.type_of(&scope),
-            Data::PtrAccess(value) => value.type_of(&scope),
-            Data::Variable(value) => value.type_of(&scope),
-            Data::Unit => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
-            Data::Map(value) => value.type_of(&scope),
-            Data::Struct(value) => value.type_of(&scope),
-            Data::Union(value) => value.type_of(&scope),
-            Data::Enum(value) => value.type_of(&scope),
-            Data::StrSlice(value) => value.type_of(&scope),
+            Data::Primitive(value) => value.type_of(&scope_manager, scope_id),
+            Data::Slice(value) => value.type_of(&scope_manager, scope_id),
+            Data::Vec(value) => value.type_of(&scope_manager, scope_id),
+            Data::Closure(value) => value.type_of(&scope_manager, scope_id),
+            Data::Tuple(value) => value.type_of(&scope_manager, scope_id),
+            Data::Address(value) => value.type_of(&scope_manager, scope_id),
+            Data::PtrAccess(value) => value.type_of(&scope_manager, scope_id),
+            Data::Variable(value) => value.type_of(&scope_manager, scope_id),
+            Data::Unit => Ok(EType::Static(StaticType::Unit)),
+            Data::Map(value) => value.type_of(&scope_manager, scope_id),
+            Data::Struct(value) => value.type_of(&scope_manager, scope_id),
+            Data::Union(value) => value.type_of(&scope_manager, scope_id),
+            Data::Enum(value) => value.type_of(&scope_manager, scope_id),
+            Data::StrSlice(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
 
 impl TypeOf for Variable {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -51,70 +52,69 @@ impl TypeOf for Variable {
 }
 
 impl TypeOf for Primitive {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
             Primitive::Number(num) => match num {
-                Number::U8(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::U8), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::U16(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::U16), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::U32(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::U32), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::U64(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::U64), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::U128(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::U128), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::I8(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::I8), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::I16(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::I16), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::I32(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::I32), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::I64(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::I64), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::I128(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::I128), scope)
-                        .map(|value| (e_static!(value)))
-                }
-                Number::F64(_) => {
-                    StaticType::build_primitive(&PrimitiveType::Number(NumberType::F64), scope)
-                        .map(|value| (e_static!(value)))
-                }
+                Number::U8(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::U8),
+                ))),
+                Number::U16(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::U16),
+                ))),
+                Number::U32(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::U32),
+                ))),
+                Number::U64(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::U64),
+                ))),
+                Number::U128(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::U128),
+                ))),
+                Number::I8(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::I8),
+                ))),
+                Number::I16(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::I16),
+                ))),
+                Number::I32(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::I32),
+                ))),
+                Number::I64(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::I64),
+                ))),
+                Number::I128(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::I128),
+                ))),
+                Number::F64(_) => Ok(EType::Static(StaticType::Primitive(
+                    static_types::PrimitiveType::Number(static_types::NumberType::F64),
+                ))),
                 Number::Unresolved(_) => Err(SemanticError::CantInferType(
                     "of the given number".to_string(),
                 )),
             },
-            Primitive::Bool(_) => StaticType::build_primitive(&PrimitiveType::Bool, scope)
-                .map(|value| (e_static!(value))),
-            Primitive::Char(_) => StaticType::build_primitive(&PrimitiveType::Char, scope)
-                .map(|value| (e_static!(value))),
+            Primitive::Bool(_) => Ok(EType::Static(StaticType::Primitive(
+                static_types::PrimitiveType::Bool,
+            ))),
+            Primitive::Char(_) => Ok(EType::Static(StaticType::Primitive(
+                static_types::PrimitiveType::Char,
+            ))),
         }
     }
 }
 
 impl TypeOf for Slice {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -125,22 +125,28 @@ impl TypeOf for Slice {
 }
 
 impl TypeOf for StrSlice {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        StaticType::build_str_slice(
-            &StrSliceType {
+        Ok(EType::Static(StaticType::StrSlice(
+            static_types::StrSliceType {
                 size: self.value.len() + self.padding,
             },
-            scope,
-        )
-        .map(|value| (e_static!(value)))
+        )))
     }
 }
 
 impl TypeOf for Vector {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -151,7 +157,11 @@ impl TypeOf for Vector {
 }
 
 impl TypeOf for Tuple {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -162,76 +172,71 @@ impl TypeOf for Tuple {
 }
 
 impl TypeOf for Closure {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         let mut params_types = Vec::with_capacity(self.params.len());
+        let mut scope_params_size = 0;
         for expr in &self.params {
-            let expr_type = expr.type_of(&scope)?;
+            let expr_type = expr.type_of(&scope_manager, scope_id)?;
+            scope_params_size += expr_type.size_of();
             params_types.push(expr_type);
         }
-        let ret_type = self.scope.type_of(&scope)?;
-        let mut scope_params_size = 0;
-        for (v, _) in self
-            .scope
-            .scope()?
-            .try_read()
-            .map_err(|_| SemanticError::ConcurrencyError)?
-            .for_closure_vars()?
-        {
-            let var = arw_read!(v, SemanticError::ConcurrencyError)?;
-            if var.state == VarState::Parameter {
-                scope_params_size += var.type_sig.size_of();
-            }
-        }
-        StaticType::build_closure(
-            &params_types,
-            &ret_type,
-            self.closed,
-            scope_params_size,
-            scope,
-        )
-        .map(|value| e_static!(value))
+        let ret_type = self.scope.type_of(&scope_manager, scope_id)?;
+
+        Ok(EType::Static(StaticType::Closure(
+            static_types::ClosureType {
+                params: params_types,
+                ret: Box::new(ret_type),
+                closed: self.closed,
+                scope_params_size,
+            },
+        )))
     }
 }
 
-impl TypeOf for ExprScope {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match self {
-            ExprScope::Scope(value) => value.type_of(&scope),
-            ExprScope::Expr(value) => value.type_of(&scope),
-        }
-    }
-}
 impl TypeOf for ClosureParam {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            ClosureParam::Full(var) => var.type_of(&scope),
-            ClosureParam::Minimal(_) => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_any().into(),
-            )),
+            ClosureParam::Full(var) => var.type_of(&scope_manager, scope_id),
+            ClosureParam::Minimal(_) => Ok(EType::Static(StaticType::Any)),
         }
     }
 }
 impl TypeOf for Address {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        let addr_type = self.value.type_of(&scope)?;
+        let addr_type = self.value.type_of(&scope_manager, scope_id)?;
 
-        StaticType::build_addr_from(&addr_type, scope).map(|value| e_static!(value))
+        Ok(EType::Static(StaticType::Address(static_types::AddrType(
+            Box::new(addr_type),
+        ))))
     }
 }
 impl TypeOf for PtrAccess {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -241,35 +246,62 @@ impl TypeOf for PtrAccess {
     }
 }
 impl TypeOf for Struct {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope.find_type(&self.id)?;
-        user_type.type_of(&scope)
+        let user_type = scope_manager.find_type_by_name(&self.id, scope_id)?;
+
+        Ok(EType::User {
+            id: ScopeManager::hash_id(&self.id, scope_id),
+            size: user_type.size_of(),
+        })
     }
 }
 impl TypeOf for Union {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope.find_type(&self.typename)?;
-        user_type.type_of(&scope)
+        let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
+        Ok(EType::User {
+            id: ScopeManager::hash_id(&self.typename, scope_id),
+            size: user_type.size_of(),
+        })
     }
 }
 
 impl TypeOf for Enum {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
-        let user_type = scope.find_type(&self.typename)?;
-        user_type.type_of(&scope)
+        let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
+
+        Ok(EType::User {
+            id: ScopeManager::hash_id(&self.typename, scope_id),
+            size: user_type.size_of(),
+        })
     }
 }
 impl TypeOf for Map {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {

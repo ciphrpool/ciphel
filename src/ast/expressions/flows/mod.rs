@@ -3,13 +3,21 @@ pub mod flows_parse;
 pub mod flows_resolve;
 pub mod flows_typeof;
 
+use std::fmt::Debug;
+
 use crate::{
-    ast::{types::Type, utils::strings::ID},
-    semantic::{EType, Metadata},
+    ast::{
+        statements::block::{BlockCommonApi, ClosureBlock, ExprBlock},
+        types::Type,
+        utils::strings::ID,
+        TryParse,
+    },
+    semantic::{EType, Metadata, Resolve},
+    vm::vm::GenerateCode,
 };
 
 use super::{
-    data::{ExprScope, Primitive, StrSlice},
+    data::{Primitive, StrSlice},
     Expression,
 };
 
@@ -25,49 +33,75 @@ pub enum ExprFlow {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfExpr {
     condition: Box<Expression>,
-    then_branch: ExprScope,
-    else_branch: ExprScope,
+    then_branch: ExprBlock,
+    else_branch: ExprBlock,
     metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr {
     expr: Box<Expression>,
-    patterns: Vec<PatternExpr>,
-    else_branch: Option<ExprScope>,
+    cases: Cases<ExprBlock, ClosureBlock>,
+    else_branch: Option<ExprBlock>,
     metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Pattern {
-    Primitive(Primitive),
-    String(StrSlice),
-    Enum {
-        typename: ID,
-        value: ID,
-    },
-    Union {
-        typename: ID,
-        variant: ID,
-        vars: Vec<ID>,
-    },
-    // Struct {
-    //     typename: ID,
-    //     vars: Vec<ID>,
-    // },
-    // Tuple(Vec<ID>),
+pub struct UnionPattern {
+    pub typename: ID,
+    pub variant: ID,
+    pub vars_names: Vec<ID>,
+    pub vars_id: Option<Vec<u64>>,
+    pub variant_value: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PatternExpr {
-    patterns: Vec<Pattern>,
-    expr: ExprScope,
+pub struct PrimitiveCase<
+    B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq,
+> {
+    pub patterns: Vec<Primitive>,
+    pub block: B,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringCase<
+    B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq,
+> {
+    pub patterns: Vec<StrSlice>,
+    pub block: B,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumCase<
+    B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq,
+> {
+    pub patterns: Vec<(String, String, Option<u64>)>,
+    pub block: B,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionCase<
+    B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq,
+> {
+    pub pattern: UnionPattern,
+    pub block: B,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Cases<
+    B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq, // IIFE
+    C: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + PartialEq, // CLOSURE
+> {
+    Primitive { cases: Vec<PrimitiveCase<B>> },
+    String { cases: Vec<StringCase<B>> },
+    Enum { cases: Vec<EnumCase<B>> },
+    Union { cases: Vec<UnionCase<C>> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TryExpr {
-    try_branch: ExprScope,
-    else_branch: Option<ExprScope>,
+    try_branch: ExprBlock,
+    else_branch: Option<ExprBlock>,
     pop_last_err: bool,
     metadata: Metadata,
 }

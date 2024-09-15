@@ -1,20 +1,17 @@
-use crate::arw_read;
-use crate::semantic::scope::scope::Scope;
+use crate::ast::expressions::locate::Locatable;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
-use crate::semantic::scope::type_traits::GetSubTypes;
 use crate::semantic::AccessLevel;
-use crate::vm::allocator::stack::Offset;
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::casm::alloc::{Access, CheckIndex};
 use crate::vm::casm::branch::Call;
 use crate::vm::casm::data;
-use crate::vm::casm::locate::{Locate, LocateUTF8Char};
+use crate::vm::casm::locate::{Locate, LocateIndex, LocateOffset, LocateUTF8Char};
 use crate::vm::casm::mem::Mem;
-use crate::vm::vm::Locatable;
 use crate::{
     semantic::{
         scope::static_types::{NumberType, RangeType, StaticType},
-        Either, SizeOf, TypeOf,
+        EType, SizeOf, TypeOf,
     },
     vm::{
         casm::{
@@ -36,30 +33,30 @@ use super::{FieldAccess, ListAccess, Range, TupleAccess};
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::UnaryOperation::Minus { value, metadata: _ } => {
                 let Some(value_type) = value.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = value.gencode(scope, instructions)?;
+                let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Minus(Minus {
                         data_type: value_type.try_into()?,
                     }),
-                    // result: OpPrimitive::Number(NumberType::U64),
                 }));
                 Ok(())
             }
             super::UnaryOperation::Not { value, metadata: _ } => {
-                let _ = value.gencode(scope, instructions)?;
+                let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Not(Not()),
-                    // result: OpPrimitive::Number(NumberType::U64),
                 }));
                 Ok(())
             }
@@ -67,289 +64,107 @@ impl GenerateCode for super::UnaryOperation {
     }
 }
 
-impl Locatable for TupleAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.var.locate(scope, instructions)?;
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
 impl GenerateCode for TupleAccess {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = self.var.locate(scope, instructions)?;
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
+        let Some(item_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::Unlocatable);
         };
-        let Some(offset) = from_type.get_inline_field_offset(self.index) else {
-            return Err(CodeGenerationError::UnresolvedError);
+
+        let Some(offset) = self.offset else {
+            return Err(CodeGenerationError::Unlocatable);
         };
-        let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        if size == 0 {
-            return Ok(());
+
+        let size = item_type.size_of();
+
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                instructions.push(Casm::Access(Access::Static {
+                    address: address.add(offset),
+                    size,
+                }))
+            }
+            None => {
+                // the address was pushed on the stack
+                instructions.push(Casm::Offset(LocateOffset { offset }));
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+            }
         }
-        instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
         Ok(())
     }
 }
 
-impl Locatable for ListAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        if let Some(signature) = self.var.signature() {
-            match signature {
-                Either::Static(signature) => match signature.as_ref() {
-                    StaticType::String(_) | StaticType::Vec(_) => {
-                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-        // Access the field
-        let _ = self.index.gencode(scope, instructions)?;
-
-        let is_utf8_access = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::String(_) | StaticType::StrSlice(_) => true,
-                _ => false,
-            },
-            _ => false,
-        };
-
-        let len = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Slice(SliceType { size, .. }) => Some(*size),
-                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
-                _ => None,
-            },
-            _ => None,
-        };
-
-        if is_utf8_access {
-            instructions.push(Casm::LocateUTF8Char(LocateUTF8Char::RuntimeAtIdx { len }));
-        } else {
-            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            if size == 0 {
-                instructions.push(Casm::Pop(8)); //Pop index
-                return Ok(());
-            }
-            instructions.push(Casm::AccessIdx(CheckIndex {
-                item_size: size,
-                len,
-            }));
-        }
-
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
 impl GenerateCode for ListAccess {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        if let Some(signature) = self.var.signature() {
-            match signature {
-                Either::Static(signature) => match signature.as_ref() {
-                    StaticType::String(_) | StaticType::Vec(_) => {
-                        instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                    }
-                    _ => {}
-                },
-                _ => {}
+        let Some(item_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let size = item_type.size_of();
+
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                let _ = self
+                    .index
+                    .gencode(scope_manager, scope_id, instructions, context)?;
+
+                instructions.push(Casm::OffsetIdx(LocateIndex {
+                    size,
+                    base_address: Some(address),
+                }));
+
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+            }
+            None => {
+                // the address was pushed on the stack
+
+                let _ = self
+                    .index
+                    .gencode(scope_manager, scope_id, instructions, context)?;
+
+                instructions.push(Casm::OffsetIdx(LocateIndex {
+                    size,
+                    base_address: None,
+                }));
+                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
             }
         }
-        // Access the field
-        let _ = self.index.gencode(scope, instructions)?;
-
-        let is_utf8_access = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::String(_) | StaticType::StrSlice(_) => true,
-                _ => false,
-            },
-            _ => false,
-        };
-
-        let len = match self
-            .var
-            .signature()
-            .ok_or(CodeGenerationError::UnresolvedError)?
-        {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Slice(SliceType { size, .. }) => Some(*size),
-                StaticType::StrSlice(StrSliceType { size }) => Some(*size),
-                _ => None,
-            },
-            _ => None,
-        };
-
-        if is_utf8_access {
-            instructions.push(Casm::Access(Access::RuntimeCharUTF8AtIdx { len }));
-        } else {
-            let Some(size) = self.metadata.signature().map(|sig| sig.size_of()) else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            if size == 0 {
-                instructions.push(Casm::Pop(8)); //Pop index
-                return Ok(());
-            }
-            instructions.push(Casm::AccessIdx(CheckIndex {
-                item_size: size,
-                len,
-            }));
-            instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
-        }
-
         Ok(())
     }
 }
 
-impl Locatable for FieldAccess {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-
-        // Access the field
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(offset) = from_type.get_field_offset(
-            &self
-                .field
-                .most_left_id()
-                .ok_or(CodeGenerationError::UnresolvedError)?,
-        ) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        let _ = self.field.locate(scope, instructions)?;
-        Ok(())
-    }
-
-    fn is_assignable(&self) -> bool {
-        true
-    }
-
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.var.most_left_id()
-    }
-}
 impl GenerateCode for FieldAccess {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        // Locate the variable
-        let _ = self.var.locate(scope, instructions)?;
-        // Access the field
-        let Some(from_type) = self.var.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        let Some(offset) = from_type.get_field_offset(
-            &self
-                .field
-                .most_left_id()
-                .ok_or(CodeGenerationError::UnresolvedError)?,
-        ) else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Data(data::Data::Serialized {
-            data: (offset as u64).to_le_bytes().into(),
-        }));
-        instructions.push(Casm::Operation(Operation {
-            kind: OperationKind::Addition(Addition {
-                left: OpPrimitive::Number(NumberType::U64),
-                right: OpPrimitive::Number(NumberType::U64),
-            }),
-        }));
-        let _ = self.field.gencode(scope, instructions)?;
+        match self.var.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                // the address is static
+                self.field
+                    .access_from(scope_manager, scope_id, instructions, address)?;
+            }
+            None => {
+                // the address was pushed on the stack
+                self.field
+                    .runtime_access(scope_manager, scope_id, instructions)?;
+            }
+        }
         Ok(())
     }
 }
@@ -357,15 +172,17 @@ impl GenerateCode for FieldAccess {
 impl GenerateCode for Range {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(signature) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
         let (_num_type, incr_data) = match signature {
-            Either::Static(value) => match value.as_ref() {
+            EType::Static(value) => match value {
                 StaticType::Range(RangeType { num, .. }) => (
                     num.size_of(),
                     match num {
@@ -387,190 +204,203 @@ impl GenerateCode for Range {
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
 
-        let _ = self.lower.gencode(scope, instructions)?;
-        let _ = self.upper.gencode(scope, instructions)?;
+        let _ = self
+            .lower
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .upper
+            .gencode(scope_manager, scope_id, instructions, context)?;
         instructions.push(Casm::Data(Data::Serialized { data: incr_data }));
         Ok(())
     }
 }
 
-impl Locatable for super::FnCall {
-    fn locate(
-        &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
-        instructions: &mut CasmProgram,
-    ) -> Result<(), CodeGenerationError> {
-        let _ = self.gencode(scope, instructions)?;
-        let Some(value_type) = self.metadata.signature() else {
-            return Err(CodeGenerationError::UnresolvedError);
-        };
-        instructions.push(Casm::Locate(Locate {
-            address: MemoryAddress::Stack {
-                offset: Offset::ST(-(value_type.size_of() as isize)),
-                level: AccessLevel::Direct,
-            },
-        }));
-        Ok(())
-    }
+// impl Locatable for super::FnCall {
+//     fn locate(
+//         &self,
+//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+//         scope_id: Option<u128>,
+//         instructions: &mut CasmProgram,
+//         context: &crate::vm::vm::CodeGenerationContext,
+//     ) -> Result<(), CodeGenerationError> {
+//         let _ = self.gencode(scope_manager, scope_id, instructions, context)?;
+//         let Some(value_type) = self.metadata.signature() else {
+//             return Err(CodeGenerationError::UnresolvedError);
+//         };
+//         instructions.push(Casm::Locate(Locate {
+//             address: MemoryAddress::Stack {
+//                 offset: Offset::ST(-(value_type.size_of() as isize)),
+//                 level: AccessLevel::Direct,
+//             },
+//         }));
+//         Ok(())
+//     }
 
-    fn is_assignable(&self) -> bool {
-        false
-    }
+//     fn is_assignable(&self) -> bool {
+//         false
+//     }
 
-    fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
-        self.fn_var.most_left_id()
-    }
-}
+//     fn most_left_id(&self) -> Option<crate::ast::utils::strings::ID> {
+//         self.fn_var.most_left_id()
+//     }
+// }
 
 impl GenerateCode for super::FnCall {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let params_size: usize = self
-            .params
-            .iter()
-            .map(|p| p.signature().map_or(0, |s| s.size_of()))
-            .sum();
+        todo!()
+        // let params_size: usize = self
+        //     .params
+        //     .iter()
+        //     .map(|p| p.signature().map_or(0, |s| s.size_of()))
+        //     .sum();
 
-        if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
-            for param in &self.params {
-                let _ = param.gencode(scope, instructions)?;
-            }
-            instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
-                dynamic_fn_id.clone(),
-            )));
-            return Ok(());
-        }
+        // if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
+        //     for param in &self.params {
+        //         let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+        //     }
+        //     instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
+        //         dynamic_fn_id.clone(),
+        //     )));
+        //     return Ok(());
+        // }
 
-        let borrowed_platform = arw_read!(self.platform, CodeGenerationError::ConcurrencyError)?;
-        if let Some(platform_api) = borrowed_platform.as_ref() {
-            for param in &self.params {
-                let _ = param.gencode(scope, instructions)?;
-            }
-            platform_api.gencode(scope, instructions)
-        } else {
-            let Some(Either::Static(fn_sig)) = self.fn_var.signature() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            let Some(signature) = self.metadata.signature() else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
-            let sig_params_size = match fn_sig.as_ref() {
-                StaticType::Closure(value) => value.scope_params_size,
-                StaticType::StaticFn(value) => value.scope_params_size,
-                _ => return Err(CodeGenerationError::UnresolvedError),
-            };
-            let _return_size = signature.size_of();
+        // if let Some(platform_api) = self.platform.as_ref() {
+        //     for param in &self.params {
+        //         let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+        //     }
+        //     platform_api.gencode(scope_manager, scope_id, instructions, context)
+        // } else {
+        //     let Some(EType::Static(fn_sig)) = self.fn_var.signature() else {
+        //         return Err(CodeGenerationError::UnresolvedError);
+        //     };
+        //     let Some(signature) = self.metadata.signature() else {
+        //         return Err(CodeGenerationError::UnresolvedError);
+        //     };
+        //     let sig_params_size = match fn_sig {
+        //         StaticType::Closure(value) => value.scope_params_size,
+        //         StaticType::StaticFn(value) => value.scope_params_size,
+        //         _ => return Err(CodeGenerationError::UnresolvedError),
+        //     };
+        //     let _return_size = signature.size_of();
 
-            match fn_sig.as_ref() {
-                StaticType::Closure(ClosureType { closed: false, .. })
-                | StaticType::StaticFn(_) => {
-                    /* Call static function */
-                    // Load Param
-                    for param in &self.params {
-                        let _ = param.gencode(scope, instructions)?;
-                    }
-                    let _ = self.fn_var.gencode(scope, instructions)?;
-                    if let Some(8) = sig_params_size.checked_sub(params_size) {
-                        // Load function address
-                        instructions.push(Casm::Mem(Mem::Dup(8)));
-                    }
-                    // Call function
-                    // Load param size
-                    instructions.push(Casm::Data(Data::Serialized {
-                        data: (sig_params_size as u64).to_le_bytes().into(),
-                    }));
+        //     match fn_sig {
+        //         StaticType::Closure(ClosureType { closed: false, .. })
+        //         | StaticType::StaticFn(_) => {
+        //             /* Call static function */
+        //             // Load Param
+        //             for param in &self.params {
+        //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+        //             }
+        //             let _ = self
+        //                 .fn_var
+        //                 .gencode(scope_manager, scope_id, instructions, context)?;
+        //             if let Some(8) = sig_params_size.checked_sub(params_size) {
+        //                 // recursive function gives function address as last parameters
+        //                 // Load function address
+        //                 instructions.push(Casm::Mem(Mem::Dup(8)));
+        //             }
+        //             // Call function
+        //             // Load param size
+        //             instructions.push(Casm::Data(Data::Serialized {
+        //                 data: (sig_params_size as u64).to_le_bytes().into(),
+        //             }));
 
-                    instructions.push(Casm::Call(Call::Stack));
-                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                }
-                StaticType::Closure(ClosureType { closed: true, .. }) => {
-                    // Load Param
-                    for param in &self.params {
-                        let _ = param.gencode(scope, instructions)?;
-                    }
+        //             instructions.push(Casm::Call(Call::Stack));
+        //         }
+        //         StaticType::Closure(ClosureType { closed: true, .. }) => {
+        //             // Load Param
+        //             for param in &self.params {
+        //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+        //             }
 
-                    let _ = self.fn_var.gencode(scope, instructions)?;
-                    match sig_params_size.checked_sub(params_size) {
-                        Some(16) => {
-                            /* Rec and closed */
-                            /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            // Load Env heap address
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Addition(Addition {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Substraction(Substraction {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        }
-                        Some(8) => {
-                            /* closed */
-                            /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-                            // Load Env heap address
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Addition(Addition {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Mem(Mem::Dup(8)));
-                            instructions.push(Casm::Data(Data::Serialized {
-                                data: (16u64).to_le_bytes().into(),
-                            }));
-                            instructions.push(Casm::Operation(Operation {
-                                kind: OperationKind::Substraction(Substraction {
-                                    left: OpPrimitive::Number(NumberType::U64),
-                                    right: OpPrimitive::Number(NumberType::U64),
-                                }),
-                            }));
-                            instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-                        }
-                        _ => return Err(CodeGenerationError::UnresolvedError),
-                    }
+        //             let _ = self
+        //                 .fn_var
+        //                 .gencode(scope_manager, scope_id, instructions, context)?;
+        //             match sig_params_size.checked_sub(params_size) {
+        //                 Some(16) => {
+        //                     /* Rec and closed */
+        //                     /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+        //                     // Load Env heap address
+        //                     instructions.push(Casm::Data(Data::Serialized {
+        //                         data: (16u64).to_le_bytes().into(),
+        //                     }));
+        //                     instructions.push(Casm::Operation(Operation {
+        //                         kind: OperationKind::Addition(Addition {
+        //                             left: OpPrimitive::Number(NumberType::U64),
+        //                             right: OpPrimitive::Number(NumberType::U64),
+        //                         }),
+        //                     }));
+        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+        //                     instructions.push(Casm::Data(Data::Serialized {
+        //                         data: (16u64).to_le_bytes().into(),
+        //                     }));
+        //                     instructions.push(Casm::Operation(Operation {
+        //                         kind: OperationKind::Substraction(Substraction {
+        //                             left: OpPrimitive::Number(NumberType::U64),
+        //                             right: OpPrimitive::Number(NumberType::U64),
+        //                         }),
+        //                     }));
+        //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+        //                 }
+        //                 Some(8) => {
+        //                     /* closed */
+        //                     /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+        //                     // Load Env heap address
+        //                     instructions.push(Casm::Data(Data::Serialized {
+        //                         data: (16u64).to_le_bytes().into(),
+        //                     }));
+        //                     instructions.push(Casm::Operation(Operation {
+        //                         kind: OperationKind::Addition(Addition {
+        //                             left: OpPrimitive::Number(NumberType::U64),
+        //                             right: OpPrimitive::Number(NumberType::U64),
+        //                         }),
+        //                     }));
+        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+        //                     instructions.push(Casm::Data(Data::Serialized {
+        //                         data: (16u64).to_le_bytes().into(),
+        //                     }));
+        //                     instructions.push(Casm::Operation(Operation {
+        //                         kind: OperationKind::Substraction(Substraction {
+        //                             left: OpPrimitive::Number(NumberType::U64),
+        //                             right: OpPrimitive::Number(NumberType::U64),
+        //                         }),
+        //                     }));
+        //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+        //                 }
+        //                 _ => return Err(CodeGenerationError::UnresolvedError),
+        //             }
 
-                    // Call function
+        //             // Call function
 
-                    // Load param size
-                    instructions.push(Casm::Data(Data::Serialized {
-                        data: (sig_params_size).to_le_bytes().into(),
-                    }));
+        //             // Load param size
+        //             instructions.push(Casm::Data(Data::Serialized {
+        //                 data: (sig_params_size).to_le_bytes().into(),
+        //             }));
 
-                    instructions.push(Casm::Call(Call::Stack));
-                    instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
-                }
-                _ => {
-                    return Err(CodeGenerationError::UnresolvedError);
-                }
-            }
-            Ok(())
-        }
+        //             instructions.push(Casm::Call(Call::Stack));
+        //         }
+        //         _ => {
+        //             return Err(CodeGenerationError::UnresolvedError);
+        //         }
+        //     }
+        //     Ok(())
+        // }
     }
 }
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Product::Mult {
@@ -584,8 +414,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mult(Mult {
@@ -607,8 +437,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Div(Division {
@@ -630,8 +460,8 @@ impl GenerateCode for super::Product {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Mod(Mod {
@@ -649,8 +479,10 @@ impl GenerateCode for super::Product {
 impl GenerateCode for super::Addition {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -658,8 +490,12 @@ impl GenerateCode for super::Addition {
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Addition(Addition {
@@ -675,8 +511,10 @@ impl GenerateCode for super::Addition {
 impl GenerateCode for super::Substraction {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -684,8 +522,12 @@ impl GenerateCode for super::Substraction {
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::Substraction(Substraction {
@@ -701,8 +543,10 @@ impl GenerateCode for super::Substraction {
 impl GenerateCode for super::Shift {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Shift::Left {
@@ -716,8 +560,8 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::ShiftLeft(ShiftLeft {
@@ -739,8 +583,8 @@ impl GenerateCode for super::Shift {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::ShiftRight(ShiftRight {
@@ -758,8 +602,10 @@ impl GenerateCode for super::Shift {
 impl GenerateCode for super::BitwiseAnd {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -767,8 +613,12 @@ impl GenerateCode for super::BitwiseAnd {
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseAnd(BitwiseAnd {
@@ -784,8 +634,10 @@ impl GenerateCode for super::BitwiseAnd {
 impl GenerateCode for super::BitwiseXOR {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -793,8 +645,12 @@ impl GenerateCode for super::BitwiseXOR {
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseXOR(BitwiseXOR {
@@ -810,8 +666,10 @@ impl GenerateCode for super::BitwiseXOR {
 impl GenerateCode for super::BitwiseOR {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -819,8 +677,12 @@ impl GenerateCode for super::BitwiseOR {
         let Some(right_type) = self.right.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::BitwiseOR(BitwiseOR {
@@ -836,23 +698,20 @@ impl GenerateCode for super::BitwiseOR {
 impl GenerateCode for super::Cast {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(left_type) = self.left.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(right_type) = self
-            .right
-            .type_of(&crate::arw_read!(
-                scope,
-                CodeGenerationError::ConcurrencyError
-            )?)
-            .ok()
-        else {
+        let Some(right_type) = self.right.type_of(&scope_manager, scope_id).ok() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let _ = self.left.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         let op_left_type: Result<OpPrimitive, CodeGenerationError> = left_type.try_into();
         let op_right_type: Result<OpPrimitive, CodeGenerationError> = right_type.try_into();
@@ -874,8 +733,10 @@ impl GenerateCode for super::Cast {
 impl GenerateCode for super::Comparaison {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Comparaison::Less {
@@ -889,8 +750,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Less(Less {
@@ -912,8 +773,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::LessEqual(LessEqual {
@@ -935,8 +796,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Greater(Greater {
@@ -958,8 +819,8 @@ impl GenerateCode for super::Comparaison {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::GreaterEqual(GreaterEqual {
@@ -977,8 +838,10 @@ impl GenerateCode for super::Comparaison {
 impl GenerateCode for super::Equation {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             super::Equation::Equal {
@@ -992,8 +855,8 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::Equal(Equal {
@@ -1015,8 +878,8 @@ impl GenerateCode for super::Equation {
                 let Some(right_type) = right.signature() else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                let _ = left.gencode(scope, instructions)?;
-                let _ = right.gencode(scope, instructions)?;
+                let _ = left.gencode(scope_manager, scope_id, instructions, context)?;
+                let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
                 instructions.push(Casm::Operation(Operation {
                     kind: OperationKind::NotEqual(NotEqual {
@@ -1034,11 +897,17 @@ impl GenerateCode for super::Equation {
 impl GenerateCode for super::LogicalAnd {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalAnd(LogicalAnd()),
@@ -1051,11 +920,17 @@ impl GenerateCode for super::LogicalAnd {
 impl GenerateCode for super::LogicalOr {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = self.left.gencode(scope, instructions)?;
-        let _ = self.right.gencode(scope, instructions)?;
+        let _ = self
+            .left
+            .gencode(scope_manager, scope_id, instructions, context)?;
+        let _ = self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
         instructions.push(Casm::Operation(Operation {
             kind: OperationKind::LogicalOr(LogicalOr()),
@@ -1080,7 +955,7 @@ mod tests {
         clear_stack, compile_statement, eval_and_compare, eval_and_compare_bool,
         semantic::{
             scope::{
-                scope::Scope,
+                scope::ScopeManager,
                 static_types::{PrimitiveType, StrSliceType},
             },
             Resolve,
@@ -1756,22 +1631,27 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
-        expr.gencode(&scope, &mut instructions)
-            .expect("Code generation should have succeeded");
+        expr.gencode(
+            &mut scope_manager,
+            None,
+            &mut instructions,
+            &crate::vm::vm::CodeGenerationContext::default(),
+        )
+        .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
         // Execute the instructions.
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

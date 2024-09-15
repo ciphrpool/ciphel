@@ -1,13 +1,28 @@
+use std::ops::Add;
+
+use heap::HEAP_SIZE;
+use stack::GLOBAL_SIZE;
+use stack::STACK_SIZE;
+
 use crate::semantic::AccessLevel;
 
 use self::{
     heap::{Heap, ALIGNMENT},
-    stack::{Offset, Stack},
+    stack::Stack,
 };
+
+use super::vm::RuntimeError;
 
 pub mod heap;
 pub mod stack;
 pub mod vtable;
+
+const RANGE_GLOBAL_SIZE_START: usize = 0;
+const RANGE_GLOBAL_SIZE_END: usize = GLOBAL_SIZE - 1;
+const RANGE_STACK_SIZE_START: usize = GLOBAL_SIZE;
+const RANGE_STACK_SIZE_END: usize = GLOBAL_SIZE + STACK_SIZE - 1;
+const RANGE_HEAP_SIZE_START: usize = GLOBAL_SIZE + STACK_SIZE;
+const RANGE_HEAP_SIZE_END: usize = GLOBAL_SIZE + STACK_SIZE + HEAP_SIZE - 1;
 
 pub fn align(size: usize) -> usize {
     (size + (ALIGNMENT - 1)) & (!(ALIGNMENT - 1))
@@ -16,20 +31,88 @@ pub fn align(size: usize) -> usize {
 #[derive(Debug, Clone, Copy)]
 pub enum MemoryAddress {
     Heap { offset: usize },
-    Stack { offset: Offset, level: AccessLevel },
+    Stack { offset: usize },
+    Global { offset: usize },
+}
+
+impl MemoryAddress {
+    pub fn add(self, n: usize) -> MemoryAddress {
+        match self {
+            MemoryAddress::Heap { offset } => MemoryAddress::Heap { offset: offset + n },
+            MemoryAddress::Stack { offset } => MemoryAddress::Stack { offset: offset + n },
+            MemoryAddress::Global { offset } => MemoryAddress::Global { offset: offset + n },
+        }
+    }
+}
+
+impl TryInto<MemoryAddress> for usize {
+    type Error = RuntimeError;
+    fn try_into(self) -> Result<MemoryAddress, Self::Error> {
+        match self {
+            RANGE_GLOBAL_SIZE_START..=RANGE_GLOBAL_SIZE_END => {
+                Ok(MemoryAddress::Global { offset: self })
+            }
+            RANGE_STACK_SIZE_START..=RANGE_STACK_SIZE_END => Ok(MemoryAddress::Stack {
+                offset: self - GLOBAL_SIZE,
+            }),
+            RANGE_HEAP_SIZE_START..=RANGE_HEAP_SIZE_END => Ok(MemoryAddress::Heap {
+                offset: self - (GLOBAL_SIZE + STACK_SIZE),
+            }),
+            _ => Err(RuntimeError::MemoryViolation),
+        }
+    }
+}
+
+impl Into<usize> for MemoryAddress {
+    fn into(self) -> usize {
+        match self {
+            MemoryAddress::Heap { offset } => offset + GLOBAL_SIZE + STACK_SIZE,
+            MemoryAddress::Stack { offset } => offset + GLOBAL_SIZE,
+            MemoryAddress::Global { offset } => offset,
+        }
+    }
+}
+
+impl Into<u64> for MemoryAddress {
+    fn into(self) -> u64 {
+        match self {
+            MemoryAddress::Heap { offset } => (offset + GLOBAL_SIZE + STACK_SIZE) as u64,
+            MemoryAddress::Stack { offset } => (offset + GLOBAL_SIZE) as u64,
+            MemoryAddress::Global { offset } => offset as u64,
+        }
+    }
+}
+
+impl TryInto<MemoryAddress> for u64 {
+    type Error = RuntimeError;
+    fn try_into(self) -> Result<MemoryAddress, Self::Error> {
+        match self as usize {
+            RANGE_GLOBAL_SIZE_START..=RANGE_GLOBAL_SIZE_END => Ok(MemoryAddress::Global {
+                offset: self as usize,
+            }),
+            RANGE_STACK_SIZE_START..=RANGE_STACK_SIZE_END => Ok(MemoryAddress::Stack {
+                offset: self as usize - GLOBAL_SIZE,
+            }),
+            RANGE_HEAP_SIZE_START..=RANGE_HEAP_SIZE_END => Ok(MemoryAddress::Heap {
+                offset: self as usize - (GLOBAL_SIZE + STACK_SIZE),
+            }),
+            _ => Err(RuntimeError::MemoryViolation),
+        }
+    }
 }
 
 impl MemoryAddress {
     pub fn name(&self) -> String {
         match self {
             MemoryAddress::Heap { offset } => format!("HP[{offset}]"),
-            MemoryAddress::Stack { offset, level } => format!("{}", offset.name(level)),
+            MemoryAddress::Stack { offset } => format!("SP[{offset}]"),
+            MemoryAddress::Global { offset } => format!("GL[{offset}]"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Memory<'runtime> {
-    pub heap: &'runtime Heap,
-    pub stack: &'runtime Stack,
-}
+// #[derive(Debug, Clone)]
+// pub struct Memory<'runtime> {
+//     pub heap: &'runtime Heap,
+//     pub stack: &'runtime Stack,
+// }

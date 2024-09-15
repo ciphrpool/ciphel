@@ -1,5 +1,6 @@
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::ArcRwLock;
+use crate::ast::statements::block::{Block, ClosureBlock, ExprBlock};
+use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::SizeOf;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
@@ -8,7 +9,7 @@ use crate::{
             static_types::{PrimitiveType, StaticType},
             ClosureState,
         },
-        EType, Either, Metadata, SemanticError,
+        EType, Metadata, SemanticError,
     },
 };
 
@@ -38,9 +39,15 @@ pub enum Data {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum VariableState {
+    Variable { id: u64 },
+    Field { offset: usize, size: usize },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
-    pub id: ID,
-    pub from_field: bool,
+    pub name: String,
+    pub state: Option<VariableState>,
     pub metadata: Metadata,
 }
 
@@ -99,46 +106,10 @@ pub type MultiData = Vec<Expression>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     params: Vec<ClosureParam>,
-    pub scope: ExprScope,
+    pub scope: ClosureBlock,
     pub closed: bool,
     pub metadata: Metadata,
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExprScope {
-    Scope(ast::statements::block::Block),
-    Expr(ast::statements::block::Block),
-}
-
-impl ExprScope {
-    pub fn scope(&self) -> Result<ArcRwLock<Scope>, SemanticError> {
-        match self {
-            ExprScope::Scope(scope) => scope.scope(),
-            ExprScope::Expr(scope) => scope.scope(),
-        }
-    }
-    pub fn to_capturing(&self, state: ClosureState) -> Result<(), SemanticError> {
-        match self {
-            ExprScope::Scope(value) => value.to_capturing(state),
-            ExprScope::Expr(value) => value.to_capturing(state),
-        }
-    }
-}
-//     pub fn env_vars(&self) -> Result<&Vec<Rc<Var>>, SemanticError> {
-//         match self {
-//             ExprScope::Scope(block) => block.env_vars(),
-//             ExprScope::Expr(block) => block.env_vars(),
-//         }
-//     }
-
-//     // pub fn parameters_size(&self) -> Result<usize, SemanticError> {
-//     //     match self {
-//     //         ExprScope::Scope(value) => value.parameters_size(),
-//     //         ExprScope::Expr(value) => value.parameters_size(),
-//     //     }
-//     // }
-
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClosureParam {
@@ -284,10 +255,10 @@ impl Data {
                     Number::F64(_) => Some(p_num!(F64)),
                     Number::Unresolved(_) => None,
                 },
-                Primitive::Bool(_) => Some(Either::Static(
+                Primitive::Bool(_) => Some(EType::Static(
                     StaticType::Primitive(PrimitiveType::Bool).into(),
                 )),
-                Primitive::Char(_) => Some(Either::Static(
+                Primitive::Char(_) => Some(EType::Static(
                     StaticType::Primitive(PrimitiveType::Char).into(),
                 )),
             },
@@ -325,6 +296,91 @@ impl Data {
                 metadata,
             }) => metadata.signature(),
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
+        }
+    }
+}
+
+impl Primitive {
+    pub fn size_of(&self) -> usize {
+        match self {
+            Primitive::Number(Number::U8(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U8,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U16(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U16,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U32(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U32,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::U128(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::U128,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I8(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I8,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I16(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I16,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I32(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I32,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::I128(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I128,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::F64(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::F64,
+                )
+                .size_of()
+            }
+            Primitive::Number(Number::Unresolved(_)) => {
+                crate::semantic::scope::static_types::PrimitiveType::Number(
+                    crate::semantic::scope::static_types::NumberType::I64,
+                )
+                .size_of()
+            }
+            Primitive::Bool(_) => {
+                crate::semantic::scope::static_types::PrimitiveType::Bool.size_of()
+            }
+            Primitive::Char(_) => {
+                crate::semantic::scope::static_types::PrimitiveType::Char.size_of()
+            }
         }
     }
 }

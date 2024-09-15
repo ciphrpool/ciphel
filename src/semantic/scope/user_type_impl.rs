@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{arch::x86_64, sync::Arc};
 
-use crate::{semantic::scope::scope::Scope, vm::casm};
+use crate::{semantic::scope::scope::ScopeManager, vm::casm};
 use ulid::Ulid;
 
 use crate::{
@@ -13,9 +13,7 @@ use crate::{
         utils::{lexem, strings::ID},
     },
     e_static, e_user,
-    semantic::{
-        CompatibleWith, EType, Either, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf,
-    },
+    semantic::{CompatibleWith, EType, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::align,
         casm::{
@@ -38,7 +36,7 @@ use super::{
         st_deserialize::{extract_end_u64, extract_u64},
         StaticType,
     },
-    type_traits::{GetSubTypes, IsEnum, OperandMerging, TypeChecking},
+    type_traits::{IsEnum, OperandMerging, TypeChecking},
     BuildUserType,
 };
 
@@ -67,37 +65,22 @@ pub struct Union {
     pub variants: Vec<(ID, Struct)>,
 }
 
-impl TypeOf for Arc<UserType> {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(Either::User(self.clone()))
-    }
-}
-
-impl TypeOf for UserType {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<Either, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(e_user!(self.clone()))
-    }
-}
-
 impl CompatibleWith for UserType {
-    fn compatible_with<Other>(
+    fn compatible_with(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        match self {
-            UserType::Struct(value) => value.compatible_with(other, scope),
-            UserType::Enum(value) => value.compatible_with(other, scope),
-            UserType::Union(value) => value.compatible_with(other, scope),
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError> {
+        match (self, other) {
+            (UserType::Struct(x), UserType::Struct(y)) => {
+                x.compatible_with(y, scope_manager, scope_id)
+            }
+            (UserType::Enum(x), UserType::Enum(y)) => x.compatible_with(y, scope_manager, scope_id),
+            (UserType::Union(x), UserType::Union(y)) => {
+                x.compatible_with(y, scope_manager, scope_id)
+            }
+            _ => Err(SemanticError::IncompatibleTypes),
         }
     }
 }
@@ -105,73 +88,23 @@ impl CompatibleWith for UserType {
 impl BuildUserType for UserType {
     fn build_usertype(
         type_sig: &crate::ast::statements::definition::TypeDef,
-        scope: &std::sync::RwLockReadGuard<Scope>,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<Self, SemanticError> {
         match type_sig {
-            definition::TypeDef::Struct(value) => {
-                Ok(UserType::Struct(Struct::build(value, scope)?))
+            definition::TypeDef::Struct(value) => Ok(UserType::Struct(Struct::build(
+                value,
+                scope_manager,
+                scope_id,
+            )?)),
+            definition::TypeDef::Union(value) => Ok(UserType::Union(Union::build(
+                value,
+                scope_manager,
+                scope_id,
+            )?)),
+            definition::TypeDef::Enum(value) => {
+                Ok(UserType::Enum(Enum::build(value, scope_manager, scope_id)?))
             }
-            definition::TypeDef::Union(value) => Ok(UserType::Union(Union::build(value, scope)?)),
-            definition::TypeDef::Enum(value) => Ok(UserType::Enum(Enum::build(value, scope)?)),
-        }
-    }
-}
-
-impl GetSubTypes for UserType {
-    fn get_field(&self, field_id: &ID) -> Option<EType> {
-        match self {
-            UserType::Struct(value) => value
-                .fields
-                .iter()
-                .find(|(id, _)| id == field_id)
-                .map(|(_, field)| field.clone()),
-            UserType::Enum(_) => None,
-            UserType::Union(_) => None,
-        }
-    }
-    fn get_variant(&self, variant: &ID) -> Option<EType> {
-        match self {
-            UserType::Struct(_) => None,
-            UserType::Enum(value) => {
-                if value.values.contains(variant) {
-                    Some(e_static!(StaticType::Unit))
-                } else {
-                    None
-                }
-            }
-            UserType::Union(value) => value
-                .variants
-                .iter()
-                .find(|(id, _)| id == variant)
-                .map(|(_, field)| field)
-                .map(|field| e_user!(UserType::Struct(field.clone()))),
-        }
-    }
-    fn get_fields(&self) -> Option<Vec<(Option<ID>, EType)>> {
-        match self {
-            UserType::Struct(value) => Some(
-                value
-                    .fields
-                    .iter()
-                    .map(|(key, val)| (Some(key.clone()), val.clone()))
-                    .collect(),
-            ),
-            UserType::Enum(_) => None,
-            UserType::Union(_) => None,
-        }
-    }
-
-    fn get_field_offset(&self, field_id: &ID) -> Option<usize> {
-        match self {
-            UserType::Struct(Struct { id: _, fields }) => Some(
-                fields
-                    .iter()
-                    .take_while(|(id, _)| id != field_id)
-                    .map(|(_, field)| align(field.size_of()))
-                    .sum(),
-            ),
-            UserType::Enum(_) => None,
-            UserType::Union(_) => None,
         }
     }
 }
@@ -191,37 +124,17 @@ impl IsEnum for UserType {
 }
 
 impl MergeType for UserType {
-    fn merge<Other>(
+    fn merge(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::User(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        match self {
-            UserType::Struct(value) => match other_type.as_ref() {
-                UserType::Struct(other_type) => value
-                    .merge(&other_type)
-                    .map(|v| e_user!(UserType::Struct(v))),
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
-            UserType::Enum(value) => match other_type.as_ref() {
-                UserType::Enum(other_type) => {
-                    value.merge(&other_type).map(|v| e_user!(UserType::Enum(v)))
-                }
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
-            UserType::Union(value) => match other_type.as_ref() {
-                UserType::Union(other_type) => value
-                    .merge(&other_type)
-                    .map(|v| e_user!(UserType::Union(v))),
-                _ => Err(SemanticError::IncompatibleTypes),
-            },
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError> {
+        match (self, other) {
+            (UserType::Struct(x), UserType::Struct(y)) => x.merge(y).map(|res| todo!()),
+            (UserType::Enum(x), UserType::Enum(y)) => x.merge(y).map(|res| todo!()),
+            (UserType::Union(x), UserType::Union(y)) => x.merge(y).map(|res| todo!()),
+            _ => Err(SemanticError::IncompatibleTypes),
         }
     }
 }
@@ -271,28 +184,18 @@ impl SizeOf for Enum {
 }
 
 impl CompatibleWith for Struct {
-    fn compatible_with<Other>(
+    fn compatible_with(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::User(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let UserType::Struct(other_type) = other_type.as_ref() else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        if self.id != other_type.id || self.fields.len() != other_type.fields.len() {
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError> {
+        if self.id != other.id || self.fields.len() != other.fields.len() {
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_key, self_field) in self.fields.iter() {
-            if let Some((_, other_field)) = other_type.fields.iter().find(|(id, _)| id == self_key)
-            {
-                let _ = self_field.compatible_with(other_field, scope)?;
+            if let Some((_, other_field)) = other.fields.iter().find(|(id, _)| id == self_key) {
+                let _ = self_field.compatible_with(other_field, scope_manager, scope_id)?;
             } else {
                 return Err(SemanticError::IncompatibleTypes);
             }
@@ -302,26 +205,17 @@ impl CompatibleWith for Struct {
 }
 
 impl CompatibleWith for Union {
-    fn compatible_with<Other>(
+    fn compatible_with(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::User(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let UserType::Union(other_type) = other_type.as_ref() else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        if self.id != other_type.id || self.variants.len() != other_type.variants.len() {
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError> {
+        if self.id != other.id || self.variants.len() != other.variants.len() {
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_variant_key, self_variant) in self.variants.iter() {
-            if let Some(other_variant) = other_type
+            if let Some(other_variant) = other
                 .variants
                 .iter()
                 .find(|(id, _)| id == self_variant_key)
@@ -334,7 +228,7 @@ impl CompatibleWith for Union {
                     if let Some((_, other_field)) =
                         other_variant.fields.iter().find(|(id, _)| id == self_key)
                     {
-                        let _ = self_field.compatible_with(other_field, scope)?;
+                        let _ = self_field.compatible_with(other_field, scope_manager, scope_id)?;
                     } else {
                         return Err(SemanticError::IncompatibleTypes);
                     }
@@ -347,26 +241,17 @@ impl CompatibleWith for Union {
     }
 }
 impl CompatibleWith for Enum {
-    fn compatible_with<Other>(
+    fn compatible_with(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<(), SemanticError>
-    where
-        Other: TypeOf,
-    {
-        let other_type = other.type_of(&scope)?;
-        let Either::User(other_type) = other_type else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        let UserType::Enum(other_type) = other_type.as_ref() else {
-            return Err(SemanticError::IncompatibleTypes);
-        };
-        if self.id != other_type.id || self.values.len() != other_type.values.len() {
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError> {
+        if self.id != other.id || self.values.len() != other.values.len() {
             return Err(SemanticError::IncompatibleTypes);
         }
         for id in &self.values {
-            if !other_type.values.contains(id) {
+            if !other.values.contains(id) {
                 return Err(SemanticError::IncompatibleTypes);
             }
         }
@@ -377,11 +262,12 @@ impl CompatibleWith for Enum {
 impl Struct {
     pub fn build(
         from: &definition::StructDef,
-        scope: &std::sync::RwLockReadGuard<Scope>,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<Self, SemanticError> {
         let mut fields = Vec::with_capacity(from.fields.len());
         for (id, field) in &from.fields {
-            let field_type = field.type_of(&scope)?;
+            let field_type = field.type_of(&scope_manager, scope_id)?;
             fields.push((id.clone(), field_type));
         }
         Ok(Self {
@@ -398,13 +284,14 @@ impl Struct {
 impl Union {
     pub fn build(
         from: &definition::UnionDef,
-        scope: &std::sync::RwLockReadGuard<Scope>,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<Self, SemanticError> {
         let mut variants = Vec::new();
         for (id, variant) in &from.variants {
             let mut fields = Vec::with_capacity(variant.len());
             for (id, field) in variant {
-                let field_type = field.type_of(&scope)?;
+                let field_type = field.type_of(&scope_manager, scope_id)?;
                 fields.push((id.clone(), field_type));
             }
             variants.push((
@@ -428,7 +315,8 @@ impl Union {
 impl Enum {
     pub fn build(
         from: &definition::EnumDef,
-        _scope: &std::sync::RwLockReadGuard<Scope>,
+        _scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
     ) -> Result<Self, SemanticError> {
         let mut values = Vec::new();
         for id in &from.values {
@@ -485,7 +373,7 @@ impl DeserializeFrom for Struct {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Arc::new(UserType::Struct(self.clone())))),
+                    signature: todo!(),
                 },
             },
         })
@@ -545,7 +433,7 @@ impl DeserializeFrom for Union {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Arc::new(UserType::Union(self.clone())))),
+                    signature: todo!(),
                 },
             },
         })
@@ -611,7 +499,7 @@ impl DeserializeFrom for Enum {
             metadata: Metadata {
                 info: Info::Resolved {
                     context: None,
-                    signature: Some(Either::User(Arc::new(UserType::Enum(self.clone())))),
+                    signature: todo!(),
                 },
             },
         })

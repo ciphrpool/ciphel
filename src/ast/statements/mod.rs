@@ -8,7 +8,9 @@ use nom::{
 use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
 
 use self::return_stat::Return;
-use crate::{semantic::scope::scope::Scope, CompilationError};
+use crate::{
+    semantic::scope::scope::ScopeManager, vm::vm::CodeGenerationContext, CompilationError,
+};
 
 use super::{
     utils::{
@@ -17,9 +19,10 @@ use super::{
     },
     TryParse,
 };
+use crate::vm::vm::GenerateCode;
 use crate::{
     ast::utils::io::{PResult, Span},
-    semantic::{scope::static_types::StaticType, EType, Either, Resolve, SemanticError, TypeOf},
+    semantic::{scope::static_types::StaticType, EType, Resolve, SemanticError, TypeOf},
     vm::{
         casm::{
             branch::{Call, Goto, Label},
@@ -28,7 +31,6 @@ use crate::{
         vm::CodeGenerationError,
     },
 };
-use crate::{semantic::scope::BuildStaticType, vm::vm::GenerateCode};
 
 pub mod assignation;
 pub mod block;
@@ -51,24 +53,29 @@ impl<T: Resolve> Resolve for WithLine<T> {
 
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.inner.resolve::<G>(scope, context, extra)
+        self.inner
+            .resolve::<G>(scope_manager, scope_id, context, extra)
     }
 }
 
 impl<T: GenerateCode> GenerateCode for WithLine<T> {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        self.inner.gencode(scope, instructions)
+        self.inner
+            .gencode(scope_manager, scope_id, instructions, context)
     }
 }
 
@@ -140,7 +147,8 @@ impl Resolve for Statement {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -149,34 +157,42 @@ impl Resolve for Statement {
     {
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve::<G>(scope, context, &mut Vec::default())?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut ())?;
                 Ok(())
             }
-            Statement::Flow(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Assignation(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Declaration(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Definition(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Loops(value) => value.resolve::<G>(scope, context, extra),
-            Statement::Return(value) => value.resolve::<G>(scope, context, extra),
+            Statement::Flow(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Statement::Assignation(value) => {
+                value.resolve::<G>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Declaration(value) => {
+                value.resolve::<G>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Definition(value) => {
+                value.resolve::<G>(scope_manager, scope_id, context, extra)
+            }
+            Statement::Loops(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Statement::Return(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
         }
     }
 }
 
 impl TypeOf for Statement {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            Statement::Scope(value) => value.type_of(&scope),
-            Statement::Flow(value) => value.type_of(&scope),
-            Statement::Assignation(value) => value.type_of(&scope),
-            Statement::Declaration(value) => value.type_of(&scope),
-            Statement::Definition(_value) => Ok(Either::Static(
-                <StaticType as BuildStaticType>::build_unit().into(),
-            )),
-            Statement::Loops(value) => value.type_of(&scope),
-            Statement::Return(value) => value.type_of(&scope),
+            Statement::Scope(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Flow(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Assignation(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Declaration(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Definition(_value) => Ok(EType::Static(StaticType::Unit)),
+            Statement::Loops(value) => value.type_of(&scope_manager, scope_id),
+            Statement::Return(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
@@ -184,35 +200,32 @@ impl TypeOf for Statement {
 impl GenerateCode for Statement {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Statement::Scope(value) => {
-                let scope_label = Label::gen();
-                let end_scope_label = Label::gen();
-
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_scope_label),
-                }));
-                instructions.push_label_id(scope_label, "block".to_string().into());
-
-                let _ = value.gencode(scope, instructions)?;
-
-                instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
-                instructions.push(Casm::Call(Call::From {
-                    label: scope_label,
-                    param_size: 0,
-                }));
-                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+                value.gencode(scope_manager, scope_id, instructions, context)?;
                 Ok(())
             }
-            Statement::Flow(value) => value.gencode(scope, instructions),
-            Statement::Assignation(value) => value.gencode(scope, instructions),
-            Statement::Declaration(value) => value.gencode(scope, instructions),
-            Statement::Definition(value) => value.gencode(scope, instructions),
-            Statement::Loops(value) => value.gencode(scope, instructions),
-            Statement::Return(value) => value.gencode(scope, instructions),
+            Statement::Flow(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Statement::Assignation(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Declaration(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Definition(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Loops(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)
+            }
+            Statement::Return(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)
+            }
         }
     }
 }

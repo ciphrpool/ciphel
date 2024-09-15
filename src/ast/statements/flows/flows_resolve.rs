@@ -1,18 +1,15 @@
 use super::{CallStat, Flow, IfStat, MatchStat, TryStat};
-use crate::semantic::scope::scope::Scope;
-use crate::{
-    ast::expressions::flows::Pattern,
-    semantic::{
-        scope::{
-            static_types::StaticType,
-            type_traits::TypeChecking,
-            user_type_impl::{Enum, Union, UserType},
-            var_impl::VarState,
-        },
-        EType, Either, Resolve, SemanticError, TypeOf,
+use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::static_types::PrimitiveType;
+use crate::semantic::{
+    scope::{
+        static_types::StaticType,
+        type_traits::TypeChecking,
+        user_type_impl::{Enum, Union, UserType},
     },
+    EType, Resolve, SemanticError, TypeOf,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl Resolve for Flow {
     type Output = ();
@@ -20,7 +17,8 @@ impl Resolve for Flow {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -28,10 +26,10 @@ impl Resolve for Flow {
         Self: Sized,
     {
         match self {
-            Flow::If(value) => value.resolve::<G>(scope, context, extra),
-            Flow::Match(value) => value.resolve::<G>(scope, context, extra),
-            Flow::Try(value) => value.resolve::<G>(scope, context, extra),
-            Flow::Call(value) => value.resolve::<G>(scope, &(), &mut ()),
+            Flow::If(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Flow::Match(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Flow::Try(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Flow::Call(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
         }
     }
 }
@@ -41,39 +39,40 @@ impl Resolve for IfStat {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.condition.resolve::<G>(scope, &None, &mut None)?;
-        // check that condition is a boolean
-        let condition_type = self
+        let _ = self
             .condition
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if !<EType as TypeChecking>::is_boolean(&condition_type) {
+            .resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        // check that condition is a boolean
+        let condition_type = self.condition.type_of(&scope_manager, scope_id)?;
+        if EType::Static(StaticType::Primitive(PrimitiveType::Bool)) != condition_type {
             return Err(SemanticError::ExpectedBoolean);
         }
 
         let _ = self
             .then_branch
-            .resolve::<G>(scope, &context, &mut Vec::default())?;
+            .resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
 
         for (else_if_cond, else_if_scope) in &mut self.else_if_branches {
-            let _ = else_if_cond.resolve::<G>(scope, &None, &mut None)?;
-            let condition_type =
-                else_if_cond.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-            if !<EType as TypeChecking>::is_boolean(&condition_type) {
+            let _ = else_if_cond.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            let condition_type = else_if_cond.type_of(&scope_manager, scope_id)?;
+            if EType::Static(StaticType::Primitive(PrimitiveType::Bool)) != condition_type {
                 return Err(SemanticError::ExpectedBoolean);
             }
-            let _ = else_if_scope.resolve::<G>(scope, &context, &mut Vec::default())?;
+            let _ = else_if_scope.resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
         }
 
         if let Some(else_branch) = &mut self.else_branch {
-            let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
+            let _ = else_branch.resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
         }
+
         Ok(())
     }
 }
@@ -83,106 +82,124 @@ impl Resolve for MatchStat {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.expr.resolve::<G>(scope, &None, &mut None)?;
-        let expr_type = Some(
-            self.expr
-                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
-        );
+        let _ = self
+            .expr
+            .resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let expr_type = self.expr.type_of(&scope_manager, scope_id)?;
 
-        let exhaustive_cases = match (&expr_type.as_ref()).unwrap() {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Primitive(_) => None,
-                StaticType::String(_) => None,
-                StaticType::StrSlice(_) => None,
-                _ => return Err(SemanticError::InvalidPattern),
-            },
-            Either::User(value) => match value.as_ref() {
-                UserType::Struct(_) => return Err(SemanticError::InvalidPattern),
-                UserType::Enum(Enum { id: _, values }) => Some(values.clone()),
-                UserType::Union(Union { id: _, variants }) => {
-                    Some(variants.iter().map(|(v, _)| v).cloned().collect())
+        let should_be_exhaustive = self.else_branch.is_none();
+
+        match &mut self.cases {
+            super::Cases::Primitive { cases } => {
+                let EType::Static(StaticType::Primitive(_)) = expr_type else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+                for case in cases {
+                    let _ = case.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        context,
+                        &mut Some(expr_type.clone()),
+                    )?;
                 }
-            },
-        };
+            }
+            super::Cases::String { cases } => {
+                match expr_type {
+                    EType::Static(StaticType::StrSlice(_))
+                    | EType::Static(StaticType::String(_)) => {}
+                    _ => return Err(SemanticError::IncompatibleTypes),
+                }
 
-        match &mut self.else_branch {
-            Some(else_branch) => {
-                for value in &mut self.patterns {
-                    let mut previous_vars =
-                        value.patterns[0].resolve::<G>(scope, &expr_type, &mut ())?;
-                    for pattern in &mut value.patterns[1..] {
-                        let vars = pattern.resolve::<G>(scope, &expr_type, &mut ())?;
-                        if previous_vars != vars {
-                            return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
+                for case in cases {
+                    let _ = case.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        context,
+                        &mut Some(expr_type.clone()),
+                    )?;
+                }
+            }
+            super::Cases::Enum { cases } => {
+                let EType::User { id, size } = expr_type else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+                let UserType::Enum(Enum { id, values }) =
+                    scope_manager.find_type_by_id(id, scope_id)?.clone()
+                else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                for case in cases.iter_mut() {
+                    let _ = case.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        context,
+                        &mut Some(expr_type.clone()),
+                    )?;
+                }
+
+                if should_be_exhaustive {
+                    let mut found_names = HashSet::new();
+                    for case in cases {
+                        for (_, name, _) in &case.patterns {
+                            found_names.insert(name.clone());
                         }
                     }
+                    if found_names.len() != values.len() {
+                        let names: HashSet<String> = values.clone().into_iter().collect();
+                        let difference: HashSet<_> =
+                            names.difference(&found_names).cloned().collect();
 
-                    for (_index, var) in previous_vars.iter_mut().enumerate() {
-                        var.state = VarState::Parameter;
-                        var.is_declared = true;
-                    }
-                    // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value
-                        .scope
-                        .resolve::<G>(scope, &context, &mut previous_vars)?;
-                }
-                let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
-                if let Some(exhaustive_cases) = exhaustive_cases {
-                    let mut map = HashMap::new();
-                    for case in exhaustive_cases {
-                        *map.entry(case).or_insert(0) += 1;
-                    }
-                    for case in self.patterns.iter().flat_map(|p| {
-                        p.patterns.iter().map(|pattern| match &pattern {
-                            Pattern::Primitive(_) => None,
-                            Pattern::String(_) => None,
-                            Pattern::Enum { typename: _, value } => Some(value),
-                            Pattern::Union {
-                                typename: _,
-                                variant,
-                                vars: _,
-                            } => Some(variant),
-                        })
-                    }) {
-                        match case {
-                            Some(case) => {
-                                *map.entry(case.clone()).or_insert(0) -= 1;
-                            }
-                            None => return Err(SemanticError::InvalidPattern),
-                        }
-                    }
-                    if map.values().all(|&count| count == 0) {
-                        return Err(SemanticError::InvalidPattern);
+                        return Err(SemanticError::ExhaustiveCases(difference));
                     }
                 }
             }
-            None => {
-                for value in &mut self.patterns {
-                    let mut previous_vars =
-                        value.patterns[0].resolve::<G>(scope, &expr_type, &mut ())?;
-                    for pattern in &mut value.patterns[1..] {
-                        let vars = pattern.resolve::<G>(scope, &expr_type, &mut ())?;
-                        if previous_vars != vars {
-                            return Err(SemanticError::IncorrectVariant("in pattern".to_string()));
-                        }
+            super::Cases::Union { cases } => {
+                let EType::User { id, size } = expr_type else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+                let UserType::Union(Union { id, variants }) =
+                    scope_manager.find_type_by_id(id, scope_id)?.clone()
+                else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                for case in cases.iter_mut() {
+                    let _ = case.resolve::<G>(
+                        scope_manager,
+                        scope_id,
+                        context,
+                        &mut Some(expr_type.clone()),
+                    )?;
+                }
+
+                if should_be_exhaustive {
+                    let mut found_names = HashSet::new();
+                    for case in cases {
+                        found_names.insert(case.pattern.variant.clone());
                     }
-                    for (_index, var) in previous_vars.iter_mut().enumerate() {
-                        var.state = VarState::Parameter;
-                        var.is_declared = true;
+                    if found_names.len() != variants.len() {
+                        let names: HashSet<String> =
+                            variants.clone().into_iter().map(|v| v.0).collect();
+                        let difference: HashSet<_> =
+                            names.difference(&found_names).cloned().collect();
+
+                        return Err(SemanticError::ExhaustiveCases(difference));
                     }
-                    // create a block and Scope::child_scope())variable to it before resolving the expression
-                    let _ = value
-                        .scope
-                        .resolve::<G>(scope, &context, &mut previous_vars)?;
                 }
             }
+        }
+
+        if let Some(block) = self.else_branch.as_mut() {
+            let _ = block.resolve::<G>(scope_manager, scope_id, context, extra)?;
         }
         Ok(())
     }
@@ -194,7 +211,8 @@ impl Resolve for TryStat {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         _extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -203,9 +221,9 @@ impl Resolve for TryStat {
     {
         let _ = self
             .try_branch
-            .resolve::<G>(scope, &context, &mut Vec::default())?;
+            .resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
         if let Some(else_branch) = &mut self.else_branch {
-            let _ = else_branch.resolve::<G>(scope, &context, &mut Vec::default())?;
+            let _ = else_branch.resolve::<G>(scope_manager, scope_id, &context, &mut ())?;
         }
         Ok(())
     }
@@ -216,14 +234,16 @@ impl Resolve for CallStat {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        self.call.resolve::<G>(scope, &None, &mut None)
+        self.call
+            .resolve::<G>(scope_manager, scope_id, &None, &mut None)
     }
 }
 
@@ -233,9 +253,8 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::p_num;
-    use crate::semantic::scope::scope::Scope;
+    use crate::semantic::scope::scope::ScopeManager;
 
-    use crate::semantic::scope::var_impl::Var;
     #[test]
     fn valid_if() {
         let mut expr = IfStat::parse(
@@ -248,8 +267,9 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = IfStat::parse(
@@ -262,8 +282,9 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -281,8 +302,9 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -300,8 +322,9 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -322,17 +345,10 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
@@ -348,8 +364,9 @@ mod tests {
         )
         .unwrap()
         .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 }

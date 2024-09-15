@@ -1,8 +1,8 @@
 use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
-use crate::semantic::Either;
+use crate::semantic::EType;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
@@ -11,7 +11,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Resolve, SemanticError, TypeOf},
+    semantic::{Resolve, SemanticError, TypeOf},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -98,7 +98,7 @@ impl StdFn {
         }
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::STD {
+                if *suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -119,15 +119,16 @@ impl Resolve for StdFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            StdFn::IO(value) => value.resolve::<G>(scope, context, extra),
-            StdFn::Math(value) => value.resolve::<G>(scope, context, extra),
-            StdFn::Strings(value) => value.resolve::<G>(scope, context, extra),
-            StdFn::Iter(value) => value.resolve::<G>(scope, context, extra),
+            StdFn::IO(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            StdFn::Math(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            StdFn::Strings(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            StdFn::Iter(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             StdFn::Assert(expect_err) => {
                 if extra.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
@@ -136,14 +137,14 @@ impl Resolve for StdFn {
                 let size = &mut extra[0];
 
                 let _ = size.resolve::<G>(
-                    scope,
+                    scope_manager,
+                    scope_id,
                     &Some(e_static!(StaticType::Primitive(PrimitiveType::Bool))),
                     &mut None,
                 )?;
-                let size_type =
-                    size.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let size_type = size.type_of(&scope_manager, scope_id)?;
                 match &size_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Primitive(PrimitiveType::Bool) => *expect_err = false,
                         StaticType::Error => *expect_err = true,
                         _ => return Err(SemanticError::IncorrectArguments),
@@ -169,15 +170,19 @@ impl Resolve for StdFn {
 }
 
 impl TypeOf for StdFn {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            StdFn::IO(value) => value.type_of(scope),
-            StdFn::Math(value) => value.type_of(scope),
-            StdFn::Iter(value) => value.type_of(scope),
-            StdFn::Strings(value) => value.type_of(scope),
+            StdFn::IO(value) => value.type_of(scope_manager, scope_id),
+            StdFn::Math(value) => value.type_of(scope_manager, scope_id),
+            StdFn::Iter(value) => value.type_of(scope_manager, scope_id),
+            StdFn::Strings(value) => value.type_of(scope_manager, scope_id),
             StdFn::Assert(_) => Ok(e_static!(StaticType::Error)),
             StdFn::Error => Ok(e_static!(StaticType::Error)),
             StdFn::Ok => Ok(e_static!(StaticType::Error)),
@@ -187,14 +192,16 @@ impl TypeOf for StdFn {
 impl GenerateCode for StdFn {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            StdFn::IO(value) => value.gencode(scope, instructions),
-            StdFn::Math(value) => value.gencode(scope, instructions),
-            StdFn::Strings(value) => value.gencode(scope, instructions),
-            StdFn::Iter(value) => value.gencode(scope, instructions),
+            StdFn::IO(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            StdFn::Math(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            StdFn::Strings(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            StdFn::Iter(value) => value.gencode(scope_manager, scope_id, instructions, context),
             StdFn::Assert(expect_err) => {
                 if *expect_err {
                     instructions.push(Casm::Platform(super::LibCasm::Std(StdCasm::AssertErr)));
@@ -215,8 +222,10 @@ impl GenerateCode for StdFn {
     }
 }
 
-pub const ERROR_VALUE: [u8; 1] = [1];
-pub const OK_VALUE: [u8; 1] = [0];
+pub const ERROR_VALUE: u8 = 1;
+pub const ERROR_SLICE: [u8; 1] = [ERROR_VALUE];
+pub const OK_VALUE: u8 = 0;
+pub const OK_SLICE: [u8; 1] = [OK_VALUE];
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
     fn execute(
@@ -238,11 +247,11 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE)?;
+                    let _ = stack.push_with(&OK_SLICE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE)?;
+                    let _ = stack.push_with(&ERROR_SLICE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
@@ -251,21 +260,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
                 program.incr();
                 if condition {
                     // push NO_ERROR
-                    let _ = stack.push_with(&OK_VALUE)?;
+                    let _ = stack.push_with(&OK_SLICE)?;
                     Ok(())
                 } else {
                     // push ERROR
-                    let _ = stack.push_with(&ERROR_VALUE)?;
+                    let _ = stack.push_with(&ERROR_SLICE)?;
                     Err(RuntimeError::AssertError)
                 }
             }
             StdCasm::Error => {
-                let _ = stack.push_with(&ERROR_VALUE)?;
+                let _ = stack.push_with(&ERROR_SLICE)?;
                 program.incr();
                 Ok(())
             }
             StdCasm::Ok => {
-                let _ = stack.push_with(&OK_VALUE)?;
+                let _ = stack.push_with(&OK_SLICE)?;
                 program.incr();
                 Ok(())
             }

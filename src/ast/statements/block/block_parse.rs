@@ -19,7 +19,7 @@ use crate::{
     semantic::{scope::ClosureState, Metadata},
 };
 
-use super::Block;
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
 
 impl TryParse for Block {
     fn parse(input: Span) -> PResult<Self> {
@@ -29,15 +29,46 @@ impl TryParse for Block {
                 cut(many0(Statement::parse)),
                 cut(wst(lexem::BRA_C)),
             ),
-            |value| Block {
-                instructions: value,
-                inner_scope: None,
-                can_capture: Arc::new(RwLock::new(ClosureState::DEFAULT)),
-                is_loop: Default::default(),
+            |value| Block::new(value),
+        )(input)
+    }
+}
 
-                caller: Default::default(),
-                metadata: Metadata::default(),
-            },
+impl TryParse for FunctionBlock {
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            delimited(
+                wst(lexem::BRA_O),
+                cut(many0(Statement::parse)),
+                cut(wst(lexem::BRA_C)),
+            ),
+            |value| FunctionBlock::new(value),
+        )(input)
+    }
+}
+
+impl TryParse for ClosureBlock {
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            delimited(
+                wst(lexem::BRA_O),
+                cut(many0(Statement::parse)),
+                cut(wst(lexem::BRA_C)),
+            ),
+            |value| ClosureBlock::new(value),
+        )(input)
+    }
+}
+
+impl TryParse for ExprBlock {
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            delimited(
+                wst(lexem::BRA_O),
+                cut(many0(Statement::parse)),
+                cut(wst(lexem::BRA_C)),
+            ),
+            |value| ExprBlock::new(value),
         )(input)
     }
 }

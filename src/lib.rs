@@ -92,22 +92,19 @@ impl Ciphel {
         src_code: &str,
         line_offset: usize,
     ) -> Result<(), CompilationError> {
-        let (scope, stack, program) = self
+        let (scope_manager, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
         {
-            let mut borrowed_scope = scope.write().map_err(|_| {
-                CompilationError::SemanticError(line_offset, SemanticError::ConcurrencyError)
-            })?;
-            let _ = borrowed_scope.open_transaction()?;
+            let _ = scope_manager.open_transaction()?;
         }
         program.in_transaction = TransactionState::OPEN;
 
         let mut statements = parse_statements(src_code.into(), line_offset)?;
         for statement in &mut statements {
             let _ = statement
-                .resolve::<G>(scope, &None, &mut ())
+                .resolve::<G>(scope_manager, None, &None, &mut ())
                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
         }
         program.statements_buffer.extend(statements);
@@ -119,7 +116,7 @@ impl Ciphel {
         player: crate::vm::vm::Player,
         tid: usize,
     ) -> Result<(), CompilationError> {
-        let (scope, stack, program) = self
+        let (scope_manager, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
@@ -130,11 +127,7 @@ impl Ciphel {
             ));
         }
         {
-            let mut borrowed_scope = scope
-                .write()
-                .map_err(|_| CompilationError::SemanticError(0, SemanticError::ConcurrencyError))?;
-            let _ = borrowed_scope.commit_transaction()?;
-            let _ = borrowed_scope.close_transaction()?;
+            let _ = scope_manager.commit_transaction()?;
         }
 
         program.in_transaction = TransactionState::COMMITED;
@@ -146,7 +139,7 @@ impl Ciphel {
         player: crate::vm::vm::Player,
         tid: usize,
     ) -> Result<(), CompilationError> {
-        let (scope, stack, program) = self
+        let (scope_manager, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
@@ -157,11 +150,8 @@ impl Ciphel {
             ));
         }
         {
-            let mut borrowed_scope = scope
-                .write()
-                .map_err(|_| CompilationError::SemanticError(0, SemanticError::ConcurrencyError))?;
-            let _ = borrowed_scope.reject_transaction()?;
-            let _ = borrowed_scope.close_transaction()?;
+            let _ = scope_manager.reject_transaction()?;
+            // let _ = scope_manager.close_transaction()?;
         }
         program.statements_buffer.clear();
         program.in_transaction = TransactionState::CLOSE;
@@ -173,7 +163,7 @@ impl Ciphel {
         player: crate::vm::vm::Player,
         tid: usize,
     ) -> Result<(), CompilationError> {
-        let (scope, stack, program) = self
+        let (scope_manager, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
@@ -183,18 +173,17 @@ impl Ciphel {
                 "Cannot push without a commit",
             ));
         }
-        let _ = arw_read!(
-            scope,
-            CompilationError::SemanticError(0, SemanticError::ConcurrencyError)
-        )?
-        .update_stack_top(stack.top())
-        .map_err(|e| CompilationError::CodeGen(0, e))?;
 
         let statements: Vec<WithLine<Statement>> = program.statements_buffer.drain(..).collect();
 
         for statement in statements {
             let _ = statement
-                .gencode(scope, program)
+                .gencode(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::vm::CodeGenerationContext::default(),
+                )
                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
         }
 
@@ -207,7 +196,7 @@ impl Ciphel {
         tid: usize,
         src_code: &str,
     ) -> Result<(), CompilationError> {
-        let (scope, stack, program) = self
+        let (scope_manager, stack, program) = self
             .runtime
             .get_mut(player, tid)
             .map_err(|_| CompilationError::InvalidTID(tid))?;
@@ -216,20 +205,18 @@ impl Ciphel {
 
         for statement in &mut statements {
             let _ = statement
-                .resolve::<G>(scope, &None, &mut ())
+                .resolve::<G>(scope_manager, None, &None, &mut ())
                 .map_err(|e| CompilationError::SemanticError(statement.line, e))?;
         }
 
-        let _ = arw_read!(
-            scope,
-            CompilationError::SemanticError(0, SemanticError::ConcurrencyError)
-        )?
-        .update_stack_top(stack.top())
-        .map_err(|e| CompilationError::CodeGen(0, e))?;
-
         for statement in &statements {
             let _ = statement
-                .gencode(scope, program)
+                .gencode(
+                    scope_manager,
+                    None,
+                    program,
+                    &crate::vm::vm::CodeGenerationContext::default(),
+                )
                 .map_err(|e| CompilationError::CodeGen(statement.line, e))?;
         }
 

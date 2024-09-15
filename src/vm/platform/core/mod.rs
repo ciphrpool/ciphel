@@ -1,5 +1,5 @@
 use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::stdio::StdIO;
@@ -66,25 +66,30 @@ impl Resolve for CoreFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
         match self {
-            CoreFn::Alloc(value) => value.resolve::<G>(scope, context, extra),
-            CoreFn::Thread(value) => value.resolve::<G>(scope, context, extra),
+            CoreFn::Alloc(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            CoreFn::Thread(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
         }
     }
 }
 
 impl TypeOf for CoreFn {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
         match self {
-            CoreFn::Alloc(value) => value.type_of(scope),
-            CoreFn::Thread(value) => value.type_of(scope),
+            CoreFn::Alloc(value) => value.type_of(scope_manager, scope_id),
+            CoreFn::Thread(value) => value.type_of(scope_manager, scope_id),
         }
     }
 }
@@ -92,12 +97,14 @@ impl TypeOf for CoreFn {
 impl GenerateCode for CoreFn {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            CoreFn::Alloc(value) => value.gencode(scope, instructions),
-            CoreFn::Thread(value) => value.gencode(scope, instructions),
+            CoreFn::Alloc(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            CoreFn::Thread(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }

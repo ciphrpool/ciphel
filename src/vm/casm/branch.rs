@@ -3,10 +3,7 @@ use super::{operation::OpPrimitive, CasmProgram};
 use crate::{
     semantic::{scope::static_types::st_deserialize::extract_u64, AccessLevel},
     vm::{
-        allocator::{
-            heap::Heap,
-            stack::{Offset, Stack},
-        },
+        allocator::{heap::Heap, stack::Stack},
         stdio::StdIO,
         vm::{CasmMetadata, Executable, RuntimeError},
     },
@@ -99,21 +96,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
                 (param_size, function_offset)
             }
         };
-        if param_size != 0 {
-            let data = stack.pop(param_size)?.to_owned();
-            let _ = stack.frame(
-                //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
-                param_size,
-                program.cursor + 1,
-            )?;
-            let _ = stack.write(Offset::FP(0), AccessLevel::Direct, &data)?;
-        } else {
-            let _ = stack.frame(
-                //return_size + 9 /* 8 bytes for the return size and 1 for wether the function returned something */,
-                param_size,
-                program.cursor + 1,
-            )?;
-        }
+
+        let _ = stack.open_frame(param_size, program.cursor + 1)?;
 
         program.cursor_set(function_offset);
         Ok(())
@@ -180,7 +164,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchIf {
             .get_label_name(&self.else_label)
             .unwrap_or("".to_string().into())
             .to_string();
-        stdio.push_casm(engine, &format!("else {label}"));
+        stdio.push_casm(engine, &format!("else_goto {label}"));
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
         crate::vm::vm::CasmWeight::ZERO
@@ -443,5 +427,109 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTry {
         }
         program.incr();
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Break;
+
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Break {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine, "break")
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Continue;
+
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Continue {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine, "continue")
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub size: usize,
+}
+
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Return {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine, &format!("return {0}", self.size))
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::MEDIUM
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CloseFrame;
+
+impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CloseFrame {
+    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+        stdio.push_casm(engine, "return")
+    }
+    fn weight(&self) -> crate::vm::vm::CasmWeight {
+        crate::vm::vm::CasmWeight::ZERO
+    }
+}
+
+impl<G: crate::GameEngineStaticFn> Executable<G> for Break {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        todo!()
+    }
+}
+
+impl<G: crate::GameEngineStaticFn> Executable<G> for Continue {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        todo!()
+    }
+}
+impl<G: crate::GameEngineStaticFn> Executable<G> for Return {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        todo!()
+    }
+}
+impl<G: crate::GameEngineStaticFn> Executable<G> for CloseFrame {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        todo!()
     }
 }

@@ -1,8 +1,8 @@
 use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType, StringType};
-use crate::semantic::{Either, TypeOf};
+use crate::semantic::{EType, TypeOf};
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
@@ -15,7 +15,7 @@ use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Resolve, SemanticError},
+    semantic::{Resolve, SemanticError},
     vm::{
         casm::CasmProgram,
         vm::{CodeGenerationError, GenerateCode},
@@ -72,7 +72,7 @@ impl StringsFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::STD {
+                if *suffixe != lexem::STD {
                     return None;
                 }
             }
@@ -91,7 +91,8 @@ impl Resolve for StringsFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -103,12 +104,11 @@ impl Resolve for StringsFn {
 
                 let src = &mut extra[0];
 
-                let _ = src.resolve::<G>(scope, &None, &mut None)?;
-                let src_type =
-                    src.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = src.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let src_type = src.type_of(&scope_manager, scope_id)?;
 
                 match &src_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Primitive(p) => match p {
                             PrimitiveType::Number(n) => match n {
                                 NumberType::U8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU8),
@@ -145,7 +145,11 @@ impl Resolve for StringsFn {
     }
 }
 impl TypeOf for StringsFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -158,8 +162,10 @@ impl TypeOf for StringsFn {
 impl GenerateCode for StringsFn {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             StringsFn::ToStr(to_str_casm) => instructions.push(Casm::Platform(LibCasm::Std(

@@ -1,17 +1,14 @@
 use std::sync::Arc;
 
-use crate::semantic::{EType, Either, SemanticError, TypeOf};
+use crate::semantic::{EType, SemanticError, TypeOf};
 
 pub mod st_builder;
 pub mod st_compatible_with;
 pub mod st_deserialize;
 pub mod st_merging;
-pub mod st_next;
 pub mod st_operand_merging;
 pub mod st_sizeof;
 pub mod st_subtypes;
-pub mod st_type_checking;
-use crate::semantic::scope::scope::Scope;
 
 type SubType = Box<EType>;
 
@@ -103,13 +100,4 @@ pub struct AddrType(pub SubType);
 pub struct MapType {
     pub keys_type: SubType,
     pub values_type: SubType,
-}
-
-impl TypeOf for StaticType {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
-    where
-        Self: Sized,
-    {
-        Ok(Either::Static(Arc::new(self.clone())))
-    }
 }

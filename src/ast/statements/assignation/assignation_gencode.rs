@@ -1,5 +1,8 @@
 use crate::{
-    ast::{expressions::operation::ListAccess, statements::assignation::AssignValue},
+    ast::{
+        expressions::{locate::Locatable, operation::ListAccess},
+        statements::assignation::AssignValue,
+    },
     semantic::SizeOf,
     vm::{
         casm::{
@@ -7,21 +10,25 @@ use crate::{
             mem::Mem,
             Casm, CasmProgram,
         },
-        vm::{CodeGenerationError, GenerateCode, Locatable},
+        vm::{CodeGenerationContext, CodeGenerationError, GenerateCode},
     },
 };
 
 use super::Assignation;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 
 impl GenerateCode for Assignation {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = &self.right.gencode(scope, instructions)?;
-        // self.left.gencode(scope, instructions)
+        let _ = &self
+            .right
+            .gencode(scope_manager, scope_id, instructions, context)?;
+
         let (var_size, is_utf8_char) = {
             let Some(var_type) = self.left.signature() else {
                 return Err(CodeGenerationError::UnresolvedError);
@@ -36,7 +43,7 @@ impl GenerateCode for Assignation {
                         .context()
                         .ok_or(CodeGenerationError::UnresolvedError)?
                     {
-                        crate::semantic::Either::Static(value) => match value.as_ref() {
+                        crate::semantic::EType::Static(value) => match value {
                             crate::semantic::scope::static_types::StaticType::String(_) => true,
                             crate::semantic::scope::static_types::StaticType::StrSlice(_) => true,
                             _ => false,
@@ -50,7 +57,7 @@ impl GenerateCode for Assignation {
         if var_size == 0 {
             return Ok(());
         }
-        let _ = self.left.locate(scope, instructions)?;
+        let _ = self.left.locate(scope_manager, scope_id, instructions)?;
         if is_utf8_char {
             instructions.push(Casm::Mem(Mem::TakeUTF8Char));
         } else {
@@ -63,27 +70,18 @@ impl GenerateCode for Assignation {
 impl GenerateCode for AssignValue {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            AssignValue::Scope(value) => {
-                let end_scope_label = Label::gen();
-                instructions.push(Casm::Goto(Goto {
-                    label: Some(end_scope_label),
-                }));
-                let scope_label = instructions.push_label("Scope".to_string().into());
-
-                value.gencode(scope, instructions)?;
-
-                instructions.push_label_id(end_scope_label, "End_Scope".to_string().into());
-                instructions.push(Casm::Call(Call::From {
-                    label: scope_label,
-                    param_size: 0,
-                }));
-                instructions.push(Casm::Pop(9)); /* Pop the unused return size and return flag */
+            AssignValue::Block(value) => {
+                let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
             }
-            AssignValue::Expr(value) => value.gencode(scope, instructions)?,
+            AssignValue::Expr(value) => {
+                value.gencode(scope_manager, scope_id, instructions, context)?
+            }
         }
         Ok(())
     }
@@ -106,11 +104,11 @@ mod tests {
         clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
-                scope::Scope,
+                scope::ScopeManager,
                 static_types::{NumberType, PrimitiveType, SliceType, StaticType, TupleType},
                 user_type_impl::{self, UserType},
             },
-            Either, Resolve,
+            EType, Resolve,
         },
         v_num,
         vm::vm::{DeserializeFrom, Executable, Runtime},
@@ -160,23 +158,33 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let _ = declaration
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         declaration
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -184,7 +192,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -232,22 +240,23 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type.clone()),
-            )
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_type("Point", UserType::Struct(user_type.clone()), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -256,7 +265,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -278,9 +287,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x {
                         Number::I64(res) => {
-                            if **r_id == "x" {
+                            if *r_id == "x" {
                                 assert_eq!(420, *res);
-                            } else if **r_id == "y" {
+                            } else if *r_id == "y" {
                                 assert_eq!(69, *res);
                             }
                         }
@@ -306,15 +315,20 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -323,7 +337,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -418,22 +432,23 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type.clone()),
-            )
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_type("Point", UserType::Struct(user_type.clone()), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -441,7 +456,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -464,9 +479,9 @@ mod tests {
                 Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(x)))) => {
                     match x {
                         Number::I64(res) => {
-                            if **r_id == "x" {
+                            if *r_id == "x" {
                                 assert_eq!(420, *res);
-                            } else if **r_id == "y" {
+                            } else if *r_id == "y" {
                                 assert_eq!(69, *res);
                             }
                         }
@@ -487,10 +502,10 @@ mod tests {
                 res.push(("x".to_string().into(), p_num!(I64)));
                 res.push((
                     "y".to_string().into(),
-                    Either::Static(
+                    EType::Static(
                         StaticType::Slice(SliceType {
                             size: 4,
-                            item_type: Box::new(Either::Static(
+                            item_type: Box::new(EType::Static(
                                 StaticType::Tuple(TupleType(vec![p_num!(U64), p_num!(U64)])).into(),
                             )),
                         })
@@ -513,22 +528,23 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type.clone()),
-            )
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_type("Point", UserType::Struct(user_type.clone()), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -537,7 +553,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -590,27 +606,6 @@ mod tests {
 
     #[test]
     fn valid_assignation_double_field_in_scope() {
-        let user_type_point3d = user_type_impl::Struct {
-            id: "Point3D".to_string().into(),
-            fields: {
-                let mut res = Vec::new();
-                res.push(("x".to_string().into(), p_num!(I64)));
-                res.push(("y".to_string().into(), p_num!(I64)));
-                res
-            },
-        };
-        let user_type_point = user_type_impl::Struct {
-            id: "Point".to_string().into(),
-            fields: {
-                let mut res = Vec::new();
-                res.push(("x".to_string().into(), p_num!(I64)));
-                res.push((
-                    "y".to_string().into(),
-                    Either::User(Arc::new(UserType::Struct(user_type_point3d.clone()))),
-                ));
-                res
-            },
-        };
         let mut statement = Statement::parse(
             r##"
         let x = {
@@ -624,29 +619,54 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point".to_string().into(),
-                UserType::Struct(user_type_point.clone()),
-            )
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+
+        let user_type_point3d = user_type_impl::Struct {
+            id: "Point3D".to_string().into(),
+            fields: {
+                let mut res = Vec::new();
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push(("y".to_string().into(), p_num!(I64)));
+                res
+            },
+        };
+
+        let user_type_point3d_id = scope_manager
+            .register_type("Point3D", UserType::Struct(user_type_point3d.clone()), None)
             .expect("Registering of user type should have succeeded");
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(
-                &"Point3D".to_string().into(),
-                UserType::Struct(user_type_point3d.clone()),
-            )
+
+        let user_type_point = user_type_impl::Struct {
+            id: "Point".to_string().into(),
+            fields: {
+                let mut res = Vec::new();
+                res.push(("x".to_string().into(), p_num!(I64)));
+                res.push((
+                    "y".to_string().into(),
+                    EType::User {
+                        id: user_type_point3d_id,
+                        size: user_type_point3d.size_of(),
+                    },
+                ));
+                res
+            },
+        };
+
+        let _ = scope_manager
+            .register_type("Point3D", UserType::Struct(user_type_point.clone()), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -655,7 +675,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -673,7 +693,7 @@ mod tests {
             .deserialize_from(&data)
             .expect("Deserialization should have succeeded");
         for (r_id, res) in &result.fields {
-            if **r_id == "y" {
+            if *r_id == "y" {
                 match res {
                     Expression::Atomic(Atomic::Data(Data::Struct(Struct {
                         id,
@@ -681,7 +701,7 @@ mod tests {
                         metadata,
                     }))) => {
                         for (r_id, res) in fields {
-                            if **r_id == "y" {
+                            if *r_id == "y" {
                                 match res {
                                     Expression::Atomic(Atomic::Data(Data::Primitive(
                                         Primitive::Number(x),

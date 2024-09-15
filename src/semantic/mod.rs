@@ -1,16 +1,16 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::ast::utils::strings::ID;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
 use thiserror::Error;
 pub mod scope;
 pub mod utils;
-
-pub type ArcMutex<T> = Arc<Mutex<T>>;
-pub type ArcRwLock<T> = Arc<RwLock<T>>;
 
 #[derive(Debug, Clone, Error)]
 pub enum SemanticError {
@@ -21,6 +21,9 @@ pub enum SemanticError {
 
     #[error("cannot infer type {0}")]
     CantInferType(String),
+
+    #[error("some case are not covered {0:?}")]
+    ExhaustiveCases(HashSet<String>),
 
     #[error("expected a boolean")]
     ExpectedBoolean,
@@ -44,9 +47,9 @@ pub enum SemanticError {
     ExpectedLeftExpression,
 
     #[error("unknown variable : {0}")]
-    UnknownVar(ID),
+    UnknownVar(String),
     #[error("unknown type : {0}")]
-    UnknownType(ID),
+    UnknownType(String),
     #[error("unknown field")]
     UnknownField,
 
@@ -84,6 +87,15 @@ pub struct Metadata {
     pub info: Info,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Info {
+    Unresolved,
+    Resolved {
+        context: Option<EType>,
+        signature: Option<EType>,
+    },
+}
+
 impl Metadata {
     pub fn context(&self) -> Option<EType> {
         match &self.info {
@@ -105,15 +117,6 @@ impl Metadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Info {
-    Unresolved,
-    Resolved {
-        context: Option<EType>,
-        signature: Option<EType>,
-    },
-}
-
 impl Default for Metadata {
     fn default() -> Self {
         Self {
@@ -123,12 +126,10 @@ impl Default for Metadata {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Either {
-    Static(Arc<StaticType>),
-    User(Arc<UserType>),
+pub enum EType {
+    Static(StaticType),
+    User { id: u64, size: usize },
 }
-
-pub type EType = Either;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AccessLevel {
@@ -152,7 +153,8 @@ pub trait Resolve {
     type Extra: Default;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -160,30 +162,50 @@ pub trait Resolve {
         Self: Sized;
 }
 
-pub trait CompatibleWith {
-    fn compatible_with<Other>(
-        &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
+pub trait ResolveFromStruct {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
     ) -> Result<(), SemanticError>
     where
-        Other: TypeOf;
+        Self: Sized + Resolve;
+}
+
+pub trait CompatibleWith {
+    fn compatible_with(
+        &self,
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError>
+    where
+        Self: PartialEq,
+    {
+        (self == other)
+            .then(|| ())
+            .ok_or(SemanticError::IncompatibleTypes)
+    }
 }
 
 pub trait TypeOf {
-    fn type_of(&self, scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized;
 }
 
 pub trait MergeType {
-    fn merge<Other>(
+    fn merge(
         &self,
-        other: &Other,
-        scope: &std::sync::RwLockReadGuard<Scope>,
-    ) -> Result<EType, SemanticError>
-    where
-        Other: TypeOf;
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>;
 }
 
 pub trait SizeOf {

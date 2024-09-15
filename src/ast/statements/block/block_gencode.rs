@@ -1,13 +1,11 @@
-use crate::semantic::scope::scope::Scope;
-use crate::{arw_read, arw_write};
-
-use crate::vm::casm::branch::BranchTry;
+use crate::semantic::scope::scope::{ScopeManager, Variable, VariableAddress};
+use crate::vm::casm::branch::{BranchTry, Return};
+use crate::vm::vm::CodeGenerationContext;
 use crate::{
-    semantic::{scope::var_impl::VarState, SizeOf},
+    semantic::SizeOf,
     vm::{
-        allocator::stack::Offset,
         casm::{
-            alloc::{Alloc, StackFrame},
+            alloc::Alloc,
             branch::{Call, Goto, Label},
             Casm, CasmProgram,
         },
@@ -15,106 +13,214 @@ use crate::{
     },
 };
 
-use super::Block;
-
-pub fn inner_block_gencode(
-    scope: &crate::semantic::ArcRwLock<Scope>,
-    block: &Block,
-    param_size: Option<usize>,
-    is_direct_loop: bool,
-    is_try_block: bool,
-    instructions: &mut CasmProgram,
-) -> Result<(), CodeGenerationError> {
-    let scope_label = Label::gen();
-    let end_scope_label = Label::gen();
-
-    instructions.push(Casm::Goto(Goto {
-        label: Some(end_scope_label),
-    }));
-
-    instructions.push_label_id(scope_label, "block".to_string().into());
-
-    let _ = block.gencode(scope, instructions)?;
-
-    instructions.push_label_id(end_scope_label, "end_scope".to_string().into());
-    instructions.push(Casm::Call(Call::From {
-        label: scope_label,
-        param_size: param_size.unwrap_or(0),
-    }));
-    if is_try_block {
-        instructions.push(Casm::Try(BranchTry::EndTry));
-    }
-    instructions.push(Casm::StackFrame(StackFrame::Transfer { is_direct_loop }));
-
-    Ok(())
-}
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
 
 impl GenerateCode for Block {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let borrowed = &self.inner_scope;
-        let Some(borrowed_scope) = borrowed else {
+        for statement in &self.statements {
+            let _ = statement.gencode(scope_manager, scope_id, instructions, context)?;
+        }
+        Ok(())
+    }
+}
+
+impl GenerateCode for FunctionBlock {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(inner_scope) = self.scope else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let borrowed = crate::arw_read!(borrowed_scope, CodeGenerationError::ConcurrencyError)?;
-
-        let _return_size = self.metadata.signature().map_or(0, |t| t.size_of());
-
-        // Parameter allocation if any
-        let parameters = borrowed.vars().filter(|(v, _)| {
-            arw_read!(v, CodeGenerationError::ConcurrencyError)
-                .ok()
-                .map(|v| v.state == VarState::Parameter)
-                .unwrap_or(false)
-        });
-
-        let mut offset_idx = 0;
-
-        for (var, offset) in parameters {
-            let var = var.as_ref();
-            let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
-                .type_sig
-                .size_of();
-            // Already allocated
-            let mut borrowed_offset = arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
-            *borrowed_offset = Offset::FP(offset_idx);
-            offset_idx += var_size;
-        }
-
-        let mut offset_idx = 0;
-        for (var, offset) in borrowed.vars() {
-            let var = var.as_ref();
-            let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
-                .type_sig
-                .size_of();
-
-            if arw_read!(var, CodeGenerationError::ConcurrencyError)?.state != VarState::Parameter {
-                let mut borrowed_offset =
-                    arw_write!(offset, CodeGenerationError::ConcurrencyError)?;
-                *borrowed_offset = Offset::FZ(offset_idx as isize);
-                // Alloc and push heap address on stack
-                if var_size == 0 {
-                    continue;
-                }
-                instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                offset_idx += var_size;
-            }
-        }
-        drop(borrowed);
-
-        let inner_scope = &self.inner_scope;
-        let Some(inner_scope) = inner_scope else {
+        let Some(return_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        for statement in &self.instructions {
-            let _ = statement.gencode(inner_scope, instructions)?;
+        let return_size = return_type.size_of();
+
+        let epilog_label = Label::gen();
+
+        let mut local_offset = 0;
+        // Allocate all parameter variable
+        for Variable {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
         }
 
-        // End Stack Frame
-        instructions.push(Casm::StackFrame(StackFrame::Clean));
+        // Allocate all local variable
+        for Variable {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+        }
+
+        // generate code for all statements
+        for statement in &self.statements {
+            let _ = statement.gencode(
+                scope_manager,
+                scope_id,
+                instructions,
+                &CodeGenerationContext {
+                    return_label: Some(epilog_label),
+                    break_label: None,
+                    continue_label: None,
+                },
+            )?;
+        }
+
+        // Function epilog
+        instructions.push_label_id(epilog_label, "epilog_Function".to_string());
+        instructions.push(Casm::Return(Return { size: return_size }));
+
+        Ok(())
+    }
+}
+
+impl GenerateCode for ClosureBlock {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(inner_scope) = self.scope else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(return_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let return_size = return_type.size_of();
+
+        let epilog_label = Label::gen();
+
+        let mut local_offset = 0;
+        // Allocate all parameter variable
+        for Variable {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+        }
+
+        // Allocate all local variable
+        for Variable {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+        }
+
+        // generate code for all statements
+        for statement in &self.statements {
+            let _ = statement.gencode(
+                scope_manager,
+                scope_id,
+                instructions,
+                &CodeGenerationContext {
+                    return_label: Some(epilog_label),
+                    break_label: None,
+                    continue_label: None,
+                },
+            )?;
+        }
+
+        // Function epilog
+        instructions.push_label_id(epilog_label, "epilog_Function".to_string());
+        instructions.push(Casm::Return(Return { size: return_size }));
+
+        Ok(())
+    }
+}
+
+impl GenerateCode for ExprBlock {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(inner_scope) = self.scope else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(return_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let return_size = return_type.size_of();
+
+        let call_label = Label::gen();
+        let epilog_label = Label::gen();
+        let start_iife = Label::gen();
+        let end_iife = Label::gen();
+
+        instructions.push(Casm::Goto(Goto {
+            label: Some(call_label),
+        }));
+        instructions.push_label_id(start_iife, "start_IIFE".to_string());
+
+        // Allocate all local variable
+        let mut local_offset = 0;
+        for Variable {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+        }
+
+        // generate code for all statements
+        for statement in &self.statements {
+            let _ = statement.gencode(
+                scope_manager,
+                scope_id,
+                instructions,
+                &CodeGenerationContext {
+                    return_label: Some(epilog_label),
+                    break_label: None,
+                    continue_label: None,
+                },
+            )?;
+        }
+
+        // IIFE epilog
+        instructions.push_label_id(epilog_label, "epilog_IIFE".to_string());
+        instructions.push(Casm::Return(Return { size: return_size }));
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_iife),
+        }));
+        instructions.push_label_id(start_iife, "call_IIFE".to_string());
+        instructions.push(Casm::Call(Call::From {
+            label: start_iife,
+            param_size: 0,
+        }));
+        instructions.push_label_id(end_iife, "end_IIFE".to_string());
+
         Ok(())
     }
 }

@@ -6,20 +6,16 @@ use super::{
 
 use crate::ast::expressions::data::{Data, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
+use crate::p_num;
 use crate::semantic::scope::static_types::{
-    AddrType, NumberType, PrimitiveType, RangeType, StaticType,
+    ClosureType, FnType, NumberType, PrimitiveType, RangeType, SliceType, StaticType, StrSliceType,
+    TupleType, VecType,
 };
+use crate::semantic::scope::user_type_impl::{Struct, UserType};
+use crate::semantic::{CompatibleWith, EType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{Info, ResolveFromStruct, SizeOf};
 use crate::vm::platform::Lib;
-use crate::{arw_write, p_num, resolve_metadata};
-
-use crate::semantic::scope::scope::Scope;
-use crate::semantic::scope::type_traits::{GetSubTypes, TypeChecking};
-use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::{
-    scope::type_traits::OperandMerging, CompatibleWith, Either, Resolve, SemanticError, TypeOf,
-};
-use crate::semantic::{EType, Info};
-use crate::vm::vm::{DefaultDynamicFn, DynamicFnResolver, Locatable};
+use crate::vm::vm::DynamicFnResolver;
 
 impl Resolve for UnaryOperation {
     type Output = ();
@@ -27,7 +23,8 @@ impl Resolve for UnaryOperation {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -36,16 +33,11 @@ impl Resolve for UnaryOperation {
     {
         match self {
             UnaryOperation::Minus { value, metadata } => {
-                // let binding = Some(Either::Static(
-                //     StaticType::Primitive(PrimitiveType::Number(NumberType::F64)).into(),
-                // ));
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let value_type =
-                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let value_type = value.type_of(&scope_manager, scope_id)?;
 
-                // let _ = <EType as OperandMerging>::can_substract(&value_type)?;
                 match value_type {
-                    Either::Static(value) => match value.as_ref() {
+                    EType::Static(value) => match value {
                         StaticType::Primitive(value) => match value {
                             PrimitiveType::Number(
                                 NumberType::I128
@@ -59,35 +51,28 @@ impl Resolve for UnaryOperation {
                         },
                         _ => return Err(SemanticError::IncompatibleOperation),
                     },
-                    Either::User(_) => return Err(SemanticError::IncompatibleOperation),
+                    EType::User { .. } => return Err(SemanticError::IncompatibleOperation),
                 }
-                {
-                    metadata.info =
-                        Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(value.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?),
-                        };
-                }
+
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(value.type_of(&scope_manager, scope_id)?),
+                };
+
                 Ok(())
             }
             UnaryOperation::Not { value, metadata } => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let value_type =
-                    value.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = <EType as OperandMerging>::can_negate(&value_type)?;
-                {
-                    metadata.info =
-                        Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(value.type_of(&crate::arw_read!(
-                                scope,
-                                SemanticError::ConcurrencyError
-                            )?)?),
-                        };
-                }
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let value_type = value.type_of(&scope_manager, scope_id)?;
+                let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) = value_type else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
+                };
+
                 Ok(())
             }
         }
@@ -100,37 +85,83 @@ impl Resolve for TupleAccess {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.var.resolve::<G>(scope, context, extra)?;
-        let var_type = self
+        let _ = self
             .var
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if !var_type.is_dotnum_indexable() {
-            Err(SemanticError::ExpectedIndexable)
-        } else {
-            let Some(fields) = &var_type.get_fields() else {
-                return Err(SemanticError::InvalidPattern);
-            };
-            if self.index >= fields.len() {
-                Err(SemanticError::InvalidPattern)
-            } else {
-                let item_type = var_type
-                    .get_nth(&self.index)
-                    .ok_or(SemanticError::ExpectedIndexable)?;
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
 
-                self.metadata.info = Info::Resolved {
-                    context: Some(var_type),
-                    signature: Some(item_type),
-                };
-                Ok(())
-            }
+        let var_type = self.var.type_of(&scope_manager, scope_id)?;
+
+        let EType::Static(StaticType::Tuple(TupleType(fields))) = var_type.clone() else {
+            return Err(SemanticError::ExpectedIndexable);
+        };
+
+        if self.index >= fields.len() {
+            return Err(SemanticError::InvalidPattern);
         }
+        let mut idx = 0;
+        let mut offset = 0;
+        while idx < self.index {
+            offset += fields[idx].size_of();
+        }
+
+        let item_type = fields
+            .get(self.index)
+            .ok_or(SemanticError::ExpectedIndexable)?;
+
+        self.offset.insert(offset);
+
+        self.metadata.info = Info::Resolved {
+            context: Some(var_type),
+            signature: Some(item_type.clone()),
+        };
+        Ok(())
+    }
+}
+
+impl ResolveFromStruct for TupleAccess {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        let _ = self
+            .var
+            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+        let var_type = self.var.type_of(&scope_manager, scope_id)?;
+
+        let EType::Static(StaticType::Tuple(TupleType(fields))) = var_type.clone() else {
+            return Err(SemanticError::ExpectedIndexable);
+        };
+
+        if self.index >= fields.len() {
+            return Err(SemanticError::InvalidPattern);
+        }
+        let mut idx = 0;
+        let mut offset = 0;
+        while idx < self.index {
+            offset += fields[idx].size_of();
+        }
+
+        let item_type = fields
+            .get(self.index)
+            .ok_or(SemanticError::ExpectedIndexable)?;
+
+        self.offset.insert(offset);
+
+        self.metadata.info = Info::Resolved {
+            context: Some(var_type),
+            signature: Some(item_type.clone()),
+        };
+        Ok(())
     }
 }
 
@@ -140,35 +171,99 @@ impl Resolve for ListAccess {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.var.resolve::<G>(scope, context, extra)?;
-        let var_type = self
+        let _ = self
             .var
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if var_type.is_indexable() {
-            let _ = self.index.resolve::<G>(scope, &Some(p_num!(U64)), extra)?;
-            let index_type = self
-                .index
-                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-            if index_type.is_u64() {
-                let item_type = var_type.get_item().ok_or(SemanticError::ExpectedIterable)?;
-
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+        let var_type = self.var.type_of(&scope_manager, scope_id)?;
+        let _ = self
+            .index
+            .resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), extra)?;
+        match &var_type {
+            EType::Static(StaticType::Slice(SliceType { size, item_type })) => {
                 self.metadata.info = Info::Resolved {
-                    context: Some(var_type),
-                    signature: Some(item_type),
+                    context: Some(var_type.clone()),
+                    signature: Some(item_type.as_ref().clone()),
                 };
                 Ok(())
-            } else {
-                Err(SemanticError::ExpectedIndexable)
             }
-        } else {
-            Err(SemanticError::ExpectedIndexable)
+            EType::Static(StaticType::Vec(VecType(item_type))) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(item_type.as_ref().clone()),
+                };
+                Ok(())
+            }
+            EType::Static(StaticType::StrSlice(StrSliceType { size })) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
+                };
+                Ok(())
+            }
+            EType::Static(StaticType::String(_)) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
+                };
+                Ok(())
+            }
+            _ => Err(SemanticError::ExpectedIndexable),
+        }
+    }
+}
+
+impl ResolveFromStruct for ListAccess {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        let _ = self
+            .var
+            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+        let var_type = self.var.type_of(&scope_manager, scope_id)?;
+        let _ = self
+            .index
+            .resolve::<G>(scope_manager, scope_id, &Some(p_num!(U64)), &mut None)?;
+        match &var_type {
+            EType::Static(StaticType::Slice(SliceType { size, item_type })) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(item_type.as_ref().clone()),
+                };
+                Ok(())
+            }
+            EType::Static(StaticType::Vec(VecType(item_type))) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(item_type.as_ref().clone()),
+                };
+                Ok(())
+            }
+            EType::Static(StaticType::StrSlice(StrSliceType { size })) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
+                };
+                Ok(())
+            }
+            EType::Static(StaticType::String(_)) => {
+                self.metadata.info = Info::Resolved {
+                    context: Some(var_type.clone()),
+                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
+                };
+                Ok(())
+            }
+            _ => Err(SemanticError::ExpectedIndexable),
         }
     }
 }
@@ -179,52 +274,53 @@ impl Resolve for FieldAccess {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.var.resolve::<G>(scope, context, extra)?;
-        let mut var_type = self
+        let _ = self
             .var
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+        let EType::User { id, .. } = self.var.type_of(&scope_manager, scope_id)? else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+        let UserType::Struct(Struct { .. }) = scope_manager.find_type_by_id(id, scope_id)? else {
+            return Err(SemanticError::ExpectedStruct);
+        };
 
-        match &var_type {
-            Either::Static(value) => match value.as_ref() {
-                StaticType::Address(AddrType(inner)) => var_type = inner.as_ref().clone(),
-                _ => return Err(SemanticError::ExpectedStruct),
-            },
-            _ => {}
-        }
-        match &var_type {
-            Either::Static(_) => return Err(SemanticError::ExpectedStruct),
-            Either::User(value) => match value.as_ref() {
-                UserType::Struct(value) => {
-                    let Some(field_id) = self.field.as_ref().most_left_id() else {
-                        return Err(SemanticError::UnknownField);
-                    };
-                    let Some((_, field_type)) = value.fields.iter().find(|(id, _)| *id == field_id)
-                    else {
-                        return Err(SemanticError::UnknownField);
-                    };
-                    let _ =
-                        self.field
-                            .resolve::<G>(scope, context, &mut Some(field_type.clone()))?;
-                    let field_type = self
-                        .field
-                        .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+        self.field
+            .resolve_from_struct::<G>(scope_manager, scope_id, id)?;
 
-                    self.metadata.info = Info::Resolved {
-                        context: Some(var_type),
-                        signature: Some(field_type),
-                    };
-                    Ok(())
-                }
-                _ => return Err(SemanticError::ExpectedStruct),
-            },
-        }
+        Ok(())
+    }
+}
+
+impl ResolveFromStruct for FieldAccess {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        let _ = self
+            .var
+            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+
+        let EType::User { id, .. } = self.var.type_of(&scope_manager, scope_id)? else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+        let UserType::Struct(Struct { .. }) = scope_manager.find_type_by_id(id, scope_id)? else {
+            return Err(SemanticError::ExpectedStruct);
+        };
+
+        self.field
+            .resolve_from_struct::<G>(scope_manager, scope_id, id)?;
+
+        Ok(())
     }
 }
 
@@ -234,7 +330,8 @@ impl Resolve for FnCall {
     type Extra = Option<EType>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -242,26 +339,29 @@ impl Resolve for FnCall {
         Self: Sized,
     {
         match self.fn_var.as_mut() {
-            Expression::Atomic(Atomic::Data(Data::Variable(Variable { id, .. }))) => {
-                let found = crate::arw_read!(scope, SemanticError::ConcurrencyError)?.find_var(id);
+            Expression::Atomic(Atomic::Data(Data::Variable(Variable { ref name, .. }))) => {
+                let found = scope_manager.find_var_by_name(name, scope_id);
                 if found.is_err() || self.lib.is_some() {
-                    if let Some(mut dynamic_fn) = G::is_dynamic_fn(&self.lib, id) {
-                        self.is_dynamic_fn = Some(id.as_str().to_string());
-                        let return_type = dynamic_fn.resolve::<G>(scope, &mut self.params)?;
+                    if let Some(mut dynamic_fn) = G::is_dynamic_fn(&self.lib, name) {
+                        self.is_dynamic_fn = Some(name.as_str().to_string());
+                        let return_type =
+                            dynamic_fn.resolve::<G>(scope_manager, scope_id, &mut self.params)?;
                         self.metadata.info = crate::semantic::Info::Resolved {
                             context: context.clone(),
                             signature: Some(return_type),
                         };
                         return Ok(());
                     }
-                    if let Some(mut api) = Lib::from(&self.lib, id) {
-                        let _ = api.resolve::<G>(scope, context, &mut self.params)?;
+                    if let Some(mut api) = Lib::from(&self.lib, name) {
+                        let _ =
+                            api.resolve::<G>(scope_manager, scope_id, context, &mut self.params)?;
 
-                        let mut borrowed_platform =
-                            arw_write!(self.platform, SemanticError::ConcurrencyError)?;
-                        *borrowed_platform = Some(api);
-                        drop(borrowed_platform);
-                        resolve_metadata!(self.metadata.info, self, scope, context);
+                        self.platform = Some(api);
+
+                        self.metadata.info = crate::semantic::Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(self.type_of(scope_manager, scope_id)?),
+                        };
                         return Ok(());
                     }
                 }
@@ -269,32 +369,55 @@ impl Resolve for FnCall {
             _ => {}
         }
 
-        let _ = self.fn_var.resolve::<G>(scope, context, extra)?;
-        let fn_var_type = self
+        let _ = self
             .fn_var
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        if !<EType as TypeChecking>::is_callable(&fn_var_type) {
-            return Err(SemanticError::ExpectedCallable);
-        }
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
 
-        for (index, expr) in self.params.iter_mut().enumerate() {
-            let param_context = <EType as GetSubTypes>::get_nth(&fn_var_type, &index);
-            let _ = expr.resolve::<G>(scope, &param_context, &mut None)?;
-        }
+        let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
 
-        let Some(fields) = <EType as GetSubTypes>::get_fields(&fn_var_type) else {
-            return Err(SemanticError::ExpectedCallable);
+        let params_type = match fn_var_type {
+            EType::Static(StaticType::Closure(ClosureType { ref params, .. })) => params.clone(),
+            EType::Static(StaticType::StaticFn(FnType { ref params, .. })) => params.clone(),
+            _ => return Err(SemanticError::ExpectedCallable),
         };
-        if self.params.len() != fields.len() {
+
+        if self.params.len() != params_type.len() {
             return Err(SemanticError::IncorrectArguments);
         }
-        for (index, (_, field_type)) in fields.iter().enumerate() {
-            let _ = field_type.compatible_with(
-                &self.params[index],
-                &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
+        for (expr, param_type) in self.params.iter_mut().zip(params_type) {
+            let _ = expr.resolve::<G>(
+                scope_manager,
+                scope_id,
+                &Some(param_type.clone()),
+                &mut None,
+            )?;
+            let _ = expr.type_of(scope_manager, scope_id)?.compatible_with(
+                &param_type,
+                scope_manager,
+                scope_id,
             )?;
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
+        Ok(())
+    }
+}
+
+impl ResolveFromStruct for FnCall {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        let _ = self
+            .fn_var
+            .resolve_from_struct::<G>(scope_manager, scope_id, struct_id)?;
+
+        todo!();
         Ok(())
     }
 }
@@ -305,7 +428,8 @@ impl Resolve for Range {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -314,8 +438,8 @@ impl Resolve for Range {
     {
         let inner_context = match context {
             Some(context) => match context {
-                Either::Static(context) => match context.as_ref() {
-                    StaticType::Range(RangeType { num, .. }) => Some(Either::Static(
+                EType::Static(context) => match context {
+                    StaticType::Range(RangeType { num, .. }) => Some(EType::Static(
                         StaticType::Primitive(PrimitiveType::Number(num.clone())).into(),
                     )),
                     _ => None,
@@ -327,31 +451,47 @@ impl Resolve for Range {
 
         match (self.lower.as_mut(), self.upper.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let upper_type = self
-                    .upper
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .lower
-                    .resolve::<G>(scope, &Some(upper_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let upper_type = self.upper.type_of(&scope_manager, scope_id)?;
+                let _ = self.lower.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(upper_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let lower_type = self
-                    .lower
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .upper
-                    .resolve::<G>(scope, &Some(lower_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let lower_type = self.lower.type_of(&scope_manager, scope_id)?;
+                let _ = self.upper.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(lower_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.lower.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.upper.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .lower
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .upper
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let _ = resolve_metadata!(self.metadata.info, self, scope, context);
+        let _ = self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
+    }
+}
+
+fn is_number(ctype: &EType) -> bool {
+    match ctype {
+        EType::Static(StaticType::Primitive(PrimitiveType::Number(_))) => true,
+        _ => false,
     }
 }
 
@@ -361,91 +501,59 @@ impl Resolve for Product {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let (left, right) = match self {
+        let (left, right, metadata) = match self {
             Product::Mult {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Product::Div {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Product::Mod {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
         };
 
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type =
-                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = right.type_of(&scope_manager, scope_id)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type =
-                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = left.type_of(&scope_manager, scope_id)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
             }
             _ => {
-                let _ = left.resolve::<G>(scope, context, &mut None)?;
-                let _ = right.resolve::<G>(scope, context, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_product(&left_type)?;
+        let left_type = left.type_of(&scope_manager, scope_id)?;
+        let right_type = right.type_of(&scope_manager, scope_id)?;
 
-        let right_type =
-            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_product(&right_type)?;
-
-        // let _ = left_type.compatible_with(right.as_ref(), &block.borrow())?;
-        let merge_type =
-            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        match self {
-            Product::Mult {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
             }
-            Product::Div {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
-            Product::Mod {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
         }
 
         Ok(())
@@ -457,7 +565,8 @@ impl Resolve for Addition {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -466,40 +575,47 @@ impl Resolve for Addition {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_add(&left_type)?;
+        let left_type = self.left.type_of(&scope_manager, scope_id)?;
+        let right_type = self.right.type_of(&scope_manager, scope_id)?;
 
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_add(&right_type)?;
-        // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            self.metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+
         Ok(())
     }
 }
@@ -510,7 +626,8 @@ impl Resolve for Substraction {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -519,41 +636,46 @@ impl Resolve for Substraction {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_substract(&left_type)?;
+        let left_type = self.left.type_of(&scope_manager, scope_id)?;
+        let right_type = self.right.type_of(&scope_manager, scope_id)?;
 
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_substract(&right_type)?;
-
-        // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            self.metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
         Ok(())
     }
 }
@@ -564,7 +686,8 @@ impl Resolve for Shift {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -586,54 +709,33 @@ impl Resolve for Shift {
 
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type =
-                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = right.type_of(&scope_manager, scope_id)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type =
-                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = left.type_of(&scope_manager, scope_id)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
             }
             _ => {
-                let _ = left.resolve::<G>(scope, context, &mut None)?;
-                let _ = right.resolve::<G>(scope, context, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
-        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_shift(&left_type)?;
 
-        let right_type =
-            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_shift(&right_type)?;
+        let left_type = left.type_of(&scope_manager, scope_id)?;
+        let right_type = right.type_of(&scope_manager, scope_id)?;
 
-        // let _ = left_type.compatible_with(right.as_ref(), &block.borrow())?;
-        let merge_type =
-            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        match self {
-            Shift::Left {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
             }
-            Shift::Right {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
         }
+
         Ok(())
     }
 }
@@ -643,7 +745,8 @@ impl Resolve for BitwiseAnd {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -652,40 +755,45 @@ impl Resolve for BitwiseAnd {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_and(&left_type)?;
+        let left_type = self.left.type_of(&scope_manager, scope_id)?;
+        let right_type = self.right.type_of(&scope_manager, scope_id)?;
 
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_and(&right_type)?;
-
-        // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            self.metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
         Ok(())
     }
 }
@@ -695,7 +803,8 @@ impl Resolve for BitwiseXOR {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -704,41 +813,45 @@ impl Resolve for BitwiseXOR {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
+        let left_type = self.left.type_of(&scope_manager, scope_id)?;
+        let right_type = self.right.type_of(&scope_manager, scope_id)?;
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_xor(&left_type)?;
-
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_xor(&right_type)?;
-
-        // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            self.metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
         Ok(())
     }
 }
@@ -748,7 +861,8 @@ impl Resolve for BitwiseOR {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -757,41 +871,46 @@ impl Resolve for BitwiseOR {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_or(&left_type)?;
+        let left_type = self.left.type_of(&scope_manager, scope_id)?;
+        let right_type = self.right.type_of(&scope_manager, scope_id)?;
 
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_bitwise_or(&right_type)?;
-
-        // let _ = left_type.compatible_with(self.right.as_ref(), &block.borrow())?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            self.metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
+        }
         Ok(())
     }
 }
@@ -802,28 +921,34 @@ impl Resolve for Cast {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-        let _ = self.right.resolve::<G>(scope, &(), &mut ())?;
+        let _ = self
+            .left
+            .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+        let _ = self
+            .right
+            .resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
 
         if let Some(l_metadata) = self.left.metadata_mut() {
             let signature = l_metadata.signature();
-            let new_context = self
-                .right
-                .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
+            let new_context = self.right.type_of(&scope_manager, scope_id)?;
 
             l_metadata.info = Info::Resolved {
                 context: Some(new_context),
                 signature,
             };
         }
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(scope_manager, scope_id)?),
+        };
         Ok(())
     }
 }
@@ -834,110 +959,64 @@ impl Resolve for Comparaison {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let (left, right) = match self {
+        let (left, right, metadata) = match self {
             Comparaison::Less {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Comparaison::LessEqual {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Comparaison::Greater {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Comparaison::GreaterEqual {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
         };
 
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type =
-                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = right.type_of(&scope_manager, scope_id)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type =
-                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = left.type_of(&scope_manager, scope_id)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
             }
             _ => {
-                let _ = left.resolve::<G>(scope, context, &mut None)?;
-                let _ = right.resolve::<G>(scope, context, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_comparaison(&left_type)?;
+        let left_type = left.type_of(&scope_manager, scope_id)?;
+        let right_type = right.type_of(&scope_manager, scope_id)?;
 
-        let right_type =
-            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_comparaison(&right_type)?;
-
-        let _ = left_type.compatible_with(
-            right.as_ref(),
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
-
-        let merge_type =
-            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        match self {
-            Comparaison::Less {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
+        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+            metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
             }
-            Comparaison::LessEqual {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
-            Comparaison::Greater {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
-            Comparaison::GreaterEqual {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
         }
         Ok(())
     }
@@ -949,80 +1028,54 @@ impl Resolve for Equation {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized,
     {
-        let (left, right) = match self {
+        let (left, right, metadata) = match self {
             Equation::Equal {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
             Equation::NotEqual {
                 left,
                 right,
                 metadata,
-            } => (left, right),
+            } => (left, right, metadata),
         };
 
         match (left.as_mut(), right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type =
-                    right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = left.resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = right.type_of(&scope_manager, scope_id)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type =
-                    left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = right.resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = left.type_of(&scope_manager, scope_id)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
             }
             _ => {
-                let _ = left.resolve::<G>(scope, context, &mut None)?;
-                let _ = right.resolve::<G>(scope, context, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = left.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_equate(&left_type)?;
+        let left_type = left.type_of(&scope_manager, scope_id)?;
+        let right_type = right.type_of(&scope_manager, scope_id)?;
 
-        let right_type =
-            right.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_equate(&right_type)?;
-
-        let _ = left_type.compatible_with(
-            right.as_ref(),
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
-
-        let merge_type =
-            self.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        match self {
-            Equation::Equal {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
+        if left_type == right_type {
+            metadata.info = Info::Resolved {
+                context: context.clone(),
+                signature: Some(left_type),
             }
-            Equation::NotEqual {
-                left,
-                right,
-                metadata,
-            } => {
-                metadata.info = Info::Resolved {
-                    context: context.clone(),
-                    signature: Some(merge_type),
-                }
-            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
         }
         Ok(())
     }
@@ -1034,7 +1087,8 @@ impl Resolve for LogicalAnd {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -1043,44 +1097,49 @@ impl Resolve for LogicalAnd {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_logical_and(&left_type)?;
-
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_logical_and(&right_type)?;
-
-        let _ = left_type.compatible_with(
-            self.right.as_ref(),
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
+            self.left.type_of(&scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
+            self.right.type_of(&scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
+        };
         Ok(())
     }
 }
@@ -1090,7 +1149,8 @@ impl Resolve for LogicalOr {
     type Extra = ();
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError>
@@ -1099,44 +1159,49 @@ impl Resolve for LogicalOr {
     {
         match (self.left.as_mut(), self.right.as_mut()) {
             (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let right_type = self
-                    .right
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .left
-                    .resolve::<G>(scope, &Some(right_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let right_type = self.right.type_of(&scope_manager, scope_id)?;
+                let _ = self.left.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(right_type),
+                    &mut None,
+                )?;
             }
             (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope, context, &mut None)?;
-                let left_type = self
-                    .left
-                    .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope, &Some(left_type), &mut None)?;
+                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let left_type = self.left.type_of(&scope_manager, scope_id)?;
+                let _ = self.right.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(left_type),
+                    &mut None,
+                )?;
             }
             _ => {
-                let _ = self.left.resolve::<G>(scope, context, &mut None)?;
-                let _ = self.right.resolve::<G>(scope, context, &mut None)?;
+                let _ = self
+                    .left
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+                let _ = self
+                    .right
+                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
             }
         }
 
-        let left_type = self
-            .left
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_logical_or(&left_type)?;
-
-        let right_type = self
-            .right
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?;
-        let _ = <EType as OperandMerging>::can_logical_or(&right_type)?;
-
-        let _ = left_type.compatible_with(
-            self.right.as_ref(),
-            &crate::arw_read!(scope, SemanticError::ConcurrencyError)?,
-        )?;
-        resolve_metadata!(self.metadata.info, self, scope, context);
+        let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
+            self.left.type_of(&scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
+            self.right.type_of(&scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleTypes);
+        };
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
+        };
         Ok(())
     }
 }
@@ -1150,11 +1215,7 @@ mod tests {
             TryParse,
         },
         p_num,
-        semantic::scope::{
-            scope::Scope,
-            static_types::{FnType, StaticType},
-            var_impl::{Var, VarState},
-        },
+        semantic::scope::static_types::{FnType, StaticType},
     };
 
     use super::*;
@@ -1162,341 +1223,553 @@ mod tests {
     #[test]
     fn valid_high_ord_math() {
         let mut expr = Product::parse("10 * 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("10.0 * 10.0".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("10 * (10+10)".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("(10+10) * 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_high_ord_math() {
         let mut expr = Product::parse("10 * 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Product::parse("'a' * 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Product::parse("10 * x".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_low_ord_math() {
         let mut expr = Addition::parse("10 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("10 - 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("10 + (10*10)".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("10 + 10*10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("(10 * 10) + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("10 * 10 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Product::parse("10 * 10 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "x".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("x", p_num!(I64), None).unwrap();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_low_ord_math() {
         let mut expr = Addition::parse("10 + 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Addition::parse("'a' + 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Addition::parse("10 + x".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Addition::parse("10.0 + 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_shift() {
         let mut expr = Shift::parse("10 >> 1".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Shift::parse("10 << 1".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_shift() {
         let mut expr = Shift::parse("10 >> 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Shift::parse("'a' >> 1".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = BitwiseOR::parse("10 | 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = BitwiseXOR::parse("10 ^ 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_bitwise() {
         let mut expr = BitwiseAnd::parse("10 & 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = BitwiseOR::parse("'a' | 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = BitwiseXOR::parse("10 ^ 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_cast() {
         let mut expr = Cast::parse("10 as f64".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+        let expr_type = expr.type_of(&scope_manager, None).unwrap();
         assert_eq!(p_num!(F64), expr_type);
 
         let mut expr = Cast::parse("'a' as u64".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
-        let expr_type = expr
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+        let expr_type = expr.type_of(&scope_manager, None).unwrap();
         assert_eq!(p_num!(U64), expr_type);
     }
 
     #[test]
     fn valid_comparaison() {
         let mut expr = Expression::parse("10 < 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Expression::parse("'a' > 'b'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_comparaison() {
         let mut expr = Expression::parse("10 > 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_equation() {
         let mut expr = Expression::parse("10 == 10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Expression::parse("'a' != 'b'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_equation() {
         let mut expr = Expression::parse("10 == 'a'".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_and_or() {
         let mut expr = Expression::parse("true and false".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Expression::parse("true or false".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Expression::parse("true and 2 > 3".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = Expression::parse("true and true and true".into())
             .unwrap()
             .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_and_or() {
         let mut expr = Expression::parse("true and 2".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
 
         let mut expr = Expression::parse("1 or true".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
     #[test]
     fn valid_unary() {
         let mut expr = UnaryOperation::parse("!true".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("! ( true and false )".into())
             .unwrap()
             .1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("-1".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("-1.0".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
 
         let mut expr = UnaryOperation::parse("- ( 10 + 10 )".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_ok(), "{:?}", res);
     }
 
     #[test]
     fn robustness_unary() {
         let mut expr = UnaryOperation::parse("!10".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_err());
 
         let mut expr = UnaryOperation::parse("- true".into()).unwrap().1;
-        let scope = Scope::new();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ());
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let res =
+            expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ());
         assert!(res.is_err());
     }
 
@@ -1506,13 +1779,11 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "f".to_string().into(),
-                type_sig: Either::Static(
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_var(
+                "f",
+                EType::Static(
                     StaticType::StaticFn(FnType {
                         params: vec![p_num!(I64), p_num!(I64)],
                         ret: Box::new(p_num!(I64)),
@@ -1520,15 +1791,18 @@ mod tests {
                     })
                     .into(),
                 ),
-                is_declared: false,
-            })
+                None,
+            )
             .unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_ok(), "{:?}", res);
 
-        let ret_type = expr
-            .type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError).unwrap())
-            .unwrap();
+        let ret_type = expr.type_of(&scope_manager, None).unwrap();
         assert_eq!(ret_type, p_num!(I64))
     }
 
@@ -1538,17 +1812,14 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "f".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
-            .unwrap();
-        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None);
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager.register_var("f", p_num!(I64), None).unwrap();
+        let res = expr.resolve::<crate::vm::vm::NoopGameEngine>(
+            &mut scope_manager,
+            None,
+            &None,
+            &mut None,
+        );
         assert!(res.is_err());
     }
 
@@ -1558,18 +1829,12 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "print".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_var("print", p_num!(I64), None)
             .unwrap();
         let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
             .expect("Resolution should have succeeded");
     }
 
@@ -1579,18 +1844,12 @@ mod tests {
             .expect("Parsing should have succeeded")
             .1;
 
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, SemanticError::ConcurrencyError)
-            .unwrap()
-            .register_var(Var {
-                state: VarState::Local,
-                id: "print".to_string().into(),
-                type_sig: p_num!(I64),
-                is_declared: false,
-            })
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_var("print", p_num!(I64), None)
             .unwrap();
         let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut None)
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
             .expect_err("Resolution should have failed");
     }
 }

@@ -1,11 +1,11 @@
+use crate::ast::statements::assignation::AssignValue;
 use crate::ast::utils::lexem;
-use crate::semantic::scope::scope::Scope;
-use crate::{arw_read, arw_write};
+use crate::semantic::scope::scope::{ScopeManager, Variable};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::SizeOf,
     vm::{
-        allocator::{stack::Offset, MemoryAddress},
+        allocator::MemoryAddress,
         casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
         vm::{CodeGenerationError, GenerateCode},
     },
@@ -16,136 +16,105 @@ use super::{Declaration, TypedVar};
 impl GenerateCode for Declaration {
     fn gencode(
         &self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        match self {
-            Declaration::Declared(TypedVar { id, .. }) => {
-                // When the variable is created in the general block,
-                // the block can't assign a stackpointer to the variable
-                // therefore the variable have to live at the current offset
-                let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
-                let mut new_stack_top = borrow.stack_top();
-                for (v, o) in borrow.vars() {
-                    let mut borrowed_var = arw_write!(v, CodeGenerationError::ConcurrencyError)?;
-                    if borrowed_var.id == *id && !borrowed_var.is_declared {
-                        let var = v;
-                        borrowed_var.is_declared = true;
-
-                        if let Some(ref mut stack_top) = new_stack_top {
-                            let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
-                            *o = Offset::SB(*stack_top);
-                            if borrowed_var.type_sig.size_of() == 0 {
-                                continue;
-                            }
-                            instructions.push(Casm::Alloc(Alloc::Stack {
-                                size: borrowed_var.type_sig.size_of(),
-                            }));
-                            *stack_top = *stack_top + borrowed_var.type_sig.size_of();
-                        }
-                        break;
-                    }
+        fn store_right_side(
+            left: &DeclaredVar,
+            right: &AssignValue,
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            scope_id: Option<u128>,
+            instructions: &mut CasmProgram,
+            context: &crate::vm::vm::CodeGenerationContext,
+        ) -> Result<(), CodeGenerationError> {
+            let first_variable_id = match left {
+                DeclaredVar::Id { id: Some(id), .. }
+                | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => *id,
+                DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. })
+                | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => {
+                    *ids.first().ok_or(CodeGenerationError::UnresolvedError)?
                 }
-                drop(borrow);
-                if let Some(stack_top) = new_stack_top {
-                    let _ = arw_write!(scope, CodeGenerationError::ConcurrencyError)?
-                        .update_stack_top(stack_top)
-                        .map_err(|_| CodeGenerationError::UnresolvedError)?;
+                _ => {
+                    return Err(CodeGenerationError::UnresolvedError);
                 }
+            };
 
-                // let (address, level) = block
-                //     .borrow()
-                //     .address_of(id)
-                //     .map_err(|_| CodeGenerationError::UnresolvedError)?;
+            let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+            let Some(right_type) = (match right {
+                crate::ast::statements::assignation::AssignValue::Block(value) => {
+                    value.metadata.signature()
+                }
+                crate::ast::statements::assignation::AssignValue::Expr(value) => value.signature(),
+            }) else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
 
-                Ok(())
-                // match address.get() {
-                //     Some(_) => Ok(()),
-                //     None => {
-                //         // Update the stack pointer of the variable
-                //         var.as_ref().address.set(Some(Offset::FZ(0)));
-                //         let var_size = var.type_sig.size_of();
-                //         instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                //         Ok(())
-                //     }
-                // }
+            // memcopy the right side at the address of the first varairable offset
+            // if there is multiple variable ( in the case of destructuring ) the variables are aligned and in order
+            // and the right side is packed
+            let Some(Variable { address, .. }) = scope_manager
+                .find_var_by_id(first_variable_id, scope_id)
+                .ok()
+            else {
+                return Err(CodeGenerationError::UnresolvedError);
+            };
+            instructions.push(Casm::Mem(Mem::Store {
+                size: right_type.size_of(),
+                address: (*address)
+                    .try_into()
+                    .map_err(|_| CodeGenerationError::UnresolvedError)?,
+            }));
+            Ok(())
+        }
+
+        if let Some(scope_id) = scope_id {
+            // LOCAL VARIABLE
+            match self {
+                Declaration::Declared(TypedVar { id, .. }) => Ok(()),
+                Declaration::Assigned { left, right } => store_right_side(
+                    left,
+                    right,
+                    scope_manager,
+                    Some(scope_id),
+                    instructions,
+                    context,
+                ),
+                Declaration::RecClosure { left, right } => todo!(),
             }
-            Declaration::Assigned { left, right } => {
-                // retrieve all named variables and alloc them if needed
-                let mut vars = match left {
-                    DeclaredVar::Id(id) => vec![id.clone()],
-                    DeclaredVar::Typed(TypedVar { id, .. }) => vec![id.clone()],
-                    // DeclaredVar::Pattern(PatternVar::UnionFields { vars, .. }) => vars.to_vec(),
-                    DeclaredVar::Pattern(PatternVar::StructFields { vars, .. }) => vars.to_vec(),
-                    DeclaredVar::Pattern(PatternVar::Tuple(ids)) => ids.to_vec(),
-                };
-
-                for id in &vars {
-                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
-                    for (v, o) in borrow.vars() {
-                        let borrowed_var = arw_write!(v, CodeGenerationError::ConcurrencyError)?;
-                        if borrowed_var.id == *id && !borrowed_var.is_declared {
-                            let var_size = borrowed_var.type_sig.size_of();
-                            if var_size == 0 {
-                                continue;
+        } else {
+            // GLOBAL VARIABLE
+            match self {
+                Declaration::Declared(TypedVar { id, .. }) => {
+                    let Some(id) = id else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    let _ = scope_manager.alloc_global_var_by_id(*id)?;
+                    Ok(())
+                }
+                Declaration::Assigned { left, right } => {
+                    // Alloc the variables
+                    match left {
+                        DeclaredVar::Id { id: Some(id), .. }
+                        | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => {
+                            let _ = scope_manager.alloc_global_var_by_id(*id)?;
+                        }
+                        DeclaredVar::Pattern(PatternVar::StructFields {
+                            ids: Some(ids), ..
+                        })
+                        | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => {
+                            for id in ids {
+                                let _ = scope_manager.alloc_global_var_by_id(*id)?;
                             }
-                            if let Some(stack_top) =
-                                arw_read!(scope, CodeGenerationError::ConcurrencyError)?.stack_top()
-                            {
-                                let mut o = arw_write!(o, CodeGenerationError::ConcurrencyError)?;
-                                *o = Offset::SB(stack_top);
-                                instructions.push(Casm::Alloc(Alloc::Stack { size: var_size }));
-                                let _ = arw_read!(scope, CodeGenerationError::ConcurrencyError)?
-                                    .update_stack_top(stack_top + var_size)?;
-                            }
-                            break;
+                        }
+                        _ => {
+                            return Err(CodeGenerationError::UnresolvedError);
                         }
                     }
+                    store_right_side(left, right, scope_manager, None, instructions, context)
                 }
-
-                // Generate right side code
-                let _ = right.gencode(scope, instructions)?;
-
-                for id in &vars {
-                    let borrow = crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?;
-                    for (v, _o) in borrow.vars() {
-                        let mut borrowed_var =
-                            arw_write!(v, CodeGenerationError::ConcurrencyError)?;
-                        if borrowed_var.id == *id && !borrowed_var.is_declared {
-                            borrowed_var.is_declared = true;
-                            break;
-                        }
-                    }
-                }
-
-                // Generate the left side code : the variable declaration
-                // reverse the variables in order to pop the stack and assign in order of stack push
-                vars.reverse();
-
-                for id in &vars {
-                    let (var, address, level) =
-                        crate::arw_read!(scope, CodeGenerationError::ConcurrencyError)?
-                            .access_var(id)?;
-
-                    let var_size = arw_read!(var, CodeGenerationError::ConcurrencyError)?
-                        .type_sig
-                        .size_of();
-                    if var_size == 0 {
-                        continue;
-                    }
-                    if **id != lexem::UNDERSCORE {
-                        instructions.push(Casm::Locate(Locate {
-                            address: MemoryAddress::Stack {
-                                offset: address,
-                                level,
-                            },
-                        }));
-                        instructions.push(Casm::Mem(Mem::TakeToStack { size: var_size }))
-                    } else {
-                        instructions.push(Casm::Pop(var_size));
-                    }
-                }
-                Ok(())
+                Declaration::RecClosure { left, right } => todo!(),
             }
         }
     }
@@ -161,7 +130,7 @@ mod tests {
         clear_stack, compile_statement, p_num,
         semantic::{
             scope::{
-                scope::Scope,
+                scope::ScopeManager,
                 static_types::{NumberType, PrimitiveType},
                 user_type_impl::{self, UserType},
             },
@@ -326,19 +295,23 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_type("Point", UserType::Struct(user_type), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -346,7 +319,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -395,19 +368,23 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
-        let _ = crate::arw_write!(scope, CodeGenerationError::ConcurrencyError)
-            .unwrap()
-            .register_type(&"Point".to_string().into(), UserType::Struct(user_type))
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+        let _ = scope_manager
+            .register_type("Point", UserType::Struct(user_type), None)
             .expect("Registering of user type should have succeeded");
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -415,7 +392,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -457,16 +434,21 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -474,7 +456,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -511,16 +493,21 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -528,7 +515,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)
@@ -568,16 +555,21 @@ mod tests {
         )
         .expect("Parsing should have succeeded")
         .1;
-        let scope = Scope::new();
+        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         let _ = statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&scope, &None, &mut ())
+            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
             .expect("Semantic resolution should have succeeded");
 
         // Code generation.
         let mut instructions = CasmProgram::default();
         statement
-            .gencode(&scope, &mut instructions)
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
             .expect("Code generation should have succeeded");
 
         assert!(instructions.len() > 0);
@@ -585,7 +577,7 @@ mod tests {
 
         let (mut runtime, mut heap, mut stdio) = Runtime::new();
         let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope)
+            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
             .expect("Thread spawn_with_scopeing should have succeeded");
         let (_, stack, program) = runtime
             .get_mut(crate::vm::vm::Player::P1, tid)

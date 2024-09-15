@@ -2,7 +2,7 @@ use ulid::Ulid;
 
 use crate::ast::utils::strings::ID;
 use crate::e_static;
-use crate::semantic::scope::scope::Scope;
+use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{StaticType, StringType};
 use crate::semantic::TypeOf;
 
@@ -98,7 +98,7 @@ impl IOFn {
     pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
         match suffixe {
             Some(suffixe) => {
-                if **suffixe != lexem::IO {
+                if *suffixe != lexem::IO {
                     return None;
                 }
             }
@@ -118,7 +118,8 @@ impl Resolve for IOFn {
     type Extra = Vec<Expression>;
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
-        scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         _context: &Self::Context,
         extra: &mut Self::Extra,
     ) -> Result<Self::Output, SemanticError> {
@@ -128,10 +129,8 @@ impl Resolve for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve::<G>(scope, &None, &mut None)?;
-                *param_type = Some(
-                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
-                );
+                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                *param_type = Some(param.type_of(&scope_manager, scope_id)?);
                 Ok(())
             }
             IOFn::Println(param_type) => {
@@ -139,10 +138,8 @@ impl Resolve for IOFn {
                     return Err(SemanticError::IncorrectArguments);
                 }
                 let param = extra.first_mut().unwrap();
-                let _ = param.resolve::<G>(scope, &None, &mut None)?;
-                *param_type = Some(
-                    param.type_of(&crate::arw_read!(scope, SemanticError::ConcurrencyError)?)?,
-                );
+                let _ = param.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                *param_type = Some(param.type_of(&scope_manager, scope_id)?);
                 Ok(())
             }
             IOFn::Scan => {
@@ -155,7 +152,11 @@ impl Resolve for IOFn {
     }
 }
 impl TypeOf for IOFn {
-    fn type_of(&self, _scope: &std::sync::RwLockReadGuard<Scope>) -> Result<EType, SemanticError>
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
     where
         Self: Sized + Resolve,
     {
@@ -170,8 +171,10 @@ impl TypeOf for IOFn {
 impl GenerateCode for IOFn {
     fn gencode(
         &self,
-        _scope: &crate::semantic::ArcRwLock<Scope>,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
         instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IOFn::Print(inner) => {
@@ -355,9 +358,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
 
             PrintCasm::PrintError => {
                 let n = OpPrimitive::get_num1::<u8>(stack)?;
-                if n == ERROR_VALUE[0] {
+                if n == ERROR_VALUE {
                     stdio.stdout.push("Error");
-                } else if n == OK_VALUE[0] {
+                } else if n == OK_VALUE {
                     stdio.stdout.push("Ok");
                 }
             }
@@ -436,7 +439,7 @@ mod tests {
     use crate::{
         ast::{statements::Statement, TryParse},
         compile_statement_for_stdout,
-        semantic::scope::scope::Scope,
+        semantic::scope::scope::ScopeManager,
         vm::vm::{Runtime, StdinTestGameEngine},
         Ciphel,
     };
@@ -669,9 +672,9 @@ mod tests {
         let mut statement = Statement::parse(
             r##"
             {
-                let x = 420; // 0x20
-                let y = 420; // 0x28
-                let z = 420; // 0x30
+                let x = 420; // 0x0
+                let y = 420; // 0x8
+                let z = 420; // 0x10
                 print(&y);
             }
         "##
@@ -680,7 +683,7 @@ mod tests {
         .expect("Parsing should have succeeded")
         .1;
         let output = compile_statement_for_stdout!(statement);
-        assert_eq!(&output, "0x28");
+        assert_eq!(&output, "0x8");
         // assert_eq!(&output, "\"Hello World\"");
     }
 
