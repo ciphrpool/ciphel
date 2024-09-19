@@ -4,7 +4,7 @@ use super::{
 };
 use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
-use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::scope::{GlobalMapping, ScopeManager};
 use crate::semantic::scope::static_types::{
     AddrType, ClosureType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType,
     VecType,
@@ -15,7 +15,7 @@ use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{Info, MergeType, ResolveFromStruct, SizeOf};
-use crate::vm::allocator::align;
+use crate::vm::allocator::{align, MemoryAddress};
 use crate::{e_static, semantic};
 
 impl Resolve for Data {
@@ -274,15 +274,15 @@ impl Resolve for Slice {
                         )?;
                     }
 
-                    {
-                        self.metadata.info = Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(e_static!(StaticType::Slice(SliceType {
-                                size: *size,
-                                item_type: Box::new(item_type),
-                            }))),
-                        };
-                    }
+                    self.size = self.value.len() * item_type.size_of();
+
+                    self.metadata.info = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Slice(SliceType {
+                            size: *size,
+                            item_type: Box::new(item_type),
+                        }))),
+                    };
                     Ok(())
                 }
                 _ => Err(SemanticError::IncompatibleTypes),
@@ -309,6 +309,8 @@ impl Resolve for Slice {
                         scope_id,
                     )?;
                 }
+
+                self.size = self.value.len() * item_type.size_of();
 
                 self.metadata.info = Info::Resolved {
                     context: context.clone(),
@@ -338,22 +340,12 @@ impl Resolve for StrSlice {
     where
         Self: Sized,
     {
-        match context {
-            Some(context_type) => match context_type {
-                EType::Static(value) => match value {
-                    StaticType::StrSlice(StrSliceType { size }) => {
-                        if *size < self.value.len() {
-                            return Err(SemanticError::IncompatibleTypes);
-                        } else if *size >= self.value.len() {
-                            self.padding = *size - self.value.len();
-                        }
-                    }
-                    _ => return Err(SemanticError::IncompatibleTypes),
-                },
-                EType::User { .. } => return Err(SemanticError::IncompatibleTypes),
-            },
-            None => {}
+        if let Some(context) = context {
+            if EType::Static(StaticType::StrSlice(StrSliceType {})) != *context {
+                return Err(SemanticError::IncompatibleTypes);
+            }
         }
+
         self.metadata.info = crate::semantic::Info::Resolved {
             context: context.clone(),
             signature: Some(self.type_of(scope_manager, scope_id)?),
@@ -988,12 +980,7 @@ mod tests {
         let res = string.resolve::<crate::vm::vm::NoopGameEngine>(
             &mut scope_manager,
             None,
-            &Some(EType::Static(
-                StaticType::StrSlice(StrSliceType {
-                    size: "Hello World".len(),
-                })
-                .into(),
-            )),
+            &Some(EType::Static(StaticType::StrSlice(StrSliceType {}).into())),
             &mut (),
         );
         assert!(res.is_ok(), "{:?}", res);

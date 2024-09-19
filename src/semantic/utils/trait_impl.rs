@@ -10,7 +10,7 @@ use crate::{
     },
     vm::{
         casm::CasmProgram,
-        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
+        vm::{CodeGenerationError, Printer, RuntimeError},
     },
 };
 
@@ -44,7 +44,7 @@ impl SizeOf for EType {
     fn size_of(&self) -> usize {
         match self {
             EType::Static(value) => value.size_of(),
-            EType::User { id, size } => todo!(),
+            EType::User { id, size } => *size,
         }
     }
 }
@@ -77,17 +77,6 @@ impl MergeType for EType {
                 });
             }
             _ => Err(SemanticError::IncompatibleTypes),
-        }
-    }
-}
-
-impl DeserializeFrom for EType {
-    type Output = Data;
-
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        match self {
-            EType::Static(value) => value.deserialize_from(bytes),
-            EType::User { id, size } => todo!(),
         }
     }
 }

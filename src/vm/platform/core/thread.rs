@@ -1,9 +1,9 @@
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
-use crate::semantic::{EType, TypeOf};
+use crate::semantic::{EType, ResolvePlatform, TypeOf};
 use crate::vm::allocator::stack::Stack;
-use crate::vm::casm::operation::OpPrimitive;
+use crate::vm::casm::operation::{OpPrimitive, PopNum};
 use crate::vm::casm::Casm;
 use crate::vm::platform::stdlib::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
 use crate::vm::platform::utils::lexem;
@@ -111,60 +111,49 @@ fn expect_one_u64<G: crate::GameEngineStaticFn>(
     }
     Ok(())
 }
-impl Resolve for ThreadFn {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = Vec<Expression>;
+impl ResolvePlatform for ThreadFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        _context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError> {
+        context: Option<&EType>,
+        parameters: &mut Vec<Expression>,
+    ) -> Result<EType, SemanticError> {
         match self {
             ThreadFn::Spawn => {
-                if extra.len() != 0 {
+                if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                Ok(())
+                Ok(err_tuple!(p_num!(U64)))
             }
             ThreadFn::Exit => {
-                if extra.len() != 0 {
+                if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                Ok(())
+                Ok(e_static!(StaticType::Unit))
             }
-            ThreadFn::Close => expect_one_u64::<G>(extra, scope_manager, scope_id),
+            ThreadFn::Close => {
+                expect_one_u64::<G>(parameters, scope_manager, scope_id);
+                Ok(e_static!(StaticType::Error))
+            }
             ThreadFn::Wait => {
-                if extra.len() != 0 {
+                if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                Ok(())
+                Ok(e_static!(StaticType::Error))
             }
-            ThreadFn::Wake => expect_one_u64::<G>(extra, scope_manager, scope_id),
-            ThreadFn::Sleep => expect_one_u64::<G>(extra, scope_manager, scope_id),
-            ThreadFn::Join => expect_one_u64::<G>(extra, scope_manager, scope_id),
-        }
-    }
-}
-impl TypeOf for ThreadFn {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match self {
-            ThreadFn::Spawn => Ok(err_tuple!(p_num!(U64))),
-            ThreadFn::Close => Ok(e_static!(StaticType::Error)),
-            ThreadFn::Wait => Ok(e_static!(StaticType::Error)),
-            ThreadFn::Wake => Ok(e_static!(StaticType::Error)),
-            ThreadFn::Exit => Ok(e_static!(StaticType::Unit)),
-            ThreadFn::Sleep => Ok(e_static!(StaticType::Unit)),
-            ThreadFn::Join => Ok(e_static!(StaticType::Error)),
+            ThreadFn::Wake => {
+                expect_one_u64::<G>(parameters, scope_manager, scope_id);
+                Ok(e_static!(StaticType::Error))
+            }
+            ThreadFn::Sleep => {
+                expect_one_u64::<G>(parameters, scope_manager, scope_id);
+                Ok(e_static!(StaticType::Unit))
+            }
+            ThreadFn::Join => {
+                expect_one_u64::<G>(parameters, scope_manager, scope_id);
+                Ok(e_static!(StaticType::Error))
+            }
         }
     }
 }
@@ -368,20 +357,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
             ThreadCasm::Spawn => Err(RuntimeError::Signal(Signal::SPAWN)),
             ThreadCasm::Exit => Err(RuntimeError::Signal(Signal::EXIT)),
             ThreadCasm::Close => {
-                let tid = OpPrimitive::get_num8::<u64>(stack)?;
+                let tid = OpPrimitive::pop_num::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::CLOSE(tid as usize)))
             }
             ThreadCasm::Wait => Err(RuntimeError::Signal(Signal::WAIT)),
             ThreadCasm::Wake => {
-                let tid = OpPrimitive::get_num8::<u64>(stack)?;
+                let tid = OpPrimitive::pop_num::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::WAKE(tid as usize)))
             }
             ThreadCasm::Sleep => {
-                let nb_maf = OpPrimitive::get_num8::<u64>(stack)?;
+                let nb_maf = OpPrimitive::pop_num::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::SLEEP(nb_maf as usize)))
             }
             ThreadCasm::Join => {
-                let tid = OpPrimitive::get_num8::<u64>(stack)?;
+                let tid = OpPrimitive::pop_num::<u64>(stack)?;
                 Err(RuntimeError::Signal(Signal::JOIN(tid as usize)))
             }
         }

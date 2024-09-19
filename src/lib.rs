@@ -239,6 +239,96 @@ impl Ciphel {
     }
 }
 
+pub fn test_extract_variable_with(
+    variable_name: &str,
+    callback: impl Fn(
+        vm::allocator::MemoryAddress,
+        &mut crate::vm::allocator::stack::Stack,
+        &mut crate::vm::allocator::heap::Heap,
+    ),
+    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+    stack: &mut crate::vm::allocator::stack::Stack,
+    heap: &mut crate::vm::allocator::heap::Heap,
+) {
+    let crate::semantic::scope::scope::Variable { address, .. } = scope_manager
+        .find_var_by_name(variable_name, None)
+        .expect("The variable should have been found");
+
+    let address: vm::allocator::MemoryAddress = (*address)
+        .try_into()
+        .expect("the address should have been known");
+
+    callback(address, stack, heap);
+}
+
+pub fn test_extract_variable<N: num_traits::PrimInt>(
+    variable_name: &str,
+    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+    stack: &mut crate::vm::allocator::stack::Stack,
+    heap: &mut crate::vm::allocator::heap::Heap,
+) -> Option<N> {
+    let crate::semantic::scope::scope::Variable { address, .. } = scope_manager
+        .find_var_by_name(variable_name, None)
+        .expect("The variable should have been found");
+
+    let address: vm::allocator::MemoryAddress = (*address)
+        .try_into()
+        .expect("the address should have been known");
+
+    let res =
+        <vm::casm::operation::OpPrimitive as vm::casm::operation::GetNumFrom>::get_num_from::<N>(
+            address, stack, heap,
+        )
+        .expect("Deserialization should have succeeded");
+
+    return Some(res);
+}
+
+pub fn test_statements<G: crate::GameEngineStaticFn>(
+    input: &str,
+    engine: &mut G,
+    assert_fn: fn(
+        &mut crate::semantic::scope::scope::ScopeManager,
+        &mut vm::allocator::stack::Stack,
+        &mut vm::allocator::heap::Heap,
+    ) -> bool,
+) {
+    let mut statements = parse_statements(input.into(), 0).expect("Parsing should have succeeded");
+    let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+    let mut instructions = vm::casm::CasmProgram::default();
+    let (mut runtime, mut heap, mut stdio) = Runtime::new();
+
+    for statement in statements.iter_mut() {
+        statement
+            .resolve::<G>(&mut scope_manager, None, &None, &mut ())
+            .expect("Resulotion should have succeeded");
+    }
+
+    for statement in statements {
+        statement
+            .gencode(
+                &mut scope_manager,
+                None,
+                &mut instructions,
+                &crate::vm::vm::CodeGenerationContext::default(),
+            )
+            .expect("Code generation should have succeeded");
+    }
+    let tid = runtime
+        .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+        .expect("Thread spawn_with_scopeing should have succeeded");
+    let (scope_manager, stack, program) = runtime
+        .get_mut(crate::vm::vm::Player::P1, tid)
+        .expect("Thread should exist");
+    program.merge(instructions);
+
+    program
+        .execute::<G>(stack, &mut heap, &mut stdio, engine, tid)
+        .expect("Execution should have succeeded");
+
+    assert!(assert_fn(scope_manager, stack, &mut heap));
+}
+
 #[cfg(test)]
 mod tests {
     use vm::vm::StdoutTestGameEngine;

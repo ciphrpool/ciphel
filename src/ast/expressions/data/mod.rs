@@ -1,6 +1,7 @@
 use crate::ast::statements::block::{Block, ClosureBlock, ExprBlock};
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
+use crate::vm::allocator::MemoryAddress;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
@@ -77,13 +78,13 @@ pub enum Number {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Slice {
     pub value: MultiData,
+    pub size: usize,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
-    pub padding: usize,
     pub metadata: Metadata,
 }
 
@@ -161,7 +162,7 @@ impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             Data::Primitive(_) => None,
-            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
+            Data::Slice(Slice { metadata, .. }) => Some(metadata),
             Data::Vec(Vector {
                 value: _,
                 metadata,
@@ -201,13 +202,8 @@ impl Data {
     pub fn metadata_mut(&mut self) -> Option<&mut Metadata> {
         match self {
             Data::Primitive(_) => None,
-            Data::Slice(Slice { value: _, metadata }) => Some(metadata),
-            Data::Vec(Vector {
-                value: _,
-                metadata,
-                length: _,
-                capacity: _,
-            }) => Some(metadata),
+            Data::Slice(Slice { metadata, .. }) => Some(metadata),
+            Data::Vec(Vector { metadata, .. }) => Some(metadata),
             Data::Closure(Closure { metadata, .. }) => Some(metadata),
             Data::Tuple(Tuple { value: _, metadata }) => Some(metadata),
             Data::Address(Address { value: _, metadata }) => Some(metadata),
@@ -262,7 +258,7 @@ impl Data {
                     StaticType::Primitive(PrimitiveType::Char).into(),
                 )),
             },
-            Data::Slice(Slice { value: _, metadata }) => metadata.signature(),
+            Data::Slice(Slice { metadata, .. }) => metadata.signature(),
             Data::Vec(Vector {
                 value: _,
                 metadata,

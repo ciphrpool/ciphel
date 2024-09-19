@@ -5,7 +5,7 @@ use crate::{
     vm::{allocator::stack::Stack, vm::RuntimeError},
 };
 
-use super::operation::OpPrimitive;
+use super::operation::{OpPrimitive, PopNum};
 
 macro_rules! perform_operation {
     ($left:expr, $right:expr, $op:tt, $cast_left:ty, $cast_right:ty) => {
@@ -86,10 +86,10 @@ pub fn math_operator(
 ) -> Result<(), RuntimeError> {
     match left {
         NumberType::U8 => {
-            let right_data = OpPrimitive::get_num1::<u8>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u8>(memory)?;
             match right {
                 NumberType::U8 => {
-                    let left_data = OpPrimitive::get_num1::<u8>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u8>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, u8, u8);
                     Ok(memory.push_with(&result)?)
                 }
@@ -97,10 +97,10 @@ pub fn math_operator(
             }
         }
         NumberType::U16 => {
-            let right_data = OpPrimitive::get_num2::<u16>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u16>(memory)?;
             match right {
                 NumberType::U16 => {
-                    let left_data = OpPrimitive::get_num2::<u16>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u16>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, u16, u16);
                     Ok(memory.push_with(&result)?)
                 }
@@ -108,10 +108,10 @@ pub fn math_operator(
             }
         }
         NumberType::U32 => {
-            let right_data = OpPrimitive::get_num4::<u32>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u32>(memory)?;
             match right {
                 NumberType::U32 => {
-                    let left_data = OpPrimitive::get_num4::<u32>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u32>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, u32, u32);
                     Ok(memory.push_with(&result)?)
                 }
@@ -119,10 +119,10 @@ pub fn math_operator(
             }
         }
         NumberType::U64 => {
-            let right_data = OpPrimitive::get_num8::<u64>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u64>(memory)?;
             match right {
                 NumberType::U64 => {
-                    let left_data = OpPrimitive::get_num8::<u64>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u64>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, u64, u64);
                     Ok(memory.push_with(&result)?)
                 }
@@ -130,10 +130,10 @@ pub fn math_operator(
             }
         }
         NumberType::U128 => {
-            let right_data = OpPrimitive::get_num16::<u128>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u128>(memory)?;
             match right {
                 NumberType::U128 => {
-                    let left_data = OpPrimitive::get_num16::<u128>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u128>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, u128, u128);
                     Ok(memory.push_with(&result)?)
                 }
@@ -141,10 +141,10 @@ pub fn math_operator(
             }
         }
         NumberType::I8 => {
-            let right_data = OpPrimitive::get_num1::<i8>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i8>(memory)?;
             match right {
                 NumberType::I8 => {
-                    let left_data = OpPrimitive::get_num1::<i8>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i8>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, i8, i8);
                     Ok(memory.push_with(&result)?)
                 }
@@ -152,10 +152,10 @@ pub fn math_operator(
             }
         }
         NumberType::I16 => {
-            let right_data = OpPrimitive::get_num2::<i16>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i16>(memory)?;
             match right {
                 NumberType::I16 => {
-                    let left_data = OpPrimitive::get_num2::<i16>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i16>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, i16, i16);
                     Ok(memory.push_with(&result)?)
                 }
@@ -163,10 +163,10 @@ pub fn math_operator(
             }
         }
         NumberType::I32 => {
-            let right_data = OpPrimitive::get_num4::<i32>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i32>(memory)?;
             match right {
                 NumberType::I32 => {
-                    let left_data = OpPrimitive::get_num4::<i32>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i32>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, i32, i32);
                     Ok(memory.push_with(&result)?)
                 }
@@ -174,10 +174,10 @@ pub fn math_operator(
             }
         }
         NumberType::I64 => {
-            let right_data = OpPrimitive::get_num8::<i64>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i64>(memory)?;
             match right {
                 NumberType::I64 => {
-                    let left_data = OpPrimitive::get_num8::<i64>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i64>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, i64, i64);
                     Ok(memory.push_with(&result)?)
                 }
@@ -185,10 +185,10 @@ pub fn math_operator(
             }
         }
         NumberType::I128 => {
-            let right_data = OpPrimitive::get_num16::<i128>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i128>(memory)?;
             match right {
                 NumberType::I128 => {
-                    let left_data = OpPrimitive::get_num16::<i128>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i128>(memory)?;
                     let result = perform_operation!(left_data, right_data, operator, i128, i128);
                     Ok(memory.push_with(&result)?)
                 }
@@ -196,10 +196,10 @@ pub fn math_operator(
             }
         }
         NumberType::F64 => {
-            let right_data = OpPrimitive::get_num8::<f64>(memory)?;
+            let right_data = OpPrimitive::pop_float(memory)?;
             match right {
                 NumberType::F64 => {
-                    let left_data = OpPrimitive::get_num8::<f64>(memory)?;
+                    let left_data = OpPrimitive::pop_float(memory)?;
                     let result =
                         perform_operation_f64!(left_data, right_data, operator).to_le_bytes();
                     Ok(memory.push_with(&result)?)
@@ -252,10 +252,10 @@ pub fn comparaison_operator(
 ) -> Result<(), RuntimeError> {
     match left {
         NumberType::U8 => {
-            let right_data = OpPrimitive::get_num1::<u8>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u8>(memory)?;
             match right {
                 NumberType::U8 => {
-                    let left_data = OpPrimitive::get_num1::<u8>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u8>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u8, u8) as u8];
                     Ok(memory.push_with(&result)?)
@@ -264,10 +264,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::U16 => {
-            let right_data = OpPrimitive::get_num2::<u16>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u16>(memory)?;
             match right {
                 NumberType::U16 => {
-                    let left_data = OpPrimitive::get_num2::<u16>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u16>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u16, u16) as u8];
                     Ok(memory.push_with(&result)?)
@@ -276,10 +276,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::U32 => {
-            let right_data = OpPrimitive::get_num4::<u32>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u32>(memory)?;
             match right {
                 NumberType::U32 => {
-                    let left_data = OpPrimitive::get_num4::<u32>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u32>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u32, u32) as u8];
                     Ok(memory.push_with(&result)?)
@@ -288,10 +288,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::U64 => {
-            let right_data = OpPrimitive::get_num8::<u64>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u64>(memory)?;
             match right {
                 NumberType::U64 => {
-                    let left_data = OpPrimitive::get_num8::<u64>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u64>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u64, u64) as u8];
                     Ok(memory.push_with(&result)?)
@@ -301,10 +301,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::U128 => {
-            let right_data = OpPrimitive::get_num16::<u128>(memory)?;
+            let right_data = OpPrimitive::pop_num::<u128>(memory)?;
             match right {
                 NumberType::U128 => {
-                    let left_data = OpPrimitive::get_num16::<u128>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<u128>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, u128, u128) as u8];
                     Ok(memory.push_with(&result)?)
@@ -313,10 +313,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::I8 => {
-            let right_data = OpPrimitive::get_num1::<i8>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i8>(memory)?;
             match right {
                 NumberType::I8 => {
-                    let left_data = OpPrimitive::get_num1::<i8>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i8>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, i8, i8) as u8];
                     Ok(memory.push_with(&result)?)
@@ -325,10 +325,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::I16 => {
-            let right_data = OpPrimitive::get_num2::<i16>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i16>(memory)?;
             match right {
                 NumberType::I16 => {
-                    let left_data = OpPrimitive::get_num2::<i16>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i16>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, i16, i16) as u8];
                     Ok(memory.push_with(&result)?)
@@ -337,10 +337,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::I32 => {
-            let right_data = OpPrimitive::get_num4::<i32>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i32>(memory)?;
             match right {
                 NumberType::I32 => {
-                    let left_data = OpPrimitive::get_num4::<i32>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i32>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, i32, i32) as u8];
                     Ok(memory.push_with(&result)?)
@@ -349,10 +349,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::I64 => {
-            let right_data = OpPrimitive::get_num8::<i64>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i64>(memory)?;
             match right {
                 NumberType::I64 => {
-                    let left_data = OpPrimitive::get_num8::<i64>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i64>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, i64, i64) as u8];
                     Ok(memory.push_with(&result)?)
@@ -361,10 +361,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::I128 => {
-            let right_data = OpPrimitive::get_num16::<i128>(memory)?;
+            let right_data = OpPrimitive::pop_num::<i128>(memory)?;
             match right {
                 NumberType::I128 => {
-                    let left_data = OpPrimitive::get_num16::<i128>(memory)?;
+                    let left_data = OpPrimitive::pop_num::<i128>(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, i128, i128) as u8];
                     Ok(memory.push_with(&result)?)
@@ -373,10 +373,10 @@ pub fn comparaison_operator(
             }
         }
         NumberType::F64 => {
-            let right_data = OpPrimitive::get_num8::<f64>(memory)?;
+            let right_data = OpPrimitive::pop_float(memory)?;
             match right {
                 NumberType::F64 => {
-                    let left_data = OpPrimitive::get_num8::<f64>(memory)?;
+                    let left_data = OpPrimitive::pop_float(memory)?;
                     let result =
                         [perform_comparaison!(left_data, right_data, operator, f64, f64) as u8];
                     Ok(memory.push_with(&result)?)

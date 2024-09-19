@@ -1,6 +1,6 @@
 use crate::{
     ast::{expressions::Expression, utils::strings::ID},
-    semantic::{EType, Resolve, SemanticError, TypeOf},
+    semantic::{EType, Resolve, ResolvePlatform, SemanticError, TypeOf},
 };
 
 use self::{
@@ -65,36 +65,19 @@ impl Lib {
     }
 }
 
-impl Resolve for Lib {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = Vec<Expression>;
-    fn resolve<GE: crate::GameEngineStaticFn>(
+impl ResolvePlatform for Lib {
+    fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError> {
+        context: Option<&EType>,
+        parameters: &mut Vec<Expression>,
+    ) -> Result<EType, SemanticError> {
         match self {
-            Lib::Core(value) => value.resolve::<GE>(scope_manager, scope_id, context, extra),
-            Lib::Std(value) => value.resolve::<GE>(scope_manager, scope_id, context, extra),
-        }
-    }
-}
-
-impl TypeOf for Lib {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match self {
-            Lib::Core(value) => value.type_of(scope_manager, scope_id),
-            Lib::Std(value) => value.type_of(scope_manager, scope_id),
+            Lib::Core(core_fn) => {
+                core_fn.resolve::<G>(scope_manager, scope_id, context, parameters)
+            }
+            Lib::Std(std_fn) => std_fn.resolve::<G>(scope_manager, scope_id, context, parameters),
         }
     }
 }

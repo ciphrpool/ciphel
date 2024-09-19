@@ -4,13 +4,13 @@ use crate::{
         EType, SizeOf,
     },
     vm::{
-        allocator::{align, heap::Heap, stack::Stack},
+        allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, RuntimeError},
     },
 };
 use nom::AsBytes;
-use num_traits::{FromBytes, ToBytes};
+use num_traits::{FromBytes, PrimInt, ToBytes};
 
 use super::{
     math_operation::{comparaison_operator, math_operator, ComparaisonOperator, MathOperator},
@@ -181,45 +181,35 @@ impl OpPrimitive {
         }
     }
 
-    pub fn get_num16<N: FromBytes<Bytes = [u8; 16]>>(
-        memory: &mut Stack,
-    ) -> Result<N, RuntimeError> {
-        let data = memory.pop(16)?;
-        let data =
-            TryInto::<&[u8; 16]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok(N::from_le_bytes(data))
-    }
-    pub fn get_num8<N: FromBytes<Bytes = [u8; 8]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
+    pub fn pop_float(memory: &mut Stack) -> Result<f64, RuntimeError> {
         let data = memory.pop(8)?;
         let data =
             TryInto::<&[u8; 8]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok(N::from_le_bytes(data))
-    }
-    pub fn get_num4<N: FromBytes<Bytes = [u8; 4]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(4)?;
-        let data =
-            TryInto::<&[u8; 4]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok(N::from_le_bytes(data))
-    }
-    pub fn get_num2<N: FromBytes<Bytes = [u8; 2]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(2)?;
-        let data =
-            TryInto::<&[u8; 2]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok(N::from_le_bytes(data))
-    }
-    pub fn get_num1<N: FromBytes<Bytes = [u8; 1]>>(memory: &mut Stack) -> Result<N, RuntimeError> {
-        let data = memory.pop(1)?;
-        let data =
-            TryInto::<&[u8; 1]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok(N::from_le_bytes(data))
+        Ok(f64::from_le_bytes(*data))
     }
 
-    pub fn get_bool(memory: &mut Stack) -> Result<bool, RuntimeError> {
+    pub fn pop_bool(memory: &mut Stack) -> Result<bool, RuntimeError> {
         let data = memory.pop(PrimitiveType::Bool.size_of())?;
 
         Ok(data.first().map_or(false, |byte| *byte != 0))
     }
-    pub fn get_char(memory: &mut Stack) -> Result<char, RuntimeError> {
+
+    pub fn get_bool_from(
+        address: MemoryAddress,
+        stack: &mut Stack,
+        heap: &mut Heap,
+    ) -> Result<bool, RuntimeError> {
+        let data = match address {
+            MemoryAddress::Heap { .. } => heap.read_slice(address, 1)?,
+            MemoryAddress::Stack { .. } => stack.read(address, 1)?,
+            MemoryAddress::Global { .. } => stack.read_global(address, 1)?,
+            MemoryAddress::Frame { .. } => stack.read_in_frame(address, 1)?,
+        };
+
+        Ok(data.first().map_or(false, |byte| *byte != 0))
+    }
+
+    pub fn pop_char(memory: &mut Stack) -> Result<char, RuntimeError> {
         let data = memory.pop(PrimitiveType::Char.size_of())?;
         let data =
             TryInto::<&[u8; 4]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
@@ -231,20 +221,140 @@ impl OpPrimitive {
             .ok_or(RuntimeError::Deserialization)?;
         Ok(chara)
     }
-    pub fn get_str_slice(memory: &mut Stack) -> Result<String, RuntimeError> {
-        let len = OpPrimitive::get_num8::<u64>(memory)? as usize;
-        let data = memory.pop(len)?;
+
+    pub fn get_char_from(
+        address: MemoryAddress,
+        stack: &mut Stack,
+        heap: &mut Heap,
+    ) -> Result<char, RuntimeError> {
+        let data = match address {
+            MemoryAddress::Heap { .. } => heap.read_slice(address, 4)?,
+            MemoryAddress::Stack { .. } => stack.read(address, 4)?,
+            MemoryAddress::Global { .. } => stack.read_global(address, 4)?,
+            MemoryAddress::Frame { .. } => stack.read_in_frame(address, 4)?,
+        };
+
+        let data =
+            TryInto::<&[u8; 4]>::try_into(data).map_err(|_| RuntimeError::Deserialization)?;
+
+        let chara = std::str::from_utf8(data.as_slice())
+            .map_err(|_| RuntimeError::Deserialization)?
+            .chars()
+            .next()
+            .ok_or(RuntimeError::Deserialization)?;
+        Ok(chara)
+    }
+
+    pub fn get_string_from(
+        address: MemoryAddress,
+        stack: &mut Stack,
+        heap: &mut Heap,
+    ) -> Result<String, RuntimeError> {
+        let size = OpPrimitive::get_num_from::<u64>(address, stack, heap)? as usize;
+        let data = match address {
+            MemoryAddress::Heap { .. } => heap.read_slice(address.add(8), size)?,
+            MemoryAddress::Stack { .. } => stack.read(address.add(8), size)?,
+            MemoryAddress::Global { .. } => stack.read_global(address.add(8), size)?,
+            MemoryAddress::Frame { .. } => stack.read_in_frame(address.add(8), size)?,
+        };
+
         let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
         Ok(data.to_string())
     }
-    pub fn get_string(stack: &mut Stack, heap: &mut Heap) -> Result<(String, u64), RuntimeError> {
-        let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-        let data = heap.read(heap_address as usize, 16)?;
-        let (length, rest) = extract_u64(&data)?;
-        let (_capacity, _rest) = extract_u64(rest)?;
-        let data = heap.read(heap_address as usize + 16, length as usize)?;
-        let data = std::str::from_utf8(&data).map_err(|_| RuntimeError::Deserialization)?;
-        Ok((data.to_string(), heap_address))
+}
+
+pub trait PopNum {
+    fn pop_num<T: PrimInt>(
+        stack: &mut crate::vm::allocator::stack::Stack,
+    ) -> Result<T, RuntimeError>;
+}
+
+fn pop_data<const N: usize>(stack: &mut Stack) -> Result<[u8; N], RuntimeError> {
+    let data = stack.pop(N)?;
+    data.try_into().map_err(|_| RuntimeError::Deserialization)
+}
+
+impl PopNum for crate::vm::casm::operation::OpPrimitive {
+    fn pop_num<T: PrimInt>(
+        stack: &mut crate::vm::allocator::stack::Stack,
+    ) -> Result<T, RuntimeError> {
+        match std::mem::size_of::<T>() {
+            1 => {
+                let data: [u8; 1] = pop_data(stack)?;
+                Ok(T::from(u8::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            2 => {
+                let data: [u8; 2] = pop_data(stack)?;
+                Ok(T::from(u16::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            4 => {
+                let data: [u8; 4] = pop_data(stack)?;
+                Ok(T::from(u32::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            8 => {
+                let data: [u8; 8] = pop_data(stack)?;
+                Ok(T::from(u64::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            16 => {
+                let data: [u8; 16] = pop_data(stack)?;
+                Ok(T::from(u128::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            _ => Err(RuntimeError::Deserialization),
+        }
+    }
+}
+
+pub trait GetNumFrom {
+    fn get_num_from<T: PrimInt>(
+        address: crate::vm::allocator::MemoryAddress,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+    ) -> Result<T, RuntimeError>;
+}
+
+fn read_data<const N: usize>(
+    address: MemoryAddress,
+    stack: &mut Stack,
+    heap: &mut Heap,
+) -> Result<[u8; N], RuntimeError> {
+    let vec = match address {
+        MemoryAddress::Heap { .. } => heap.read_slice(address, N)?,
+        MemoryAddress::Stack { .. } => stack.read(address, N)?,
+        MemoryAddress::Global { .. } => stack.read_global(address, N)?,
+        MemoryAddress::Frame { .. } => stack.read_in_frame(address, N)?,
+    };
+    vec.try_into().map_err(|_| RuntimeError::Deserialization)
+}
+
+impl GetNumFrom for crate::vm::casm::operation::OpPrimitive {
+    fn get_num_from<T: PrimInt>(
+        address: crate::vm::allocator::MemoryAddress,
+        stack: &mut crate::vm::allocator::stack::Stack,
+        heap: &mut crate::vm::allocator::heap::Heap,
+    ) -> Result<T, RuntimeError> {
+        match std::mem::size_of::<T>() {
+            1 => {
+                let data: [u8; 1] = read_data(address, stack, heap)?;
+                Ok(T::from(u8::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            2 => {
+                let data: [u8; 2] = read_data(address, stack, heap)?;
+                Ok(T::from(u16::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            4 => {
+                let data: [u8; 4] = read_data(address, stack, heap)?;
+                Ok(T::from(u32::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            8 => {
+                let data: [u8; 8] = read_data(address, stack, heap)?;
+                Ok(T::from(u64::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            16 => {
+                let data: [u8; 16] = read_data(address, stack, heap)?;
+                Ok(T::from(u128::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+            }
+            _ => Err(RuntimeError::Deserialization),
+        }
     }
 }
 
@@ -307,12 +417,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
             OperationKind::Minus(value) => value.execute(program, stack, heap, stdio, engine, tid),
             OperationKind::Not(value) => value.execute(program, stack, heap, stdio, engine, tid),
             OperationKind::Align => {
-                let num = OpPrimitive::get_num8::<u64>(stack)?;
+                let num = OpPrimitive::pop_num::<u64>(stack)?;
                 let aligned_num = align(num as usize) as u64;
                 Ok(stack.push_with(&aligned_num.to_le_bytes())?)
             }
             OperationKind::CastCharToUTF8 => {
-                let chara = OpPrimitive::get_char(stack)?;
+                let chara = OpPrimitive::pop_char(stack)?;
                 let chara = chara.to_string();
                 let chara = chara.as_bytes();
                 let _ = stack.push_with(chara)?;
@@ -420,16 +530,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
         match (self.left, self.right) {
             (OpPrimitive::Number(left), OpPrimitive::Number(right)) => {
                 math_operator(&left, &right, MathOperator::Add, stack)
-            }
-            (OpPrimitive::String, OpPrimitive::String) => {
-                let right = OpPrimitive::get_str_slice(stack)?;
-                let left = OpPrimitive::get_str_slice(stack)?;
-
-                let str_bytes: Vec<u8> = (left.to_owned() + &right).into_bytes();
-
-                stack.push_with(str_bytes.as_slice())?;
-
-                Ok(stack.push_with(&(str_bytes.len() as u64).to_le_bytes())?)
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -615,18 +715,20 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
                 comparaison_operator(&left, &right, ComparaisonOperator::Less, stack)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(stack)?;
-                let left = OpPrimitive::get_bool(stack)?;
+                let right = OpPrimitive::pop_bool(stack)?;
+                let left = OpPrimitive::pop_bool(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(stack)?;
-                let left = OpPrimitive::get_char(stack)?;
+                let right = OpPrimitive::pop_char(stack)?;
+                let left = OpPrimitive::pop_char(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::String, OpPrimitive::String) => {
-                let right = OpPrimitive::get_str_slice(stack)?;
-                let left = OpPrimitive::get_str_slice(stack)?;
+                let right_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let left_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+                let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             _ => Err(RuntimeError::UnsupportedOperation),
@@ -649,19 +751,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
                 comparaison_operator(&left, &right, ComparaisonOperator::LessEqual, stack)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(stack)?;
-                let left = OpPrimitive::get_bool(stack)?;
-                Ok(stack.push_with(&[(left < right) as u8])?)
+                let right = OpPrimitive::pop_bool(stack)?;
+                let left = OpPrimitive::pop_bool(stack)?;
+                Ok(stack.push_with(&[(left <= right) as u8])?)
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(stack)?;
-                let left = OpPrimitive::get_char(stack)?;
-                Ok(stack.push_with(&[(left < right) as u8])?)
+                let right = OpPrimitive::pop_char(stack)?;
+                let left = OpPrimitive::pop_char(stack)?;
+                Ok(stack.push_with(&[(left <= right) as u8])?)
             }
             (OpPrimitive::String, OpPrimitive::String) => {
-                let right = OpPrimitive::get_str_slice(stack)?;
-                let left = OpPrimitive::get_str_slice(stack)?;
-                Ok(stack.push_with(&[(left < right) as u8])?)
+                let right_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let left_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+                let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
+                Ok(stack.push_with(&[(left <= right) as u8])?)
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -683,19 +787,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
                 comparaison_operator(&left, &right, ComparaisonOperator::Greater, stack)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(stack)?;
-                let left = OpPrimitive::get_bool(stack)?;
+                let right = OpPrimitive::pop_bool(stack)?;
+                let left = OpPrimitive::pop_bool(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(stack)?;
-                let left = OpPrimitive::get_char(stack)?;
+                let right = OpPrimitive::pop_char(stack)?;
+                let left = OpPrimitive::pop_char(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::String, OpPrimitive::String) => {
-                let right = OpPrimitive::get_str_slice(stack)?;
-                let left = OpPrimitive::get_str_slice(stack)?;
-                Ok(stack.push_with(&[(left < right) as u8])?)
+                let right_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let left_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+                let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
+                Ok(stack.push_with(&[(left > right) as u8])?)
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -717,19 +823,21 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for GreaterEqual {
                 comparaison_operator(&left, &right, ComparaisonOperator::GreaterEqual, stack)
             }
             (OpPrimitive::Bool, OpPrimitive::Bool) => {
-                let right = OpPrimitive::get_bool(stack)?;
-                let left = OpPrimitive::get_bool(stack)?;
+                let right = OpPrimitive::pop_bool(stack)?;
+                let left = OpPrimitive::pop_bool(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::Char, OpPrimitive::Char) => {
-                let right = OpPrimitive::get_char(stack)?;
-                let left = OpPrimitive::get_char(stack)?;
+                let right = OpPrimitive::pop_char(stack)?;
+                let left = OpPrimitive::pop_char(stack)?;
                 Ok(stack.push_with(&[(left < right) as u8])?)
             }
             (OpPrimitive::String, OpPrimitive::String) => {
-                let right = OpPrimitive::get_str_slice(stack)?;
-                let left = OpPrimitive::get_str_slice(stack)?;
-                Ok(stack.push_with(&[(left < right) as u8])?)
+                let right_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let left_address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+                let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+                let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
+                Ok(stack.push_with(&[(left >= right) as u8])?)
             }
             _ => Err(RuntimeError::UnsupportedOperation),
         }
@@ -802,8 +910,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let right_data = OpPrimitive::get_bool(stack)?;
-        let left_data = OpPrimitive::get_bool(stack)?;
+        let right_data = OpPrimitive::pop_bool(stack)?;
+        let left_data = OpPrimitive::pop_bool(stack)?;
         let data = [(left_data && right_data) as u8];
         Ok(stack.push_with(&data)?)
     }
@@ -822,8 +930,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalOr {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let right_data = OpPrimitive::get_bool(stack)?;
-        let left_data = OpPrimitive::get_bool(stack)?;
+        let right_data = OpPrimitive::pop_bool(stack)?;
+        let left_data = OpPrimitive::pop_bool(stack)?;
         let data = [(left_data || right_data) as u8];
         Ok(stack.push_with(&data)?)
     }
@@ -847,47 +955,47 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
         match &self.data_type {
             OpPrimitive::Number(number) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(stack)? as i16;
+                    let data = OpPrimitive::pop_num::<u8>(stack)? as i16;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(stack)? as i32;
+                    let data = OpPrimitive::pop_num::<u16>(stack)? as i32;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(stack)? as i64;
+                    let data = OpPrimitive::pop_num::<u32>(stack)? as i64;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(stack)? as i128;
+                    let data = OpPrimitive::pop_num::<u64>(stack)? as i128;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(stack)? as i128;
+                    let data = OpPrimitive::pop_num::<u128>(stack)? as i128;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(stack)?;
+                    let data = OpPrimitive::pop_num::<i8>(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(stack)?;
+                    let data = OpPrimitive::pop_num::<i16>(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(stack)?;
+                    let data = OpPrimitive::pop_num::<i32>(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(stack)?;
+                    let data = OpPrimitive::pop_num::<i64>(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(stack)?;
+                    let data = OpPrimitive::pop_num::<i128>(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(stack)?;
+                    let data = OpPrimitive::pop_float(stack)?;
                     Ok(stack.push_with(&(-data).to_le_bytes())?)
                 }
             },
@@ -911,7 +1019,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Not {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let data = OpPrimitive::get_bool(stack)?;
+        let data = OpPrimitive::pop_bool(stack)?;
         let data = [(!data) as u8];
         Ok(stack.push_with(&data)?)
     }
@@ -954,93 +1062,93 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
         match (self.from, self.to) {
             (OpPrimitive::Number(number), OpPrimitive::Number(to)) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(stack)?;
+                    let data = OpPrimitive::pop_num::<u8>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u16>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u32>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u64>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u128>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i8>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i16>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i32>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i64>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i128>(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(stack)? as f64;
+                    let data = OpPrimitive::pop_float(stack)? as f64;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
             },
             (OpPrimitive::Number(number), OpPrimitive::Bool) => match number {
                 NumberType::U8 => {
-                    let data = OpPrimitive::get_num1::<u8>(stack)?;
+                    let data = OpPrimitive::pop_num::<u8>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::get_num2::<u16>(stack)?;
+                    let data = OpPrimitive::pop_num::<u16>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::get_num4::<u32>(stack)?;
+                    let data = OpPrimitive::pop_num::<u32>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::get_num8::<u64>(stack)?;
+                    let data = OpPrimitive::pop_num::<u64>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::get_num16::<u128>(stack)?;
+                    let data = OpPrimitive::pop_num::<u128>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::get_num1::<i8>(stack)?;
+                    let data = OpPrimitive::pop_num::<i8>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::get_num2::<i16>(stack)?;
+                    let data = OpPrimitive::pop_num::<i16>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::get_num4::<i32>(stack)?;
+                    let data = OpPrimitive::pop_num::<i32>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::get_num8::<i64>(stack)?;
+                    let data = OpPrimitive::pop_num::<i64>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::get_num16::<i128>(stack)?;
+                    let data = OpPrimitive::pop_num::<i128>(stack)?;
                     Ok(stack.push_with(&[(data != 0) as u8])?)
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::get_num8::<f64>(stack)?;
+                    let data = OpPrimitive::pop_float(stack)?;
                     Ok(stack.push_with(&[(data == 0.0) as u8])?)
                 }
             },
@@ -1050,7 +1158,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
                 Err(RuntimeError::UnsupportedOperation)
             }
             (OpPrimitive::Bool, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_num1::<u8>(stack)? as u8;
+                let data = OpPrimitive::pop_num::<u8>(stack)? as u8;
                 match number {
                     NumberType::U8 => Ok(stack.push_with(&data.to_le_bytes())?),
                     NumberType::U16 => Ok(stack.push_with(&(data as u16).to_le_bytes())?),
@@ -1069,7 +1177,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
             (OpPrimitive::Bool, OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Bool, OpPrimitive::String) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Char, OpPrimitive::Number(number)) => {
-                let data = OpPrimitive::get_num4::<u32>(stack)?;
+                let data = OpPrimitive::pop_num::<u32>(stack)?;
                 match number {
                     NumberType::U8 => Ok(stack.push_with(&(data as u8).to_le_bytes())?),
                     NumberType::U16 => Ok(stack.push_with(&(data as u16).to_le_bytes())?),
@@ -1204,7 +1312,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 * 20, res);
     }
 
@@ -1230,7 +1338,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 / 2, res);
     }
 
@@ -1256,7 +1364,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 % 2, res);
     }
 
@@ -1282,7 +1390,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 + 20, res);
     }
 
@@ -1308,7 +1416,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 - 5, res);
     }
 
@@ -1334,7 +1442,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 << 5, res);
     }
 
@@ -1360,7 +1468,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 >> 2, res);
     }
 
@@ -1386,7 +1494,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 & 5, res);
     }
 
@@ -1412,7 +1520,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 ^ 5, res);
     }
 
@@ -1438,7 +1546,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num4::<u32>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<u32>(stack).expect("result should be of valid type");
         assert_eq!(10 | 5, res);
     }
 
@@ -1464,7 +1572,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 < 5, res);
     }
 
@@ -1490,7 +1598,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 <= 5, res);
     }
     #[test]
@@ -1514,7 +1622,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(true, res);
     }
     #[test]
@@ -1539,7 +1647,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 > 5, res);
     }
 
@@ -1565,7 +1673,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 >= 5, res);
     }
 
@@ -1591,7 +1699,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 == 10, res);
     }
 
@@ -1617,7 +1725,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(10 != 5, res);
     }
 
@@ -1640,7 +1748,7 @@ mod tests {
             .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(true && true, res);
     }
 
@@ -1663,7 +1771,7 @@ mod tests {
             .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(true || true, res);
     }
 
@@ -1687,7 +1795,7 @@ mod tests {
         .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
         .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_num8::<i64>(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_num::<i64>(stack).expect("result should be of valid type");
         assert_eq!(-10i64, res);
     }
 
@@ -1709,7 +1817,7 @@ mod tests {
             .execute(&mut program, stack, &mut heap, &mut stdio, &mut engine, tid)
             .expect("execution should have succeeded");
 
-        let res = OpPrimitive::get_bool(stack).expect("result should be of valid type");
+        let res = OpPrimitive::pop_bool(stack).expect("result should be of valid type");
         assert_eq!(false, res);
     }
 }

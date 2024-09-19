@@ -24,7 +24,7 @@ use crate::{
     },
     vm::{
         casm::{
-            branch::{BranchIf, BranchTable, Goto, Label},
+            branch::{BranchIf, Goto, Label},
             Casm, CasmProgram,
         },
         vm::{CodeGenerationError, GenerateCode},
@@ -253,860 +253,859 @@ mod tests {
     use crate::ast::TryParse;
     use crate::semantic::scope::static_types::{NumberType, PrimitiveType};
     use crate::semantic::Resolve;
-    use crate::vm::vm::DeserializeFrom;
+    use crate::v_num;
     use crate::{ast::statements::Statement, semantic::scope::scope::ScopeManager};
-    use crate::{compile_statement, v_num};
-
-    #[test]
-    fn valid_if() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 0;
-            if var == 0 {
-                var = 420;
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_if_else_if() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 1;
-            if var == 0 {
-                var = 420;
-            } else if var == 1 {
-                var = 69;
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_if_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 1;
-            if var == 0 {
-                var = 420;
-            } else {
-                var = 69;
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn robustness_if_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 1;
-            if var == 1 {
-                var = 420;
-            } else {
-                var = 69;
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-    #[test]
-    fn valid_match_primitive() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 1;
-
-            match var {
-                case 2 => {
-                    var = 420;
-                }
-                case 1 => {
-                    var = 420;
-                }
-                else => {
-                    var = 69;
-                }
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-    #[test]
-    fn valid_match_primitive_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = 3;
-
-            match var {
-                case 1 => {
-                    var = 420;
-                }
-                else => {
-                    var = 69;
-                }
-            }
-
-            return var;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_strslice() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = "Hello";
-            let res = 0;
-            match var {
-                case "Hello" => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_strslice_other() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = "Hello";
-            let res = 0;
-            match var {
-                case "World" => {
-                    res = 69;
-                }
-                case "Hello" => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_strslice_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            let var = "World";
-            let res = 0;
-            match var {
-                case "Hello" => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_enum() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            enum Sport {
-                Foot,
-                Volley,
-                Basket
-            }
-            let var = Sport::Volley;
-            let res = 0;
-            match var {
-                case Sport::Foot => {
-                    res = 69;
-                }
-                case Sport::Volley => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_enum_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            enum Sport {
-                Foot,
-                Volley,
-                Basket
-            }
-            let var = Sport::Volley;
-            let res = 0;
-            match var {
-                case Sport::Foot => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_union() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            union Sport {
-                Foot{x:i64},
-                Basket{}
-            }
-            let var = Sport::Foot{x:420};
-            let res = 0;
-            match var {
-                case Sport::Foot{x} => {
-                    res = x;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_match_union_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            union Sport {
-                Foot{x:i64},
-                Basket{}
-            }
-            let var = Sport::Basket{};
-            let res = 0;
-            match var {
-                case Sport::Foot{x} => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 69));
-    }
-
-    #[test]
-    fn valid_match_union_mult() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-            union Sport {
-                Foot{x:i64},
-                Volley{x:i64},
-                Basket{}
-            }
-            let var = Sport::Volley{x:420};
-            let res = 0;
-            match var {
-                case Sport::Foot{x} | Sport::Volley{x} => {
-                    res = 420;
-                }
-                else => {
-                    res = 69;
-                }
-            }
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 420));
-    }
-
-    #[test]
-    fn valid_try_catch_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            try {
-                let x = arr[7];
-            }
-
-            return 1;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 1));
-    }
-
-    #[test]
-    fn valid_try_catch_err_with_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = arr[7];
-            } else {
-                res = 2;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 2));
-    }
-
-    #[test]
-    fn valid_try_catch_no_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = arr[2];
-                res = 2;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 2));
-    }
-
-    #[test]
-    fn valid_try_catch_no_err_with_else() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = arr[2];
-                res = 2;
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 2));
-    }
-
-    #[test]
-    fn valid_try_with_inner_try_catch_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = try arr[7] else 2;
-                res = x;
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 2));
-    }
-
-    #[test]
-    fn valid_try_with_inner_try_catch_no_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = try arr[3] else 2;
-                res = x;
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 4));
-    }
-
-    #[test]
-    fn valid_try_catch_err_with_inner_try_catch_no_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                let x = try arr[3] else 2;
-                res = arr[7];
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 3));
-    }
-
-    #[test]
-    fn valid_try_early_return() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                return 7;
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 7));
-    }
-
-    #[test]
-    fn valid_try_early_return_with_inner_try_catch_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                try {
-                    if arr[7] == 2 {
-                        return 8;
-                    }
-                } else {
-                    return 7;
-                }
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 7));
-    }
-    #[test]
-    fn valid_try_early_return_with_inner_try_catch_no_err() {
-        let mut statement = Statement::parse(
-            r##"
-        let x = {
-
-            let arr = vec[1,2,3,4];
-
-            let res = 1;
-
-            try {
-                try {
-                    res = 2;
-                } else {
-                    if arr[7] == 2 {
-                        return 8;
-                    }
-                }
-            } else {
-                res = 3;
-            }
-
-            return res;
-        };
-
-        "##
-            .into(),
-        )
-        .expect("Parsing should have succeeded")
-        .1;
-
-        let data = compile_statement!(statement);
-
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::I64),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
-        assert_eq!(result, v_num!(I64, 2));
-    }
+
+    // #[test]
+    // fn valid_if() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 0;
+    //         if var == 0 {
+    //             var = 420;
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_if_else_if() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 1;
+    //         if var == 0 {
+    //             var = 420;
+    //         } else if var == 1 {
+    //             var = 69;
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn valid_if_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 1;
+    //         if var == 0 {
+    //             var = 420;
+    //         } else {
+    //             var = 69;
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn robustness_if_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 1;
+    //         if var == 1 {
+    //             var = 420;
+    //         } else {
+    //             var = 69;
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+    // #[test]
+    // fn valid_match_primitive() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 1;
+
+    //         match var {
+    //             case 2 => {
+    //                 var = 420;
+    //             }
+    //             case 1 => {
+    //                 var = 420;
+    //             }
+    //             else => {
+    //                 var = 69;
+    //             }
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+    // #[test]
+    // fn valid_match_primitive_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = 3;
+
+    //         match var {
+    //             case 1 => {
+    //                 var = 420;
+    //             }
+    //             else => {
+    //                 var = 69;
+    //             }
+    //         }
+
+    //         return var;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn valid_match_strslice() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = "Hello";
+    //         let res = 0;
+    //         match var {
+    //             case "Hello" => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_match_strslice_other() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = "Hello";
+    //         let res = 0;
+    //         match var {
+    //             case "World" => {
+    //                 res = 69;
+    //             }
+    //             case "Hello" => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_match_strslice_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         let var = "World";
+    //         let res = 0;
+    //         match var {
+    //             case "Hello" => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn valid_match_enum() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         enum Sport {
+    //             Foot,
+    //             Volley,
+    //             Basket
+    //         }
+    //         let var = Sport::Volley;
+    //         let res = 0;
+    //         match var {
+    //             case Sport::Foot => {
+    //                 res = 69;
+    //             }
+    //             case Sport::Volley => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_match_enum_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         enum Sport {
+    //             Foot,
+    //             Volley,
+    //             Basket
+    //         }
+    //         let var = Sport::Volley;
+    //         let res = 0;
+    //         match var {
+    //             case Sport::Foot => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn valid_match_union() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         union Sport {
+    //             Foot{x:i64},
+    //             Basket{}
+    //         }
+    //         let var = Sport::Foot{x:420};
+    //         let res = 0;
+    //         match var {
+    //             case Sport::Foot{x} => {
+    //                 res = x;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_match_union_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         union Sport {
+    //             Foot{x:i64},
+    //             Basket{}
+    //         }
+    //         let var = Sport::Basket{};
+    //         let res = 0;
+    //         match var {
+    //             case Sport::Foot{x} => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 69));
+    // }
+
+    // #[test]
+    // fn valid_match_union_mult() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+    //         union Sport {
+    //             Foot{x:i64},
+    //             Volley{x:i64},
+    //             Basket{}
+    //         }
+    //         let var = Sport::Volley{x:420};
+    //         let res = 0;
+    //         match var {
+    //             case Sport::Foot{x} | Sport::Volley{x} => {
+    //                 res = 420;
+    //             }
+    //             else => {
+    //                 res = 69;
+    //             }
+    //         }
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 420));
+    // }
+
+    // #[test]
+    // fn valid_try_catch_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         try {
+    //             let x = arr[7];
+    //         }
+
+    //         return 1;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 1));
+    // }
+
+    // #[test]
+    // fn valid_try_catch_err_with_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = arr[7];
+    //         } else {
+    //             res = 2;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 2));
+    // }
+
+    // #[test]
+    // fn valid_try_catch_no_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = arr[2];
+    //             res = 2;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 2));
+    // }
+
+    // #[test]
+    // fn valid_try_catch_no_err_with_else() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = arr[2];
+    //             res = 2;
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 2));
+    // }
+
+    // #[test]
+    // fn valid_try_with_inner_try_catch_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = try arr[7] else 2;
+    //             res = x;
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 2));
+    // }
+
+    // #[test]
+    // fn valid_try_with_inner_try_catch_no_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = try arr[3] else 2;
+    //             res = x;
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 4));
+    // }
+
+    // #[test]
+    // fn valid_try_catch_err_with_inner_try_catch_no_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             let x = try arr[3] else 2;
+    //             res = arr[7];
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 3));
+    // }
+
+    // #[test]
+    // fn valid_try_early_return() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             return 7;
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 7));
+    // }
+
+    // #[test]
+    // fn valid_try_early_return_with_inner_try_catch_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             try {
+    //                 if arr[7] == 2 {
+    //                     return 8;
+    //                 }
+    //             } else {
+    //                 return 7;
+    //             }
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 7));
+    // }
+    // #[test]
+    // fn valid_try_early_return_with_inner_try_catch_no_err() {
+    //     let mut statement = Statement::parse(
+    //         r##"
+    //     let x = {
+
+    //         let arr = vec[1,2,3,4];
+
+    //         let res = 1;
+
+    //         try {
+    //             try {
+    //                 res = 2;
+    //             } else {
+    //                 if arr[7] == 2 {
+    //                     return 8;
+    //                 }
+    //             }
+    //         } else {
+    //             res = 3;
+    //         }
+
+    //         return res;
+    //     };
+
+    //     "##
+    //         .into(),
+    //     )
+    //     .expect("Parsing should have succeeded")
+    //     .1;
+
+    //     let data = compile_statement!(statement);
+
+    //     let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+    //         &PrimitiveType::Number(NumberType::I64),
+    //         &data,
+    //     )
+    //     .expect("Deserialization should have succeeded");
+    //     assert_eq!(result, v_num!(I64, 2));
+    // }
 }

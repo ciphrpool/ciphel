@@ -162,6 +162,18 @@ pub trait Resolve {
         Self: Sized;
 }
 
+pub trait ResolvePlatform {
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: Option<&EType>,
+        parameters: &mut Vec<crate::ast::expressions::Expression>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized;
+}
+
 pub trait ResolveFromStruct {
     fn resolve_from_struct<G: crate::GameEngineStaticFn>(
         &mut self,

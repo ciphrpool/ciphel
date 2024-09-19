@@ -88,20 +88,11 @@ impl TypeOf for FnCall {
     where
         Self: Sized + Resolve,
     {
-        if self.is_dynamic_fn.is_some() {
+        if self.is_dynamic_fn.is_some() || self.platform.is_some() {
             return self
                 .metadata
                 .signature()
                 .ok_or(SemanticError::NotResolvedYet);
-        }
-        match self.fn_var.as_ref() {
-            Expression::Atomic(Atomic::Data(Data::Variable(Variable { .. }))) => {
-                match &self.platform {
-                    Some(api) => return api.type_of(scope_manager, scope_id),
-                    None => {}
-                }
-            }
-            _ => {}
         }
 
         let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;

@@ -134,9 +134,7 @@ impl TypeOf for StrSlice {
         Self: Sized + Resolve,
     {
         Ok(EType::Static(StaticType::StrSlice(
-            static_types::StrSliceType {
-                size: self.value.len() + self.padding,
-            },
+            static_types::StrSliceType {},
         )))
     }
 }

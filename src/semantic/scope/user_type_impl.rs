@@ -17,7 +17,7 @@ use crate::{
     vm::{
         allocator::align,
         casm::{
-            branch::{BranchTable, Goto, Label},
+            branch::{Goto, Label},
             Casm, CasmProgram,
         },
         platform::{
@@ -27,7 +27,7 @@ use crate::{
             },
             LibCasm,
         },
-        vm::{CodeGenerationError, DeserializeFrom, Printer, RuntimeError},
+        vm::{CodeGenerationError, Printer, RuntimeError},
     },
 };
 
@@ -332,219 +332,127 @@ impl Enum {
     }
 }
 
-impl DeserializeFrom for UserType {
-    type Output = Data;
-
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        match self {
-            UserType::Struct(value) => Ok(Data::Struct(value.deserialize_from(bytes)?)),
-            UserType::Enum(value) => Ok(Data::Enum(<Enum as DeserializeFrom>::deserialize_from(
-                value, bytes,
-            )?)),
-            UserType::Union(value) => Ok(Data::Union(value.deserialize_from(bytes)?)),
-        }
-    }
-}
-
-impl DeserializeFrom for Struct {
-    type Output = data::Struct;
-
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let mut offset = 0;
-        let mut value = Vec::default();
-
-        for (field_id, field_type) in &self.fields {
-            let size = field_type.size_of();
-            let aligned_size = align(field_type.size_of());
-            if offset + aligned_size > bytes.len() {
-                return Err(RuntimeError::Deserialization);
-            }
-            let data = <EType as DeserializeFrom>::deserialize_from(
-                &field_type,
-                &bytes[offset..offset + size],
-            )?;
-            value.push((field_id.clone(), Expression::Atomic(Atomic::Data(data))));
-            offset += aligned_size;
-        }
-
-        Ok(data::Struct {
-            id: self.id.clone(),
-            fields: value,
-            metadata: Metadata {
-                info: Info::Resolved {
-                    context: None,
-                    signature: todo!(),
-                },
-            },
-        })
-    }
-}
-
 impl Printer for Struct {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::PrintID(self.id.clone()),
-        )))));
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::StdOutBufOpen,
-        )))));
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::PrintLexem(lexem::BRA_C),
-        )))));
-        for (idx, (field_name, field_type)) in self.fields.iter().enumerate().rev() {
-            if idx != self.fields.len() - 1 {
-                instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                    PrintCasm::PrintLexem(lexem::COMA),
-                )))));
-            }
-            let _ = field_type.build_printer(instructions)?;
-            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                PrintCasm::PrintLexem(lexem::COLON),
-            )))));
-            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                PrintCasm::PrintID(field_name.clone()),
-            )))));
-        }
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::PrintLexem(lexem::BRA_O),
-        )))));
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-            PrintCasm::StdOutBufRevFlush,
-        )))));
+        todo!();
+        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     PrintCasm::PrintID(self.id.clone()),
+        // )))));
+        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     PrintCasm::StdOutBufOpen,
+        // )))));
+        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     PrintCasm::PrintLexem(lexem::BRA_C),
+        // )))));
+        // for (idx, (field_name, field_type)) in self.fields.iter().enumerate().rev() {
+        //     if idx != self.fields.len() - 1 {
+        //         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //             PrintCasm::PrintLexem(lexem::COMA),
+        //         )))));
+        //     }
+        //     let _ = field_type.build_printer(instructions)?;
+        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         PrintCasm::PrintLexem(lexem::COLON),
+        //     )))));
+        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         PrintCasm::PrintID(field_name.clone()),
+        //     )))));
+        // }
+        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     PrintCasm::PrintLexem(lexem::BRA_O),
+        // )))));
+        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     PrintCasm::StdOutBufRevFlush,
+        // )))));
         Ok(())
-    }
-}
-
-impl DeserializeFrom for Union {
-    type Output = data::Union;
-
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let (idx, bytes) = extract_end_u64(bytes)?;
-        let Some((variant, struct_type)) = self.variants.get(idx as usize) else {
-            return Err(RuntimeError::Deserialization);
-        };
-
-        let data: data::Struct = struct_type.deserialize_from(bytes)?;
-
-        Ok(data::Union {
-            typename: self.id.clone(),
-            variant: variant.clone(),
-            fields: data.fields,
-            metadata: Metadata {
-                info: Info::Resolved {
-                    context: None,
-                    signature: todo!(),
-                },
-            },
-        })
     }
 }
 
 impl Printer for Union {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
-        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
+        todo!();
+        // let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
+        // let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
 
-        let end_label = Label::gen();
+        // let end_label = Label::gen();
 
-        for (idx, _) in self.variants.iter().enumerate() {
-            let label: Ulid = Label::gen();
-            dump_data.push((idx as u64).to_le_bytes().into());
-            cases.push(label);
-        }
+        // for (idx, _) in self.variants.iter().enumerate() {
+        //     let label: Ulid = Label::gen();
+        //     dump_data.push((idx as u64).to_le_bytes().into());
+        //     cases.push(label);
+        // }
 
-        let dump_data_label = instructions.push_data(casm::data::Data::Dump {
-            data: dump_data.into(),
-        });
-        let table_data_label = instructions.push_data(casm::data::Data::Table {
-            data: cases.clone().into(),
-        });
-        instructions.push(Casm::Switch(BranchTable::Swith {
-            size: Some(8),
-            data_label: Some(dump_data_label),
-            else_label: None,
-        }));
-        instructions.push(Casm::Switch(BranchTable::Table {
-            table_label: Some(table_data_label),
-            else_label: None,
-        }));
+        // let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+        //     data: dump_data.into(),
+        // });
+        // let table_data_label = instructions.push_data(casm::data::Data::Table {
+        //     data: cases.clone().into(),
+        // });
+        // instructions.push(Casm::Switch(BranchTable::Swith {
+        //     size: Some(8),
+        //     data_label: Some(dump_data_label),
+        //     else_label: None,
+        // }));
+        // instructions.push(Casm::Switch(BranchTable::Table {
+        //     table_label: Some(table_data_label),
+        //     else_label: None,
+        // }));
 
-        for ((name, value), label) in self.variants.iter().zip(cases) {
-            instructions.push_label_id(label, format!("print_{}", name).into());
-            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
-            )))));
-            let _ = value.build_printer(instructions)?;
-            instructions.push(Casm::Goto(Goto {
-                label: Some(end_label),
-            }));
-        }
-        instructions.push_label_id(end_label, "end_print_enum".to_string().into());
+        // for ((name, value), label) in self.variants.iter().zip(cases) {
+        //     instructions.push_label_id(label, format!("print_{}", name).into());
+        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
+        //     )))));
+        //     let _ = value.build_printer(instructions)?;
+        //     instructions.push(Casm::Goto(Goto {
+        //         label: Some(end_label),
+        //     }));
+        // }
+        // instructions.push_label_id(end_label, "end_print_enum".to_string().into());
         Ok(())
-    }
-}
-
-impl DeserializeFrom for Enum {
-    type Output = data::Enum;
-
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError> {
-        let (idx, _bytes) = extract_u64(bytes)?;
-        let value = self
-            .values
-            .get(idx as usize)
-            .ok_or(RuntimeError::Deserialization)?;
-        Ok(data::Enum {
-            typename: self.id.clone(),
-            value: value.clone(),
-            metadata: Metadata {
-                info: Info::Resolved {
-                    context: None,
-                    signature: todo!(),
-                },
-            },
-        })
     }
 }
 
 impl Printer for Enum {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
-        let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
-        let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
-        let end_label = Label::gen();
+        todo!();
+        // let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
+        // let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
+        // let end_label = Label::gen();
 
-        for (idx, _) in self.values.iter().enumerate() {
-            let label: Ulid = Label::gen();
-            dump_data.push((idx as u64).to_le_bytes().into());
-            cases.push(label);
-        }
+        // for (idx, _) in self.values.iter().enumerate() {
+        //     let label: Ulid = Label::gen();
+        //     dump_data.push((idx as u64).to_le_bytes().into());
+        //     cases.push(label);
+        // }
 
-        let dump_data_label = instructions.push_data(casm::data::Data::Dump {
-            data: dump_data.into(),
-        });
-        let table_data_label = instructions.push_data(casm::data::Data::Table {
-            data: cases.clone().into(),
-        });
-        instructions.push(Casm::Switch(BranchTable::Swith {
-            size: Some(8),
-            data_label: Some(dump_data_label),
-            else_label: None,
-        }));
-        instructions.push(Casm::Switch(BranchTable::Table {
-            table_label: Some(table_data_label),
-            else_label: None,
-        }));
+        // let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+        //     data: dump_data.into(),
+        // });
+        // let table_data_label = instructions.push_data(casm::data::Data::Table {
+        //     data: cases.clone().into(),
+        // });
+        // instructions.push(Casm::Switch(BranchTable::Swith {
+        //     size: Some(8),
+        //     data_label: Some(dump_data_label),
+        //     else_label: None,
+        // }));
+        // instructions.push(Casm::Switch(BranchTable::Table {
+        //     table_label: Some(table_data_label),
+        //     else_label: None,
+        // }));
 
-        for (name, label) in self.values.iter().zip(cases) {
-            instructions.push_label_id(label, format!("print_{}", name).into());
-            instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
-                PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
-            )))));
-            instructions.push(Casm::Goto(Goto {
-                label: Some(end_label),
-            }));
-        }
+        // for (name, label) in self.values.iter().zip(cases) {
+        //     instructions.push_label_id(label, format!("print_{}", name).into());
+        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
+        //     )))));
+        //     instructions.push(Casm::Goto(Goto {
+        //         label: Some(end_label),
+        //     }));
+        // }
 
-        instructions.push_label_id(end_label, "end_print_enum".to_string().into());
+        // instructions.push_label_id(end_label, "end_print_enum".to_string().into());
         Ok(())
     }
 }

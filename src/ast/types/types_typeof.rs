@@ -129,7 +129,7 @@ impl TypeOf for StrSliceType {
         Self: Sized,
     {
         Ok(EType::Static(StaticType::StrSlice(
-            static_types::StrSliceType { size: self.size },
+            static_types::StrSliceType {},
         )))
     }
 }
@@ -150,18 +150,7 @@ impl TypeOf for StringType {
 }
 impl CompatibleWith for static_types::StringType {}
 
-impl CompatibleWith for static_types::StrSliceType {
-    fn compatible_with(
-        &self,
-        other: &Self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<(), SemanticError> {
-        (other.size >= self.size)
-            .then(|| ())
-            .ok_or(SemanticError::IncompatibleTypes)
-    }
-}
+impl CompatibleWith for static_types::StrSliceType {}
 
 impl TypeOf for VecType {
     fn type_of(

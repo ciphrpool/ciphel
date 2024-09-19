@@ -31,7 +31,9 @@ impl Resolve for Declaration {
                 left: DeclaredVar::Typed(value),
                 right,
             } => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
+                let _ = value
+                    .signature
+                    .resolve::<G>(scope_manager, scope_id, &(), &mut ())?;
                 let var_type = value.signature.type_of(&scope_manager, scope_id)?;
                 if EType::Static(StaticType::Any) == var_type {
                     return Err(SemanticError::CantInferType(format!(

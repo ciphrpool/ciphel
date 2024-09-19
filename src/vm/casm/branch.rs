@@ -1,4 +1,7 @@
-use super::{operation::OpPrimitive, CasmProgram};
+use super::{
+    operation::{OpPrimitive, PopNum},
+    CasmProgram,
+};
 
 use crate::{
     semantic::{scope::static_types::st_deserialize::extract_u64, AccessLevel},
@@ -90,9 +93,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
                 (*param_size, function_offset)
             }
             Call::Stack => {
-                //let return_size = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                let param_size = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                let function_offset = OpPrimitive::get_num8::<u64>(stack)? as usize;
+                //let return_size = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let param_size = OpPrimitive::pop_num::<u64>(stack)? as usize;
+                let function_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 (param_size, function_offset)
             }
         };
@@ -145,7 +148,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Goto {
                 Ok(())
             }
             None => {
-                let idx = OpPrimitive::get_num8::<u64>(stack)? as usize;
+                let idx = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 program.cursor_set(idx);
                 Ok(())
             }
@@ -180,7 +183,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let condition = OpPrimitive::get_bool(stack)?;
+        let condition = OpPrimitive::pop_bool(stack)?;
 
         let Some(else_label) = program.get(&self.else_label) else {
             return Err(RuntimeError::CodeSegmentation);
@@ -194,195 +197,195 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for BranchIf {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum BranchTable {
-    Swith {
-        size: Option<usize>,
-        data_label: Option<Ulid>,
-        else_label: Option<Ulid>,
-    },
-    Table {
-        table_label: Option<Ulid>,
-        else_label: Option<Ulid>,
-    },
-}
+// #[derive(Debug, Clone)]
+// pub enum BranchTable {
+//     Swith {
+//         size: Option<usize>,
+//         data_label: Option<Ulid>,
+//         else_label: Option<Ulid>,
+//     },
+//     Table {
+//         table_label: Option<Ulid>,
+//         else_label: Option<Ulid>,
+//     },
+// }
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        match self {
-            BranchTable::Swith {
-                size,
-                data_label,
-                else_label,
-            } => {
-                let data_label = match data_label {
-                    Some(label) => program
-                        .get_label_name(label)
-                        .unwrap_or("".to_string().into())
-                        .to_string(),
-                    None => "".to_string().into(),
-                };
-                let else_label = match else_label {
-                    Some(label) => program
-                        .get_label_name(label)
-                        .unwrap_or("".to_string().into())
-                        .to_string(),
-                    None => "".to_string().into(),
-                };
-                let size = match size {
-                    Some(size) => format!("{size}"),
-                    None => "".to_string().into(),
-                };
-                stdio.push_casm(engine, &format!("table {data_label} {else_label} {size}"));
-            }
-            BranchTable::Table {
-                table_label,
-                else_label,
-            } => {
-                let table_label = match table_label {
-                    Some(label) => program
-                        .get_label_name(label)
-                        .unwrap_or("".to_string().into())
-                        .to_string(),
-                    None => "".to_string().into(),
-                };
-                let else_label = match else_label {
-                    Some(label) => program
-                        .get_label_name(label)
-                        .unwrap_or("".to_string().into())
-                        .to_string(),
-                    None => "".to_string().into(),
-                };
-                stdio.push_casm(engine, &format!("table {table_label} {else_label}"));
-            }
-        }
-    }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        crate::vm::vm::CasmWeight::ZERO
-    }
-}
+// impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for BranchTable {
+//     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+//         match self {
+//             BranchTable::Swith {
+//                 size,
+//                 data_label,
+//                 else_label,
+//             } => {
+//                 let data_label = match data_label {
+//                     Some(label) => program
+//                         .get_label_name(label)
+//                         .unwrap_or("".to_string().into())
+//                         .to_string(),
+//                     None => "".to_string().into(),
+//                 };
+//                 let else_label = match else_label {
+//                     Some(label) => program
+//                         .get_label_name(label)
+//                         .unwrap_or("".to_string().into())
+//                         .to_string(),
+//                     None => "".to_string().into(),
+//                 };
+//                 let size = match size {
+//                     Some(size) => format!("{size}"),
+//                     None => "".to_string().into(),
+//                 };
+//                 stdio.push_casm(engine, &format!("table {data_label} {else_label} {size}"));
+//             }
+//             BranchTable::Table {
+//                 table_label,
+//                 else_label,
+//             } => {
+//                 let table_label = match table_label {
+//                     Some(label) => program
+//                         .get_label_name(label)
+//                         .unwrap_or("".to_string().into())
+//                         .to_string(),
+//                     None => "".to_string().into(),
+//                 };
+//                 let else_label = match else_label {
+//                     Some(label) => program
+//                         .get_label_name(label)
+//                         .unwrap_or("".to_string().into())
+//                         .to_string(),
+//                     None => "".to_string().into(),
+//                 };
+//                 stdio.push_casm(engine, &format!("table {table_label} {else_label}"));
+//             }
+//         }
+//     }
+//     fn weight(&self) -> crate::vm::vm::CasmWeight {
+//         crate::vm::vm::CasmWeight::ZERO
+//     }
+// }
 
-impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
-    fn execute(
-        &self,
-        program: &mut CasmProgram,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
-    ) -> Result<(), RuntimeError> {
-        match self {
-            BranchTable::Swith {
-                data_label,
-                size,
-                else_label,
-            } => {
-                let data_offset = match data_label {
-                    Some(label) => {
-                        let Some(data_offset) = program.get(&label) else {
-                            return Err(RuntimeError::CodeSegmentation);
-                        };
-                        data_offset
-                    }
-                    None => {
-                        let data_offset = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                        data_offset
-                    }
-                };
-                let data = match size {
-                    Some(size) => stack.pop(*size)?.to_vec(),
-                    None => {
-                        let heap_address = OpPrimitive::get_num8::<u64>(stack)?;
-                        let data = heap
-                            .read(heap_address as usize, 16)
-                            .expect("Heap Read should have succeeded");
-                        let (length, rest) = extract_u64(&data)?;
-                        let (_capacity, _rest) = extract_u64(rest)?;
-                        let data = heap
-                            .read(heap_address as usize + 16, length as usize)
-                            .expect("Heap Read should have succeeded");
-                        data
-                    }
-                };
-                let data = data.into();
-                let mut found_idx = None;
-                for (idx, datum) in program.data_at_offset(data_offset)?.iter().enumerate() {
-                    if datum == &data {
-                        found_idx = Some(idx);
-                        break;
-                    }
-                }
+// impl<G: crate::GameEngineStaticFn> Executable<G> for BranchTable {
+//     fn execute(
+//         &self,
+//         program: &mut CasmProgram,
+//         stack: &mut Stack,
+//         heap: &mut Heap,
+//         stdio: &mut StdIO,
+//         engine: &mut G,
+//         tid: usize,
+//     ) -> Result<(), RuntimeError> {
+//         match self {
+//             BranchTable::Swith {
+//                 data_label,
+//                 size,
+//                 else_label,
+//             } => {
+//                 let data_offset = match data_label {
+//                     Some(label) => {
+//                         let Some(data_offset) = program.get(&label) else {
+//                             return Err(RuntimeError::CodeSegmentation);
+//                         };
+//                         data_offset
+//                     }
+//                     None => {
+//                         let data_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
+//                         data_offset
+//                     }
+//                 };
+//                 let data = match size {
+//                     Some(size) => stack.pop(*size)?.to_vec(),
+//                     None => {
+//                         let heap_address = OpPrimitive::pop_num::<u64>(stack)?;
+//                         let data = heap
+//                             .read(heap_address as usize, 16)
+//                             .expect("Heap Read should have succeeded");
+//                         let (length, rest) = extract_u64(&data)?;
+//                         let (_capacity, _rest) = extract_u64(rest)?;
+//                         let data = heap
+//                             .read(heap_address as usize + 16, length as usize)
+//                             .expect("Heap Read should have succeeded");
+//                         data
+//                     }
+//                 };
+//                 let data = data.into();
+//                 let mut found_idx = None;
+//                 for (idx, datum) in program.data_at_offset(data_offset)?.iter().enumerate() {
+//                     if datum == &data {
+//                         found_idx = Some(idx);
+//                         break;
+//                     }
+//                 }
 
-                match found_idx {
-                    Some(idx) => {
-                        let _ = stack.push_with(&(idx as u64).to_le_bytes())?;
-                        program.incr();
-                    }
-                    None => {
-                        if let Some(else_label) = else_label {
-                            let Some(idx) = program.get(&else_label) else {
-                                return Err(RuntimeError::CodeSegmentation);
-                            };
-                            program.cursor_set(idx);
-                        } else {
-                            return Err(RuntimeError::IncorrectVariant);
-                        }
-                    }
-                }
+//                 match found_idx {
+//                     Some(idx) => {
+//                         let _ = stack.push_with(&(idx as u64).to_le_bytes())?;
+//                         program.incr();
+//                     }
+//                     None => {
+//                         if let Some(else_label) = else_label {
+//                             let Some(idx) = program.get(&else_label) else {
+//                                 return Err(RuntimeError::CodeSegmentation);
+//                             };
+//                             program.cursor_set(idx);
+//                         } else {
+//                             return Err(RuntimeError::IncorrectVariant);
+//                         }
+//                     }
+//                 }
 
-                Ok(())
-            }
-            BranchTable::Table {
-                table_label,
-                else_label,
-            } => {
-                let table_offset = match table_label {
-                    Some(label) => {
-                        let Some(table_offset) = program.get(&label) else {
-                            return Err(RuntimeError::CodeSegmentation);
-                        };
-                        table_offset
-                    }
-                    None => {
-                        let table_offset = OpPrimitive::get_num8::<u64>(stack)? as usize;
-                        table_offset
-                    }
-                };
+//                 Ok(())
+//             }
+//             BranchTable::Table {
+//                 table_label,
+//                 else_label,
+//             } => {
+//                 let table_offset = match table_label {
+//                     Some(label) => {
+//                         let Some(table_offset) = program.get(&label) else {
+//                             return Err(RuntimeError::CodeSegmentation);
+//                         };
+//                         table_offset
+//                     }
+//                     None => {
+//                         let table_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
+//                         table_offset
+//                     }
+//                 };
 
-                let variant = OpPrimitive::get_num8::<u64>(stack)?;
+//                 let variant = OpPrimitive::pop_num::<u64>(stack)?;
 
-                let mut found_offset = None;
-                for (idx, label) in program.table_at_offset(table_offset)?.iter().enumerate() {
-                    let Some(instr_offset) = program.get(label) else {
-                        return Err(RuntimeError::CodeSegmentation);
-                    };
-                    if variant == idx as u64 {
-                        found_offset = Some(instr_offset);
-                        break;
-                    }
-                }
+//                 let mut found_offset = None;
+//                 for (idx, label) in program.table_at_offset(table_offset)?.iter().enumerate() {
+//                     let Some(instr_offset) = program.get(label) else {
+//                         return Err(RuntimeError::CodeSegmentation);
+//                     };
+//                     if variant == idx as u64 {
+//                         found_offset = Some(instr_offset);
+//                         break;
+//                     }
+//                 }
 
-                match found_offset {
-                    Some(idx) => {
-                        program.cursor_set(idx);
-                    }
-                    None => {
-                        if let Some(else_label) = else_label {
-                            let Some(idx) = program.get(&else_label) else {
-                                return Err(RuntimeError::CodeSegmentation);
-                            };
-                            program.cursor_set(idx);
-                        } else {
-                            return Err(RuntimeError::IncorrectVariant);
-                        }
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-}
+//                 match found_offset {
+//                     Some(idx) => {
+//                         program.cursor_set(idx);
+//                     }
+//                     None => {
+//                         if let Some(else_label) = else_label {
+//                             let Some(idx) = program.get(&else_label) else {
+//                                 return Err(RuntimeError::CodeSegmentation);
+//                             };
+//                             program.cursor_set(idx);
+//                         } else {
+//                             return Err(RuntimeError::IncorrectVariant);
+//                         }
+//                     }
+//                 }
+//                 Ok(())
+//             }
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub enum BranchTry {

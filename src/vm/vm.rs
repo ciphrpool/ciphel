@@ -493,11 +493,6 @@ pub trait CasmMetadata<G: GameEngineStaticFn> {
     }
 }
 
-pub trait DeserializeFrom {
-    type Output;
-    fn deserialize_from(&self, bytes: &[u8]) -> Result<Self::Output, RuntimeError>;
-}
-
 pub trait Printer {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
 }

@@ -26,27 +26,17 @@ pub enum VariableAddress {
     Unallocated,
 }
 
-impl TryInto<usize> for VariableAddress {
+impl TryInto<MemoryAddress> for VariableAddress {
     type Error = ();
-    fn try_into(self) -> Result<usize, Self::Error> {
+    fn try_into(self) -> Result<MemoryAddress, Self::Error> {
         match self {
-            VariableAddress::Global(_) => todo!(),
-            VariableAddress::Local(_) => todo!(),
+            VariableAddress::Global(address) => Ok(MemoryAddress::Global { offset: address }),
+            VariableAddress::Local(address) => Ok(MemoryAddress::Frame { offset: address }),
             VariableAddress::Unallocated => Err(()),
         }
     }
 }
 
-impl TryInto<MemoryAddress> for VariableAddress {
-    type Error = ();
-    fn try_into(self) -> Result<MemoryAddress, Self::Error> {
-        match self {
-            VariableAddress::Global(_) => todo!(),
-            VariableAddress::Local(_) => todo!(),
-            VariableAddress::Unallocated => Err(()),
-        }
-    }
-}
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum VariableState {
     #[default]
@@ -88,12 +78,15 @@ pub struct GlobalMapping {
 
 impl Default for GlobalMapping {
     fn default() -> Self {
-        Self { top: 0 }
+        // EMPTY STRING : must set the first 8 bytes to 0
+        Self { top: 8 }
     }
 }
 
 impl GlobalMapping {
+    pub const EMPTY_STRING_ADDRESS: MemoryAddress = MemoryAddress::Global { offset: 0 };
     pub fn alloc(&mut self, size: usize) -> VariableAddress {
+        dbg!(self.top);
         let variable = VariableAddress::Global(self.top);
         self.top += size;
         variable
@@ -311,6 +304,10 @@ impl ScopeManager {
             }
         }
         return None;
+    }
+
+    pub fn iter_on_global_variable(&self) -> impl Iterator<Item = &Variable> {
+        self.vars.iter().filter(move |var| var.scope.is_none())
     }
 
     pub fn iter_on_local_variable<'a, T: 'a>(

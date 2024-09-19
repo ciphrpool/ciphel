@@ -2,7 +2,7 @@ use crate::ast::utils::strings::ID;
 use crate::e_static;
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
-use crate::semantic::EType;
+use crate::semantic::{EType, ResolvePlatform};
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
@@ -113,28 +113,27 @@ impl StdFn {
     }
 }
 
-impl Resolve for StdFn {
-    type Output = ();
-    type Context = Option<EType>;
-    type Extra = Vec<Expression>;
+impl ResolvePlatform for StdFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        context: &Self::Context,
-        extra: &mut Self::Extra,
-    ) -> Result<Self::Output, SemanticError> {
+        context: Option<&EType>,
+        parameters: &mut Vec<Expression>,
+    ) -> Result<EType, SemanticError> {
         match self {
-            StdFn::IO(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            StdFn::Math(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            StdFn::Strings(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
-            StdFn::Iter(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            StdFn::IO(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
+            StdFn::Math(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
+            StdFn::Strings(value) => {
+                value.resolve::<G>(scope_manager, scope_id, context, parameters)
+            }
+            StdFn::Iter(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
             StdFn::Assert(expect_err) => {
-                if extra.len() != 1 {
+                if parameters.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
 
-                let size = &mut extra[0];
+                let size = &mut parameters[0];
 
                 let _ = size.resolve::<G>(
                     scope_manager,
@@ -151,44 +150,24 @@ impl Resolve for StdFn {
                     },
                     _ => return Err(SemanticError::IncorrectArguments),
                 }
-                Ok(())
+                Ok(e_static!(StaticType::Error))
             }
             StdFn::Error => {
-                if extra.len() != 0 {
+                if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                return Ok(());
+                return Ok(e_static!(StaticType::Error));
             }
             StdFn::Ok => {
-                if extra.len() != 0 {
+                if parameters.len() != 0 {
                     return Err(SemanticError::IncorrectArguments);
                 }
-                return Ok(());
+                return Ok(e_static!(StaticType::Error));
             }
         }
     }
 }
 
-impl TypeOf for StdFn {
-    fn type_of(
-        &self,
-        scope_manager: &crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-    ) -> Result<EType, SemanticError>
-    where
-        Self: Sized + Resolve,
-    {
-        match self {
-            StdFn::IO(value) => value.type_of(scope_manager, scope_id),
-            StdFn::Math(value) => value.type_of(scope_manager, scope_id),
-            StdFn::Iter(value) => value.type_of(scope_manager, scope_id),
-            StdFn::Strings(value) => value.type_of(scope_manager, scope_id),
-            StdFn::Assert(_) => Ok(e_static!(StaticType::Error)),
-            StdFn::Error => Ok(e_static!(StaticType::Error)),
-            StdFn::Ok => Ok(e_static!(StaticType::Error)),
-        }
-    }
-}
 impl GenerateCode for StdFn {
     fn gencode(
         &self,
@@ -243,7 +222,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
             StdCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine, tid),
             StdCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine, tid),
             StdCasm::AssertBool => {
-                let condition = OpPrimitive::get_bool(stack)?;
+                let condition = OpPrimitive::pop_bool(stack)?;
                 program.incr();
                 if condition {
                     // push NO_ERROR
@@ -256,7 +235,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StdCasm {
                 }
             }
             StdCasm::AssertErr => {
-                let condition = !OpPrimitive::get_bool(stack)?;
+                let condition = !OpPrimitive::pop_bool(stack)?;
                 program.incr();
                 if condition {
                     // push NO_ERROR

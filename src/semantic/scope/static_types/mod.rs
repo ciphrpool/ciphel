@@ -58,9 +58,8 @@ pub struct SliceType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StrSliceType {
-    pub size: usize,
-}
+pub struct StrSliceType();
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringType();
 

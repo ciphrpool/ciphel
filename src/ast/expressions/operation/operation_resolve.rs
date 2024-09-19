@@ -12,7 +12,7 @@ use crate::semantic::scope::static_types::{
     TupleType, VecType,
 };
 use crate::semantic::scope::user_type_impl::{Struct, UserType};
-use crate::semantic::{CompatibleWith, EType, Resolve, SemanticError, TypeOf};
+use crate::semantic::{CompatibleWith, EType, Resolve, ResolvePlatform, SemanticError, TypeOf};
 use crate::semantic::{Info, ResolveFromStruct, SizeOf};
 use crate::vm::platform::Lib;
 use crate::vm::vm::DynamicFnResolver;
@@ -201,20 +201,6 @@ impl Resolve for ListAccess {
                 };
                 Ok(())
             }
-            EType::Static(StaticType::StrSlice(StrSliceType { size })) => {
-                self.metadata.info = Info::Resolved {
-                    context: Some(var_type.clone()),
-                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
-                };
-                Ok(())
-            }
-            EType::Static(StaticType::String(_)) => {
-                self.metadata.info = Info::Resolved {
-                    context: Some(var_type.clone()),
-                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
-                };
-                Ok(())
-            }
             _ => Err(SemanticError::ExpectedIndexable),
         }
     }
@@ -246,20 +232,6 @@ impl ResolveFromStruct for ListAccess {
                 self.metadata.info = Info::Resolved {
                     context: Some(var_type.clone()),
                     signature: Some(item_type.as_ref().clone()),
-                };
-                Ok(())
-            }
-            EType::Static(StaticType::StrSlice(StrSliceType { size })) => {
-                self.metadata.info = Info::Resolved {
-                    context: Some(var_type.clone()),
-                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
-                };
-                Ok(())
-            }
-            EType::Static(StaticType::String(_)) => {
-                self.metadata.info = Info::Resolved {
-                    context: Some(var_type.clone()),
-                    signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Char))),
                 };
                 Ok(())
             }
@@ -353,14 +325,18 @@ impl Resolve for FnCall {
                         return Ok(());
                     }
                     if let Some(mut api) = Lib::from(&self.lib, name) {
-                        let _ =
-                            api.resolve::<G>(scope_manager, scope_id, context, &mut self.params)?;
+                        let return_type = api.resolve::<G>(
+                            scope_manager,
+                            scope_id,
+                            context.as_ref(),
+                            &mut self.params,
+                        )?;
 
                         self.platform = Some(api);
 
                         self.metadata.info = crate::semantic::Info::Resolved {
                             context: context.clone(),
-                            signature: Some(self.type_of(scope_manager, scope_id)?),
+                            signature: Some(return_type),
                         };
                         return Ok(());
                     }

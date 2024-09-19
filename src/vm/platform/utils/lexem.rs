@@ -2,15 +2,6 @@
 pub const CORE: &str = "core";
 pub const STD: &str = "std";
 pub const IO: &str = "io";
-// CURSOR
-pub const LEFT: &str = "left";
-pub const RIGHT: &str = "right";
-pub const LOCK: &str = "lock";
-pub const UNLOCK: &str = "unlock";
-pub const SHOW: &str = "show";
-pub const HIDE: &str = "hide";
-pub const WRITE: &str = "write";
-pub const CLEAR_CELL: &str = "clear_cell";
 
 // ERROR
 pub const ERROR: &str = "Err";
@@ -18,22 +9,35 @@ pub const OK: &str = "Ok";
 pub const ASSERT: &str = "assert";
 
 // ALLOC
-
-pub const APPEND: &str = "append";
-pub const EXTEND: &str = "extend";
-pub const INSERT: &str = "insert";
-pub const GET: &str = "get";
-pub const DELETE: &str = "delete";
 pub const LEN: &str = "len";
 pub const CAP: &str = "cap";
 pub const FREE: &str = "free";
 pub const ALLOC: &str = "alloc";
-pub const VEC: &str = "vec";
-pub const MAP: &str = "map";
-pub const STRING: &str = "string";
 pub const MEMCPY: &str = "memcpy";
-pub const CLEAR: &str = "clear";
 pub const SIZEOF: &str = "size_of";
+
+// VECTOR
+pub const VECTOR: &str = "vector";
+pub const VEC: &str = "vec";
+pub const PUSH: &str = "push";
+pub const POP: &str = "pop";
+pub const EXTEND: &str = "extend";
+pub const DELETE: &str = "delete";
+pub const CLEAR_VEC: &str = "clear_vec";
+
+// MAP
+pub const MAP: &str = "map";
+pub const INSERT: &str = "insert";
+pub const DELKEY: &str = "del_key";
+pub const GET: &str = "get";
+pub const CLEAR_MAP: &str = "clear_map";
+
+// STRING
+pub const STRING: &str = "string";
+pub const APPEND: &str = "append";
+pub const CHARAT: &str = "char_at";
+pub const TO_CONST_STR: &str = "to_const_str";
+pub const CLEAR_STRING: &str = "clear_string";
 
 // THREADS
 pub const SPAWN: &str = "spawn";

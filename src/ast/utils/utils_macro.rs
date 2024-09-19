@@ -61,14 +61,11 @@ macro_rules! e_user {
 #[macro_export]
 macro_rules! p_num {
     ($num:ident) => {
-        crate::semantic::EType::Static(
-            crate::semantic::scope::static_types::StaticType::Primitive(
-                crate::semantic::scope::static_types::PrimitiveType::Number(
-                    crate::semantic::scope::static_types::NumberType::$num,
-                ),
-            )
-            .into(),
-        )
+        crate::semantic::EType::Static(crate::semantic::scope::static_types::StaticType::Primitive(
+            crate::semantic::scope::static_types::PrimitiveType::Number(
+                crate::semantic::scope::static_types::NumberType::$num,
+            ),
+        ))
     };
 }
 
@@ -120,346 +117,356 @@ macro_rules! assert_number {
     };
 }
 
-#[macro_export]
-macro_rules! compile_expression {
-    ($expr_type:ident,$expr_str:expr) => {{
-        // Parse the expression.
-        let mut expr = $expr_type::parse($expr_str.into())
-            .expect("Parsing should have succeeded")
-            .1;
+// #[macro_export]
+// macro_rules! compile_expression {
+//     ($expr_type:ident,$expr_str:expr) => {{
+//         // Parse the expression.
+//         let mut expr = $expr_type::parse($expr_str.into())
+//             .expect("Parsing should have succeeded")
+//             .1;
 
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        // Create a new block.
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        // Perform semantic check.
-        expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
+//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         // Create a new block.
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         // Perform semantic check.
+//         expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        expr.gencode(
-            &mut scope_manager,
-            None,
-            &mut instructions,
-            &crate::vm::vm::CodeGenerationContext::default(),
-        )
-        .expect("Code generation should have succeeded");
-        assert!(instructions.len() > 0);
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         expr.gencode(
+//             &mut scope_manager,
+//             None,
+//             &mut instructions,
+//             &crate::vm::vm::CodeGenerationContext::default(),
+//         )
+//         .expect("Code generation should have succeeded");
+//         assert!(instructions.len() > 0);
 
-        // Execute the instructions.
+//         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-        (expr, data)
-    }};
-}
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = clear_stack!(memory);
+//         (expr, data)
+//     }};
+// }
 
-#[macro_export]
-macro_rules! compile_expression_with_type {
-    ($expr_type:ident,$expr_str:expr,$user_type_str:expr,$user_type:ident) => {{
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        // Parse the expression.
-        let mut expr = $expr_type::parse($expr_str.into())
-            .expect("Parsing should have succeeded")
-            .1;
+// #[macro_export]
+// macro_rules! compile_expression_with_type {
+//     ($expr_type:ident,$expr_str:expr,$user_type_str:expr,$user_type:ident) => {{
+//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         // Parse the expression.
+//         let mut expr = $expr_type::parse($expr_str.into())
+//             .expect("Parsing should have succeeded")
+//             .1;
 
-        // Create a new block.
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = scope_manager
-            .register_type(
-                $user_type_str,
-                UserType::$expr_type($user_type.clone()),
-                None,
-            )
-            .expect("Type registering should have succeeded");
-        // Perform semantic check.
-        expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
+//         // Create a new block.
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = scope_manager
+//             .register_type(
+//                 $user_type_str,
+//                 UserType::$expr_type($user_type.clone()),
+//                 None,
+//             )
+//             .expect("Type registering should have succeeded");
+//         // Perform semantic check.
+//         expr.resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        expr.gencode(
-            &mut scope_manager,
-            None,
-            &mut instructions,
-            &crate::vm::vm::CodeGenerationContext::default(),
-        )
-        .expect("Code generation should have succeeded");
-        assert!(instructions.len() > 0);
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         expr.gencode(
+//             &mut scope_manager,
+//             None,
+//             &mut instructions,
+//             &crate::vm::vm::CodeGenerationContext::default(),
+//         )
+//         .expect("Code generation should have succeeded");
+//         assert!(instructions.len() > 0);
 
-        // Execute the instructions.
+//         // Execute the instructions.
 
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-        (expr, data)
-    }};
-}
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = clear_stack!(memory);
+//         (expr, data)
+//     }};
+// }
 
-#[macro_export]
-macro_rules! compile_statement {
-    ($statement:ident) => {{
-        let mut engine = crate::vm::vm::DbgGameEngine {};
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = $statement
-            .resolve::<crate::vm::vm::DbgGameEngine>(&mut scope_manager, None, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
+// #[macro_export]
+// macro_rules! compile_statement {
+//     ($statement:ident) => {{
+//         let mut engine = crate::vm::vm::DbgGameEngine {};
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = $statement
+//             .resolve::<crate::vm::vm::DbgGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        $statement
-            .gencode(
-                &mut scope_manager,
-                None,
-                &mut instructions,
-                &crate::vm::vm::CodeGenerationContext::default(),
-            )
-            .expect("Code generation should have succeeded");
-        assert!(instructions.len() > 0);
-        let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
-        dbg!(&program.main);
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = crate::clear_stack!(memory);
-        data.to_owned()
-    }};
-}
-#[macro_export]
-macro_rules! compile_statement_for_stdout {
-    ($statement:ident) => {{
-        let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = $statement
-            .resolve::<crate::vm::vm::StdoutTestGameEngine>(
-                &mut scope_manager,
-                None,
-                &None,
-                &mut (),
-            )
-            .expect("Resolution should have succeeded");
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        $statement
-            .gencode(
-                &mut scope_manager,
-                None,
-                &mut instructions,
-                &crate::vm::vm::CodeGenerationContext::default(),
-            )
-            .expect("Code generation should have succeeded");
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         $statement
+//             .gencode(
+//                 &mut scope_manager,
+//                 None,
+//                 &mut instructions,
+//                 &crate::vm::vm::CodeGenerationContext::default(),
+//             )
+//             .expect("Code generation should have succeeded");
+//         assert!(instructions.len() > 0);
+//         let (mut runtime, mut heap, mut stdio) = crate::vm::vm::Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
+//         dbg!(&program.main);
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = crate::clear_stack!(memory);
+//         data.to_owned()
+//     }};
+// }
+// #[macro_export]
+// macro_rules! compile_statement_for_stdout {
+//     ($statement:ident) => {{
+//         let mut engine = crate::vm::vm::StdoutTestGameEngine { out: String::new() };
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = $statement
+//             .resolve::<crate::vm::vm::StdoutTestGameEngine>(
+//                 &mut scope_manager,
+//                 None,
+//                 &None,
+//                 &mut (),
+//             )
+//             .expect("Resolution should have succeeded");
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         $statement
+//             .gencode(
+//                 &mut scope_manager,
+//                 None,
+//                 &mut instructions,
+//                 &crate::vm::vm::CodeGenerationContext::default(),
+//             )
+//             .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         assert!(instructions.len() > 0, "No instructions generated");
+//         // Execute the instructions.
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let output = engine.out;
-        output
-    }};
-}
-#[macro_export]
-macro_rules! compile_statement_for_string {
-    ($statement:ident) => {{
-        let mut engine = crate::vm::vm::NoopGameEngine {};
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = $statement
-            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
-            .expect("Semantic resolution should have succeeded");
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let output = engine.out;
+//         output
+//     }};
+// }
+// #[macro_export]
+// macro_rules! compile_statement_for_string {
+//     ($statement:ident) => {{
+//         let mut engine = crate::vm::vm::NoopGameEngine {};
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = $statement
+//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        $statement
-            .gencode(
-                &mut scope_manager,
-                None,
-                &mut instructions,
-                &crate::vm::vm::CodeGenerationContext::default(),
-            )
-            .expect("Code generation should have succeeded");
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         $statement
+//             .gencode(
+//                 &mut scope_manager,
+//                 None,
+//                 &mut instructions,
+//                 &crate::vm::vm::CodeGenerationContext::default(),
+//             )
+//             .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0);
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         assert!(instructions.len() > 0);
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
-        let heap_address = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = clear_stack!(memory);
+//         let heap_address = u64::from_le_bytes(
+//             TryInto::<[u8; 8]>::try_into(&data[0..8])
+//                 .expect("heap address should be deserializable"),
+//         ) as usize;
 
-        let data_length = heap
-            .read(heap_address, 8)
-            .expect("length should be readable");
-        let length = u64::from_le_bytes(
-            TryInto::<[u8; 8]>::try_into(&data_length[0..8])
-                .expect("heap address should be deserializable"),
-        ) as usize;
+//         let data_length = heap
+//             .read(
+//                 crate::vm::allocator::MemoryAddress::Heap {
+//                     offset: heap_address,
+//                 },
+//                 8,
+//             )
+//             .expect("length should be readable");
+//         let length = u64::from_le_bytes(
+//             TryInto::<[u8; 8]>::try_into(&data_length[0..8])
+//                 .expect("heap address should be deserializable"),
+//         ) as usize;
 
-        let data = heap
-            .read(heap_address, length + 16)
-            .expect("length should be readable");
-        let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
-            .expect("Deserialization should have succeeded")
-            .value;
-        result
-    }};
-}
+//         let data = heap
+//             .read(
+//                 crate::vm::allocator::MemoryAddress::Heap {
+//                     offset: heap_address,
+//                 },
+//                 length + 16,
+//             )
+//             .expect("length should be readable");
+//         let result = <StringType as DeserializeFrom>::deserialize_from(&StringType(), &data)
+//             .expect("Deserialization should have succeeded")
+//             .value;
+//         result
+//     }};
+// }
 
-#[macro_export]
-macro_rules! eval_and_compare {
-    ($expr:expr, $expected:expr,$size:ident) => {{
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+// #[macro_export]
+// macro_rules! eval_and_compare {
+//     ($expr:expr, $expected:expr,$size:ident) => {{
+//         let mut engine = crate::vm::vm::NoopGameEngine {};
 
-        let mut expr = Expression::parse($expr.into())
-            .expect("Parsing should have succeeded")
-            .1;
+//         let mut expr = Expression::parse($expr.into())
+//             .expect("Parsing should have succeeded")
+//             .1;
 
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
-            .expect("Semantic resolution should have succeeded");
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = expr
+//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        expr.gencode(
-            &mut scope_manager,
-            None,
-            &mut instructions,
-            &crate::vm::vm::CodeGenerationContext::default(),
-        )
-        .expect("Code generation should have succeeded");
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         expr.gencode(
+//             &mut scope_manager,
+//             None,
+//             &mut instructions,
+//             &crate::vm::vm::CodeGenerationContext::default(),
+//         )
+//         .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
+//         assert!(instructions.len() > 0, "No instructions generated");
 
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         // Execute the instructions.
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = clear_stack!(memory);
 
-        let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
-            &PrimitiveType::Number(NumberType::$size),
-            &data,
-        )
-        .expect("Deserialization should have succeeded");
+//         let result = <PrimitiveType as DeserializeFrom>::deserialize_from(
+//             &PrimitiveType::Number(NumberType::$size),
+//             &data,
+//         )
+//         .expect("Deserialization should have succeeded");
 
-        assert_eq!(
-            result, $expected,
-            "Result does not match the expected value"
-        );
-    }};
-}
+//         assert_eq!(
+//             result, $expected,
+//             "Result does not match the expected value"
+//         );
+//     }};
+// }
 
-#[macro_export]
-macro_rules! eval_and_compare_bool {
-    ($expr:expr, $expected:expr) => {{
-        let mut engine = crate::vm::vm::NoopGameEngine {};
+// #[macro_export]
+// macro_rules! eval_and_compare_bool {
+//     ($expr:expr, $expected:expr) => {{
+//         let mut engine = crate::vm::vm::NoopGameEngine {};
 
-        let mut expr = Expression::parse($expr.into())
-            .expect("Parsing should have succeeded")
-            .1;
+//         let mut expr = Expression::parse($expr.into())
+//             .expect("Parsing should have succeeded")
+//             .1;
 
-        let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-        let _ = expr
-            .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
-            .expect("Semantic resolution should have succeeded");
+//         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
+//         let _ = expr
+//             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
+//             .expect("Semantic resolution should have succeeded");
 
-        // Code generation.
-        let mut instructions = CasmProgram::default();
-        expr.gencode(
-            &mut scope_manager,
-            None,
-            &mut instructions,
-            &crate::vm::vm::CodeGenerationContext::default(),
-        )
-        .expect("Code generation should have succeeded");
+//         // Code generation.
+//         let mut instructions = CasmProgram::default();
+//         expr.gencode(
+//             &mut scope_manager,
+//             None,
+//             &mut instructions,
+//             &crate::vm::vm::CodeGenerationContext::default(),
+//         )
+//         .expect("Code generation should have succeeded");
 
-        assert!(instructions.len() > 0, "No instructions generated");
+//         assert!(instructions.len() > 0, "No instructions generated");
 
-        // Execute the instructions.
-        let (mut runtime, mut heap, mut stdio) = Runtime::new();
-        let tid = runtime
-            .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-            .expect("Thread spawn_with_scopeing should have succeeded");
-        let (_, stack, program) = runtime
-            .get_mut(crate::vm::vm::Player::P1, tid)
-            .expect("Thread should exist");
-        program.merge(instructions);
+//         // Execute the instructions.
+//         let (mut runtime, mut heap, mut stdio) = Runtime::new();
+//         let tid = runtime
+//             .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
+//             .expect("Thread spawn_with_scopeing should have succeeded");
+//         let (_, stack, program) = runtime
+//             .get_mut(crate::vm::vm::Player::P1, tid)
+//             .expect("Thread should exist");
+//         program.merge(instructions);
 
-        program
-            .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-            .expect("Execution should have succeeded");
-        let memory = stack;
-        let data = clear_stack!(memory);
+//         program
+//             .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
+//             .expect("Execution should have succeeded");
+//         let memory = stack;
+//         let data = clear_stack!(memory);
 
-        let result =
-            <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
-                .expect("Deserialization should have succeeded");
+//         let result =
+//             <PrimitiveType as DeserializeFrom>::deserialize_from(&PrimitiveType::Bool, &data)
+//                 .expect("Deserialization should have succeeded");
 
-        assert_eq!(
-            result, $expected,
-            "Result does not match the expected value"
-        );
-    }};
-}
+//         assert_eq!(
+//             result, $expected,
+//             "Result does not match the expected value"
+//         );
+//     }};
+// }

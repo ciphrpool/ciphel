@@ -9,7 +9,7 @@ use crate::vm::{
 };
 
 use super::{alloc::ALLOC_SIZE_THRESHOLD, CasmProgram};
-struct HexSlice<'a>(&'a [u8]);
+pub struct HexSlice<'a>(pub &'a [u8]);
 
 impl<'a> fmt::Display for HexSlice<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

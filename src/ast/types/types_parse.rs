@@ -120,15 +120,7 @@ impl TryParse for StrSliceType {
      *  | [ num ] str
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(
-            pair(
-                wst(lexem::STR),
-                delimited(wst(lexem::LE), parse_number, wst(lexem::GE)),
-            ),
-            |(_, size)| StrSliceType {
-                size: size as usize,
-            },
-        )(input)
+        map(wst(lexem::STR), |_| StrSliceType {})(input)
     }
 }
 

@@ -1,6 +1,4 @@
-use alloc::CheckIndex;
-use branch::{BranchIf, BranchTable};
-use locate::LocateUTF8Char;
+use branch::BranchIf;
 use std::collections::HashMap;
 use ulid::Ulid;
 
@@ -171,7 +169,7 @@ impl CasmProgram {
         };
         callback(self, &instruction)
     }
-    pub fn execute<'runtime, G: crate::GameEngineStaticFn + Clone>(
+    pub fn execute<'runtime, G: crate::GameEngineStaticFn>(
         &mut self,
         stack: &mut Stack,
         heap: &mut Heap,
@@ -215,18 +213,17 @@ pub enum Casm {
     Operation(operation::Operation),
     Data(data::Data),
     Access(alloc::Access),
-    AccessIdx(alloc::CheckIndex),
+    // AccessIdx(alloc::CheckIndex),
     Locate(locate::Locate),
     OffsetIdx(locate::LocateIndex),
     OffsetSP(locate::LocateOffsetFromStackPointer),
     Offset(locate::LocateOffset),
     If(branch::BranchIf),
     Try(branch::BranchTry),
-    LocateUTF8Char(locate::LocateUTF8Char),
     Label(branch::Label),
     Call(branch::Call),
     Goto(branch::Goto),
-    Switch(branch::BranchTable),
+    // Switch(branch::BranchTable),
     Pop(usize),
 }
 
@@ -248,19 +245,18 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
             Casm::Break(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Data(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Access(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            Casm::AccessIdx(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            // Casm::AccessIdx(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::If(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Label(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Call(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Goto(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Alloc(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Mem(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            Casm::Switch(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            // Casm::Switch(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::OffsetIdx(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Offset(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::OffsetSP(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Locate(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            Casm::LocateUTF8Char(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Platform(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Pop(size) => {
                 stack.pop(*size)?;
@@ -289,17 +285,16 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
             Casm::Operation(value) => value.name(stdio, program, engine),
             Casm::Data(value) => value.name(stdio, program, engine),
             Casm::Access(value) => value.name(stdio, program, engine),
-            Casm::AccessIdx(value) => value.name(stdio, program, engine),
+            // Casm::AccessIdx(value) => value.name(stdio, program, engine),
             Casm::Offset(value) => value.name(stdio, program, engine),
             Casm::OffsetIdx(value) => value.name(stdio, program, engine),
             Casm::OffsetSP(value) => value.name(stdio, program, engine),
             Casm::Locate(value) => value.name(stdio, program, engine),
             Casm::If(value) => value.name(stdio, program, engine),
-            Casm::LocateUTF8Char(value) => value.name(stdio, program, engine),
             Casm::Label(value) => value.name(stdio, program, engine),
             Casm::Call(value) => value.name(stdio, program, engine),
             Casm::Goto(value) => value.name(stdio, program, engine),
-            Casm::Switch(value) => value.name(stdio, program, engine),
+            // Casm::Switch(value) => value.name(stdio, program, engine),
             Casm::Try(value) => value.name(stdio, program, engine),
             Casm::Pop(n) => stdio.push_casm(engine, &format!("pop {n}")),
         }
@@ -319,7 +314,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
             Casm::Operation(value) => <operation::Operation as CasmMetadata<G>>::weight(value),
             Casm::Data(value) => <Data as CasmMetadata<G>>::weight(value),
             Casm::Access(value) => <alloc::Access as CasmMetadata<G>>::weight(value),
-            Casm::AccessIdx(value) => <CheckIndex as CasmMetadata<G>>::weight(value),
+            // Casm::AccessIdx(value) => <CheckIndex as CasmMetadata<G>>::weight(value),
             Casm::OffsetSP(value) => {
                 <locate::LocateOffsetFromStackPointer as CasmMetadata<G>>::weight(value)
             }
@@ -328,11 +323,10 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
             Casm::Locate(value) => <locate::Locate as CasmMetadata<G>>::weight(value),
             Casm::If(value) => <BranchIf as CasmMetadata<G>>::weight(value),
             Casm::Try(value) => <branch::BranchTry as CasmMetadata<G>>::weight(value),
-            Casm::LocateUTF8Char(value) => <LocateUTF8Char as CasmMetadata<G>>::weight(value),
             Casm::Label(value) => <Label as CasmMetadata<G>>::weight(value),
             Casm::Call(value) => <branch::Call as CasmMetadata<G>>::weight(value),
             Casm::Goto(value) => <branch::Goto as CasmMetadata<G>>::weight(value),
-            Casm::Switch(value) => <BranchTable as CasmMetadata<G>>::weight(value),
+            // Casm::Switch(value) => <BranchTable as CasmMetadata<G>>::weight(value),
             Casm::Pop(value) => vm::CasmWeight::LOW,
         }
     }

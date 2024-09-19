@@ -20,7 +20,10 @@ use crate::{
         TryParse,
     },
     semantic::{scope::ClosureState, Metadata},
-    vm::{allocator::align, platform},
+    vm::{
+        allocator::{align, MemoryAddress},
+        platform,
+    },
 };
 use nom::{
     branch::alt,
@@ -148,6 +151,7 @@ impl TryParse for Slice {
             ),
             |value| Slice {
                 value,
+                size: 0,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -164,7 +168,6 @@ impl TryParse for StrSlice {
     fn parse(input: Span) -> PResult<Self> {
         map(parse_string, |value| StrSlice {
             value,
-            padding: 0,
             metadata: Metadata::default(),
         })(input)
     }
@@ -493,6 +496,7 @@ mod tests {
                         Number::Unresolved(6).into()
                     ))))
                 ],
+                size: 0,
                 metadata: Metadata::default(),
             },
             value
@@ -508,7 +512,6 @@ mod tests {
             StrSlice {
                 value: "Hello World".to_string(),
                 metadata: Metadata::default(),
-                padding: 0,
             },
             value
         );
@@ -703,7 +706,6 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".to_string().into(),
-                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -713,7 +715,6 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".to_string().into(),
-                            padding: 0,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(

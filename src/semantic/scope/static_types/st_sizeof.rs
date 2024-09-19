@@ -55,7 +55,7 @@ impl SizeOf for PrimitiveType {
 
 impl SizeOf for SliceType {
     fn size_of(&self) -> usize {
-        self.size * self.item_type.size_of()
+        8
     }
 }
 
@@ -66,7 +66,7 @@ impl SizeOf for StringType {
 }
 impl SizeOf for StrSliceType {
     fn size_of(&self) -> usize {
-        self.size + 8
+        8
     }
 }
 

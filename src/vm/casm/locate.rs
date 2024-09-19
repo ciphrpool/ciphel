@@ -13,7 +13,10 @@ use crate::{
 };
 use num_traits::ToBytes;
 
-use super::CasmProgram;
+use super::{
+    operation::{GetNumFrom, PopNum},
+    CasmProgram,
+};
 
 #[derive(Debug, Clone)]
 pub struct Locate {
@@ -36,7 +39,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let address: u64 = self.address.into();
+        let address: u64 = self.address.into(stack);
 
         let _ = stack.push_with(&address.to_le_bytes())?;
         program.incr();
@@ -67,10 +70,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffsetFromStackPointe
     ) -> Result<(), RuntimeError> {
         let address =
             (stack.top().checked_sub(self.offset)).ok_or(RuntimeError::MemoryViolation)?;
-        let address @ MemoryAddress::Stack { .. } = address.try_into()? else {
-            return Err(RuntimeError::MemoryViolation);
-        };
-        let address: u64 = address.into();
+
+        let address = MemoryAddress::Stack { offset: address };
+
+        let address: u64 = address.into(stack);
 
         let _ = stack.push_with(&address.to_le_bytes())?;
         program.incr();
@@ -99,7 +102,13 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffset {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        todo!()
+        let address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+        let new_address = address.add(self.offset);
+        let new_address: u64 = new_address.into(stack);
+
+        let _ = stack.push_with(&new_address.to_le_bytes())?;
+        program.incr();
+        Ok(())
     }
 }
 
@@ -107,6 +116,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffset {
 pub struct LocateIndex {
     pub size: usize,
     pub base_address: Option<MemoryAddress>,
+    pub offset: Option<usize>,
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateIndex {
@@ -131,88 +141,30 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateIndex {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        todo!()
-    }
-}
+        let (mut address, index) = match self.base_address {
+            Some(address) => {
+                let index = OpPrimitive::pop_num::<u64>(stack)?;
+                let address: MemoryAddress =
+                    OpPrimitive::get_num_from::<u64>(address, stack, heap)?.try_into()?;
+                (address, index)
+            }
+            None => {
+                let index = OpPrimitive::pop_num::<u64>(stack)?;
+                let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
-#[derive(Debug, Clone)]
-pub enum LocateUTF8Char {
-    RuntimeNext,
-    RuntimeAtIdx { len: Option<usize> },
-}
+                (address, index)
+            }
+        };
 
-impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateUTF8Char {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        match self {
-            LocateUTF8Char::RuntimeNext => stdio.push_casm(engine, "addr_utf8 "),
-            LocateUTF8Char::RuntimeAtIdx { .. } => stdio.push_casm(engine, "addr_utf8_at"),
+        if let Some(offset) = self.offset {
+            address = address.add(offset);
         }
-    }
-    fn weight(&self) -> crate::vm::vm::CasmWeight {
-        match self {
-            LocateUTF8Char::RuntimeNext => crate::vm::vm::CasmWeight::LOW,
-            LocateUTF8Char::RuntimeAtIdx { len } => crate::vm::vm::CasmWeight::MEDIUM,
-        }
-    }
-}
-impl<G: crate::GameEngineStaticFn> Executable<G> for LocateUTF8Char {
-    fn execute(
-        &self,
-        program: &mut CasmProgram,
-        stack: &mut Stack,
-        heap: &mut Heap,
-        stdio: &mut StdIO,
-        engine: &mut G,
-        tid: usize,
-    ) -> Result<(), RuntimeError> {
+
+        let new_address = address.add(self.size * (index as usize));
+        let new_address: u64 = new_address.into(stack);
+
+        let _ = stack.push_with(&new_address.to_le_bytes())?;
         program.incr();
-        match self {
-            LocateUTF8Char::RuntimeNext => {
-                let pointer = OpPrimitive::get_num8::<u64>(stack)?.try_into()?;
-                let offset = match pointer {
-                    MemoryAddress::Heap { offset } => {
-                        let (_, offset) = heap.read_utf8(offset, 1, 1)?;
-                        offset
-                    }
-                    MemoryAddress::Stack { offset } => {
-                        todo!()
-                    }
-                    MemoryAddress::Global { offset } => todo!(),
-                };
-                let pointer: u64 = pointer.into();
-                let _ = stack.push_with(&(pointer + offset as u64).to_le_bytes());
-
-                Ok(())
-            }
-            LocateUTF8Char::RuntimeAtIdx { len } => {
-                /* */
-                let idx = OpPrimitive::get_num8::<u64>(stack)?;
-                let pointer = OpPrimitive::get_num8::<u64>(stack)?.try_into()?;
-
-                let size = match pointer {
-                    MemoryAddress::Heap { offset } => {
-                        let len_bytes = heap.read(offset, 8)?;
-                        let len_bytes = TryInto::<&[u8; 8]>::try_into(len_bytes.as_slice())
-                            .map_err(|_| RuntimeError::Deserialization)?;
-                        let len = u64::from_le_bytes(*len_bytes) as usize;
-
-                        let (_, size) = heap.read_utf8(offset + 16, idx as usize, len)?;
-                        size
-                    }
-                    MemoryAddress::Stack { offset } => {
-                        let Some(len) = len else {
-                            return Err(RuntimeError::CodeSegmentation);
-                        };
-                        todo!()
-                    }
-                    MemoryAddress::Global { offset } => todo!(),
-                };
-
-                let pointer: u64 = pointer.into();
-                let _ = stack.push_with(&(pointer + size as u64).to_le_bytes());
-
-                Ok(())
-            }
-        }
+        Ok(())
     }
 }

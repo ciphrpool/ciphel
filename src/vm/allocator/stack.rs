@@ -8,6 +8,8 @@ use num_traits::ToBytes;
 use crate::semantic::AccessLevel;
 use thiserror::Error;
 
+use super::MemoryAddress;
+
 pub const STACK_SIZE: usize = 2024;
 pub const GLOBAL_SIZE: usize = 2024;
 
@@ -28,8 +30,9 @@ pub enum StackError {
 #[derive(Debug, Clone)]
 pub struct Stack {
     stack: [u8; STACK_SIZE],
+    global: [u8; GLOBAL_SIZE],
     stack_pointer: usize,
-    frame_pointer: usize,
+    pub frame_pointer: usize,
     return_pointer: usize,
 }
 
@@ -44,6 +47,7 @@ impl Stack {
     pub fn new() -> Self {
         Self {
             stack: [0; STACK_SIZE],
+            global: [0; GLOBAL_SIZE],
             stack_pointer: 0,
             frame_pointer: 0,
             return_pointer: 0,
@@ -162,145 +166,41 @@ impl Stack {
         self.stack_pointer -= size;
         Ok(res)
     }
-    pub fn read<'env>(&'env self, pointer: usize, size: usize) -> Result<&'env [u8], StackError> {
+    pub fn read<'env>(
+        &'env self,
+        pointer: MemoryAddress,
+        size: usize,
+    ) -> Result<&'env [u8], StackError> {
+        let MemoryAddress::Stack { offset: pointer } = pointer else {
+            return Err(StackError::ReadError);
+        };
         let top = self.top();
         if pointer + size > top {
             return Err(StackError::ReadError);
         }
         Ok(&self.stack[pointer..pointer + size])
     }
+    pub fn read_in_frame<'env>(
+        &'env self,
+        pointer: MemoryAddress,
+        size: usize,
+    ) -> Result<&'env [u8], StackError> {
+        let MemoryAddress::Frame { offset } = pointer else {
+            return Err(StackError::ReadError);
+        };
+        let top = self.top();
+        let frame_pointer = self.frame_pointer;
+        if frame_pointer + offset + size > top {
+            return Err(StackError::ReadError);
+        }
+        let pointer = frame_pointer + offset;
+        Ok(&self.stack[pointer..pointer + size])
+    }
 
-    // pub fn read_utf8<'env>(
-    //     &'env self,
-    //     pointer: usize,
-    //     idx: usize,
-    //     len: usize,
-    // ) -> Result<([u8; 4], usize), StackError> {
-    //     let top = self.top();
-    //     let address = self.compute_absolute_address(address, level)?;
-    //     if address >= top {
-    //         return Err(StackError::ReadError);
-    //     }
-    //     let mut offset = 0;
-    //     let mut current_idx = 0;
-    //     let mut byte = self.stack[address + offset];
-
-    //     while current_idx < idx {
-    //         byte = self.stack[address + offset];
-    //         if offset >= len {
-    //             return Err(StackError::ReadError);
-    //         }
-    //         match byte {
-    //             // 7-bit ASCII character (U+0000 to U+007F)
-    //             0x00..=0x7F => {
-    //                 offset += 1;
-    //                 current_idx += 1;
-    //             }
-    //             // Two-byte character (U+0080 to U+07FF)
-    //             0xC0..=0xDF => {
-    //                 if (address + offset) + 1 >= STACK_SIZE {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 let in_byte = self.stack[(address + offset) + 1];
-    //                 if (in_byte & 0xC0) != 0x80 {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 offset += 2;
-    //                 current_idx += 1;
-    //             }
-    //             // Three-byte character (U+0800 to U+FFFF)
-    //             0xE0..=0xEF => {
-    //                 for i in 1..3 {
-    //                     if (address + offset) + i >= STACK_SIZE {
-    //                         return Err(StackError::ReadError);
-    //                     }
-    //                     let in_byte = self.stack[(address + offset) + i];
-    //                     if (in_byte & 0xC0) != 0x80 {
-    //                         return Err(StackError::ReadError);
-    //                     }
-    //                 }
-    //                 offset += 3;
-    //                 current_idx += 1;
-    //             }
-    //             // Four-byte character (U+10000 to U+10FFFF)
-    //             0xF0..=0xF7 => {
-    //                 for i in 1..4 {
-    //                     if (address + offset) + i >= STACK_SIZE {
-    //                         return Err(StackError::ReadError);
-    //                     }
-    //                     let in_byte = self.stack[(address + offset) + i];
-    //                     if (in_byte & 0xC0) != 0x80 {
-    //                         return Err(StackError::ReadError);
-    //                     }
-    //                 }
-    //                 offset += 4;
-    //                 current_idx += 1;
-    //             }
-    //             _ => {
-    //                 return Err(StackError::ReadError);
-    //             }
-    //         }
-    //     }
-
-    //     if current_idx != idx {
-    //         return Err(StackError::ReadError);
-    //     }
-
-    //     byte = self.stack[address + offset];
-    //     let mut bytes = [byte, 0u8, 0u8, 0u8];
-    //     let mut size = 1;
-    //     match byte {
-    //         // 7-bit ASCII character (U+0000 to U+007F)
-    //         0x00..=0x7F => {}
-    //         // Two-byte character (U+0080 to U+07FF)
-    //         0xC0..=0xDF => {
-    //             if (address + offset) + 1 >= STACK_SIZE {
-    //                 return Err(StackError::ReadError);
-    //             }
-    //             let in_byte = self.stack[(address + offset) + 1];
-    //             if (in_byte & 0xC0) != 0x80 {
-    //                 return Err(StackError::ReadError);
-    //             }
-    //             bytes[1] = in_byte;
-    //             size = 2;
-    //         }
-    //         // Three-byte character (U+0800 to U+FFFF)
-    //         0xE0..=0xEF => {
-    //             for i in 1..3 {
-    //                 if (address + offset) + i >= STACK_SIZE {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 let in_byte = self.stack[(address + offset) + i];
-    //                 if (in_byte & 0xC0) != 0x80 {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 bytes[i] = in_byte;
-    //             }
-    //             size = 3;
-    //         }
-    //         // Four-byte character (U+10000 to U+10FFFF)
-    //         0xF0..=0xF7 => {
-    //             for i in 1..4 {
-    //                 if (address + offset) + i >= STACK_SIZE {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 let in_byte = self.stack[(address + offset) + i];
-    //                 if (in_byte & 0xC0) != 0x80 {
-    //                     return Err(StackError::ReadError);
-    //                 }
-    //                 bytes[i] = in_byte;
-    //             }
-    //             size = 4;
-    //         }
-    //         _ => {
-    //             return Err(StackError::ReadError);
-    //         }
-    //     }
-
-    //     Ok((bytes, offset))
-    // }
-
-    pub fn write(&mut self, pointer: usize, data: &[u8]) -> Result<(), StackError> {
+    pub fn write(&mut self, pointer: MemoryAddress, data: &[u8]) -> Result<(), StackError> {
+        let MemoryAddress::Stack { offset: pointer } = pointer else {
+            return Err(StackError::ReadError);
+        };
         let top = self.top();
         let size = data.len();
         if pointer + size > top {
@@ -308,6 +208,51 @@ impl Stack {
         }
         self.stack[pointer..pointer + size].copy_from_slice(&data);
         Ok(())
+    }
+
+    pub fn write_in_frame(
+        &mut self,
+        pointer: MemoryAddress,
+        data: &[u8],
+    ) -> Result<(), StackError> {
+        let MemoryAddress::Frame { offset } = pointer else {
+            return Err(StackError::ReadError);
+        };
+        let top = self.top();
+        let frame_pointer = self.frame_pointer;
+        let size = data.len();
+        if frame_pointer + offset + size > top {
+            return Err(StackError::WriteError);
+        }
+        let pointer = frame_pointer + offset;
+        self.stack[pointer..pointer + size].copy_from_slice(&data);
+        Ok(())
+    }
+
+    pub fn write_global(&mut self, pointer: MemoryAddress, data: &[u8]) -> Result<(), StackError> {
+        let MemoryAddress::Global { offset: pointer } = pointer else {
+            return Err(StackError::ReadError);
+        };
+        let size = data.len();
+        if pointer + size > GLOBAL_SIZE {
+            return Err(StackError::WriteError);
+        }
+        self.global[pointer..pointer + size].copy_from_slice(&data);
+        Ok(())
+    }
+
+    pub fn read_global<'env>(
+        &'env self,
+        pointer: MemoryAddress,
+        size: usize,
+    ) -> Result<&'env [u8], StackError> {
+        let MemoryAddress::Global { offset: pointer } = pointer else {
+            return Err(StackError::ReadError);
+        };
+        if pointer + size > GLOBAL_SIZE {
+            return Err(StackError::ReadError);
+        }
+        Ok(&self.global[pointer..pointer + size])
     }
 }
 
@@ -352,14 +297,18 @@ mod tests {
 
         stack.stack[0..8].copy_from_slice(&[1u8; 8]);
 
-        let data = stack.read(0, 8).expect("Read should have succeeded");
+        let data = stack
+            .read(MemoryAddress::Stack { offset: 0 }, 8)
+            .expect("Read should have succeeded");
         assert_eq!(data, vec![1; 8]);
     }
 
     #[test]
     fn robustness_read() {
         let stack = Stack::new();
-        let _ = stack.read(0, 8).expect_err("Read should have failed");
+        let _ = stack
+            .read(MemoryAddress::Stack { offset: 0 }, 8)
+            .expect_err("Read should have failed");
     }
 
     #[test]
@@ -368,7 +317,7 @@ mod tests {
         let _ = stack.push(8).expect("Push should have succeeded");
 
         let _ = stack
-            .write(0, &vec![1; 8])
+            .write(MemoryAddress::Stack { offset: 0 }, &vec![1; 8])
             .expect("Write should have succeeded");
 
         assert_eq!(stack.stack[0..8], vec![1; 8]);
@@ -378,7 +327,7 @@ mod tests {
     fn robustness_write() {
         let mut stack = Stack::new();
         let _ = stack
-            .write(0, &vec![1; 8])
+            .write(MemoryAddress::Stack { offset: 0 }, &vec![1; 8])
             .expect_err("Read should have failed");
     }
 

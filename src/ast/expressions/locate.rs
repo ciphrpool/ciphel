@@ -1,5 +1,5 @@
 use crate::{
-    semantic::SizeOf,
+    semantic::{scope::static_types::StaticType, EType, SizeOf},
     vm::{
         allocator::MemoryAddress,
         casm::{
@@ -461,6 +461,16 @@ impl Locatable for ListAccess {
         };
         let size = item_type.size_of();
 
+        let Some(array_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        let offset = match array_type {
+            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Slice(_)) => 0,
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        };
+
         match self.var.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
                 // the address is static
@@ -474,6 +484,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
+                    offset: Some(offset),
                 }));
             }
             None => {
@@ -489,6 +500,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
+                    offset: Some(offset),
                 }));
             }
         }
@@ -507,6 +519,15 @@ impl Locatable for ListAccess {
         };
         let size = item_type.size_of();
 
+        let Some(array_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let offset = match array_type {
+            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Slice(_)) => 0,
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        };
+
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, address)?
@@ -523,6 +544,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
+                    offset: Some(offset),
                 }));
             }
             None => {
@@ -538,6 +560,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
+                    offset: Some(offset),
                 }));
             }
         }
@@ -556,6 +579,15 @@ impl Locatable for ListAccess {
         };
         let size = item_type.size_of();
 
+        let Some(array_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let offset = match array_type {
+            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Slice(_)) => 0,
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        };
+
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, Some(address))?
@@ -572,6 +604,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
+                    offset: Some(offset),
                 }));
                 instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
             }
@@ -588,6 +621,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
+                    offset: Some(offset),
                 }));
                 instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
             }
@@ -606,6 +640,15 @@ impl Locatable for ListAccess {
         };
         let size = item_type.size_of();
 
+        let Some(array_type) = self.var.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let offset = match array_type {
+            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Slice(_)) => 0,
+            _ => return Err(CodeGenerationError::UnresolvedError),
+        };
+
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, None)?
@@ -622,6 +665,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
+                    offset: Some(offset),
                 }));
                 instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
             }
@@ -638,6 +682,7 @@ impl Locatable for ListAccess {
                 instructions.push(Casm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
+                    offset: Some(offset),
                 }));
                 instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
             }
