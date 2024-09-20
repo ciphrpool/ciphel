@@ -304,52 +304,9 @@ impl TypeOf for Comparaison {
     where
         Self: Sized + Resolve,
     {
-        match self {
-            Comparaison::Less {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-            Comparaison::LessEqual {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-            Comparaison::Greater {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-            Comparaison::GreaterEqual {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-        }
+        Ok(EType::Static(StaticType::Primitive(
+            static_types::PrimitiveType::Bool,
+        )))
     }
 }
 
@@ -362,30 +319,9 @@ impl TypeOf for Equation {
     where
         Self: Sized + Resolve,
     {
-        match self {
-            Equation::Equal {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-            Equation::NotEqual {
-                left,
-                right,
-                metadata: _,
-            } => {
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                Ok(EType::Static(StaticType::Primitive(
-                    static_types::PrimitiveType::Bool,
-                )))
-            }
-        }
+        Ok(EType::Static(StaticType::Primitive(
+            static_types::PrimitiveType::Bool,
+        )))
     }
 }
 
@@ -398,8 +334,6 @@ impl TypeOf for LogicalAnd {
     where
         Self: Sized + Resolve,
     {
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
         Ok(EType::Static(StaticType::Primitive(
             static_types::PrimitiveType::Bool,
         )))
@@ -414,8 +348,6 @@ impl TypeOf for LogicalOr {
     where
         Self: Sized + Resolve,
     {
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
         Ok(EType::Static(StaticType::Primitive(
             static_types::PrimitiveType::Bool,
         )))

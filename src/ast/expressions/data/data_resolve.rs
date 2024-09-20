@@ -14,7 +14,7 @@ use crate::semantic::scope::ClosureState;
 use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Info, MergeType, ResolveFromStruct, SizeOf};
+use crate::semantic::{Info, MergeType, ResolveFromStruct, ResolveNumber, SizeOf};
 use crate::vm::allocator::{align, MemoryAddress};
 use crate::{e_static, semantic};
 
@@ -51,6 +51,25 @@ impl Resolve for Data {
     }
 }
 
+impl ResolveNumber for Data {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Data::Primitive(primitive) => primitive.is_unresolved_number(),
+            _ => false,
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Data::Primitive(primitive) => primitive.resolve_number(to),
+            _ => Ok(()),
+        }
+    }
+}
+
 impl ResolveFromStruct for Data {
     fn resolve_from_struct<G: crate::GameEngineStaticFn>(
         &mut self,
@@ -82,7 +101,8 @@ impl Resolve for Variable {
         Self: Sized,
     {
         let var = scope_manager.find_var_by_name(&self.name, scope_id)?;
-        self.state
+        let _ = self
+            .state
             .insert(super::VariableState::Variable { id: var.id });
         let var_type = var.ctype.clone();
 
@@ -113,7 +133,7 @@ impl ResolveFromStruct for Variable {
         for (field_name, field_type) in struct_type.fields.iter() {
             if *field_name == self.name {
                 found = true;
-                self.state.insert(super::VariableState::Field {
+                let _ = self.state.insert(super::VariableState::Field {
                     offset,
                     size: align(field_type.size_of()),
                 });
@@ -135,6 +155,98 @@ impl ResolveFromStruct for Variable {
     }
 }
 
+impl ResolveNumber for Primitive {
+    fn is_unresolved_number(&self) -> bool {
+        if let Primitive::Number(Number::Unresolved(_)) = self {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        let Primitive::Number(Number::Unresolved(value)) = *self else {
+            return Ok(());
+        };
+        match to {
+            NumberType::U8 => {
+                *self = Primitive::Number(Number::U8(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::U16 => {
+                *self = Primitive::Number(Number::U16(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::U32 => {
+                *self = Primitive::Number(Number::U32(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::U64 => {
+                *self = Primitive::Number(Number::U64(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::U128 => {
+                *self = Primitive::Number(Number::U128(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::I8 => {
+                *self = Primitive::Number(Number::I8(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::I16 => {
+                *self = Primitive::Number(Number::I16(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::I32 => {
+                *self = Primitive::Number(Number::I32(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::I64 => {
+                *self = Primitive::Number(Number::I64(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::I128 => {
+                *self = Primitive::Number(Number::I128(
+                    (value)
+                        .try_into()
+                        .map_err(|_| SemanticError::IncompatibleTypes)?,
+                ))
+            }
+            NumberType::F64 => *self = Primitive::Number(Number::F64(value as f64)),
+        }
+        Ok(())
+    }
+}
 impl Resolve for Primitive {
     type Output = ();
     type Context = Option<EType>;
@@ -149,97 +261,22 @@ impl Resolve for Primitive {
     where
         Self: Sized,
     {
-        match context {
-            Some(context_type) => {
-                match context_type {
-                    EType::Static(value) => {
-                        if let Primitive::Number(n) = self {
-                            if let Number::Unresolved(v) = n {
-                                match value {
-                                    StaticType::Primitive(PrimitiveType::Number(value)) => {
-                                        match value {
-                                            NumberType::U8 => {
-                                                *n = Number::U8((*v).try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?);
-                                            }
-                                            NumberType::U16 => {
-                                                *n =
-                                                    Number::U16((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::U32 => {
-                                                *n =
-                                                    Number::U32((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::U64 => {
-                                                *n =
-                                                    Number::U64((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::U128 => {
-                                                *n = Number::U128((*v).try_into().map_err(
-                                                    |_| SemanticError::IncompatibleTypes,
-                                                )?);
-                                            }
-                                            NumberType::I8 => {
-                                                *n = Number::I8((*v).try_into().map_err(|_| {
-                                                    SemanticError::IncompatibleTypes
-                                                })?);
-                                            }
-                                            NumberType::I16 => {
-                                                *n =
-                                                    Number::I16((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::I32 => {
-                                                *n =
-                                                    Number::I32((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::I64 => {
-                                                *n =
-                                                    Number::I64((*v).try_into().map_err(|_| {
-                                                        SemanticError::IncompatibleTypes
-                                                    })?);
-                                            }
-                                            NumberType::I128 => {
-                                                *n = Number::I128((*v).try_into().map_err(
-                                                    |_| SemanticError::IncompatibleTypes,
-                                                )?);
-                                            }
-                                            NumberType::F64 => *n = Number::F64(*v as f64),
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                    EType::User { .. } => {}
-                }
-                let _ = context_type.compatible_with(
-                    &self.type_of(scope_manager, scope_id)?,
-                    &scope_manager,
-                    scope_id,
-                )?;
-                Ok(())
+        if context.is_none() {
+            if self.is_unresolved_number() {
+                self.resolve_number(NumberType::I64)?;
             }
-            None => {
-                if let Primitive::Number(n) = self {
-                    if let Number::Unresolved(v) = n {
-                        *n = Number::I64(*v)
-                    }
-                }
-                Ok(())
+        } else if let Some(context @ EType::Static(StaticType::Primitive(primitive_type))) = context
+        {
+            if let PrimitiveType::Number(number_type) = primitive_type {
+                self.resolve_number(*number_type)?;
             }
+            if self.type_of(scope_manager, scope_id)? != *context {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        } else {
+            return Err(SemanticError::IncompatibleTypes);
         }
+        Ok(())
     }
 }
 impl Resolve for Slice {

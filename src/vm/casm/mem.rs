@@ -41,7 +41,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
             }
             Mem::Take { size } => stdio.push_casm(engine, &format!("take {size}")),
             Mem::Store { size, address } => {
-                stdio.push_casm(engine, &format!("store {}", address.name()))
+                stdio.push_casm(engine, &format!("store {} {}", address.name(), size))
             }
         }
     }

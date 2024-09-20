@@ -973,11 +973,531 @@ mod tests {
             },
             Resolve,
         },
-        v_num,
+        test_extract_variable, test_statements, v_num,
         vm::vm::Runtime,
     };
 
     use super::*;
+
+    #[test]
+    fn valid_addition() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 + 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 + 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 + 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 + 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 + 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 + 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 + 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 + 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 + 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 + 3u128;
+        let var_u64 = 2 + 3u64;
+        let var_u32 = 3 + 3u32;
+        let var_u16 = 4u16 + 3u16;
+        let var_u8 = 5u8 + 3;
+        let var_i128 = 6i128 + 3;
+        let var_i64 = 7 + 3;
+        let var_i32 = 8i32 + 3i32;
+        let var_i16 : i16 = 9 + 3;
+        let var_i8 : i8 = 10i8 + 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_substraction() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 - 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20 - 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 - 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 - 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 - 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 - 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 - 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 - 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 - 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 - 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 10u128 - 3u128;
+        let var_u64 = 20 - 3u64;
+        let var_u32 = 3 - 3u32;
+        let var_u16 = 4u16 - 3u16;
+        let var_u8 = 5u8 - 3;
+        let var_i128 = 6i128 - 3;
+        let var_i64 = 7 - 3;
+        let var_i32 = 8i32 - 3i32;
+        let var_i16 : i16 = 9 - 3;
+        let var_i8 : i8 = 10i8 - 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_multiplaction() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 * 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 * 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 * 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 * 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 * 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 * 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 * 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 * 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 * 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 * 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 * 3u128;
+        let var_u64 = 2 * 3u64;
+        let var_u32 = 3 * 3u32;
+        let var_u16 = 4u16 * 3u16;
+        let var_u8 = 5u8 * 3;
+        let var_i128 = 6i128 * 3;
+        let var_i64 = 7 * 3;
+        let var_i32 = 8i32 * 3i32;
+        let var_i16 : i16 = 9 * 3;
+        let var_i8 : i8 = 10i8 * 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_division() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 / 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20 / 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 / 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 / 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 / 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 / 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 / 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 / 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 / 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 / 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 10u128 / 3u128;
+        let var_u64 = 20 / 3u64;
+        let var_u32 = 3 / 3u32;
+        let var_u16 = 4u16 / 3u16;
+        let var_u8 = 5u8 / 3;
+        let var_i128 = 6i128 / 3;
+        let var_i64 = 7 / 3;
+        let var_i32 = 8i32 / 3i32;
+        let var_i16 : i16 = 9 / 3;
+        let var_i8 : i8 = 10i8 / 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_shift() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 >> 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 << 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 >> 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 << 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 >> 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 << 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 >> 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 << 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 >> 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 << 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 >> 3u128;
+        let var_u64 = 2 << 3u64;
+        let var_u32 = 3 >> 3u32;
+        let var_u16 = 4u16 << 3u16;
+        let var_u8 = 5u8 >> 3;
+        let var_i128 = 6i128 << 3;
+        let var_i64 = 7 >> 3;
+        let var_i32 = 8i32 << 3i32;
+        let var_i16 : i16 = 9 >> 3;
+        let var_i8 : i8 = 10i8 << 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_band_bor_bxor() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u128>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 & 3);
+            let res = test_extract_variable::<u64>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2 | 3);
+            let res = test_extract_variable::<u32>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3 ^ 3);
+            let res = test_extract_variable::<u16>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4 | 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5 & 3);
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6 ^ 3);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7 & 3);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8 | 3);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9 ^ 3);
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10 | 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 & 3u128;
+        let var_u64 = 2 | 3u64;
+        let var_u32 = 3 ^ 3u32;
+        let var_u16 = 4u16 | 3u16;
+        let var_u8 = 5u8 & 3;
+        let var_i128 = 6i128 ^ 3;
+        let var_i64 = 7 & 3;
+        let var_i32 = 8i32 | 3i32;
+        let var_i16 : i16 = 9 ^ 3;
+        let var_i8 : i8 = 10i8 | 3;
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_cmp() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u8>("var_u128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 1 == 3);
+            let res = test_extract_variable::<u8>("var_u64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 2 != 3);
+            let res = test_extract_variable::<u8>("var_u32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 3 > 3);
+            let res = test_extract_variable::<u8>("var_u16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 4 >= 3);
+            let res = test_extract_variable::<u8>("var_u8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 5 < 3);
+            let res = test_extract_variable::<u8>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 6 <= 3);
+            let res = test_extract_variable::<u8>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 7 == 3);
+            let res = test_extract_variable::<u8>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 8 != 3);
+            let res = test_extract_variable::<u8>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 9 < 3);
+            let res = test_extract_variable::<u8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, 10 > 3);
+
+            let res = test_extract_variable::<u8>("var_and1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true && false);
+            let res = test_extract_variable::<u8>("var_and2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true && true);
+            let res = test_extract_variable::<u8>("var_and3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false && false);
+            let res = test_extract_variable::<u8>("var_and4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false && true);
+
+            let res = test_extract_variable::<u8>("var_or1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true || false);
+            let res = test_extract_variable::<u8>("var_or2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, true || true);
+            let res = test_extract_variable::<u8>("var_or3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false || false);
+            let res = test_extract_variable::<u8>("var_or4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, false || true);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_u128 = 1u128 == 3u128;
+        let var_u64 = 2 != 3u64;
+        let var_u32 = 3 > 3u32;
+        let var_u16 = 4u16 >= 3u16;
+        let var_u8 = 5u8 < 3;
+        let var_i128 = 6i128 <= 3;
+        let var_i64 = 7 == 3;
+        let var_i32 = 8i32 != 3i32;
+        let var_i16 = 9 < 3;
+        let var_i8 = 10i8 > 3;
+        let var_and1 = true and false;
+        let var_and2 = true and true;
+        let var_and3 = false and false;
+        let var_and4 = false and true;
+        let var_or1 = true or false;
+        let var_or2 = true or true;
+        let var_or3 = false or false;
+        let var_or4 = false or true;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_neg() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i128>("var_i128", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5);
+            let res = test_extract_variable::<i64>("var_i64", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5);
+            let res = test_extract_variable::<i32>("var_i32", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + -5);
+            let res = test_extract_variable::<i16>("var_i16", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1 + (-5));
+            let res = test_extract_variable::<i8>("var_i8", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, -5 + 1);
+
+            let res = test_extract_variable::<u8>("var_neg1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, !true);
+            let res = test_extract_variable::<u8>("var_neg2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res != 0, !false);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let var_i128 = -5i128;
+        let var_i64 = -5i64;
+        let var_i32 = 1i32 + -5 as i32;
+        let var_i16 = 1 + (-5i16);
+        let var_i8 = -5 + 1i8;
+
+        let var_neg1 = ! true;
+        let var_neg2 = !false;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
     // #[test]
     // fn valid_operation_u128() {

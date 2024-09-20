@@ -15,7 +15,7 @@ use crate::{
         utils::{
             io::{PResult, Span},
             lexem,
-            strings::{parse_id, wst},
+            strings::{parse_id, wst, wst_closed},
         },
         TryParse,
     },
@@ -40,7 +40,8 @@ impl TryParse for UnaryOperation {
             map(
                 preceded(
                     wst(lexem::MINUS),
-                    cut(Expression::parse).context("Invalid negation expression"),
+                    cut(map(Atomic::parse, |v| Expression::Atomic(v)))
+                        .context("Invalid negation expression"),
                 ),
                 |value| UnaryOperation::Minus {
                     value: Box::new(value),
@@ -50,7 +51,8 @@ impl TryParse for UnaryOperation {
             map(
                 preceded(
                     wst(lexem::NEGATION),
-                    cut(Expression::parse).context("Invalid not expression"),
+                    cut(map(Atomic::parse, |v| Expression::Atomic(v)))
+                        .context("Invalid not expression"),
                 ),
                 |value| UnaryOperation::Not {
                     value: Box::new(value),
@@ -480,8 +482,8 @@ impl TryParseOperation for Shift {
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Addition::parse(input)?;
         let (remainder, op) = opt(alt((
-            value(ShiftOPERATOR::Left, wst(lexem::SHL)),
-            value(ShiftOPERATOR::Right, wst(lexem::SHR)),
+            value(ShiftOPERATOR::Left, wst_closed(lexem::SHL)),
+            value(ShiftOPERATOR::Right, wst_closed(lexem::SHR)),
         )))(remainder)?;
 
         if let Some(op) = op {
@@ -519,7 +521,7 @@ impl TryParseOperation for BitwiseAnd {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Shift::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::BAND))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::BAND))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -549,7 +551,7 @@ impl TryParseOperation for BitwiseXOR {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseAnd::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::XOR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::XOR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -579,7 +581,7 @@ impl TryParseOperation for BitwiseOR {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = BitwiseXOR::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::BOR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::BOR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -609,7 +611,7 @@ impl TryParseOperation for Cast {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = FnCall::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::AS))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::AS))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -716,7 +718,7 @@ impl TryParseOperation for LogicalAnd {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = Comparaison::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::AND))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::AND))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =
@@ -746,7 +748,7 @@ impl TryParseOperation for LogicalOr {
      */
     fn parse(input: Span) -> PResult<Expression> {
         let (remainder, left) = LogicalAnd::parse(input)?;
-        let (remainder, op) = opt(wst(lexem::OR))(remainder)?;
+        let (remainder, op) = opt(wst_closed(lexem::OR))(remainder)?;
 
         if let Some(_op) = op {
             let (remainder, right) =

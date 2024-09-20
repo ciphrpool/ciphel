@@ -4,7 +4,7 @@ use super::{
     UnaryOperation,
 };
 
-use crate::ast::expressions::data::{Data, Primitive, Variable};
+use crate::ast::expressions::data::{Data, Number, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::p_num;
 use crate::semantic::scope::static_types::{
@@ -12,7 +12,9 @@ use crate::semantic::scope::static_types::{
     TupleType, VecType,
 };
 use crate::semantic::scope::user_type_impl::{Struct, UserType};
-use crate::semantic::{CompatibleWith, EType, Resolve, ResolvePlatform, SemanticError, TypeOf};
+use crate::semantic::{
+    CompatibleWith, EType, Resolve, ResolveNumber, ResolvePlatform, SemanticError, TypeOf,
+};
 use crate::semantic::{Info, ResolveFromStruct, SizeOf};
 use crate::vm::platform::Lib;
 use crate::vm::vm::DynamicFnResolver;
@@ -33,7 +35,12 @@ impl Resolve for UnaryOperation {
     {
         match self {
             UnaryOperation::Minus { value, metadata } => {
+                if value.is_unresolved_number() {
+                    value.resolve_number(NumberType::I64)?;
+                }
+
                 let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+
                 let value_type = value.type_of(&scope_manager, scope_id)?;
 
                 match value_type {
@@ -75,6 +82,25 @@ impl Resolve for UnaryOperation {
 
                 Ok(())
             }
+        }
+    }
+}
+
+impl ResolveNumber for UnaryOperation {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            UnaryOperation::Minus { value, metadata } => value.is_unresolved_number(),
+            UnaryOperation::Not { value, metadata } => value.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            UnaryOperation::Minus { value, metadata } => value.resolve_number(to),
+            UnaryOperation::Not { value, metadata } => value.resolve_number(to),
         }
     }
 }
@@ -471,6 +497,165 @@ fn is_number(ctype: &EType) -> bool {
     }
 }
 
+fn resolve_logical_binary_operation<G: crate::GameEngineStaticFn>(
+    left: &mut Expression,
+    right: &mut Expression,
+    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+    scope_id: Option<u128>,
+) -> Result<(), SemanticError> {
+    let left_is_unresolved = left.is_unresolved_number();
+    let right_is_unresolved = right.is_unresolved_number();
+
+    if left_is_unresolved && right_is_unresolved {
+        left.resolve_number(NumberType::I64);
+        right.resolve_number(NumberType::I64);
+        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+    } else if left_is_unresolved && !right_is_unresolved {
+        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+            right.type_of(scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        left.resolve_number(number_type);
+        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+    } else if right_is_unresolved && !left_is_unresolved {
+        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+            left.type_of(scope_manager, scope_id)?
+        else {
+            return Err(SemanticError::IncompatibleOperands);
+        };
+        right.resolve_number(number_type);
+        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+    } else {
+        let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+        let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+    }
+    Ok(())
+}
+fn resolve_binary_numerical_operation<G: crate::GameEngineStaticFn>(
+    left: &mut Expression,
+    right: &mut Expression,
+    scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+    scope_id: Option<u128>,
+    context: &Option<EType>,
+) -> Result<EType, SemanticError> {
+    match context {
+        Some(context_type) => {
+            let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+                context_type
+            else {
+                return Err(SemanticError::IncompatibleOperands);
+            };
+            left.resolve_number(number_type.clone());
+            right.resolve_number(number_type.clone());
+
+            let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+            let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
+        }
+        None => {
+            let left_is_unresolved = left.is_unresolved_number();
+            let right_is_unresolved = right.is_unresolved_number();
+
+            if left_is_unresolved && right_is_unresolved {
+                left.resolve_number(NumberType::I64);
+                right.resolve_number(NumberType::I64);
+                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            } else if left_is_unresolved && !right_is_unresolved {
+                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+                    right.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::IncompatibleOperands);
+                };
+                left.resolve_number(number_type);
+                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            } else if right_is_unresolved && !left_is_unresolved {
+                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let EType::Static(StaticType::Primitive(PrimitiveType::Number(number_type))) =
+                    left.type_of(scope_manager, scope_id)?
+                else {
+                    return Err(SemanticError::IncompatibleOperands);
+                };
+                right.resolve_number(number_type);
+                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            } else {
+                let _ = right.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                let _ = left.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+            }
+        }
+    }
+
+    let left_type = left.type_of(&scope_manager, scope_id)?;
+    let right_type = right.type_of(&scope_manager, scope_id)?;
+
+    if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+        return Ok(left_type);
+    } else {
+        return Err(SemanticError::IncompatibleTypes);
+    }
+    return left.type_of(scope_manager, scope_id);
+}
+
+impl ResolveNumber for Product {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Product::Mult {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Product::Div {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Product::Mod {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Product::Mult {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Product::Div {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Product::Mod {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+        }
+    }
+}
 impl Resolve for Product {
     type Output = ();
     type Context = Option<EType>;
@@ -503,35 +688,28 @@ impl Resolve for Product {
             } => (left, right, metadata),
         };
 
-        match (left.as_mut(), right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
-            }
-            _ => {
-                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
+        let operation_type =
+            resolve_binary_numerical_operation::<G>(left, right, scope_manager, scope_id, context)?;
+        metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
 
-        let left_type = left.type_of(&scope_manager, scope_id)?;
-        let right_type = right.type_of(&scope_manager, scope_id)?;
+        Ok(())
+    }
+}
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+impl ResolveNumber for Addition {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
 
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
         Ok(())
     }
 }
@@ -549,53 +727,36 @@ impl Resolve for Addition {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
-
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+        let operation_type = resolve_binary_numerical_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+            context,
+        )?;
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
 
         Ok(())
     }
 }
 
+impl ResolveNumber for Substraction {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
+        Ok(())
+    }
+}
 impl Resolve for Substraction {
     type Output = ();
     type Context = Option<EType>;
@@ -610,52 +771,63 @@ impl Resolve for Substraction {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
-
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+        let operation_type = resolve_binary_numerical_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+            context,
+        )?;
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
         Ok(())
     }
 }
 
+impl ResolveNumber for Shift {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Shift::Left {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Shift::Right {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Shift::Left {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Shift::Right {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+        }
+    }
+}
 impl Resolve for Shift {
     type Output = ();
     type Context = Option<EType>;
@@ -683,35 +855,27 @@ impl Resolve for Shift {
             } => (left, right, metadata),
         };
 
-        match (left.as_mut(), right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
-            }
-            _ => {
-                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
+        let operation_type =
+            resolve_binary_numerical_operation::<G>(left, right, scope_manager, scope_id, context)?;
+        metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
+        Ok(())
+    }
+}
 
-        let left_type = left.type_of(&scope_manager, scope_id)?;
-        let right_type = right.type_of(&scope_manager, scope_id)?;
+impl ResolveNumber for BitwiseAnd {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
-
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
         Ok(())
     }
 }
@@ -729,47 +893,32 @@ impl Resolve for BitwiseAnd {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
+        let operation_type = resolve_binary_numerical_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+            context,
+        )?;
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
+        Ok(())
+    }
+}
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+impl ResolveNumber for BitwiseXOR {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
         Ok(())
     }
 }
@@ -787,47 +936,32 @@ impl Resolve for BitwiseXOR {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
+        let operation_type = resolve_binary_numerical_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+            context,
+        )?;
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
+        Ok(())
+    }
+}
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+impl ResolveNumber for BitwiseOR {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
         Ok(())
     }
 }
@@ -845,48 +979,31 @@ impl Resolve for BitwiseOR {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
+        let operation_type = resolve_binary_numerical_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+            context,
+        )?;
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(operation_type),
+        };
+        Ok(())
+    }
+}
 
-        let left_type = self.left.type_of(&scope_manager, scope_id)?;
-        let right_type = self.right.type_of(&scope_manager, scope_id)?;
+impl ResolveNumber for Cast {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number()
+    }
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
-            self.metadata.info = Info::Resolved {
-                context: context.clone(),
-                signature: Some(left_type),
-            }
-        } else {
-            return Err(SemanticError::IncompatibleTypes);
-        }
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
         Ok(())
     }
 }
@@ -929,6 +1046,77 @@ impl Resolve for Cast {
     }
 }
 
+impl ResolveNumber for Comparaison {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Comparaison::Less {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Comparaison::LessEqual {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Comparaison::Greater {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Comparaison::GreaterEqual {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Comparaison::Less {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Comparaison::LessEqual {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Comparaison::Greater {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Comparaison::GreaterEqual {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+        }
+    }
+}
+
 impl Resolve for Comparaison {
     type Output = ();
     type Context = Option<EType>;
@@ -966,30 +1154,14 @@ impl Resolve for Comparaison {
             } => (left, right, metadata),
         };
 
-        match (left.as_mut(), right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
-            }
-            _ => {
-                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-
+        resolve_logical_binary_operation::<G>(left, right, scope_manager, scope_id)?;
         let left_type = left.type_of(&scope_manager, scope_id)?;
         let right_type = right.type_of(&scope_manager, scope_id)?;
 
-        if is_number(&left_type) && is_number(&right_type) && left_type == right_type {
+        if left_type == right_type {
             metadata.info = Info::Resolved {
                 context: context.clone(),
-                signature: Some(left_type),
+                signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
             }
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -998,6 +1170,48 @@ impl Resolve for Comparaison {
     }
 }
 
+impl ResolveNumber for Equation {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Equation::Equal {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+            Equation::NotEqual {
+                left,
+                right,
+                metadata,
+            } => left.is_unresolved_number() || right.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Equation::Equal {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+            Equation::NotEqual {
+                left,
+                right,
+                metadata,
+            } => {
+                left.resolve_number(to)?;
+                right.resolve_number(to)?;
+                Ok(())
+            }
+        }
+    }
+}
 impl Resolve for Equation {
     type Output = ();
     type Context = Option<EType>;
@@ -1024,31 +1238,14 @@ impl Resolve for Equation {
                 metadata,
             } => (left, right, metadata),
         };
-
-        match (left.as_mut(), right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = right.type_of(&scope_manager, scope_id)?;
-                let _ = left.resolve::<G>(scope_manager, scope_id, &Some(right_type), &mut None)?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = left.type_of(&scope_manager, scope_id)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, &Some(left_type), &mut None)?;
-            }
-            _ => {
-                let _ = left.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = right.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
-
+        resolve_logical_binary_operation::<G>(left, right, scope_manager, scope_id)?;
         let left_type = left.type_of(&scope_manager, scope_id)?;
         let right_type = right.type_of(&scope_manager, scope_id)?;
 
         if left_type == right_type {
             metadata.info = Info::Resolved {
                 context: context.clone(),
-                signature: Some(left_type),
+                signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
             }
         } else {
             return Err(SemanticError::IncompatibleTypes);
@@ -1057,6 +1254,20 @@ impl Resolve for Equation {
     }
 }
 
+impl ResolveNumber for LogicalAnd {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
+        Ok(())
+    }
+}
 impl Resolve for LogicalAnd {
     type Output = ();
     type Context = Option<EType>;
@@ -1071,36 +1282,12 @@ impl Resolve for LogicalAnd {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
+        resolve_logical_binary_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+        )?;
 
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
             self.left.type_of(&scope_manager, scope_id)?
@@ -1108,7 +1295,7 @@ impl Resolve for LogicalAnd {
             return Err(SemanticError::IncompatibleTypes);
         };
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
-            self.right.type_of(&scope_manager, scope_id)?
+            self.left.type_of(&scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
@@ -1116,6 +1303,21 @@ impl Resolve for LogicalAnd {
             context: context.clone(),
             signature: Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
         };
+        Ok(())
+    }
+}
+
+impl ResolveNumber for LogicalOr {
+    fn is_unresolved_number(&self) -> bool {
+        self.left.is_unresolved_number() || self.right.is_unresolved_number()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        self.left.resolve_number(to)?;
+        self.right.resolve_number(to)?;
         Ok(())
     }
 }
@@ -1133,36 +1335,12 @@ impl Resolve for LogicalOr {
     where
         Self: Sized,
     {
-        match (self.left.as_mut(), self.right.as_mut()) {
-            (Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_)))), value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let right_type = self.right.type_of(&scope_manager, scope_id)?;
-                let _ = self.left.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(right_type),
-                    &mut None,
-                )?;
-            }
-            (value, Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(_))))) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let left_type = self.left.type_of(&scope_manager, scope_id)?;
-                let _ = self.right.resolve::<G>(
-                    scope_manager,
-                    scope_id,
-                    &Some(left_type),
-                    &mut None,
-                )?;
-            }
-            _ => {
-                let _ = self
-                    .left
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-                let _ = self
-                    .right
-                    .resolve::<G>(scope_manager, scope_id, context, &mut None)?;
-            }
-        }
+        resolve_logical_binary_operation::<G>(
+            &mut self.left,
+            &mut self.right,
+            scope_manager,
+            scope_id,
+        )?;
 
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
             self.left.type_of(&scope_manager, scope_id)?
@@ -1170,7 +1348,7 @@ impl Resolve for LogicalOr {
             return Err(SemanticError::IncompatibleTypes);
         };
         let EType::Static(StaticType::Primitive(PrimitiveType::Bool)) =
-            self.right.type_of(&scope_manager, scope_id)?
+            self.left.type_of(&scope_manager, scope_id)?
         else {
             return Err(SemanticError::IncompatibleTypes);
         };

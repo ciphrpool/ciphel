@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     semantic::{
         scope::static_types::{st_deserialize::extract_u64, NumberType, PrimitiveType, StaticType},
@@ -264,7 +266,7 @@ impl OpPrimitive {
 }
 
 pub trait PopNum {
-    fn pop_num<T: PrimInt>(
+    fn pop_num<T: PrimInt + Debug>(
         stack: &mut crate::vm::allocator::stack::Stack,
     ) -> Result<T, RuntimeError>;
 }
@@ -275,29 +277,39 @@ fn pop_data<const N: usize>(stack: &mut Stack) -> Result<[u8; N], RuntimeError> 
 }
 
 impl PopNum for crate::vm::casm::operation::OpPrimitive {
-    fn pop_num<T: PrimInt>(
+    fn pop_num<T: PrimInt + Debug>(
         stack: &mut crate::vm::allocator::stack::Stack,
     ) -> Result<T, RuntimeError> {
         match std::mem::size_of::<T>() {
             1 => {
                 let data: [u8; 1] = pop_data(stack)?;
-                Ok(T::from(u8::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u8::from_le_bytes(data))
+                    .or_else(|| T::from(i8::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             2 => {
                 let data: [u8; 2] = pop_data(stack)?;
-                Ok(T::from(u16::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u16::from_le_bytes(data))
+                    .or_else(|| T::from(i16::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             4 => {
                 let data: [u8; 4] = pop_data(stack)?;
-                Ok(T::from(u32::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u32::from_le_bytes(data))
+                    .or_else(|| T::from(i32::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             8 => {
                 let data: [u8; 8] = pop_data(stack)?;
-                Ok(T::from(u64::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u64::from_le_bytes(data))
+                    .or_else(|| T::from(i64::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             16 => {
                 let data: [u8; 16] = pop_data(stack)?;
-                Ok(T::from(u128::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u128::from_le_bytes(data))
+                    .or_else(|| T::from(i128::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             _ => Err(RuntimeError::Deserialization),
         }
@@ -335,23 +347,33 @@ impl GetNumFrom for crate::vm::casm::operation::OpPrimitive {
         match std::mem::size_of::<T>() {
             1 => {
                 let data: [u8; 1] = read_data(address, stack, heap)?;
-                Ok(T::from(u8::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u8::from_le_bytes(data))
+                    .or_else(|| T::from(i8::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             2 => {
                 let data: [u8; 2] = read_data(address, stack, heap)?;
-                Ok(T::from(u16::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u16::from_le_bytes(data))
+                    .or_else(|| T::from(i16::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             4 => {
                 let data: [u8; 4] = read_data(address, stack, heap)?;
-                Ok(T::from(u32::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u32::from_le_bytes(data))
+                    .or_else(|| T::from(i32::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             8 => {
                 let data: [u8; 8] = read_data(address, stack, heap)?;
-                Ok(T::from(u64::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u64::from_le_bytes(data))
+                    .or_else(|| T::from(i64::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             16 => {
                 let data: [u8; 16] = read_data(address, stack, heap)?;
-                Ok(T::from(u128::from_le_bytes(data)).ok_or(RuntimeError::Deserialization)?)
+                Ok(T::from(u128::from_le_bytes(data))
+                    .or_else(|| T::from(i128::from_le_bytes(data)))
+                    .ok_or(RuntimeError::Deserialization)?)
             }
             _ => Err(RuntimeError::Deserialization),
         }
@@ -1066,43 +1088,43 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U16 => {
-                    let data = OpPrimitive::pop_num::<u16>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u16>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U32 => {
-                    let data = OpPrimitive::pop_num::<u32>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u32>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U64 => {
-                    let data = OpPrimitive::pop_num::<u64>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u64>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::U128 => {
-                    let data = OpPrimitive::pop_num::<u128>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<u128>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I8 => {
-                    let data = OpPrimitive::pop_num::<i8>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i8>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I16 => {
-                    let data = OpPrimitive::pop_num::<i16>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i16>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I32 => {
-                    let data = OpPrimitive::pop_num::<i32>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i32>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I64 => {
-                    let data = OpPrimitive::pop_num::<i64>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i64>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::I128 => {
-                    let data = OpPrimitive::pop_num::<i128>(stack)? as f64;
+                    let data = OpPrimitive::pop_num::<i128>(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
                 NumberType::F64 => {
-                    let data = OpPrimitive::pop_float(stack)? as f64;
+                    let data = OpPrimitive::pop_float(stack)?;
                     Ok(push_data_as_type!(data, to, stack)?)
                 }
             },
@@ -1152,7 +1174,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
                     Ok(stack.push_with(&[(data == 0.0) as u8])?)
                 }
             },
-            (OpPrimitive::Number(NumberType::U8), OpPrimitive::Char) => Ok(()),
+            (OpPrimitive::Number(NumberType::U8), OpPrimitive::Char) => {
+                Err(RuntimeError::UnsupportedOperation)
+            }
             (OpPrimitive::Number(_), OpPrimitive::Char) => Err(RuntimeError::UnsupportedOperation),
             (OpPrimitive::Number(_), OpPrimitive::String) => {
                 Err(RuntimeError::UnsupportedOperation)

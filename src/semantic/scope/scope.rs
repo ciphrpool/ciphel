@@ -86,7 +86,6 @@ impl Default for GlobalMapping {
 impl GlobalMapping {
     pub const EMPTY_STRING_ADDRESS: MemoryAddress = MemoryAddress::Global { offset: 0 };
     pub fn alloc(&mut self, size: usize) -> VariableAddress {
-        dbg!(self.top);
         let variable = VariableAddress::Global(self.top);
         self.top += size;
         variable

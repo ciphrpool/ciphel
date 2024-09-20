@@ -8,6 +8,7 @@ use crate::semantic::scope::scope::ScopeManager;
 
 use self::scope::{static_types::StaticType, user_type_impl::UserType};
 
+use scope::static_types::NumberType;
 use thiserror::Error;
 pub mod scope;
 pub mod utils;
@@ -160,6 +161,11 @@ pub trait Resolve {
     ) -> Result<Self::Output, SemanticError>
     where
         Self: Sized;
+}
+
+pub trait ResolveNumber {
+    fn is_unresolved_number(&self) -> bool;
+    fn resolve_number(&mut self, to: NumberType) -> Result<(), SemanticError>;
 }
 
 pub trait ResolvePlatform {

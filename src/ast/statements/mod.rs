@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     combinator::{eof, map},
     multi::{many0, many1},
-    sequence::terminated,
+    sequence::{delimited, terminated},
     Finish, Parser,
 };
 use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree, StackContext};
@@ -15,7 +15,7 @@ use crate::{
 use super::{
     utils::{
         error::{generate_error_report, squash},
-        strings::eater,
+        strings::eater::{self, ws},
     },
     TryParse,
 };
@@ -94,7 +94,7 @@ pub fn parse_statements(
     input: Span,
     line_offset: usize,
 ) -> Result<Vec<WithLine<Statement>>, CompilationError> {
-    let mut parser = many1(|input| {
+    let mut parser = ws(many1(|input| {
         let (input, statement) = Statement::parse(input)?;
         let line = input.location_line();
         Ok((
@@ -104,7 +104,7 @@ pub fn parse_statements(
                 line: line as usize + line_offset,
             },
         ))
-    });
+    }));
 
     match parser(input).finish() {
         Ok((remaining, statements)) => {

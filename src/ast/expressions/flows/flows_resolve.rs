@@ -12,7 +12,7 @@ use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType},
     CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Info, MergeType};
+use crate::semantic::{Info, MergeType, ResolveNumber};
 use crate::vm::vm::GenerateCode;
 use crate::{e_static, p_num};
 use std::collections::{HashMap, HashSet};
@@ -49,6 +49,32 @@ impl Resolve for ExprFlow {
         }
     }
 }
+
+impl ResolveNumber for ExprFlow {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            ExprFlow::If(if_expr) => if_expr.is_unresolved_number(),
+            ExprFlow::Match(match_expr) => match_expr.is_unresolved_number(),
+            ExprFlow::Try(try_expr) => try_expr.is_unresolved_number(),
+            ExprFlow::FCall(fcall) => false,
+            ExprFlow::SizeOf(_, metadata) => false,
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            ExprFlow::If(if_expr) => if_expr.resolve_number(to),
+            ExprFlow::Match(match_expr) => match_expr.resolve_number(to),
+            ExprFlow::Try(try_expr) => try_expr.resolve_number(to),
+            ExprFlow::FCall(fcall) => Ok(()),
+            ExprFlow::SizeOf(_, metadata) => Ok(()),
+        }
+    }
+}
+
 impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
@@ -94,6 +120,19 @@ impl Resolve for IfExpr {
     }
 }
 
+impl ResolveNumber for IfExpr {
+    fn is_unresolved_number(&self) -> bool {
+        todo!()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        todo!()
+    }
+}
+
 impl Resolve for UnionPattern {
     type Output = ();
     type Context = Option<EType>;
@@ -123,7 +162,7 @@ impl Resolve for UnionPattern {
             )));
         };
 
-        self.variant_value.insert(variant_value as u64);
+        let _ = self.variant_value.insert(variant_value as u64);
 
         if self.vars_names.len() != fields.len() {
             return Err(SemanticError::InvalidPattern);
@@ -427,6 +466,20 @@ impl Resolve for MatchExpr {
         Ok(())
     }
 }
+
+impl ResolveNumber for MatchExpr {
+    fn is_unresolved_number(&self) -> bool {
+        todo!()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        todo!()
+    }
+}
+
 impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
@@ -477,6 +530,19 @@ impl Resolve for TryExpr {
         };
 
         Ok(())
+    }
+}
+
+impl ResolveNumber for TryExpr {
+    fn is_unresolved_number(&self) -> bool {
+        todo!()
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        todo!()
     }
 }
 

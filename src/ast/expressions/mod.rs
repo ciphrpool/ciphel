@@ -4,7 +4,7 @@ use nom::{
     sequence::delimited,
 };
 
-use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::{scope::scope::ScopeManager, ResolveNumber};
 use crate::{
     ast::{
         expressions::operation::LogicalOr,
@@ -251,6 +251,80 @@ impl Resolve for Expression {
             Expression::FnCall(value) => {
                 value.resolve::<G>(scope_manager, scope_id, context, extra)
             }
+        }
+    }
+}
+
+impl ResolveNumber for Expression {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Expression::Product(product) => product.is_unresolved_number(),
+            Expression::Addition(addition) => addition.is_unresolved_number(),
+            Expression::Substraction(substraction) => substraction.is_unresolved_number(),
+            Expression::Shift(shift) => shift.is_unresolved_number(),
+            Expression::BitwiseAnd(bitwise_and) => bitwise_and.is_unresolved_number(),
+            Expression::BitwiseXOR(bitwise_xor) => bitwise_xor.is_unresolved_number(),
+            Expression::BitwiseOR(bitwise_or) => bitwise_or.is_unresolved_number(),
+            Expression::Cast(cast) => cast.is_unresolved_number(),
+            Expression::Comparaison(comparaison) => comparaison.is_unresolved_number(),
+            Expression::Equation(equation) => equation.is_unresolved_number(),
+            Expression::LogicalAnd(logical_and) => logical_and.is_unresolved_number(),
+            Expression::LogicalOr(logical_or) => logical_or.is_unresolved_number(),
+            Expression::Range(_) => todo!(),
+            Expression::FieldAccess(_) => false,
+            Expression::ListAccess(_) => false,
+            Expression::TupleAccess(_) => false,
+            Expression::FnCall(_) => false,
+            Expression::Atomic(atomic) => atomic.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Expression::Product(product) => product.resolve_number(to),
+            Expression::Addition(addition) => addition.resolve_number(to),
+            Expression::Substraction(substraction) => substraction.resolve_number(to),
+            Expression::Shift(shift) => shift.resolve_number(to),
+            Expression::BitwiseAnd(bitwise_and) => bitwise_and.resolve_number(to),
+            Expression::BitwiseXOR(bitwise_xor) => bitwise_xor.resolve_number(to),
+            Expression::BitwiseOR(bitwise_or) => bitwise_or.resolve_number(to),
+            Expression::Cast(cast) => cast.resolve_number(to),
+            Expression::Comparaison(comparaison) => comparaison.resolve_number(to),
+            Expression::Equation(equation) => equation.resolve_number(to),
+            Expression::LogicalAnd(logical_and) => logical_and.resolve_number(to),
+            Expression::LogicalOr(logical_or) => logical_or.resolve_number(to),
+            Expression::Range(_) => todo!(),
+            Expression::FieldAccess(_) => Ok(()),
+            Expression::ListAccess(_) => Ok(()),
+            Expression::TupleAccess(_) => Ok(()),
+            Expression::FnCall(_) => Ok(()),
+            Expression::Atomic(atomic) => atomic.resolve_number(to),
+        }
+    }
+}
+
+impl ResolveNumber for Atomic {
+    fn is_unresolved_number(&self) -> bool {
+        match self {
+            Atomic::Data(data) => data.is_unresolved_number(),
+            Atomic::UnaryOperation(unary_operation) => unary_operation.is_unresolved_number(),
+            Atomic::Paren(expression) => expression.is_unresolved_number(),
+            Atomic::ExprFlow(expr_flow) => expr_flow.is_unresolved_number(),
+        }
+    }
+
+    fn resolve_number(
+        &mut self,
+        to: crate::semantic::scope::static_types::NumberType,
+    ) -> Result<(), SemanticError> {
+        match self {
+            Atomic::Data(data) => data.resolve_number(to),
+            Atomic::UnaryOperation(unary_operation) => unary_operation.resolve_number(to),
+            Atomic::Paren(expression) => expression.resolve_number(to),
+            Atomic::ExprFlow(expr_flow) => expr_flow.resolve_number(to),
         }
     }
 }

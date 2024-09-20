@@ -301,7 +301,7 @@ pub fn test_statements<G: crate::GameEngineStaticFn>(
     for statement in statements.iter_mut() {
         statement
             .resolve::<G>(&mut scope_manager, None, &None, &mut ())
-            .expect("Resulotion should have succeeded");
+            .expect(&format!("Resulotion should have succeeded {:?}", statement));
     }
 
     for statement in statements {
