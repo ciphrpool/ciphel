@@ -20,25 +20,11 @@ use crate::{
             branch::{Goto, Label},
             Casm, CasmProgram,
         },
-        platform::{
-            stdlib::{
-                io::{IOCasm, PrintCasm},
-                StdCasm,
-            },
-            LibCasm,
-        },
         vm::{CodeGenerationError, Printer, RuntimeError},
     },
 };
 
-use super::{
-    static_types::{
-        st_deserialize::{extract_end_u64, extract_u64},
-        StaticType,
-    },
-    type_traits::{IsEnum, OperandMerging, TypeChecking},
-    BuildUserType,
-};
+use super::BuildUserType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserType {
@@ -105,20 +91,6 @@ impl BuildUserType for UserType {
             definition::TypeDef::Enum(value) => {
                 Ok(UserType::Enum(Enum::build(value, scope_manager, scope_id)?))
             }
-        }
-    }
-}
-
-impl TypeChecking for UserType {}
-
-impl OperandMerging for UserType {}
-
-impl IsEnum for UserType {
-    fn is_enum(&self) -> bool {
-        match self {
-            UserType::Struct(_) => false,
-            UserType::Enum(_) => true,
-            UserType::Union(_) => false,
         }
     }
 }
@@ -335,33 +307,33 @@ impl Enum {
 impl Printer for Struct {
     fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
         todo!();
-        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintID(self.id.clone()),
         // )))));
-        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::StdOutBufOpen,
         // )))));
-        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintLexem(lexem::BRA_C),
         // )))));
         // for (idx, (field_name, field_type)) in self.fields.iter().enumerate().rev() {
         //     if idx != self.fields.len() - 1 {
-        //         instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //             PrintCasm::PrintLexem(lexem::COMA),
         //         )))));
         //     }
         //     let _ = field_type.build_printer(instructions)?;
-        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintLexem(lexem::COLON),
         //     )))));
-        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(field_name.clone()),
         //     )))));
         // }
-        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintLexem(lexem::BRA_O),
         // )))));
-        // instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::StdOutBufRevFlush,
         // )))));
         Ok(())
@@ -400,7 +372,7 @@ impl Printer for Union {
 
         // for ((name, value), label) in self.variants.iter().zip(cases) {
         //     instructions.push_label_id(label, format!("print_{}", name).into());
-        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
         //     )))));
         //     let _ = value.build_printer(instructions)?;
@@ -444,7 +416,7 @@ impl Printer for Enum {
 
         // for (name, label) in self.values.iter().zip(cases) {
         //     instructions.push_label_id(label, format!("print_{}", name).into());
-        //     instructions.push(Casm::Platform(LibCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
         //     )))));
         //     instructions.push(Casm::Goto(Goto {

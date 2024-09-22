@@ -5,18 +5,15 @@ use crate::{
     },
     e_static,
     semantic::{
-        scope::{
-            static_types::{self, ClosureType, FnType, StaticType},
-            type_traits::OperandMerging,
-        },
+        scope::static_types::{self, ClosureType, FnType, StaticType},
         EType, MergeType, Resolve, SemanticError, TypeOf,
     },
 };
 
 use super::{
-    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, FieldAccess, FnCall,
-    ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction, TupleAccess,
-    UnaryOperation,
+    Addition, BitwiseAnd, BitwiseOR, BitwiseXOR, Cast, Comparaison, Equation, ExprCall,
+    FieldAccess, ListAccess, LogicalAnd, LogicalOr, Product, Range, Shift, Substraction,
+    TupleAccess, UnaryOperation,
 };
 use crate::semantic::scope::scope::ScopeManager;
 
@@ -78,8 +75,7 @@ impl TypeOf for FieldAccess {
             .ok_or(SemanticError::NotResolvedYet)
     }
 }
-
-impl TypeOf for FnCall {
+impl TypeOf for ExprCall {
     fn type_of(
         &self,
         scope_manager: &crate::semantic::scope::scope::ScopeManager,
@@ -88,24 +84,38 @@ impl TypeOf for FnCall {
     where
         Self: Sized + Resolve,
     {
-        if self.is_dynamic_fn.is_some() || self.platform.is_some() {
-            return self
-                .metadata
-                .signature()
-                .ok_or(SemanticError::NotResolvedYet);
-        }
-
-        let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
-
-        let return_type = match fn_var_type {
-            EType::Static(StaticType::Closure(ClosureType { ref ret, .. })) => ret.as_ref().clone(),
-            EType::Static(StaticType::StaticFn(FnType { ref ret, .. })) => ret.as_ref().clone(),
-            _ => return Err(SemanticError::ExpectedCallable),
-        };
-
-        Ok(return_type)
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
     }
 }
+// impl TypeOf for Call {
+//     fn type_of(
+//         &self,
+//         scope_manager: &crate::semantic::scope::scope::ScopeManager,
+//         scope_id: Option<u128>,
+//     ) -> Result<EType, SemanticError>
+//     where
+//         Self: Sized + Resolve,
+//     {
+//         if self.is_dynamic_fn.is_some() || self.platform.is_some() {
+//             return self
+//                 .metadata
+//                 .signature()
+//                 .ok_or(SemanticError::NotResolvedYet);
+//         }
+
+//         let fn_var_type = self.fn_var.type_of(&scope_manager, scope_id)?;
+
+//         let return_type = match fn_var_type {
+//             EType::Static(StaticType::Closure(ClosureType { ref ret, .. })) => ret.as_ref().clone(),
+//             EType::Static(StaticType::StaticFn(FnType { ref ret, .. })) => ret.as_ref().clone(),
+//             _ => return Err(SemanticError::ExpectedCallable),
+//         };
+
+//         Ok(return_type)
+//     }
+// }
 
 impl TypeOf for Range {
     fn type_of(

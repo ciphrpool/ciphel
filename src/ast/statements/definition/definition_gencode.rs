@@ -1,5 +1,5 @@
 use super::{Definition, FnDef, TypeDef};
-use crate::semantic::scope::scope::{ScopeManager, Variable};
+use crate::semantic::scope::scope::{ScopeManager, Variable, VariableInfo};
 use crate::semantic::SizeOf;
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::vm::CodeGenerationContext;
@@ -63,7 +63,7 @@ impl GenerateCode for FnDef {
         self.scope
             .gencode(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push_label_id(function_label, format!("store_fn_{0}", self.name));
+        instructions.push_label_id(store_label, format!("store_fn_{0}", self.name));
 
         instructions.push(Casm::Mem(Mem::Label(function_label)));
 
@@ -73,8 +73,7 @@ impl GenerateCode for FnDef {
             let Some(id) = self.id else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
-            let Ok(Variable { address, .. }) = scope_manager.find_var_by_id(id, Some(scope_id))
-            else {
+            let Ok(VariableInfo { address, .. }) = scope_manager.find_var_by_id(id) else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
             instructions.push(Casm::Mem(Mem::Store {
@@ -113,7 +112,65 @@ mod tests {
     use crate::semantic::Resolve;
     use crate::vm::vm::Runtime;
     use crate::{ast::statements::Statement, semantic::scope::scope::ScopeManager};
-    use crate::{clear_stack, v_num};
+    use crate::{clear_stack, test_extract_variable, test_statements, v_num};
+
+    #[test]
+    fn valid_fn() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res5", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            true
+        }
+
+        test_statements(
+            r##"
+        fn test1() {
+            let x = 5;
+        }
+
+        test1();
+
+        fn test2() -> i64 {
+            let x = 5;
+            return x;
+        }
+
+        let res2 = test2();
+
+        fn test3(x:i64) -> i64 {
+            return x + 1;
+        }
+        let res3 = test3(4);
+
+        fn test4(x:i64) {
+            let y = x;
+        }
+        test4(5);
+
+        fn test5(x:i64,y:i64) -> i64 {
+            let z = x + y;
+            return z;
+        }
+        let res5 = test5(2,3);
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
     // #[test]
     // fn valid_function() {

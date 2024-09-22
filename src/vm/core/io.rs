@@ -12,9 +12,9 @@ use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::branch::Label;
 use crate::vm::casm::operation::{OpPrimitive, PopNum};
 use crate::vm::casm::Casm;
-use crate::vm::platform::utils::lexem;
+use crate::vm::core::lexem;
 
-use crate::vm::platform::LibCasm;
+use crate::vm::core::CoreCasm;
 use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, Printer, RuntimeError};
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-use super::{ERROR_VALUE, OK_VALUE};
+use super::{PathFinder, ERROR_VALUE, OK_VALUE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IOFn {
@@ -94,24 +94,23 @@ pub enum PrintCasm {
     },
 }
 
-impl IOFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::IO {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for IOFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::IO) || path.len() == 0 {
+            return match name {
+                lexem::PRINT => Some(IOFn::Print(None)),
+                lexem::PRINTLN => Some(IOFn::Println(None)),
+                lexem::SCAN => Some(IOFn::Scan),
+                _ => None,
+            };
         }
-        match id.as_str() {
-            lexem::PRINT => Some(IOFn::Print(None)),
-            lexem::PRINTLN => Some(IOFn::Println(None)),
-            lexem::SCAN => Some(IOFn::Scan),
-            _ => None,
-        }
+        None
     }
 }
+
 impl ResolvePlatform for IOFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
@@ -157,43 +156,36 @@ impl GenerateCode for IOFn {
         instructions: &mut CasmProgram,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        match self {
-            IOFn::Print(inner) => {
-                let binding = inner;
+        todo!()
+        // match self {
+        //     IOFn::Print(inner) => {
+        //         let binding = inner;
 
-                let Some(param_type) = binding.as_ref() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let _ = param_type.build_printer(instructions)?;
-                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
-                    IOCasm::Flush(false),
-                ))));
+        //         let Some(param_type) = binding.as_ref() else {
+        //             return Err(CodeGenerationError::UnresolvedError);
+        //         };
+        //         let _ = param_type.build_printer(instructions)?;
+        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Flush(false))));
 
-                Ok(())
-            }
-            IOFn::Println(inner) => {
-                let binding = inner;
+        //         Ok(())
+        //     }
+        //     IOFn::Println(inner) => {
+        //         let binding = inner;
 
-                let Some(param_type) = binding.as_ref() else {
-                    return Err(CodeGenerationError::UnresolvedError);
-                };
-                let _ = param_type.build_printer(instructions)?;
+        //         let Some(param_type) = binding.as_ref() else {
+        //             return Err(CodeGenerationError::UnresolvedError);
+        //         };
+        //         let _ = param_type.build_printer(instructions)?;
 
-                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
-                    IOCasm::Flush(true),
-                ))));
-                Ok(())
-            }
-            IOFn::Scan => {
-                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
-                    IOCasm::RequestScan,
-                ))));
-                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::IO(
-                    IOCasm::Scan,
-                ))));
-                Ok(())
-            }
-        }
+        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Flush(true))));
+        //         Ok(())
+        //     }
+        //     IOFn::Scan => {
+        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::RequestScan)));
+        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Scan)));
+        //         Ok(())
+        //     }
+        // }
     }
 }
 

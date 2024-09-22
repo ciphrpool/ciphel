@@ -8,15 +8,13 @@ use std::{
 
 use crate::vm::{
     casm::Casm,
-    platform::core::thread::{
-        sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake,
-    },
+    core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
     vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
 };
 
 use super::{
     allocator::heap::Heap,
-    platform::core::thread::sig_wait_stdin,
+    core::thread::sig_wait_stdin,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, GameEngineStaticFn, Player, Runtime, RuntimeError, Tid},
 };

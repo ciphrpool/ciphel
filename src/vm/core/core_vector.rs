@@ -10,13 +10,13 @@ use crate::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
             Casm, CasmProgram,
         },
-        platform::{utils::lexem, LibCasm},
+        core::{lexem, CoreCasm},
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
 
-use super::CoreCasm;
+use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VectorFn {
@@ -41,29 +41,26 @@ pub enum VectorFn {
     },
 }
 
-impl VectorFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::VECTOR {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for VectorFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::VEC) || path.len() == 0 {
+            return match name {
+                lexem::VEC => Some(VectorFn::Vec {
+                    with_capacity: false,
+                    item_size: 0,
+                }),
+                lexem::PUSH => Some(VectorFn::Push { item_size: 0 }),
+                lexem::POP => Some(VectorFn::Pop { item_size: 0 }),
+                // lexem::EXTEND => Some(VectorFn::Extend { item_size: 0 }),
+                lexem::DELETE => Some(VectorFn::Delete { item_size: 0 }),
+                lexem::CLEAR_VEC => Some(VectorFn::ClearVec { item_size: 0 }),
+                _ => None,
+            };
         }
-
-        match id.as_str() {
-            lexem::VEC => Some(VectorFn::Vec {
-                with_capacity: false,
-                item_size: 0,
-            }),
-            lexem::PUSH => Some(VectorFn::Push { item_size: 0 }),
-            lexem::POP => Some(VectorFn::Pop { item_size: 0 }),
-            // lexem::EXTEND => Some(VectorFn::Extend { item_size: 0 }),
-            lexem::DELETE => Some(VectorFn::Delete { item_size: 0 }),
-            lexem::CLEAR_VEC => Some(VectorFn::ClearVec { item_size: 0 }),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -244,38 +241,28 @@ impl GenerateCode for VectorFn {
                 item_size,
             } => {
                 if with_capacity {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                        VectorCasm::VecWithCapacity { item_size },
-                    ))));
+                    instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::VecWithCapacity {
+                        item_size,
+                    })));
                 } else {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                        VectorCasm::Vec { item_size },
-                    ))));
+                    instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Vec { item_size })));
                 }
             }
             VectorFn::Push { item_size } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                    VectorCasm::Push { item_size },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Push { item_size })));
             }
             VectorFn::Pop { item_size } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                    VectorCasm::Pop { item_size },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Pop { item_size })));
             }
             VectorFn::Extend { item_size } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                    VectorCasm::Extend { item_size },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Extend { item_size })));
             }
             VectorFn::Delete { item_size } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Vec(
-                    VectorCasm::Delete { item_size },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Delete { item_size })));
             }
-            VectorFn::ClearVec { item_size } => instructions.push(Casm::Platform(LibCasm::Core(
-                CoreCasm::Vec(VectorCasm::Clear { item_size }),
-            ))),
+            VectorFn::ClearVec { item_size } => {
+                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Clear { item_size })))
+            }
         }
         Ok(())
     }

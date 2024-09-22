@@ -5,9 +5,9 @@ use crate::semantic::{EType, ResolvePlatform, TypeOf};
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::{OpPrimitive, PopNum};
 use crate::vm::casm::Casm;
-use crate::vm::platform::stdlib::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
-use crate::vm::platform::utils::lexem;
-use crate::vm::platform::LibCasm;
+use crate::vm::core::lexem;
+use crate::vm::core::CoreCasm;
+use crate::vm::core::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
 use crate::vm::scheduler::{SchedulerContext, WaitingStatus};
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError, Signal, ThreadState, Tid};
 use crate::{
@@ -20,7 +20,8 @@ use crate::{
 };
 use crate::{e_static, err_tuple, p_num};
 
-use super::CoreCasm;
+use super::PathFinder;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ThreadFn {
     Spawn,
@@ -67,28 +68,28 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for ThreadCasm {
         }
     }
 }
-impl ThreadFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::CORE {
-                    return None;
-                }
-            }
-            None => {}
+
+impl PathFinder for ThreadFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::THREAD) || path.len() == 0 {
+            return match name {
+                lexem::SPAWN => Some(ThreadFn::Spawn),
+                lexem::CLOSE => Some(ThreadFn::Close),
+                lexem::EXIT => Some(ThreadFn::Exit),
+                lexem::WAIT => Some(ThreadFn::Wait),
+                lexem::WAKE => Some(ThreadFn::Wake),
+                lexem::SLEEP => Some(ThreadFn::Sleep),
+                lexem::JOIN => Some(ThreadFn::Join),
+                _ => None,
+            };
         }
-        match id.as_str() {
-            lexem::SPAWN => Some(ThreadFn::Spawn),
-            lexem::CLOSE => Some(ThreadFn::Close),
-            lexem::EXIT => Some(ThreadFn::Exit),
-            lexem::WAIT => Some(ThreadFn::Wait),
-            lexem::WAKE => Some(ThreadFn::Wake),
-            lexem::SLEEP => Some(ThreadFn::Sleep),
-            lexem::JOIN => Some(ThreadFn::Join),
-            _ => None,
-        }
+        None
     }
 }
+
 fn expect_one_u64<G: crate::GameEngineStaticFn>(
     params: &mut Vec<Expression>,
     scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -167,27 +168,13 @@ impl GenerateCode for ThreadFn {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            ThreadFn::Spawn => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Spawn,
-            )))),
-            ThreadFn::Exit => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Exit,
-            )))),
-            ThreadFn::Close => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Close,
-            )))),
-            ThreadFn::Wait => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Wait,
-            )))),
-            ThreadFn::Wake => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Wake,
-            )))),
-            ThreadFn::Sleep => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Sleep,
-            )))),
-            ThreadFn::Join => instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Thread(
-                ThreadCasm::Join,
-            )))),
+            ThreadFn::Spawn => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Spawn))),
+            ThreadFn::Exit => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Exit))),
+            ThreadFn::Close => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Close))),
+            ThreadFn::Wait => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Wait))),
+            ThreadFn::Wake => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Wake))),
+            ThreadFn::Sleep => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Sleep))),
+            ThreadFn::Join => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Join))),
         }
         Ok(())
     }

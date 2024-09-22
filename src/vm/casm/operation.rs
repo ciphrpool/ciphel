@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::{
     semantic::{
-        scope::static_types::{st_deserialize::extract_u64, NumberType, PrimitiveType, StaticType},
+        scope::static_types::{NumberType, PrimitiveType, StaticType},
         EType, SizeOf,
     },
     vm::{
@@ -104,6 +104,8 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Operation {
                 stdio.push_casm(engine, &format!("neg_{}", data_type.name()))
             }
             OperationKind::Not(Not()) => stdio.push_casm(engine, "not"),
+            OperationKind::StrEqual(_) => stdio.push_casm(engine, &format!("str_eq")),
+            OperationKind::StrNotEqual(_) => stdio.push_casm(engine, &format!("str_eq")),
         }
     }
 }
@@ -127,7 +129,9 @@ pub enum OperationKind {
     Greater(Greater),
     GreaterEqual(GreaterEqual),
     Equal(Equal),
+    StrEqual(StrEqual),
     NotEqual(NotEqual),
+    StrNotEqual(StrNotEqual),
     LogicalAnd(LogicalAnd),
     LogicalOr(LogicalOr),
     Minus(Minus),
@@ -449,6 +453,12 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
                 let chara = chara.as_bytes();
                 let _ = stack.push_with(chara)?;
                 Ok(stack.push_with(&(chara.len() as u64).to_le_bytes())?)
+            }
+            OperationKind::StrEqual(value) => {
+                value.execute(program, stack, heap, stdio, engine, tid)
+            }
+            OperationKind::StrNotEqual(value) => {
+                value.execute(program, stack, heap, stdio, engine, tid)
             }
         }
     }
@@ -877,6 +887,12 @@ pub struct NotEqual {
     pub right: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct StrEqual;
+
+#[derive(Debug, Clone)]
+pub struct StrNotEqual;
+
 impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
     fn execute(
         &self,
@@ -887,17 +903,36 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let data = {
-            let right_data = stack.pop(self.right)?.to_owned();
+        let right_data = stack.pop(self.right)?.to_owned();
 
-            let left_data = stack.pop(self.left)?;
+        let left_data = stack.pop(self.left)?;
 
-            [(left_data == right_data) as u8]
-        };
+        let data = [(left_data == right_data) as u8];
         Ok(stack.push_with(&data)?)
     }
 }
 
+impl<G: crate::GameEngineStaticFn> Executable<G> for StrEqual {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+        let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+
+        let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
+        let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+
+        let data = [(left == right) as u8];
+
+        Ok(stack.push_with(&data)?)
+    }
+}
 impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
     fn execute(
         &self,
@@ -908,17 +943,35 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let data = {
-            let right_data = stack.pop(self.right)?.to_owned();
+        let right_data = stack.pop(self.right)?.to_owned();
 
-            let left_data = stack.pop(self.left)?.to_owned();
+        let left_data = stack.pop(self.left)?.to_owned();
 
-            [(left_data != right_data) as u8]
-        };
+        let data = [(left_data != right_data) as u8];
+
         Ok(stack.push_with(&data)?)
     }
 }
+impl<G: crate::GameEngineStaticFn> Executable<G> for StrNotEqual {
+    fn execute(
+        &self,
+        program: &mut CasmProgram,
+        stack: &mut Stack,
+        heap: &mut Heap,
+        stdio: &mut StdIO,
+        engine: &mut G,
+        tid: usize,
+    ) -> Result<(), RuntimeError> {
+        let left_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
+        let right_address: MemoryAddress = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
 
+        let left = OpPrimitive::get_string_from(left_address, stack, heap)?;
+        let right = OpPrimitive::get_string_from(right_address, stack, heap)?;
+        let data = [(left != right) as u8];
+
+        Ok(stack.push_with(&data)?)
+    }
+}
 #[derive(Debug, Clone)]
 pub struct LogicalAnd();
 

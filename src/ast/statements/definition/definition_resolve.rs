@@ -1,9 +1,11 @@
 use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 
 use crate::ast::statements::block::BlockCommonApi;
+use crate::ast::statements::Statement;
 use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::scope::static_types::FnType;
 use crate::semantic::scope::BuildUserType;
+use crate::semantic::Desugar;
 use crate::semantic::EType;
 use crate::semantic::SizeOf;
 use crate::semantic::{
@@ -28,6 +30,19 @@ impl Resolve for Definition {
         match self {
             Definition::Type(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
             Definition::Fn(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
+        }
+    }
+}
+
+impl Desugar<Statement> for Definition {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Definition::Type(type_def) => Ok(None),
+            Definition::Fn(fn_def) => fn_def.desugar::<G>(scope_manager, scope_id),
         }
     }
 }
@@ -172,7 +187,7 @@ impl Resolve for FnDef {
         }));
 
         let id = scope_manager.register_var(self.name.as_str(), fn_type_sig, scope_id)?;
-        self.id.insert(id);
+        let _ = self.id.insert(id);
 
         let _ = self
             .scope
@@ -183,6 +198,18 @@ impl Resolve for FnDef {
     }
 }
 
+impl Desugar<Statement> for FnDef {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        if let Some(output) = self.scope.desugar::<G>(scope_manager, scope_id)? {
+            self.scope = output;
+        }
+        Ok(None)
+    }
+}
 #[cfg(test)]
 mod tests {
 
@@ -232,7 +259,7 @@ mod tests {
                     res
                 },
             }),
-            res_type.clone()
+            res_type.def
         )
         .into()
     }
@@ -285,20 +312,20 @@ mod tests {
                         "start".to_string(),
                         crate::semantic::EType::User {
                             id: point_id,
-                            size: res_type.size_of(),
+                            size: res_type.def.size_of(),
                         },
                     ));
                     res.push((
                         "end".to_string(),
                         crate::semantic::EType::User {
                             id: point_id,
-                            size: res_type.size_of(),
+                            size: res_type.def.size_of(),
                         },
                     ));
                     res
                 },
             }),
-            res_type.clone()
+            res_type.def
         )
     }
 
@@ -362,7 +389,7 @@ mod tests {
                     res
                 },
             }),
-            res_type.clone()
+            res_type.def
         )
     }
 
@@ -398,7 +425,7 @@ mod tests {
                     res
                 },
             }),
-            res_type.clone()
+            res_type.def
         )
     }
 

@@ -1,6 +1,6 @@
 use crate::ast::statements::assignation::AssignValue;
 use crate::ast::utils::lexem;
-use crate::semantic::scope::scope::{ScopeManager, Variable};
+use crate::semantic::scope::scope::{ScopeManager, Variable, VariableInfo};
 use crate::{
     ast::statements::declaration::{DeclaredVar, PatternVar},
     semantic::SizeOf,
@@ -54,12 +54,12 @@ impl GenerateCode for Declaration {
             // memcopy the right side at the address of the first varairable offset
             // if there is multiple variable ( in the case of destructuring ) the variables are aligned and in order
             // and the right side is packed
-            let Some(Variable { address, .. }) = scope_manager
-                .find_var_by_id(first_variable_id, scope_id)
-                .ok()
+            let Some(VariableInfo { address, .. }) =
+                scope_manager.find_var_by_id(first_variable_id).ok()
             else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
+
             instructions.push(Casm::Mem(Mem::Store {
                 size: right_type.size_of(),
                 address: (*address)
@@ -69,53 +69,42 @@ impl GenerateCode for Declaration {
             Ok(())
         }
 
-        if let Some(scope_id) = scope_id {
-            // LOCAL VARIABLE
-            match self {
-                Declaration::Declared(TypedVar { id, .. }) => Ok(()),
-                Declaration::Assigned { left, right } => store_right_side(
-                    left,
-                    right,
-                    scope_manager,
-                    Some(scope_id),
-                    instructions,
-                    context,
-                ),
-                Declaration::RecClosure { left, right } => todo!(),
-            }
-        } else {
-            // GLOBAL VARIABLE
-            match self {
-                Declaration::Declared(TypedVar { id, .. }) => {
-                    let Some(id) = id else {
-                        return Err(CodeGenerationError::UnresolvedError);
-                    };
+        match self {
+            Declaration::Declared(TypedVar { id, .. }) => {
+                let Some(id) = id else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+
+                if scope_manager.is_var_global(*id) {
                     let _ = scope_manager.alloc_global_var_by_id(*id)?;
-                    Ok(())
                 }
-                Declaration::Assigned { left, right } => {
-                    // Alloc the variables
-                    match left {
-                        DeclaredVar::Id { id: Some(id), .. }
-                        | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => {
+                Ok(())
+            }
+            Declaration::Assigned { left, right } => {
+                // Alloc the variables
+                match left {
+                    DeclaredVar::Id { id: Some(id), .. }
+                    | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => {
+                        if scope_manager.is_var_global(*id) {
                             let _ = scope_manager.alloc_global_var_by_id(*id)?;
                         }
-                        DeclaredVar::Pattern(PatternVar::StructFields {
-                            ids: Some(ids), ..
-                        })
-                        | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => {
-                            for id in ids {
+                    }
+                    DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. })
+                    | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => {
+                        for id in ids {
+                            if scope_manager.is_var_global(*id) {
                                 let _ = scope_manager.alloc_global_var_by_id(*id)?;
                             }
                         }
-                        _ => {
-                            return Err(CodeGenerationError::UnresolvedError);
-                        }
                     }
-                    store_right_side(left, right, scope_manager, None, instructions, context)
+                    _ => {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    }
                 }
-                Declaration::RecClosure { left, right } => todo!(),
+                store_right_side(left, right, scope_manager, None, instructions, context)
             }
+            Declaration::RecClosure { left, right } => todo!(),
+            // }
         }
     }
 }

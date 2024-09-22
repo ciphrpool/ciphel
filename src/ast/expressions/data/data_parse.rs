@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use crate::{
     ast::{
         self,
-        expressions::{Atomic, Expression},
+        expressions::{Atomic, CompletePath, Expression},
         statements::{block::ClosureBlock, declaration::TypedVar, return_stat::Return, Statement},
         types::NumberType,
         utils::{
@@ -19,10 +19,10 @@ use crate::{
         },
         TryParse,
     },
-    semantic::{scope::ClosureState, Metadata},
+    semantic::Metadata,
     vm::{
         allocator::{align, MemoryAddress},
-        platform,
+        core,
     },
 };
 use nom::{
@@ -35,8 +35,8 @@ use nom::{
 use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, Map, MultiData, Number, Primitive, PtrAccess,
-    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, LeftCall, Map, MultiData, Number,
+    Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -52,6 +52,7 @@ impl TryParse for Data {
                 map(PtrAccess::parse, |value| Data::PtrAccess(value)),
                 value(Data::Unit, wst_closed(lexem::UNIT)),
                 map(Map::parse, |value| Data::Map(value)),
+                map(Call::parse, |value| Data::Call(value)),
                 map(Struct::parse, |value| Data::Struct(value)),
                 map(Union::parse, |value| Data::Union(value)),
                 map(Enum::parse, |value| Data::Enum(value)),
@@ -184,7 +185,7 @@ impl TryParse for Vector {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(platform::utils::lexem::VEC),
+                wst(core::lexem::VEC),
                 delimited(
                     wst(lexem::SQ_BRA_O),
                     cut(MultiData::parse).context("Invalid vector"),
@@ -406,7 +407,7 @@ impl TryParse for Map {
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
-                wst(platform::utils::lexem::MAP),
+                wst(core::lexem::MAP),
                 delimited(
                     wst(lexem::BRA_O),
                     cut(separated_list1(
@@ -424,6 +425,48 @@ impl TryParse for Map {
     }
 }
 
+impl TryParse for CallArgs {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * CallArgs := (( Expression, )*)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            delimited(
+                wst(lexem::PAR_O),
+                separated_list0(wst(lexem::COMA), Expression::parse),
+                wst(lexem::PAR_C),
+            ),
+            |args| CallArgs { args, size: None },
+        )(input)
+    }
+}
+
+impl TryParse for Call {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Call := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(CompletePath::parse, CallArgs::parse),
+            |(path, args)| Call {
+                path: LeftCall::VarCall(VarCall {
+                    path,
+                    id: None,
+                    is_closure: false,
+                }),
+                args,
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, RwLock};
@@ -431,10 +474,9 @@ mod tests {
     use crate::{
         ast::expressions::{
             data::Number,
-            operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
+            operation::{FieldAccess, ListAccess, TupleAccess},
             Atomic,
         },
-        semantic::scope::ClosureState,
         v_num,
     };
 
@@ -924,33 +966,6 @@ mod tests {
                     metadata: Metadata::default(),
                     state: None,
                 })))),
-                metadata: Metadata::default()
-            }),
-            value
-        );
-
-        let res = Expression::parse("f(10).1".into());
-        assert!(res.is_ok(), "{:?}", res);
-        let value = res.unwrap().1;
-        assert_eq!(
-            Expression::TupleAccess(TupleAccess {
-                var: Expression::FnCall(FnCall {
-                    lib: None,
-                    fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(Variable {
-                        name: "f".to_string().into(),
-                        metadata: Metadata::default(),
-                        state: None,
-                    })))),
-                    params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                        Primitive::Number(Number::Unresolved(10).into())
-                    )))],
-                    metadata: Metadata::default(),
-                    platform: Default::default(),
-                    is_dynamic_fn: None,
-                })
-                .into(),
-                index: 1,
-                offset: None,
                 metadata: Metadata::default()
             }),
             value

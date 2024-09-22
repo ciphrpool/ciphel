@@ -1,8 +1,9 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
+use crate::ast::statements::Statement;
 use crate::semantic::scope::static_types::TupleType;
 use crate::semantic::scope::user_type_impl::{Struct, UserType};
 use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
-use crate::semantic::{CompatibleWith, EType};
+use crate::semantic::{CompatibleWith, Desugar, EType};
 
 impl Resolve for Declaration {
     type Output = ();
@@ -72,6 +73,26 @@ impl Resolve for Declaration {
         }
     }
 }
+
+impl Desugar<Statement> for Declaration {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Declaration::Declared(typed_var) => Ok(None),
+            Declaration::Assigned { left, right } => {
+                if let Some(output) = right.desugar::<G>(scope_manager, scope_id)? {
+                    *right = output;
+                }
+                Ok(None)
+            }
+            Declaration::RecClosure { left, right } => todo!(),
+        }
+    }
+}
+
 impl Resolve for TypedVar {
     type Output = ();
     type Context = ();

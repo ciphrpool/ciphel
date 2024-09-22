@@ -38,9 +38,18 @@ impl GenerateCode for Assignation {
         if var_size == 0 {
             return Ok(());
         }
-        let _ = self.left.locate(scope_manager, scope_id, instructions)?;
-
-        instructions.push(Casm::Mem(Mem::Take { size: var_size }));
+        match self.left.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                instructions.push(Casm::Mem(Mem::Store {
+                    size: var_size,
+                    address,
+                }));
+            }
+            None => {
+                // The address was push on stack
+                instructions.push(Casm::Mem(Mem::Take { size: var_size }));
+            }
+        }
 
         Ok(())
     }
@@ -89,11 +98,185 @@ mod tests {
             },
             EType, Resolve,
         },
-        v_num,
-        vm::vm::{Executable, Runtime},
+        test_extract_variable, test_extract_variable_with, test_statements, v_num,
+        vm::{
+            allocator::MemoryAddress,
+            casm::operation::{GetNumFrom, OpPrimitive},
+            vm::{Executable, Runtime},
+        },
     };
 
     use super::*;
+
+    #[test]
+    fn valid_assignation() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            test_extract_variable_with(
+                "point",
+                |address, stack, heap| {
+                    let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                        .expect("Deserialization should have succeeded");
+
+                    assert_eq!(x, 5);
+                    assert_eq!(y, 6);
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+            test_extract_variable_with(
+                "arr",
+                |address, stack, heap| {
+                    let address: MemoryAddress =
+                        OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                            .expect("Deserialization should have succeeded")
+                            .try_into()
+                            .unwrap();
+                    let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let z = OpPrimitive::get_num_from::<u64>(address.add(16), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let w = OpPrimitive::get_num_from::<u64>(address.add(24), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    assert_eq!(x, 5);
+                    assert_eq!(y, 6);
+                    assert_eq!(z, 7);
+                    assert_eq!(w, 8);
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+
+            test_extract_variable_with(
+                "tuple",
+                |address, stack, heap| {
+                    let x = OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let y = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    let z = OpPrimitive::get_num_from::<u64>(address.add(16), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    assert_eq!(x, 5);
+                    assert_eq!(y, 6);
+                    assert_eq!(z, 7);
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+            true
+        }
+
+        test_statements(
+            r##"
+        struct Point {
+            x : i64,
+            y : i64,
+        }
+
+        let point = Point { x:1, y:2 };
+
+        point.x = 5;
+        point.y = 6;
+
+        let arr = [1,2,3,4];
+        arr[0] = 5;
+        arr[1] = 6;
+        arr[2] = 7;
+        arr[3] = 8;
+
+        let tuple = (1,2,3);
+        tuple.0 = 5;
+        tuple.1 = 6;
+        tuple.2 = 7;
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_complex_assignation() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            test_extract_variable_with(
+                "t",
+                |address, stack, heap| {
+                    let address: MemoryAddress =
+                        OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                            .expect("Deserialization should have succeeded")
+                            .try_into()
+                            .unwrap();
+                    let res = OpPrimitive::get_num_from::<u64>(address.add(16), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    assert_eq!(res, 69);
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+            test_extract_variable_with(
+                "arr",
+                |address, stack, heap| {
+                    let address: MemoryAddress =
+                        OpPrimitive::get_num_from::<u64>(address, stack, heap)
+                            .expect("Deserialization should have succeeded")
+                            .try_into()
+                            .unwrap();
+                    let address = address.add(16);
+                    let res = OpPrimitive::get_num_from::<u64>(address.add(16), stack, heap)
+                        .expect("Deserialization should have succeeded");
+                    assert_eq!(res, 69);
+                },
+                scope_manager,
+                stack,
+                heap,
+            );
+            true
+        }
+
+        test_statements(
+            r##"
+        struct Point {
+            x :i64,
+            y :i64,
+            z :i64,
+        }
+
+        struct Test {
+            tuple : ([4]i64,i64,Point)
+        }
+
+        let t = Test{
+            tuple : ([1,2,3,4],2,Point{x:1,y:2,z:3})
+        };
+        
+        t.tuple.0[2] = 69;
+
+        let arr = vec[1,2,3,4];
+        arr[2] = 69;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
     // #[test]
     // fn valid_assignation_in_scope() {

@@ -1,6 +1,6 @@
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
-    Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice,
+    StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{self, StaticType};
@@ -32,6 +32,7 @@ impl TypeOf for Data {
             Data::Union(value) => value.type_of(&scope_manager, scope_id),
             Data::Enum(value) => value.type_of(&scope_manager, scope_id),
             Data::StrSlice(value) => value.type_of(&scope_manager, scope_id),
+            Data::Call(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
@@ -253,10 +254,9 @@ impl TypeOf for Struct {
         Self: Sized + Resolve,
     {
         let user_type = scope_manager.find_type_by_name(&self.id, scope_id)?;
-
         Ok(EType::User {
-            id: ScopeManager::hash_id(&self.id, scope_id),
-            size: user_type.size_of(),
+            id: user_type.id,
+            size: user_type.def.size_of(),
         })
     }
 }
@@ -271,8 +271,8 @@ impl TypeOf for Union {
     {
         let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
         Ok(EType::User {
-            id: ScopeManager::hash_id(&self.typename, scope_id),
-            size: user_type.size_of(),
+            id: user_type.id,
+            size: user_type.def.size_of(),
         })
     }
 }
@@ -287,14 +287,27 @@ impl TypeOf for Enum {
         Self: Sized + Resolve,
     {
         let user_type = scope_manager.find_type_by_name(&self.typename, scope_id)?;
-
         Ok(EType::User {
-            id: ScopeManager::hash_id(&self.typename, scope_id),
-            size: user_type.size_of(),
+            id: user_type.id,
+            size: user_type.def.size_of(),
         })
     }
 }
 impl TypeOf for Map {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+impl TypeOf for Call {
     fn type_of(
         &self,
         scope_manager: &crate::semantic::scope::scope::ScopeManager,

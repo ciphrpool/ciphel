@@ -10,10 +10,8 @@ use crate::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
             Casm, CasmProgram,
         },
-        platform::{
-            stdlib::{ERROR_SLICE, OK_SLICE},
-            utils::lexem,
-            LibCasm,
+        core::{
+            lexem, CoreCasm, {ERROR_SLICE, OK_SLICE},
         },
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
@@ -25,7 +23,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use super::{core_string::STRING_HEADER, core_vector::VEC_HEADER, CoreCasm};
+use super::{core_string::STRING_HEADER, core_vector::VEC_HEADER, PathFinder};
 use crate::vm::allocator::heap::{HeapError, HEAP_SIZE};
 use num_traits::ToBytes;
 use rand::Rng;
@@ -80,45 +78,42 @@ pub enum MapFn {
     },
 }
 
-impl MapFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::MAP {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for MapFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::MAP) || path.len() == 0 {
+            return match name {
+                lexem::MAP => Some(MapFn::Map {
+                    with_capacity: false,
+                    item_size: 0,
+                    key_size: 0,
+                }),
+                lexem::INSERT => Some(MapFn::Insert {
+                    item_size: 0,
+                    key_size: 0,
+                    ref_access: DerefHashing::Default,
+                }),
+                lexem::GET => Some(MapFn::Get {
+                    item_size: 0,
+                    key_size: 0,
+                    ref_access: DerefHashing::Default,
+                }),
+                lexem::DELKEY => Some(MapFn::DelKey {
+                    item_size: 0,
+                    key_size: 0,
+                    ref_access: DerefHashing::Default,
+                }),
+                lexem::CLEAR_MAP => Some(MapFn::DelKey {
+                    item_size: 0,
+                    key_size: 0,
+                    ref_access: DerefHashing::Default,
+                }),
+                _ => None,
+            };
         }
-
-        match id.as_str() {
-            lexem::MAP => Some(MapFn::Map {
-                with_capacity: false,
-                item_size: 0,
-                key_size: 0,
-            }),
-            lexem::INSERT => Some(MapFn::Insert {
-                item_size: 0,
-                key_size: 0,
-                ref_access: DerefHashing::Default,
-            }),
-            lexem::GET => Some(MapFn::Get {
-                item_size: 0,
-                key_size: 0,
-                ref_access: DerefHashing::Default,
-            }),
-            lexem::DELKEY => Some(MapFn::DelKey {
-                item_size: 0,
-                key_size: 0,
-                ref_access: DerefHashing::Default,
-            }),
-            lexem::CLEAR_MAP => Some(MapFn::DelKey {
-                item_size: 0,
-                key_size: 0,
-                ref_access: DerefHashing::Default,
-            }),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -366,17 +361,15 @@ impl GenerateCode for MapFn {
                 key_size,
             } => {
                 if with_capacity {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-                        MapCasm::MapWithCapacity {
-                            item_size,
-                            key_size,
-                        },
-                    ))));
-                } else {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(MapCasm::Map {
+                    instructions.push(Casm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
                         item_size,
                         key_size,
-                    }))));
+                    })));
+                } else {
+                    instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Map {
+                        item_size,
+                        key_size,
+                    })));
                 }
             }
             MapFn::Insert {
@@ -384,49 +377,43 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-                    MapCasm::Insert {
-                        item_size,
-                        key_size,
-                        ref_access,
-                    },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Insert {
+                    item_size,
+                    key_size,
+                    ref_access,
+                })));
             }
             MapFn::Get {
                 key_size,
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(MapCasm::Get {
+                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Get {
                     item_size,
                     key_size,
                     ref_access,
-                }))));
+                })));
             }
             MapFn::DelKey {
                 key_size,
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-                    MapCasm::DelKey {
-                        item_size,
-                        key_size,
-                        ref_access,
-                    },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::DelKey {
+                    item_size,
+                    key_size,
+                    ref_access,
+                })));
             }
             MapFn::Clear {
                 key_size,
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-                    MapCasm::Clear {
-                        item_size,
-                        key_size,
-                    },
-                ))));
+                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Clear {
+                    item_size,
+                    key_size,
+                })));
             }
         }
         Ok(())

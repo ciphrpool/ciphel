@@ -3,18 +3,15 @@ use std::sync::atomic::Ordering;
 use num_traits::ToBytes;
 use ulid::Ulid;
 
-use crate::{
-    semantic::AccessLevel,
-    vm::{
-        allocator::{
-            heap::Heap,
-            stack::{Stack, STACK_SIZE},
-            MemoryAddress,
-        },
-        casm::operation::OpPrimitive,
-        stdio::StdIO,
-        vm::{CasmMetadata, Executable, RuntimeError},
+use crate::vm::{
+    allocator::{
+        heap::Heap,
+        stack::{Stack, STACK_SIZE},
+        MemoryAddress,
     },
+    casm::operation::OpPrimitive,
+    stdio::StdIO,
+    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
 use super::{data::HexSlice, operation::PopNum, CasmProgram};
@@ -220,11 +217,11 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
             Access::Static { address, size } => {
-                stdio.push_casm(engine, &format!("ld {} {size}", address.name()))
+                stdio.push_casm(engine, &format!("load {} {size}", address.name()))
             }
             Access::Runtime { size } => match size {
-                Some(n) => stdio.push_casm(engine, &format!("ld {n}")),
-                None => stdio.push_casm(engine, "ld"),
+                Some(n) => stdio.push_casm(engine, &format!("load {n}")),
+                None => stdio.push_casm(engine, "load"),
             },
         }
     }

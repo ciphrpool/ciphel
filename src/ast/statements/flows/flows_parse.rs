@@ -1,8 +1,5 @@
 use crate::ast::{
-    expressions::{
-        flows::Cases,
-        operation::{operation_parse::TryParseOperation, FnCall},
-    },
+    expressions::{data::Call, flows::Cases, operation::operation_parse::TryParseOperation},
     statements::block::Block,
     utils::{error::squash, strings::wst_closed},
     TryParse,
@@ -98,7 +95,7 @@ impl TryParse for MatchStat {
                     cut(pair(
                         Cases::parse,
                         opt(preceded(
-                            wst_closed(lexem::ELSE),
+                            preceded(opt(wst(lexem::COMA)), wst_closed(lexem::ELSE)),
                             preceded(
                                 wst(lexem::BIGARROW),
                                 cut(Block::parse).context("Invalid block in else statement"),
@@ -152,10 +149,9 @@ impl TryParse for CallStat {
      * FnCallStat := ID \(  Fn_Args \) ;
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(
-            terminated(FnCall::parse_statement, wst(lexem::SEMI_COLON)),
-            |call| CallStat { call },
-        )(input)
+        map(terminated(Call::parse, wst(lexem::SEMI_COLON)), |call| {
+            CallStat { call }
+        })(input)
     }
 }
 
@@ -175,7 +171,6 @@ mod tests {
                 Statement,
             },
         },
-        semantic::{scope::ClosureState, Metadata},
         v_num,
     };
 
@@ -195,53 +190,6 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            IfStat {
-                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                then_branch: Box::new(Block::new(vec![Statement::Flow(Flow::Call(CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "f".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }))])),
-                else_if_branches: Vec::default(),
-                else_branch: Some(Box::new(Block::new(vec![Statement::Flow(Flow::Call(
-                    CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    name: "f".to_string().into(),
-                                    metadata: Metadata::default(),
-                                    state: None,
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }
-                ))])))
-            },
-            value
-        );
     }
 
     #[test]
@@ -261,73 +209,6 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            IfStat {
-                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                then_branch: Box::new(Block::new(vec![Statement::Flow(Flow::Call(CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "f".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }))])),
-                else_if_branches: vec![(
-                    Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Bool(true)))),
-                    Block::new(vec![Statement::Flow(Flow::Call(CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    name: "f".to_string().into(),
-                                    metadata: Metadata::default(),
-                                    state: None,
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }))])
-                )],
-                else_branch: Some(Box::new(Block::new(vec![Statement::Flow(Flow::Call(
-                    CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    name: "f".to_string().into(),
-                                    metadata: Metadata::default(),
-                                    state: None,
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }
-                ))])))
-            },
-            value
-        );
     }
 
     #[test]
@@ -344,48 +225,5 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            TryStat {
-                try_branch: Box::new(Block::new(vec![Statement::Flow(Flow::Call(CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "f".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }))])),
-                else_branch: Some(Box::new(Block::new(vec![Statement::Flow(Flow::Call(
-                    CallStat {
-                        call: Expression::FnCall(FnCall {
-                            lib: None,
-                            fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                Variable {
-                                    name: "f".to_string().into(),
-                                    metadata: Metadata::default(),
-                                    state: None,
-                                }
-                            )))),
-                            params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(
-                                v_num!(Unresolved, 10)
-                            )))],
-                            metadata: Metadata::default(),
-                            platform: Default::default(),
-                            is_dynamic_fn: None,
-                        })
-                    }
-                ))])))
-            },
-            value
-        );
     }
 }

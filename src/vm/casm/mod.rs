@@ -8,7 +8,7 @@ use self::{branch::Label, data::Data};
 
 use super::{
     allocator::{heap::Heap, stack::Stack},
-    platform,
+    core,
     stdio::StdIO,
     vm::{self, CasmMetadata, Executable, GameEngineStaticFn, RuntimeError, Signal},
 };
@@ -201,7 +201,7 @@ impl CasmProgram {
 
 #[derive(Debug, Clone)]
 pub enum Casm {
-    Platform(platform::LibCasm),
+    Core(core::CoreCasm),
     Return(branch::Return),
     Break(branch::Break),
     Continue(branch::Continue),
@@ -257,7 +257,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
             Casm::Offset(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::OffsetSP(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Locate(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            Casm::Platform(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            Casm::Core(value) => value.execute(program, stack, heap, stdio, engine, tid),
             Casm::Pop(size) => {
                 stack.pop(*size)?;
                 program.incr();
@@ -273,7 +273,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Casm {
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
-            Casm::Platform(value) => value.name(stdio, program, engine),
+            Casm::Core(value) => value.name(stdio, program, engine),
             Casm::Return(value) => value.name(stdio, program, engine),
             Casm::Continue(value) => value.name(stdio, program, engine),
             Casm::CloseFrame(value) => value.name(stdio, program, engine),
@@ -302,7 +302,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Casm {
 
     fn weight(&self) -> vm::CasmWeight {
         match self {
-            Casm::Platform(value) => <platform::LibCasm as CasmMetadata<G>>::weight(value),
+            Casm::Core(value) => <core::CoreCasm as CasmMetadata<G>>::weight(value),
             Casm::Return(value) => <branch::Return as CasmMetadata<G>>::weight(value),
             Casm::Continue(value) => <branch::Continue as CasmMetadata<G>>::weight(value),
             Casm::CloseFrame(value) => <branch::CloseFrame as CasmMetadata<G>>::weight(value),

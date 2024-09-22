@@ -1,4 +1,4 @@
-use crate::ast::expressions::{flows::Cases, Expression};
+use crate::ast::expressions::{data::Call, flows::Cases, Expression};
 
 use super::block::{Block, ClosureBlock};
 
@@ -38,5 +38,5 @@ pub struct TryStat {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CallStat {
-    pub call: Expression,
+    pub call: Call,
 }

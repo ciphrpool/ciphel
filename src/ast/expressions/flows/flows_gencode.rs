@@ -6,14 +6,13 @@ use ulid::Ulid;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
 use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::static_types::st_sizeof::POINTER_SIZE;
 use crate::semantic::{EType, Resolve, SemanticError};
 use crate::vm::casm::branch::{BranchTry, CloseFrame, Return};
 use crate::vm::casm::data;
 use crate::vm::casm::mem::Mem;
-use crate::vm::casm::operation::{Equal, Operation};
-use crate::vm::platform::stdlib::strings::{JoinCasm, StringsCasm, ToStrCasm};
-use crate::vm::platform::stdlib::{StdCasm, ERROR_VALUE};
-use crate::vm::platform::LibCasm;
+use crate::vm::casm::operation::{Equal, Operation, StrEqual};
+use crate::vm::core::ERROR_VALUE;
 use crate::vm::vm::CodeGenerationContext;
 use crate::{
     ast::expressions::data::{Number, Primitive},
@@ -73,8 +72,8 @@ impl GenerateCode for IfExpr {
         instructions: &mut CasmProgram,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let mut else_label = Label::gen();
-        let mut end_label = Label::gen();
+        let else_label = Label::gen();
+        let end_label = Label::gen();
 
         let _ = self
             .condition
@@ -128,7 +127,9 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
                 }),
             }));
 
+            else_label = Label::gen();
             instructions.push(Casm::If(BranchIf { else_label }));
+            instructions.push(Casm::Pop(value.size_of()));
             instructions.push(Casm::Goto(Goto {
                 label: Some(block_label),
             }));
@@ -159,18 +160,19 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         let block_label = Label::gen();
         let mut else_label = Label::gen();
 
-        todo!("complete str slice to static string rebuilding");
         for (i, value) in self.patterns.iter().enumerate() {
             instructions.push_label_id(else_label, format!("case_{}", i));
-            instructions.push(Casm::Mem(Mem::Dup(8)));
+            instructions.push(Casm::Mem(Mem::Dup(POINTER_SIZE)));
 
             value.gencode(scope_manager, scope_id, instructions, context)?;
 
             instructions.push(Casm::Operation(Operation {
-                kind: crate::vm::casm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
+                kind: crate::vm::casm::operation::OperationKind::StrEqual(StrEqual),
             }));
 
+            else_label = Label::gen();
             instructions.push(Casm::If(BranchIf { else_label }));
+            instructions.push(Casm::Pop(POINTER_SIZE));
             instructions.push(Casm::Goto(Goto {
                 label: Some(block_label),
             }));
@@ -203,7 +205,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
 
         for (i, (_, _, value)) in self.patterns.iter().enumerate() {
             instructions.push_label_id(else_label, format!("case_{}", i));
-            instructions.push(Casm::Mem(Mem::Dup(8)));
+            instructions.push(Casm::Mem(Mem::Dup(POINTER_SIZE)));
 
             let Some(value) = value else {
                 return Err(CodeGenerationError::UnresolvedError);
@@ -216,7 +218,9 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
                 kind: crate::vm::casm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
             }));
 
+            else_label = Label::gen();
             instructions.push(Casm::If(BranchIf { else_label }));
+            instructions.push(Casm::Pop(POINTER_SIZE));
             instructions.push(Casm::Goto(Goto {
                 label: Some(block_label),
             }));
@@ -434,27 +438,28 @@ impl GenerateCode for FCall {
         instructions: &mut CasmProgram,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        for item in &self.value {
-            match item {
-                super::FormatItem::Str(string) => {
-                    let str_bytes: Box<[u8]> = string.as_bytes().into();
-                    let size = (&str_bytes).len() as u64;
-                    instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-                    instructions.push(Casm::Data(data::Data::Serialized {
-                        data: size.to_le_bytes().into(),
-                    }));
-                    instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
-                        StringsCasm::ToStr(ToStrCasm::ToStrStrSlice),
-                    ))));
-                }
-                super::FormatItem::Expr(expr) => {
-                    let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
-                }
-            }
-        }
-        instructions.push(Casm::Platform(LibCasm::Std(StdCasm::Strings(
-            StringsCasm::Join(JoinCasm::NoSepFromSlice(Some(self.value.len()))),
-        ))));
+        todo!();
+        // for item in &self.value {
+        //     match item {
+        //         super::FormatItem::Str(string) => {
+        //             let str_bytes: Box<[u8]> = string.as_bytes().into();
+        //             let size = (&str_bytes).len() as u64;
+        //             instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
+        //             instructions.push(Casm::Data(data::Data::Serialized {
+        //                 data: size.to_le_bytes().into(),
+        //             }));
+        //             instructions.push(Casm::Core(CoreCasm::Std(StdCasm::Strings(
+        //                 StringsCasm::ToStr(ToStrCasm::ToStrStrSlice),
+        //             ))));
+        //         }
+        //         super::FormatItem::Expr(expr) => {
+        //             let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
+        //         }
+        //     }
+        // }
+        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::Strings(
+        //     StringsCasm::Join(JoinCasm::NoSepFromSlice(Some(self.value.len()))),
+        // ))));
         Ok(())
     }
 }
@@ -480,11 +485,179 @@ mod tests {
             },
             Resolve,
         },
-        v_num,
-        vm::vm::{Executable, Runtime},
+        test_extract_variable, test_extract_variable_with, test_statements, v_num,
+        vm::{
+            casm::operation::OpPrimitive,
+            vm::{Executable, Runtime},
+        },
     };
 
     use super::*;
+
+    #[test]
+    fn valid_if() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = if true then {
+            1
+        } else {
+            2
+        };
+
+        let res2 = if false then {
+            1
+        } else {
+            2
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_if_with_inner_var() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = if true then {
+            let x = 5;
+            x + 1
+        } else {
+            2
+        };
+
+        let res2 = if false then {
+            1
+        } else {
+            let x = 5;
+            x + 2
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_if_with_inner_var_in_local_scope() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = {
+            let y = if true then {
+                let x = 5;
+                x + 1
+            } else {
+                2
+            };
+            y
+        };
+
+        let res2 = {
+            let y = if false then {
+                1
+            } else {
+                2
+            };
+            y
+        };
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_match() {
+        let mut engine = crate::vm::vm::DbgGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = match 1 {
+            case 1 | 2 => { 5 },
+            else => { 10 }
+        };
+
+        union Test {
+            Point {
+                x : i64,
+                y : i64,
+            }
+        }
+
+        let var2 = Test::Point { x : 1, y : 5 };
+        let res2 = match var2 {
+            case Test::Point { x, y } => { y },
+            else => { 10 }
+        };
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
     // #[test]
     // fn valid_if_basic() {

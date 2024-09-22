@@ -40,6 +40,7 @@ pub const TO_CONST_STR: &str = "to_const_str";
 pub const CLEAR_STRING: &str = "clear_string";
 
 // THREADS
+pub const THREAD: &str = "thread";
 pub const SPAWN: &str = "spawn";
 pub const CLOSE: &str = "close";
 pub const EXIT: &str = "exit";
@@ -48,16 +49,18 @@ pub const WAKE: &str = "wake";
 pub const SLEEP: &str = "sleep";
 pub const JOIN: &str = "join";
 
-// STD
 pub const PRINT: &str = "print";
 pub const PRINTLN: &str = "println";
 pub const SCAN: &str = "scan";
 pub const TOSTR: &str = "to_str";
+
+pub const ITER: &str = "iter";
 pub const ITEMS: &str = "items";
 pub const KEYS: &str = "keys";
 pub const VALUES: &str = "values";
 
 // pub const JOIN: &str = "join";
+pub const MATH: &str = "math";
 pub const CEIL: &str = "ceil";
 pub const FLOOR: &str = "floor";
 pub const ABS: &str = "abs";

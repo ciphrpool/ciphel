@@ -12,7 +12,7 @@ use crate::vm::{
     vm::{CodeGenerationError, GenerateCode},
 };
 
-use super::{ForLoop, Loop, WhileLoop};
+use super::{ForInit, ForLoop, Loop, WhileLoop};
 
 impl GenerateCode for Loop {
     fn gencode(
@@ -73,11 +73,32 @@ impl GenerateCode for ForLoop {
         instructions: &mut CasmProgram,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let return_label = Label::gen();
         let break_label = Label::gen();
         let continue_label = Label::gen();
+        let end_label = Label::gen();
+        let start_label = Label::gen();
+        let epilog_label = Label::gen();
 
-        todo!();
+        for index in self.indices.iter() {
+            match index {
+                ForInit::Assignation(assignation) => {
+                    let _ = assignation.gencode(scope_manager, scope_id, instructions, context)?;
+                }
+                ForInit::Declaration(declaration) => {
+                    let _ = declaration.gencode(scope_manager, scope_id, instructions, context)?;
+                }
+            }
+        }
+
+        instructions.push_label_id(start_label, "start_loop".to_string());
+
+        if let Some(condition) = &self.condition {
+            let _ = condition.gencode(scope_manager, scope_id, instructions, context)?;
+            instructions.push(Casm::If(BranchIf {
+                else_label: break_label,
+            }));
+        }
+
         self.block.gencode(
             scope_manager,
             scope_id,
@@ -86,24 +107,27 @@ impl GenerateCode for ForLoop {
                 return_label: context.return_label.clone(),
                 break_label: Some(break_label),
                 continue_label: Some(continue_label),
-                ..Default::default()
             },
         )?;
 
-        // instructions.push_label_id(break_label, "break_block".to_string().into());
-        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
-        // instructions.push(Casm::Goto(Goto {
-        //     label: context.break_label,
-        // }));
-        // instructions.push_label_id(continue_label, "continue_block".to_string().into());
-        // instructions.push(Casm::StackFrame(StackFrame::SoftClean));
-        // instructions.push(Casm::Goto(Goto {
-        //     label: context.continue_label,
-        // }));
-        // instructions.push_label_id(return_label, "return_block".to_string().into());
-        // instructions.push(Casm::Goto(Goto {
-        //     label: context.return_label,
-        // }));
+        // Loop epilog
+        instructions.push_label_id(epilog_label, "epilog_loop".to_string());
+        instructions.push(Casm::Goto(Goto {
+            label: Some(continue_label),
+        }));
+        instructions.push_label_id(continue_label, "continue_loop".to_string());
+        for increment in self.increments.iter() {
+            let _ = increment.gencode(scope_manager, scope_id, instructions, context)?;
+        }
+        instructions.push(Casm::Goto(Goto {
+            label: Some(start_label),
+        }));
+        instructions.push_label_id(break_label, "break_loop".to_string());
+        instructions.push(Casm::Goto(Goto {
+            label: Some(end_label),
+        }));
+        instructions.push_label_id(end_label, "end_loop".to_string());
+
         Ok(())
     }
 }
@@ -120,6 +144,7 @@ impl GenerateCode for WhileLoop {
         let end_label = Label::gen();
         let break_label = Label::gen();
         let continue_label = Label::gen();
+        let epilog_label = Label::gen();
 
         instructions.push_label_id(start_label, "start_while".to_string().into());
 
@@ -138,24 +163,24 @@ impl GenerateCode for WhileLoop {
                 return_label: context.return_label.clone(),
                 break_label: Some(break_label),
                 continue_label: Some(continue_label),
-                ..Default::default()
             },
         )?;
 
+        // Loop epilog
+        instructions.push_label_id(epilog_label, "epilog_loop".to_string());
+        instructions.push(Casm::Goto(Goto {
+            label: Some(continue_label),
+        }));
+        instructions.push_label_id(continue_label, "continue_loop".to_string());
         instructions.push(Casm::Goto(Goto {
             label: Some(start_label),
         }));
 
-        instructions.push_label_id(break_label, "break_loop".to_string().into());
+        instructions.push_label_id(break_label, "break_loop".to_string());
         instructions.push(Casm::Goto(Goto {
             label: Some(end_label),
         }));
-        instructions.push_label_id(continue_label, "continue_loop".to_string().into());
-        instructions.push(Casm::Goto(Goto {
-            label: Some(start_label),
-        }));
-
-        instructions.push_label_id(end_label, "end_while".to_string().into());
+        instructions.push_label_id(end_label, "end_loop".to_string());
 
         Ok(())
     }
@@ -167,7 +192,6 @@ mod tests {
     use super::*;
     use crate::ast::TryParse;
     use crate::semantic::Resolve;
-    use crate::v_num;
     use crate::{
         ast::{expressions::data::Primitive, statements::Statement},
         semantic::scope::{
@@ -175,6 +199,153 @@ mod tests {
             static_types::{NumberType, PrimitiveType},
         },
     };
+    use crate::{test_extract_variable, test_statements, v_num};
+
+    #[test]
+    fn valid_for() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 45);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 15);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = 0;
+        for ( let i = 0; i < 10; i = i + 1) {
+            res1 = res1 + i;
+        }
+
+
+        let res2 = 0;
+        for ( let i = 0; i < 10; i = i + 1) {
+            res2 = res2 + i;
+            if i >= 5 {
+                break;
+            }
+        }
+        
+        let res3 = 0;
+        for ( let i = 0; i < 10; i = i + 1) {
+            if i % 2 != 0{
+                continue;
+            } else {
+                res3 = res3 + i;
+            }
+        }
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_while() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 45);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 15);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 20);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = 0;
+        let i = 0;
+        while i < 10 {
+            res1 = res1 + i;
+            i = i + 1;
+        }
+
+
+        let res2 = 0;
+        let i = 0;
+        while i < 10 {
+            res2 = res2 + i;
+            if i >= 5 {
+                break;
+            }
+            i = i + 1;
+        }
+        
+        let res3 = 0;
+        let i = 0;
+        while i < 9 {
+            i = i + 1;
+            if i % 2 != 0{
+                continue;
+            } else {
+                res3 = res3 + i;
+            }
+        }
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_loop() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 45);
+
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = 0;
+        let i = 0;
+        loop {
+            res1 = res1 + i;
+            i = i + 1;
+            if i >= 10 {
+                break;
+            }
+        }
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
     // cargo.exe test --package ciphel --lib -- ast::statements::loops::loops_gencode::tests::valid_loop --show-output --nocapture
     // #[test]
     // fn valid_loop() {

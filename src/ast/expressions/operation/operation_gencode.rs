@@ -1,7 +1,6 @@
 use crate::ast::expressions::locate::Locatable;
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{ClosureType, SliceType, StrSliceType};
-use crate::semantic::AccessLevel;
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::casm::alloc::Access;
 use crate::vm::casm::branch::Call;
@@ -28,7 +27,7 @@ use crate::{
     },
 };
 
-use super::{FieldAccess, ListAccess, Range, TupleAccess};
+use super::{ExprCall, FieldAccess, ListAccess, Range, TupleAccess};
 
 impl GenerateCode for super::UnaryOperation {
     fn gencode(
@@ -115,7 +114,7 @@ impl GenerateCode for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -177,6 +176,18 @@ impl GenerateCode for FieldAccess {
             }
         }
         Ok(())
+    }
+}
+
+impl GenerateCode for ExprCall {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        todo!()
     }
 }
 
@@ -256,158 +267,159 @@ impl GenerateCode for Range {
 //     }
 // }
 
-impl GenerateCode for super::FnCall {
-    fn gencode(
-        &self,
-        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-        scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
-        context: &crate::vm::vm::CodeGenerationContext,
-    ) -> Result<(), CodeGenerationError> {
-        let params_size: usize = self
-            .params
-            .iter()
-            .map(|p| p.signature().map_or(0, |s| s.size_of()))
-            .sum();
+// impl GenerateCode for super::FnCall {
+//     fn gencode(
+//         &self,
+//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+//         scope_id: Option<u128>,
+//         instructions: &mut CasmProgram,
+//         context: &crate::vm::vm::CodeGenerationContext,
+//     ) -> Result<(), CodeGenerationError> {
+//         let params_size: usize = self
+//             .params
+//             .iter()
+//             .map(|p| p.signature().map_or(0, |s| s.size_of()))
+//             .sum();
 
-        if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
-            for param in &self.params {
-                let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
-            }
-            instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
-                dynamic_fn_id.clone(),
-            )));
-            return Ok(());
-        }
+//         if let Some(dynamic_fn_id) = &self.is_dynamic_fn {
+//             for param in &self.params {
+//                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+//             }
+//             instructions.push(Casm::Platform(crate::vm::platform::LibCasm::Engine(
+//                 dynamic_fn_id.clone(),
+//             )));
+//             return Ok(());
+//         }
 
-        if let Some(platform_api) = self.platform.as_ref() {
-            for param in &self.params {
-                let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
-            }
-            platform_api.gencode(scope_manager, scope_id, instructions, context)?;
-            return Ok(());
-        }
+//         if let Some(platform_api) = self.platform.as_ref() {
+//             for param in &self.params {
+//                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+//             }
+//             platform_api.gencode(scope_manager, scope_id, instructions, context)?;
+//             return Ok(());
+//         }
 
-        todo!()
-        // else {
-        //     let Some(EType::Static(fn_sig)) = self.fn_var.signature() else {
-        //         return Err(CodeGenerationError::UnresolvedError);
-        //     };
-        //     let Some(signature) = self.metadata.signature() else {
-        //         return Err(CodeGenerationError::UnresolvedError);
-        //     };
-        //     let sig_params_size = match fn_sig {
-        //         StaticType::Closure(value) => value.scope_params_size,
-        //         StaticType::StaticFn(value) => value.scope_params_size,
-        //         _ => return Err(CodeGenerationError::UnresolvedError),
-        //     };
-        //     let _return_size = signature.size_of();
+//         todo!()
+//         // else {
+//         //     let Some(EType::Static(fn_sig)) = self.fn_var.signature() else {
+//         //         return Err(CodeGenerationError::UnresolvedError);
+//         //     };
+//         //     let Some(signature) = self.metadata.signature() else {
+//         //         return Err(CodeGenerationError::UnresolvedError);
+//         //     };
+//         //     let sig_params_size = match fn_sig {
+//         //         StaticType::Closure(value) => value.scope_params_size,
+//         //         StaticType::StaticFn(value) => value.scope_params_size,
+//         //         _ => return Err(CodeGenerationError::UnresolvedError),
+//         //     };
+//         //     let _return_size = signature.size_of();
 
-        //     match fn_sig {
-        //         StaticType::Closure(ClosureType { closed: false, .. })
-        //         | StaticType::StaticFn(_) => {
-        //             /* Call static function */
-        //             // Load Param
-        //             for param in &self.params {
-        //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
-        //             }
-        //             let _ = self
-        //                 .fn_var
-        //                 .gencode(scope_manager, scope_id, instructions, context)?;
-        //             if let Some(8) = sig_params_size.checked_sub(params_size) {
-        //                 // recursive function gives function address as last parameters
-        //                 // Load function address
-        //                 instructions.push(Casm::Mem(Mem::Dup(8)));
-        //             }
-        //             // Call function
-        //             // Load param size
-        //             instructions.push(Casm::Data(Data::Serialized {
-        //                 data: (sig_params_size as u64).to_le_bytes().into(),
-        //             }));
+//         //     match fn_sig {
+//         //         StaticType::Closure(ClosureType { closed: false, .. })
+//         //         | StaticType::StaticFn(_) => {
+//         //             /* Call static function */
+//         //             // Load Param
+//         //             for param in &self.params {
+//         //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+//         //             }
+//         //             let _ = self
+//         //                 .fn_var
+//         //                 .gencode(scope_manager, scope_id, instructions, context)?;
+//         //             if let Some(8) = sig_params_size.checked_sub(params_size) {
+//         //                 // recursive function gives function address as last parameters
+//         //                 // Load function address
+//         //                 instructions.push(Casm::Mem(Mem::Dup(8)));
+//         //             }
+//         //             // Call function
+//         //             // Load param size
+//         //             instructions.push(Casm::Data(Data::Serialized {
+//         //                 data: (sig_params_size as u64).to_le_bytes().into(),
+//         //             }));
 
-        //             instructions.push(Casm::Call(Call::Stack));
-        //         }
-        //         StaticType::Closure(ClosureType { closed: true, .. }) => {
-        //             // Load Param
-        //             for param in &self.params {
-        //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
-        //             }
+//         //             instructions.push(Casm::Call(Call::Stack));
+//         //         }
+//         //         StaticType::Closure(ClosureType { closed: true, .. }) => {
+//         //             // Load Param
+//         //             for param in &self.params {
+//         //                 let _ = param.gencode(scope_manager, scope_id, instructions, context)?;
+//         //             }
 
-        //             let _ = self
-        //                 .fn_var
-        //                 .gencode(scope_manager, scope_id, instructions, context)?;
-        //             match sig_params_size.checked_sub(params_size) {
-        //                 Some(16) => {
-        //                     /* Rec and closed */
-        //                     /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
-        //                     // Load Env heap address
-        //                     instructions.push(Casm::Data(Data::Serialized {
-        //                         data: (16u64).to_le_bytes().into(),
-        //                     }));
-        //                     instructions.push(Casm::Operation(Operation {
-        //                         kind: OperationKind::Addition(Addition {
-        //                             left: OpPrimitive::Number(NumberType::U64),
-        //                             right: OpPrimitive::Number(NumberType::U64),
-        //                         }),
-        //                     }));
-        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
-        //                     instructions.push(Casm::Data(Data::Serialized {
-        //                         data: (16u64).to_le_bytes().into(),
-        //                     }));
-        //                     instructions.push(Casm::Operation(Operation {
-        //                         kind: OperationKind::Substraction(Substraction {
-        //                             left: OpPrimitive::Number(NumberType::U64),
-        //                             right: OpPrimitive::Number(NumberType::U64),
-        //                         }),
-        //                     }));
-        //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-        //                 }
-        //                 Some(8) => {
-        //                     /* closed */
-        //                     /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
-        //                     // Load Env heap address
-        //                     instructions.push(Casm::Data(Data::Serialized {
-        //                         data: (16u64).to_le_bytes().into(),
-        //                     }));
-        //                     instructions.push(Casm::Operation(Operation {
-        //                         kind: OperationKind::Addition(Addition {
-        //                             left: OpPrimitive::Number(NumberType::U64),
-        //                             right: OpPrimitive::Number(NumberType::U64),
-        //                         }),
-        //                     }));
-        //                     instructions.push(Casm::Mem(Mem::Dup(8)));
-        //                     instructions.push(Casm::Data(Data::Serialized {
-        //                         data: (16u64).to_le_bytes().into(),
-        //                     }));
-        //                     instructions.push(Casm::Operation(Operation {
-        //                         kind: OperationKind::Substraction(Substraction {
-        //                             left: OpPrimitive::Number(NumberType::U64),
-        //                             right: OpPrimitive::Number(NumberType::U64),
-        //                         }),
-        //                     }));
-        //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
-        //                 }
-        //                 _ => return Err(CodeGenerationError::UnresolvedError),
-        //             }
+//         //             let _ = self
+//         //                 .fn_var
+//         //                 .gencode(scope_manager, scope_id, instructions, context)?;
+//         //             match sig_params_size.checked_sub(params_size) {
+//         //                 Some(16) => {
+//         //                     /* Rec and closed */
+//         //                     /* PARAMS + [8] heap pointer to fn + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+//         //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+//         //                     // Load Env heap address
+//         //                     instructions.push(Casm::Data(Data::Serialized {
+//         //                         data: (16u64).to_le_bytes().into(),
+//         //                     }));
+//         //                     instructions.push(Casm::Operation(Operation {
+//         //                         kind: OperationKind::Addition(Addition {
+//         //                             left: OpPrimitive::Number(NumberType::U64),
+//         //                             right: OpPrimitive::Number(NumberType::U64),
+//         //                         }),
+//         //                     }));
+//         //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+//         //                     instructions.push(Casm::Data(Data::Serialized {
+//         //                         data: (16u64).to_le_bytes().into(),
+//         //                     }));
+//         //                     instructions.push(Casm::Operation(Operation {
+//         //                         kind: OperationKind::Substraction(Substraction {
+//         //                             left: OpPrimitive::Number(NumberType::U64),
+//         //                             right: OpPrimitive::Number(NumberType::U64),
+//         //                         }),
+//         //                     }));
+//         //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+//         //                 }
+//         //                 Some(8) => {
+//         //                     /* closed */
+//         //                     /* PARAMS + [8] env heap pointer + [8] function pointer ( instruction offset stored in the heap)*/
+//         //                     // Load Env heap address
+//         //                     instructions.push(Casm::Data(Data::Serialized {
+//         //                         data: (16u64).to_le_bytes().into(),
+//         //                     }));
+//         //                     instructions.push(Casm::Operation(Operation {
+//         //                         kind: OperationKind::Addition(Addition {
+//         //                             left: OpPrimitive::Number(NumberType::U64),
+//         //                             right: OpPrimitive::Number(NumberType::U64),
+//         //                         }),
+//         //                     }));
+//         //                     instructions.push(Casm::Mem(Mem::Dup(8)));
+//         //                     instructions.push(Casm::Data(Data::Serialized {
+//         //                         data: (16u64).to_le_bytes().into(),
+//         //                     }));
+//         //                     instructions.push(Casm::Operation(Operation {
+//         //                         kind: OperationKind::Substraction(Substraction {
+//         //                             left: OpPrimitive::Number(NumberType::U64),
+//         //                             right: OpPrimitive::Number(NumberType::U64),
+//         //                         }),
+//         //                     }));
+//         //                     instructions.push(Casm::Access(Access::Runtime { size: Some(8) }));
+//         //                 }
+//         //                 _ => return Err(CodeGenerationError::UnresolvedError),
+//         //             }
 
-        //             // Call function
+//         //             // Call function
 
-        //             // Load param size
-        //             instructions.push(Casm::Data(Data::Serialized {
-        //                 data: (sig_params_size).to_le_bytes().into(),
-        //             }));
+//         //             // Load param size
+//         //             instructions.push(Casm::Data(Data::Serialized {
+//         //                 data: (sig_params_size).to_le_bytes().into(),
+//         //             }));
 
-        //             instructions.push(Casm::Call(Call::Stack));
-        //         }
-        //         _ => {
-        //             return Err(CodeGenerationError::UnresolvedError);
-        //         }
-        //     }
-        //     Ok(())
-        // }
-    }
-}
+//         //             instructions.push(Casm::Call(Call::Stack));
+//         //         }
+//         //         _ => {
+//         //             return Err(CodeGenerationError::UnresolvedError);
+//         //         }
+//         //     }
+//         //     Ok(())
+//         // }
+//     }
+// }
+
 impl GenerateCode for super::Product {
     fn gencode(
         &self,
@@ -1500,733 +1512,198 @@ mod tests {
     }
 
     // #[test]
-    // fn valid_operation_u128() {
-    //     eval_and_compare!(r##"400u128 + 20u128"##, v_num!(U128, 420), U128);
-    //     eval_and_compare!(
-    //         r##"400u128 - 20u128"##,
-    //         Primitive::Number(Number::U128(400 - 20)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 * 20u128"##,
-    //         Primitive::Number(Number::U128(400 * 20)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 / 20u128"##,
-    //         Primitive::Number(Number::U128(400 / 20)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 % 20u128"##,
-    //         Primitive::Number(Number::U128(400 % 20)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 << 20u128"##,
-    //         Primitive::Number(Number::U128(400u128 << 20u128)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 >> 20u128"##,
-    //         Primitive::Number(Number::U128(400u128 >> 20u128)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"428u128 & 428u128"##,
-    //         Primitive::Number(Number::U128(428u128 & 428u128)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 | 420u128"##,
-    //         Primitive::Number(Number::U128(400u128 | 420u128)),
-    //         U128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u128 ^ 420u128"##,
-    //         Primitive::Number(Number::U128(400u128 ^ 420u128)),
-    //         U128
-    //     );
-    //     eval_and_compare!(r##"400u128 as u64"##, v_num!(U64, 400), U64);
-
-    //     eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u128 >= 2u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u128 >= 20u128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2u128 <= 20u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u128 <= 2u128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u128 > 2u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u128 > 20u128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u128 == 20u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u128 == 2u128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u128 != 2u128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u128 != 20u128"##, Primitive::Bool(false));
-    // }
-
-    // #[test]
     // fn valid_cast() {
-    //     eval_and_compare!(r##"126u8 as u16"##, v_num!(U16, 126), U16);
-    //     eval_and_compare!(r##"126u8 as u32"##, v_num!(U32, 126), U32);
-    //     eval_and_compare!(r##"126u8 as u64"##, v_num!(U64, 126), U64);
-    //     eval_and_compare!(r##"126u8 as u128"##, v_num!(U128, 126), U128);
-    //     eval_and_compare!(r##"126u16 as u16"##, v_num!(U16, 126), U16);
-    //     eval_and_compare!(r##"126u16 as u32"##, v_num!(U32, 126), U32);
-    //     eval_and_compare!(r##"126u16 as u64"##, v_num!(U64, 126), U64);
-    //     eval_and_compare!(r##"126u16 as u128"##, v_num!(U128, 126), U128);
-    //     eval_and_compare!(r##"126u32 as u16"##, v_num!(U16, 126), U16);
-    //     eval_and_compare!(r##"126u32 as u32"##, v_num!(U32, 126), U32);
-    //     eval_and_compare!(r##"126u32 as u64"##, v_num!(U64, 126), U64);
-    //     eval_and_compare!(r##"126u32 as u128"##, v_num!(U128, 126), U128);
-    //     eval_and_compare!(r##"126u64 as u16"##, v_num!(U16, 126), U16);
-    //     eval_and_compare!(r##"126u64 as u32"##, v_num!(U32, 126), U32);
-    //     eval_and_compare!(r##"126u64 as u64"##, v_num!(U64, 126), U64);
-    //     eval_and_compare!(r##"126u64 as u128"##, v_num!(U128, 126), U128);
-    //     eval_and_compare!(r##"126u128 as u16"##, v_num!(U16, 126), U16);
-    //     eval_and_compare!(r##"126u128 as u32"##, v_num!(U32, 126), U32);
-    //     eval_and_compare!(r##"126u128 as u64"##, v_num!(U64, 126), U64);
-    //     eval_and_compare!(r##"126u128 as u128"##, v_num!(U128, 126), U128);
+    //    todo!()
     // }
 
-    // #[test]
-    // fn valid_operation_u64() {
-    //     eval_and_compare!(r##"400 + 20"##, v_num!(U64, 420), U64);
-    //     eval_and_compare!(
-    //         r##"400 - 20"##,
-    //         Primitive::Number(Number::U64(400 - 20)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400 * 20"##,
-    //         Primitive::Number(Number::U64(400 * 20)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400 / 20"##,
-    //         Primitive::Number(Number::U64(400 / 20)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400 % 20"##,
-    //         Primitive::Number(Number::U64(400 % 20)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u64 << 20u64"##,
-    //         Primitive::Number(Number::U64(400u64 << 20u64)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u64 >> 20u64"##,
-    //         Primitive::Number(Number::U64(400u64 >> 20u64)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"428u64 & 428u64"##,
-    //         Primitive::Number(Number::U64(428u64 & 428u64)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u64 | 420u64"##,
-    //         Primitive::Number(Number::U64(400u64 | 420u64)),
-    //         U64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u64 ^ 420u64"##,
-    //         Primitive::Number(Number::U64(400u64 ^ 420u64)),
-    //         U64
-    //     );
-    //     eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u64 > 20u64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u64 >= 2u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u64 >= 20u64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2u64 <= 20u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u64 <= 2u64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u64 > 2u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u64 > 20u64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u64 == 20u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u64 == 2u64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u64 != 2u64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u64 != 20u64"##, Primitive::Bool(false));
-    // }
+    #[test]
+    fn valid_tuple_access() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
-    // #[test]
-    // fn valid_operation_u32() {
-    //     eval_and_compare!(r##"400u32 + 20u32"##, v_num!(U32, 420), U32);
-    //     eval_and_compare!(
-    //         r##"400u32 - 20u32"##,
-    //         Primitive::Number(Number::U32(400 - 20)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 * 20u32"##,
-    //         Primitive::Number(Number::U32(400 * 20)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 / 20u32"##,
-    //         Primitive::Number(Number::U32(400 / 20)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 % 20u32"##,
-    //         Primitive::Number(Number::U32(400 % 20)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 << 20u32"##,
-    //         Primitive::Number(Number::U32(400u32 << 20u32)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 >> 20u32"##,
-    //         Primitive::Number(Number::U32(400u32 >> 20u32)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"428u32 & 428u32"##,
-    //         Primitive::Number(Number::U32(428u32 & 428u32)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 | 420u32"##,
-    //         Primitive::Number(Number::U32(400u32 | 420u32)),
-    //         U32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u32 ^ 420u32"##,
-    //         Primitive::Number(Number::U32(400u32 ^ 420u32)),
-    //         U32
-    //     );
-    //     eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u32 > 20u32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u32 >= 2u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u32 >= 20u32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2u32 <= 20u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u32 <= 2u32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u32 > 2u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u32 > 20u32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u32 == 20u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u32 == 2u32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u32 != 2u32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u32 != 20u32"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_u16() {
-    //     eval_and_compare!(r##"400u16 + 20u16"##, v_num!(U16, 420), U16);
-    //     eval_and_compare!(
-    //         r##"400u16 - 20u16"##,
-    //         Primitive::Number(Number::U16(400 - 20)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 * 20u16"##,
-    //         Primitive::Number(Number::U16(400 * 20)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 / 20u16"##,
-    //         Primitive::Number(Number::U16(400 / 20)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 % 20u16"##,
-    //         Primitive::Number(Number::U16(400 % 20)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 << 2u16"##,
-    //         Primitive::Number(Number::U16(400u16 << 2u16)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 >> 2u16"##,
-    //         Primitive::Number(Number::U16(400u16 >> 2u16)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"428u16 & 428u16"##,
-    //         Primitive::Number(Number::U16(428u16 & 428u16)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 | 420u16"##,
-    //         Primitive::Number(Number::U16(400u16 | 420u16)),
-    //         U16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400u16 ^ 420u16"##,
-    //         Primitive::Number(Number::U16(400u16 ^ 420u16)),
-    //         U16
-    //     );
-    //     eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u16 > 20u16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u16 >= 2u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u16 >= 20u16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2u16 <= 20u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u16 <= 2u16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u16 > 2u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u16 > 20u16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u16 == 20u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u16 == 2u16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u16 != 2u16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u16 != 20u16"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_u8() {
-    //     eval_and_compare!(r##"100u8 + 20u8"##, v_num!(U8, 120), U8);
-    //     eval_and_compare!(r##"50u8 - 2u8"##, Primitive::Number(Number::U8(50 - 2)), U8);
-    //     eval_and_compare!(r##"50u8 * 2u8"##, Primitive::Number(Number::U8(50 * 2)), U8);
-    //     eval_and_compare!(r##"50u8 / 2u8"##, Primitive::Number(Number::U8(50 / 2)), U8);
-    //     eval_and_compare!(r##"50u8 % 2u8"##, Primitive::Number(Number::U8(50 % 2)), U8);
-    //     eval_and_compare!(
-    //         r##"40u8 << 2u8"##,
-    //         Primitive::Number(Number::U8(40u8 << 2u8)),
-    //         U8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40u8 >> 2u8"##,
-    //         Primitive::Number(Number::U8(40u8 >> 2u8)),
-    //         U8
-    //     );
-    //     eval_and_compare!(
-    //         r##"48u8 & 48u8"##,
-    //         Primitive::Number(Number::U8(48u8 & 48u8)),
-    //         U8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40u8 | 42u8"##,
-    //         Primitive::Number(Number::U8(40u8 | 42u8)),
-    //         U8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40u8 ^ 42u8"##,
-    //         Primitive::Number(Number::U8(40u8 ^ 42u8)),
-    //         U8
-    //     );
-    //     eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u8 > 20u8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u8 >= 2u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u8 >= 20u8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2u8 <= 20u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u8 <= 2u8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u8 > 2u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2u8 > 20u8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u8 == 20u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u8 == 2u8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20u8 != 2u8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20u8 != 20u8"##, Primitive::Bool(false));
-    // }
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
 
-    // #[test]
-    // fn valid_operation_i128() {
-    //     eval_and_compare!(r##"400i128 + 20i128"##, v_num!(I128, 420), I128);
-    //     eval_and_compare!(
-    //         r##"400i128 - 800i128"##,
-    //         Primitive::Number(Number::I128(400 - 800)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 * 5i128"##,
-    //         Primitive::Number(Number::I128(400 * 5)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 / 2i128"##,
-    //         Primitive::Number(Number::I128(400 / 2)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 % 2i128"##,
-    //         Primitive::Number(Number::I128(400 % 2)),
-    //         I128
-    //     );
-    //     eval_and_compare!(r##"-20i128"##, Primitive::Number(Number::I128(-20)), I128);
-    //     eval_and_compare!(
-    //         r##"400i128 << 20i128"##,
-    //         Primitive::Number(Number::I128(400i128 << 20i128)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 >> 20i128"##,
-    //         Primitive::Number(Number::I128(400i128 >> 20i128)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"428i128 & 428i128"##,
-    //         Primitive::Number(Number::I128(428i128 & 428i128)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 | 420i128"##,
-    //         Primitive::Number(Number::I128(400i128 | 420i128)),
-    //         I128
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i128 ^ 420i128"##,
-    //         Primitive::Number(Number::I128(400i128 ^ 420i128)),
-    //         I128
-    //     );
-    //     eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i128 > 20i128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i128 >= 2i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i128 >= 20i128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2i128 <= 20i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i128 <= 2i128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i128 > 2i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i128 > 20i128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i128 == 20i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i128 == 2i128"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i128 != 2i128"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i128 != 20i128"##, Primitive::Bool(false));
-    // }
+        test_statements(
+            r##"
+        let t = (1,2,3);
+        let x = t.0;
+        let y = t.1;
+        let z = t.2;
 
-    // #[test]
-    // fn valid_operation_i64() {
-    //     eval_and_compare!(r##"400i64 + 20i64"##, v_num!(I64, 420), I64);
-    //     eval_and_compare!(
-    //         r##"400i64 - 800i64"##,
-    //         Primitive::Number(Number::I64(400 - 800)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 * 5i64"##,
-    //         Primitive::Number(Number::I64(400 * 5)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 / 2i64"##,
-    //         Primitive::Number(Number::I64(400 / 2)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 % 2i64"##,
-    //         Primitive::Number(Number::I64(400 % 2)),
-    //         I64
-    //     );
-    //     eval_and_compare!(r##"-20i64"##, Primitive::Number(Number::I64(-20)), I64);
-    //     eval_and_compare!(r##"-20"##, Primitive::Number(Number::I64(-20)), I64);
-    //     eval_and_compare!(
-    //         r##"400i64 << 20i64"##,
-    //         Primitive::Number(Number::I64(400i64 << 20i64)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 >> 20i64"##,
-    //         Primitive::Number(Number::I64(400i64 >> 20i64)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"428i64 & 428i64"##,
-    //         Primitive::Number(Number::I64(428i64 & 428i64)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 | 420i64"##,
-    //         Primitive::Number(Number::I64(400i64 | 420i64)),
-    //         I64
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i64 ^ 420i64"##,
-    //         Primitive::Number(Number::I64(400i64 ^ 420i64)),
-    //         I64
-    //     );
-    //     eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i64 > 20i64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i64 >= 2i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i64 >= 20i64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2i64 <= 20i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i64 <= 2i64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i64 > 2i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i64 > 20i64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i64 == 20i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i64 == 2i64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i64 != 2i64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i64 != 20i64"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_i32() {
-    //     eval_and_compare!(r##"400i32 + 20i32"##, v_num!(I32, 420), I32);
-    //     eval_and_compare!(
-    //         r##"400i32 - 800i32"##,
-    //         Primitive::Number(Number::I32(400 - 800)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 * 5i32"##,
-    //         Primitive::Number(Number::I32(400 * 5)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 / 2i32"##,
-    //         Primitive::Number(Number::I32(400 / 2)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 % 2i32"##,
-    //         Primitive::Number(Number::I32(400 % 2)),
-    //         I32
-    //     );
-    //     eval_and_compare!(r##"-20i32"##, Primitive::Number(Number::I32(-20)), I32);
-    //     eval_and_compare!(
-    //         r##"400i32 << 20i32"##,
-    //         Primitive::Number(Number::I32(400i32 << 20i32)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 >> 20i32"##,
-    //         Primitive::Number(Number::I32(400i32 >> 20i32)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"428i32 & 428i32"##,
-    //         Primitive::Number(Number::I32(428i32 & 428i32)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 | 420i32"##,
-    //         Primitive::Number(Number::I32(400i32 | 420i32)),
-    //         I32
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i32 ^ 420i32"##,
-    //         Primitive::Number(Number::I32(400i32 ^ 420i32)),
-    //         I32
-    //     );
-    //     eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i32 > 20i32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i32 >= 2i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i32 >= 20i32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2i32 <= 20i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i32 <= 2i32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i32 > 2i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i32 > 20i32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i32 == 20i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i32 == 2i32"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i32 != 2i32"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i32 != 20i32"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_i16() {
-    //     eval_and_compare!(r##"400i16 + 20i16"##, v_num!(I16, 420), I16);
-    //     eval_and_compare!(
-    //         r##"400i16 - 800i16"##,
-    //         Primitive::Number(Number::I16(400 - 800)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 * 5i16"##,
-    //         Primitive::Number(Number::I16(400 * 5)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 / 2i16"##,
-    //         Primitive::Number(Number::I16(400 / 2)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 % 2i16"##,
-    //         Primitive::Number(Number::I16(400 % 2)),
-    //         I16
-    //     );
-    //     eval_and_compare!(r##"-20i16"##, Primitive::Number(Number::I16(-20)), I16);
-    //     eval_and_compare!(
-    //         r##"400i16 << 2i16"##,
-    //         Primitive::Number(Number::I16(400i16 << 2i16)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 >> 2i16"##,
-    //         Primitive::Number(Number::I16(400i16 >> 2i16)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"428i16 & 428i16"##,
-    //         Primitive::Number(Number::I16(428i16 & 428i16)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 | 420i16"##,
-    //         Primitive::Number(Number::I16(400i16 | 420i16)),
-    //         I16
-    //     );
-    //     eval_and_compare!(
-    //         r##"400i16 ^ 420i16"##,
-    //         Primitive::Number(Number::I16(400i16 ^ 420i16)),
-    //         I16
-    //     );
-    //     eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i16 > 20i16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i16 >= 2i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i16 >= 20i16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2i16 <= 20i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i16 <= 2i16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i16 > 2i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i16 > 20i16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i16 == 20i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i16 == 2i16"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i16 != 2i16"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i16 != 20i16"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_i8() {
-    //     eval_and_compare!(r##"100i8 + 20i8"##, v_num!(I8, 120), I8);
-    //     eval_and_compare!(
-    //         r##"20i8 - 10i8"##,
-    //         Primitive::Number(Number::I8(20 - 10)),
-    //         I8
-    //     );
-    //     eval_and_compare!(r##"20i8 * 5i8"##, Primitive::Number(Number::I8(20 * 5)), I8);
-    //     eval_and_compare!(r##"20i8 / 2i8"##, Primitive::Number(Number::I8(20 / 2)), I8);
-    //     eval_and_compare!(r##"20i8 % 2i8"##, Primitive::Number(Number::I8(20 % 2)), I8);
-    //     eval_and_compare!(r##"-20i8"##, Primitive::Number(Number::I8(-20)), I8);
-    //     eval_and_compare!(
-    //         r##"40i8 << 2i8"##,
-    //         Primitive::Number(Number::I8(40i8 << 2i8)),
-    //         I8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40i8 >> 2i8"##,
-    //         Primitive::Number(Number::I8(40i8 >> 2i8)),
-    //         I8
-    //     );
-    //     eval_and_compare!(
-    //         r##"48i8 & 48i8"##,
-    //         Primitive::Number(Number::I8(48i8 & 48i8)),
-    //         I8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40i8 | 42i8"##,
-    //         Primitive::Number(Number::I8(40i8 | 42i8)),
-    //         I8
-    //     );
-    //     eval_and_compare!(
-    //         r##"40i8 ^ 42i8"##,
-    //         Primitive::Number(Number::I8(40i8 ^ 42i8)),
-    //         I8
-    //     );
-    //     eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i8 > 20i8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i8 >= 2i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i8 >= 20i8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2i8 <= 20i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i8 <= 2i8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i8 > 2i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2i8 > 20i8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i8 == 20i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i8 == 2i8"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20i8 != 2i8"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20i8 != 20i8"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_operation_f64() {
-    //     eval_and_compare!(
-    //         r##"10.5 + 20.2"##,
-    //         Primitive::Number(Number::F64(10.5 + 20.2)),
-    //         F64
-    //     );
-    //     eval_and_compare!(
-    //         r##"10.5 - 20.2"##,
-    //         Primitive::Number(Number::F64(10.5 - 20.2)),
-    //         F64
-    //     );
-    //     eval_and_compare!(
-    //         r##"10.5 * 20.2"##,
-    //         Primitive::Number(Number::F64(10.5 * 20.2)),
-    //         F64
-    //     );
-    //     eval_and_compare!(
-    //         r##"10.5 / 20.2"##,
-    //         Primitive::Number(Number::F64(10.5 / 20.2)),
-    //         F64
-    //     );
-    //     eval_and_compare!(r##"-20.0"##, Primitive::Number(Number::F64(-20.0)), F64);
-    //     eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20f64 >= 2f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2f64 >= 20f64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"2f64 <= 20f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20f64 <= 2f64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20f64 > 2f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"2f64 > 20f64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20f64 == 20f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20f64 == 2f64"##, Primitive::Bool(false));
-    //     eval_and_compare_bool!(r##"20f64 != 2f64"##, Primitive::Bool(true));
-    //     eval_and_compare_bool!(r##"20f64 != 20f64"##, Primitive::Bool(false));
-    // }
-    // #[test]
-    // fn valid_addition_string() {
-    //     let mut expr = Expression::parse(
-    //         r##"
-    //        "Hello " + "World"
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-    //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-    //     let _ = expr
-    //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut None)
-    //         .expect("Semantic resolution should have succeeded");
+    #[test]
+    fn valid_field_access() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
-    //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
-    //     expr.gencode(
-    //         &mut scope_manager,
-    //         None,
-    //         &mut instructions,
-    //         &crate::vm::vm::CodeGenerationContext::default(),
-    //     )
-    //     .expect("Code generation should have succeeded");
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
 
-    //     assert!(instructions.len() > 0);
-    //     // Execute the instructions.
+        test_statements(
+            r##"
+        struct Point {
+            x :i64,
+            y :i64,
+            z :i64,
+        }
 
-    //     let (mut runtime, mut heap, mut stdio) = Runtime::new();
-    //     let tid = runtime
-    //         .spawn_with_scope(crate::vm::vm::Player::P1, scope_manager)
-    //         .expect("Thread spawn_with_scopeing should have succeeded");
-    //     let (_, stack, program) = runtime
-    //         .get_mut(crate::vm::vm::Player::P1, tid)
-    //         .expect("Thread should exist");
-    //     program.merge(instructions);
-    //     let mut engine = crate::vm::vm::NoopGameEngine {};
+        let t = Point{x:1,y:2,z:3};
+        let x = t.x;
+        let y = t.y;
+        let z = t.z;
 
-    //     program
-    //         .execute(stack, &mut heap, &mut stdio, &mut engine, tid)
-    //         .expect("Execution should have succeeded");
-    //     let memory = stack;
-    //     let data = clear_stack!(memory);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-    //     let result: StrSlice =
-    //         <StrSliceType as DeserializeFrom>::deserialize_from(&StrSliceType {}, &data)
-    //             .expect("Deserialization should have succeeded");
+    #[test]
+    fn valid_slice_access() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
 
-    //     assert_eq!(result.value, "Hello World")
-    // }
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
 
-    // #[test]
-    // fn valid_addition_string_with_padding() {
-    //     let mut statement = Statement::parse(
-    //         r##"
-    //         let res = {
-    //             let hello : str<10> = "Hello ";
-    //             hello[8] = 'b';
-    //             hello[7] = 'a';
-    //             let world : str<10> = "World";
-    //             return hello + world;
-    //         };
-    //     "##
-    //         .into(),
-    //     )
-    //     .expect("Parsing should have succeeded")
-    //     .1;
-    //     let data = compile_statement!(statement);
+        test_statements(
+            r##"
+        
+        let t = [1,2,3];
+        let x = t[0];
+        let y = t[1];
+        let z = t[2];
 
-    //     let result: StrSlice =
-    //         <StrSliceType as DeserializeFrom>::deserialize_from(&StrSliceType {}, &data)
-    //             .expect("Deserialization should have succeeded");
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
-    //     assert_eq!(result.value, "Hello \0ab\0World\0\0\0\0\0")
-    // }
+    #[test]
+    fn valid_vec_access() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        
+        let t = vec[1,2,3];
+        let x = t[0];
+        let y = t[1];
+        let z = t[2];
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_complex_access() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("z", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            true
+        }
+
+        test_statements(
+            r##"
+        struct Point {
+            x :i64,
+            y :i64,
+            z :i64,
+        }
+
+        struct Test {
+            tuple : ([4]i64,i64,Point)
+        }
+
+        let t = Test{
+            tuple : ([1,2,3,4],2,Point{x:1,y:2,z:3})
+        };
+
+        let x = t.tuple.0[0];
+        let y = t.tuple.1;
+        let z = t.tuple.2.z;
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 }

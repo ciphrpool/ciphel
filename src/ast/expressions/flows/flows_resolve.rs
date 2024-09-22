@@ -1,18 +1,18 @@
 use super::{
-    EnumCase, ExprFlow, FCall, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr, UnionCase,
-    UnionPattern,
+    Cases, EnumCase, ExprFlow, FCall, IfExpr, MatchExpr, PrimitiveCase, StringCase, TryExpr,
+    UnionCase, UnionPattern,
 };
 use crate::ast::expressions::flows::FormatItem;
+use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
 use crate::semantic::scope::static_types::{PrimitiveType, TupleType};
-use crate::semantic::scope::type_traits::TypeChecking;
 use crate::semantic::scope::user_type_impl::{Enum, Struct, Union};
 use crate::semantic::{
     scope::{static_types::StaticType, user_type_impl::UserType},
     CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Info, MergeType, ResolveNumber};
+use crate::semantic::{Desugar, Info, MergeType, ResolveNumber};
 use crate::vm::vm::GenerateCode;
 use crate::{e_static, p_num};
 use std::collections::{HashMap, HashSet};
@@ -75,6 +75,22 @@ impl ResolveNumber for ExprFlow {
     }
 }
 
+impl Desugar<Atomic> for ExprFlow {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        match self {
+            ExprFlow::If(value) => value.desugar::<G>(scope_manager, scope_id),
+            ExprFlow::Match(value) => value.desugar::<G>(scope_manager, scope_id),
+            ExprFlow::Try(value) => value.desugar::<G>(scope_manager, scope_id),
+            ExprFlow::FCall(value) => value.desugar::<G>(scope_manager, scope_id),
+            ExprFlow::SizeOf(value, metadata) => Ok(None),
+        }
+    }
+}
+
 impl Resolve for IfExpr {
     type Output = ();
     type Context = Option<EType>;
@@ -120,6 +136,25 @@ impl Resolve for IfExpr {
     }
 }
 
+impl Desugar<Atomic> for IfExpr {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(output) = self.condition.desugar::<G>(scope_manager, scope_id)? {
+            self.condition = output.into();
+        }
+        if let Some(output) = self.then_branch.desugar::<G>(scope_manager, scope_id)? {
+            self.then_branch = output;
+        }
+        if let Some(output) = self.else_branch.desugar::<G>(scope_manager, scope_id)? {
+            self.else_branch = output;
+        }
+        Ok(None)
+    }
+}
+
 impl ResolveNumber for IfExpr {
     fn is_unresolved_number(&self) -> bool {
         todo!()
@@ -149,12 +184,15 @@ impl Resolve for UnionPattern {
     {
         let UserType::Union(Union { id, variants }) = scope_manager
             .find_type_by_name(&self.typename, scope_id)?
-            .clone()
+            .def
         else {
             return Err(SemanticError::IncompatibleTypes);
         };
-        let Some((variant_value, (_, Struct { fields, .. }))) =
-            variants.iter().enumerate().find(|(i, v)| v.0 == *id)
+
+        let Some((variant_value, (_, Struct { fields, .. }))) = variants
+            .iter()
+            .enumerate()
+            .find(|(i, (variant_name, variant_struct))| *variant_name == self.variant)
         else {
             return Err(SemanticError::CantInferType(format!(
                 "of {}::{}",
@@ -176,6 +214,7 @@ impl Resolve for UnionPattern {
             let id = scope_manager.register_parameter(&field_name, field_type.clone(), scope_id)?;
             ids.push(id);
         }
+
         Ok(())
     }
 }
@@ -279,7 +318,7 @@ impl<
 
         for (ref typename, ref name, value) in self.patterns.iter_mut() {
             let UserType::Enum(Enum { id, values }) =
-                scope_manager.find_type_by_name(typename, scope_id)?
+                scope_manager.find_type_by_name(typename, scope_id)?.def
             else {
                 return Err(SemanticError::IncompatibleTypes);
             };
@@ -480,6 +519,78 @@ impl ResolveNumber for MatchExpr {
     }
 }
 
+impl<
+        B: TryParse
+            + Resolve<Context = Option<EType>, Extra = ()>
+            + GenerateCode
+            + BlockCommonApi
+            + Desugar<B>
+            + Clone
+            + Debug
+            + PartialEq,
+        C: TryParse
+            + Resolve<Context = Option<EType>, Extra = ()>
+            + GenerateCode
+            + BlockCommonApi
+            + Desugar<C>
+            + Clone
+            + Debug
+            + PartialEq,
+    > Desugar<Cases<B, C>> for Cases<B, C>
+{
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Cases<B, C>>, SemanticError> {
+        match self {
+            Cases::Primitive { cases } => {
+                for case in cases.iter_mut() {
+                    if let Some(output) = case.block.desugar::<G>(scope_manager, scope_id)? {
+                        case.block = output;
+                    }
+                }
+            }
+            Cases::String { cases } => {
+                for case in cases.iter_mut() {
+                    if let Some(output) = case.block.desugar::<G>(scope_manager, scope_id)? {
+                        case.block = output;
+                    }
+                }
+            }
+            Cases::Enum { cases } => {
+                for case in cases.iter_mut() {
+                    if let Some(output) = case.block.desugar::<G>(scope_manager, scope_id)? {
+                        case.block = output;
+                    }
+                }
+            }
+            Cases::Union { cases } => {
+                for case in cases.iter_mut() {
+                    if let Some(output) = case.block.desugar::<G>(scope_manager, scope_id)? {
+                        case.block = output;
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Desugar<Atomic> for MatchExpr {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        let _ = self.cases.desugar::<G>(scope_manager, scope_id)?;
+        if let Some(output) = self.expr.desugar::<G>(scope_manager, scope_id)? {
+            self.expr = output.into();
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for TryExpr {
     type Output = ();
     type Context = Option<EType>;
@@ -546,6 +657,24 @@ impl ResolveNumber for TryExpr {
     }
 }
 
+impl Desugar<Atomic> for TryExpr {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(output) = self.try_branch.desugar::<G>(scope_manager, scope_id)? {
+            self.try_branch = output.into();
+        }
+        if let Some(else_block) = &mut self.else_branch {
+            if let Some(output) = else_block.desugar::<G>(scope_manager, scope_id)? {
+                *else_block = output.into();
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for FCall {
     type Output = ();
     type Context = Option<EType>;
@@ -573,6 +702,16 @@ impl Resolve for FCall {
             signature: Some(self.type_of(scope_manager, scope_id)?),
         };
         Ok(())
+    }
+}
+
+impl Desugar<Atomic> for FCall {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        todo!()
     }
 }
 

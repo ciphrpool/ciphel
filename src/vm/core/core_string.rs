@@ -3,8 +3,8 @@ use crate::semantic::TypeOf;
 use crate::vm::allocator::{align, MemoryAddress};
 use crate::vm::casm::operation::{GetNumFrom, OpPrimitive, PopNum};
 use crate::vm::casm::Casm;
-use crate::vm::platform::utils::lexem;
-use crate::vm::platform::LibCasm;
+use crate::vm::core::lexem;
+use crate::vm::core::CoreCasm;
 use crate::{
     ast::expressions::Expression,
     semantic::{EType, Metadata, Resolve, ResolvePlatform, SemanticError},
@@ -16,7 +16,8 @@ use crate::{
     },
 };
 
-use super::CoreCasm;
+use super::PathFinder;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringFn {
     String {},
@@ -25,6 +26,23 @@ pub enum StringFn {
     ToConstStr {},
 }
 
+impl PathFinder for StringFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::STRING) || path.len() == 0 {
+            return match name {
+                lexem::STRING => Some(StringFn::String {}),
+                lexem::APPEND => Some(StringFn::Append {}),
+                lexem::CHARAT => Some(StringFn::CharAt { for_string: true }),
+                lexem::TO_CONST_STR => Some(StringFn::ToConstStr {}),
+                _ => None,
+            };
+        }
+        None
+    }
+}
 impl ResolvePlatform for StringFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
@@ -143,27 +161,6 @@ pub enum StringCasm {
     ToConstStr,
 }
 
-impl StringFn {
-    pub fn from(suffixe: &Option<String>, id: &String) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::STRING {
-                    return None;
-                }
-            }
-            None => {}
-        }
-
-        match id.as_str() {
-            lexem::STRING => Some(StringFn::String {}),
-            lexem::APPEND => Some(StringFn::Append {}),
-            lexem::CHARAT => Some(StringFn::CharAt { for_string: true }),
-            lexem::TO_CONST_STR => Some(StringFn::ToConstStr {}),
-            _ => None,
-        }
-    }
-}
-
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringCasm {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
@@ -195,26 +192,22 @@ impl GenerateCode for StringFn {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match *self {
-            StringFn::String {} => instructions.push(Casm::Platform(LibCasm::Core(
-                CoreCasm::String(StringCasm::String {}),
-            ))),
-            StringFn::Append {} => instructions.push(Casm::Platform(LibCasm::Core(
-                CoreCasm::String(StringCasm::Append {}),
-            ))),
+            StringFn::String {} => {
+                instructions.push(Casm::Core(CoreCasm::String(StringCasm::String {})))
+            }
+            StringFn::Append {} => {
+                instructions.push(Casm::Core(CoreCasm::String(StringCasm::Append {})))
+            }
             StringFn::CharAt { for_string } => {
                 if for_string {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::String(
-                        StringCasm::CharAtString {},
-                    ))))
+                    instructions.push(Casm::Core(CoreCasm::String(StringCasm::CharAtString {})))
                 } else {
-                    instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::String(
-                        StringCasm::CharAtStrslice {},
-                    ))))
+                    instructions.push(Casm::Core(CoreCasm::String(StringCasm::CharAtStrslice {})))
                 }
             }
-            StringFn::ToConstStr {} => instructions.push(Casm::Platform(LibCasm::Core(
-                CoreCasm::String(StringCasm::ToConstStr {}),
-            ))),
+            StringFn::ToConstStr {} => {
+                instructions.push(Casm::Core(CoreCasm::String(StringCasm::ToConstStr {})))
+            }
         }
         Ok(())
     }

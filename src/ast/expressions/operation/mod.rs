@@ -1,10 +1,12 @@
 use crate::{
     ast::{types::Type, utils::strings::ID},
     semantic::Metadata,
-    vm::platform::Lib,
 };
 
-use super::{data::Number, Atomic, Expression};
+use super::{
+    data::{CallArgs, Number},
+    Atomic, CompletePath, Expression,
+};
 pub mod operation_gencode;
 pub mod operation_parse;
 pub mod operation_resolve;
@@ -43,24 +45,11 @@ pub struct ListAccess {
     pub metadata: Metadata,
 }
 
-#[derive(Debug, Clone)]
-pub struct FnCall {
-    pub lib: Option<ID>,
-    pub fn_var: Box<Expression>,
-    pub params: Vec<Expression>,
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExprCall {
+    pub var: Box<Expression>,
+    pub args: CallArgs,
     pub metadata: Metadata,
-    pub platform: Option<Lib>,
-    pub is_dynamic_fn: Option<String>,
-}
-
-impl PartialEq for FnCall {
-    fn eq(&self, other: &Self) -> bool {
-        self.lib == other.lib
-            && self.fn_var == other.fn_var
-            && self.params == other.params
-            && self.metadata == other.metadata
-        // && self.platform == other.platform
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

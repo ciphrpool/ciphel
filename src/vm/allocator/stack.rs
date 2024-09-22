@@ -5,7 +5,6 @@ use std::sync::{
 
 use num_traits::ToBytes;
 
-use crate::semantic::AccessLevel;
 use thiserror::Error;
 
 use super::MemoryAddress;
@@ -33,7 +32,7 @@ pub struct Stack {
     global: [u8; GLOBAL_SIZE],
     stack_pointer: usize,
     pub frame_pointer: usize,
-    return_pointer: usize,
+    pub return_pointer: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -63,7 +62,7 @@ impl Stack {
         parameters_size: usize,
         return_pointer: usize,
     ) -> Result<(), StackError> {
-        if self.stack_pointer <= parameters_size {
+        if self.stack_pointer < parameters_size {
             return Err(StackError::StackUnderflow);
         }
         let parameters =
@@ -77,7 +76,7 @@ impl Stack {
         };
 
         self.frame_pointer = self.stack_pointer;
-        self.frame_pointer = return_pointer;
+        self.return_pointer = return_pointer;
 
         // copy the frame onto the stack
         if self.stack_pointer + std::mem::size_of::<Frame>() > STACK_SIZE {
@@ -96,16 +95,16 @@ impl Stack {
         if self.stack_pointer + parameters_size > STACK_SIZE {
             return Err(StackError::StackOverflow);
         }
+
         self.stack[self.stack_pointer..self.stack_pointer + parameters_size]
             .copy_from_slice(&parameters);
+
+        self.stack_pointer += parameters_size;
 
         Ok(())
     }
 
     pub fn close_frame(&mut self, return_size: usize) -> Result<usize, StackError> {
-        if self.frame_pointer == 0 {
-            return Err(StackError::ReadError);
-        }
         if self.stack_pointer <= return_size {
             return Err(StackError::StackUnderflow);
         }
@@ -116,6 +115,7 @@ impl Stack {
         if self.frame_pointer + std::mem::size_of::<Frame>() > STACK_SIZE {
             return Err(StackError::StackOverflow);
         }
+
         let frame = unsafe {
             *(self.stack[self.frame_pointer..self.frame_pointer + std::mem::size_of::<Frame>()]
                 .as_ptr() as *const Frame)
@@ -130,8 +130,11 @@ impl Stack {
         if self.stack_pointer + return_size > STACK_SIZE {
             return Err(StackError::StackOverflow);
         }
+
         self.stack[self.stack_pointer..self.stack_pointer + return_size]
             .copy_from_slice(&return_value);
+
+        self.stack_pointer += return_size;
 
         Ok(return_pointer)
     }
@@ -189,7 +192,7 @@ impl Stack {
             return Err(StackError::ReadError);
         };
         let top = self.top();
-        let frame_pointer = self.frame_pointer;
+        let frame_pointer = self.frame_pointer + std::mem::size_of::<Frame>();
         if frame_pointer + offset + size > top {
             return Err(StackError::ReadError);
         }
@@ -219,7 +222,7 @@ impl Stack {
             return Err(StackError::ReadError);
         };
         let top = self.top();
-        let frame_pointer = self.frame_pointer;
+        let frame_pointer = self.frame_pointer + std::mem::size_of::<Frame>();
         let size = data.len();
         if frame_pointer + offset + size > top {
             return Err(StackError::WriteError);

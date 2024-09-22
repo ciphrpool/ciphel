@@ -8,8 +8,8 @@ use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::{OpPrimitive, PopNum};
 use crate::vm::casm::Casm;
-use crate::vm::platform::utils::lexem;
-use crate::vm::platform::LibCasm;
+use crate::vm::core::lexem;
+use crate::vm::core::CoreCasm;
 
 use crate::vm::stdio::StdIO;
 use crate::vm::vm::{CasmMetadata, Executable, RuntimeError};
@@ -21,6 +21,8 @@ use crate::{
         vm::{CodeGenerationError, GenerateCode},
     },
 };
+
+use super::PathFinder;
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringsFn {
     ToStr(StringsCasm),
@@ -68,20 +70,18 @@ pub enum JoinCasm {
     NoSepFromSlice(Option<usize>),
 }
 
-impl StringsFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::STD {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for StringsFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::STRING) || path.len() == 0 {
+            return match name {
+                lexem::TOSTR => Some(StringsFn::ToStr(StringsCasm::ToStr(ToStrCasm::ToStrI64))),
+                _ => None,
+            };
         }
-        match id.as_str() {
-            lexem::TOSTR => Some(StringsFn::ToStr(StringsCasm::ToStr(ToStrCasm::ToStrI64))),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -151,9 +151,9 @@ impl GenerateCode for StringsFn {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            StringsFn::ToStr(to_str_casm) => instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Strings(*to_str_casm),
-            ))),
+            StringsFn::ToStr(to_str_casm) => {
+                instructions.push(Casm::Core(super::CoreCasm::Strings(*to_str_casm)))
+            }
         }
         Ok(())
     }

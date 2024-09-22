@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use crate::semantic::{scope::ClosureState, Metadata, SemanticError};
+use crate::semantic::{Metadata, SemanticError};
 
 use super::Statement;
 use crate::semantic::scope::scope::ScopeManager;

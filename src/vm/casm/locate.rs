@@ -1,15 +1,12 @@
-use crate::{
-    semantic::AccessLevel,
-    vm::{
-        allocator::{
-            heap::Heap,
-            stack::{Stack, STACK_SIZE},
-            MemoryAddress,
-        },
-        casm::operation::OpPrimitive,
-        stdio::StdIO,
-        vm::{CasmMetadata, Executable, RuntimeError},
+use crate::vm::{
+    allocator::{
+        heap::Heap,
+        stack::{Stack, STACK_SIZE},
+        MemoryAddress,
     },
+    casm::operation::OpPrimitive,
+    stdio::StdIO,
+    vm::{CasmMetadata, Executable, RuntimeError},
 };
 use num_traits::ToBytes;
 

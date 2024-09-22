@@ -5,6 +5,8 @@ use super::{
     StaticType, StrSliceType, StringType, TupleType, VecType,
 };
 
+pub const POINTER_SIZE: usize = 8;
+
 impl SizeOf for StaticType {
     fn size_of(&self) -> usize {
         match self {
@@ -55,18 +57,18 @@ impl SizeOf for PrimitiveType {
 
 impl SizeOf for SliceType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
 impl SizeOf for StringType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 impl SizeOf for StrSliceType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
@@ -78,19 +80,19 @@ impl SizeOf for RangeType {
 
 impl SizeOf for VecType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
 impl SizeOf for FnType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
 impl SizeOf for ClosureType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
@@ -102,12 +104,12 @@ impl SizeOf for TupleType {
 
 impl SizeOf for AddrType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 
 impl SizeOf for MapType {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }

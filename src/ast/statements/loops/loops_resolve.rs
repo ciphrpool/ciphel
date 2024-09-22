@@ -1,11 +1,13 @@
-use super::{ForLoop, Loop, WhileLoop};
-use crate::ast::statements::block::BlockCommonApi;
+use std::process::Output;
+
+use super::{ForIncrements, ForLoop, Loop, WhileLoop};
+use crate::ast::statements::block::{Block, BlockCommonApi};
 use crate::ast::statements::loops::ForInit;
+use crate::ast::statements::{self, Statement};
 use crate::e_static;
 use crate::semantic::scope::scope::{ScopeManager, ScopeState};
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType};
-use crate::semantic::scope::type_traits::TypeChecking;
-use crate::semantic::EType;
+use crate::semantic::{Desugar, EType, Metadata};
 use crate::semantic::{Resolve, SemanticError, TypeOf};
 
 impl Resolve for Loop {
@@ -38,6 +40,80 @@ impl Resolve for Loop {
     }
 }
 
+impl Desugar<Statement> for Loop {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Loop::For(for_loop) => for_loop.desugar::<G>(scope_manager, scope_id),
+            Loop::While(while_loop) => while_loop.desugar::<G>(scope_manager, scope_id),
+            Loop::Loop(block) => {
+                let _: Option<Block> = block.desugar::<G>(scope_manager, scope_id)?;
+                Ok(None)
+            }
+        }
+    }
+}
+
+impl Desugar<Statement> for ForLoop {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        for index in self.indices.iter_mut() {
+            match index {
+                ForInit::Assignation(assignation) => {
+                    if let Some(Statement::Assignation(output)) =
+                        assignation.desugar::<G>(scope_manager, scope_id)?
+                    {
+                        *index = ForInit::Assignation(output);
+                    }
+                }
+                ForInit::Declaration(declaration) => {
+                    if let Some(Statement::Declaration(output)) =
+                        declaration.desugar::<G>(scope_manager, scope_id)?
+                    {
+                        *index = ForInit::Declaration(output);
+                    }
+                }
+            }
+        }
+
+        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+            self.block = Box::new(output);
+        }
+
+        if let Some(condition) = &mut self.condition {
+            if let Some(output) = condition.desugar::<G>(scope_manager, scope_id)? {
+                *condition = output;
+            }
+        }
+
+        for increment in self.increments.iter_mut() {
+            if let Some(Statement::Assignation(output)) =
+                increment.desugar::<G>(scope_manager, scope_id)?
+            {
+                *increment = output;
+            }
+        }
+
+        Ok(None)
+    }
+}
+impl Desugar<Statement> for WhileLoop {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        let _: Option<Block> = self.block.desugar::<G>(scope_manager, scope_id)?;
+        self.condition.desugar::<G>(scope_manager, scope_id)?;
+        Ok(None)
+    }
+}
 impl Resolve for ForLoop {
     type Output = ();
     type Context = Option<EType>;
@@ -52,8 +128,43 @@ impl Resolve for ForLoop {
     where
         Self: Sized,
     {
-        self.block
-            .resolve::<G>(scope_manager, scope_id, context, &mut ())
+        for index in self.indices.iter_mut() {
+            match index {
+                ForInit::Assignation(assignation) => {
+                    let _ = assignation.resolve::<G>(scope_manager, scope_id, context, extra)?;
+                }
+                ForInit::Declaration(declaration) => {
+                    let _ = declaration.resolve::<G>(scope_manager, scope_id, context, extra)?;
+                }
+            }
+        }
+
+        if let Some(condition) = &mut self.condition {
+            let _ = condition.resolve::<G>(
+                scope_manager,
+                scope_id,
+                &Some(EType::Static(StaticType::Primitive(PrimitiveType::Bool))),
+                &mut None,
+            )?;
+            if EType::Static(StaticType::Primitive(PrimitiveType::Bool))
+                != condition.type_of(scope_manager, scope_id)?
+            {
+                return Err(SemanticError::IncompatibleTypes);
+            }
+        }
+
+        for increment in self.increments.iter_mut() {
+            let _ = increment.resolve::<G>(scope_manager, scope_id, context, extra)?;
+        }
+
+        let inner = self.block.init_from_parent(scope_manager, scope_id)?;
+        scope_manager.scope_states.insert(inner, ScopeState::Loop);
+
+        let _ = self
+            .block
+            .resolve::<G>(scope_manager, scope_id, context, extra)?;
+
+        Ok(())
     }
 }
 

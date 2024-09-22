@@ -12,8 +12,8 @@ use crate::{
 };
 
 use super::{
-    data::{Address, Data, PtrAccess, Variable},
-    operation::{FieldAccess, FnCall, ListAccess, TupleAccess},
+    data::{Address, Call, Data, PtrAccess, Variable},
+    operation::{FieldAccess, ListAccess, TupleAccess},
     Atomic, Expression,
 };
 
@@ -64,8 +64,8 @@ impl Locatable for Variable {
         let Some(super::data::VariableState::Variable { id }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Ok(crate::semantic::scope::scope::Variable { address, .. }) =
-            scope_manager.find_var_by_id(*id, scope_id)
+        let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
+            scope_manager.find_var_by_id(*id)
         else {
             return Err(CodeGenerationError::Unlocatable);
         };
@@ -466,7 +466,7 @@ impl Locatable for ListAccess {
         };
 
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -523,7 +523,7 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -583,11 +583,10 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
-
         match self
             .var
             .locate_from(scope_manager, scope_id, instructions, Some(address))?
@@ -644,7 +643,7 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::platform::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -691,7 +690,7 @@ impl Locatable for ListAccess {
     }
 }
 
-impl Locatable for FnCall {
+impl Locatable for Call {
     fn is_assignable(&self) -> bool {
         false
     }
@@ -738,7 +737,6 @@ impl Locatable for Expression {
     fn is_assignable(&self) -> bool {
         match self {
             Expression::FieldAccess(value) => value.is_assignable(),
-            Expression::FnCall(value) => value.is_assignable(),
             Expression::ListAccess(value) => value.is_assignable(),
             Expression::TupleAccess(value) => value.is_assignable(),
             Expression::Atomic(value) => value.is_assignable(),
@@ -753,7 +751,6 @@ impl Locatable for Expression {
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => value.locate(scope_manager, scope_id, instructions),
-            Expression::FnCall(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::ListAccess(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::TupleAccess(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::Atomic(value) => value.locate(scope_manager, scope_id, instructions),
@@ -770,9 +767,6 @@ impl Locatable for Expression {
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => {
-                value.locate_from(scope_manager, scope_id, instructions, address)
-            }
-            Expression::FnCall(value) => {
                 value.locate_from(scope_manager, scope_id, instructions, address)
             }
             Expression::ListAccess(value) => {
@@ -799,9 +793,6 @@ impl Locatable for Expression {
             Expression::FieldAccess(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
             }
-            Expression::FnCall(value) => {
-                value.access_from(scope_manager, scope_id, instructions, address)
-            }
             Expression::ListAccess(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
             }
@@ -823,9 +814,6 @@ impl Locatable for Expression {
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => {
-                value.runtime_access(scope_manager, scope_id, instructions)
-            }
-            Expression::FnCall(value) => {
                 value.runtime_access(scope_manager, scope_id, instructions)
             }
             Expression::ListAccess(value) => {
@@ -942,9 +930,15 @@ impl Locatable for Data {
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
-            Data::Address(value) => value.locate(scope_manager, scope_id, instructions),
-            Data::PtrAccess(value) => value.locate(scope_manager, scope_id, instructions),
-            Data::Variable(value) => value.locate(scope_manager, scope_id, instructions),
+            Data::Address(value) => {
+                value.locate_from(scope_manager, scope_id, instructions, address)
+            }
+            Data::PtrAccess(value) => {
+                value.locate_from(scope_manager, scope_id, instructions, address)
+            }
+            Data::Variable(value) => {
+                value.locate_from(scope_manager, scope_id, instructions, address)
+            }
             _ => Err(CodeGenerationError::Unlocatable),
         }
     }

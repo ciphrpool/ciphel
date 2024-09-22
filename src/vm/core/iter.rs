@@ -8,8 +8,7 @@ use crate::{
             scope::ScopeManager,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        AccessLevel, EType, Info, Metadata, Resolve, ResolvePlatform, SemanticError, SizeOf,
-        TypeOf,
+        EType, Info, Metadata, Resolve, ResolvePlatform, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
@@ -17,11 +16,13 @@ use crate::{
             operation::{OpPrimitive, PopNum},
             Casm, CasmProgram,
         },
-        platform::{core::core_map::map_layout, utils::lexem, LibCasm},
+        core::{core_map::map_layout, lexem, CoreCasm},
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
+
+use super::PathFinder;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IterFn {
@@ -50,31 +51,29 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
     }
 }
 
-impl IterFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::STD {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for IterFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::ITER) || path.len() == 0 {
+            return match name {
+                lexem::ITEMS => Some(IterFn::MapItems {
+                    key_size: 0,
+                    value_size: 0,
+                }),
+                lexem::KEYS => Some(IterFn::MapKeys {
+                    key_size: 0,
+                    value_size: 0,
+                }),
+                lexem::VALUES => Some(IterFn::MapValues {
+                    key_size: 0,
+                    value_size: 0,
+                }),
+                _ => None,
+            };
         }
-        match id.as_str() {
-            lexem::ITEMS => Some(IterFn::MapItems {
-                key_size: 0,
-                value_size: 0,
-            }),
-            lexem::KEYS => Some(IterFn::MapKeys {
-                key_size: 0,
-                value_size: 0,
-            }),
-            lexem::VALUES => Some(IterFn::MapValues {
-                key_size: 0,
-                value_size: 0,
-            }),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -220,30 +219,24 @@ impl GenerateCode for IterFn {
             IterFn::MapItems {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
-                IterCasm::MapItems {
-                    key_size: *key_size,
-                    value_size: *value_size,
-                },
-            )))),
+            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapItems {
+                key_size: *key_size,
+                value_size: *value_size,
+            }))),
             IterFn::MapValues {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
-                IterCasm::MapValues {
-                    key_size: *key_size,
-                    value_size: *value_size,
-                },
-            )))),
+            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapValues {
+                key_size: *key_size,
+                value_size: *value_size,
+            }))),
             IterFn::MapKeys {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Iter(
-                IterCasm::MapKeys {
-                    key_size: *key_size,
-                    value_size: *value_size,
-                },
-            )))),
+            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapKeys {
+                key_size: *key_size,
+                value_size: *value_size,
+            }))),
         }
         Ok(())
     }

@@ -1,10 +1,6 @@
-use std::ops::Add;
-
 use heap::HEAP_SIZE;
 use stack::GLOBAL_SIZE;
 use stack::STACK_SIZE;
-
-use crate::semantic::AccessLevel;
 
 use self::{
     heap::{Heap, ALIGNMENT},

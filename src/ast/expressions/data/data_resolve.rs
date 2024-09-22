@@ -1,21 +1,25 @@
+use std::process::Output;
+
 use super::{
-    Address, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice,
-    Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, Data, Enum, LeftCall, Map, Number, Primitive, PtrAccess,
+    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
-use crate::ast::expressions::Atomic;
+use crate::ast::expressions::data::{CoreCall, ExternCall, VarCall};
+use crate::ast::expressions::{Atomic, CompletePath, Expression, Path};
 use crate::ast::statements::block::BlockCommonApi;
 use crate::semantic::scope::scope::{GlobalMapping, ScopeManager};
 use crate::semantic::scope::static_types::{
-    AddrType, ClosureType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType, TupleType,
-    VecType,
+    AddrType, ClosureType, FnType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType,
+    TupleType, VecType,
 };
 use crate::semantic::scope::user_type_impl::UserType;
-use crate::semantic::scope::ClosureState;
+use crate::semantic::ResolvePlatform;
 use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
-use crate::semantic::{Info, MergeType, ResolveFromStruct, ResolveNumber, SizeOf};
+use crate::semantic::{Desugar, Info, MergeType, ResolveFromStruct, ResolveNumber, SizeOf};
 use crate::vm::allocator::{align, MemoryAddress};
+use crate::vm::core::{Core, PathFinder};
 use crate::{e_static, semantic};
 
 impl Resolve for Data {
@@ -47,6 +51,7 @@ impl Resolve for Data {
             Data::Union(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Enum(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::StrSlice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Call(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
         }
     }
 }
@@ -81,11 +86,37 @@ impl ResolveFromStruct for Data {
             Data::Variable(value) => {
                 value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id)
             }
+            Data::Call(value) => value.resolve_from_struct::<G>(scope_manager, scope_id, struct_id),
             _ => Err(SemanticError::UnknownField),
         }
     }
 }
 
+impl Desugar<Atomic> for Data {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        match self {
+            Data::Primitive(value) => Ok(None),
+            Data::Slice(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::StrSlice(value) => Ok(None),
+            Data::Vec(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Closure(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Tuple(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Address(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::PtrAccess(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Variable(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Call(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Unit => Ok(None),
+            Data::Map(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Struct(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Union(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Enum(value) => Ok(None),
+        }
+    }
+}
 impl Resolve for Variable {
     type Output = ();
     type Context = Option<EType>;
@@ -101,10 +132,15 @@ impl Resolve for Variable {
         Self: Sized,
     {
         let var = scope_manager.find_var_by_name(&self.name, scope_id)?;
+
+        if let Some(scope_id) = scope_id {
+            scope_manager.signal_variable_access(&var, scope_id);
+        }
+
         let _ = self
             .state
             .insert(super::VariableState::Variable { id: var.id });
-        let var_type = var.ctype.clone();
+        let var_type = var.ctype;
 
         self.metadata.info = Info::Resolved {
             context: context.clone(),
@@ -144,14 +180,24 @@ impl ResolveFromStruct for Variable {
                     }),
                     signature: Some(field_type.clone()),
                 };
+                break;
             }
             offset += align(field_type.size_of())
         }
         if !found {
             return Err(SemanticError::UnknownField);
         }
-
         Ok(())
+    }
+}
+
+impl Desugar<Atomic> for Variable {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        Ok(None)
     }
 }
 
@@ -363,6 +409,21 @@ impl Resolve for Slice {
     }
 }
 
+impl Desugar<Atomic> for Slice {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for expr in self.value.iter_mut() {
+            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                *expr = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for StrSlice {
     type Output = ();
     type Context = Option<EType>;
@@ -463,6 +524,22 @@ impl Resolve for Vector {
         }
     }
 }
+
+impl Desugar<Atomic> for Vector {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for expr in self.value.iter_mut() {
+            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                *expr = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Tuple {
     type Output = ();
     type Context = Option<EType>;
@@ -528,6 +605,21 @@ impl Resolve for Tuple {
     }
 }
 
+impl Desugar<Atomic> for Tuple {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for expr in self.value.iter_mut() {
+            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                *expr = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Closure {
     type Output = ();
     type Context = Option<EType>;
@@ -589,6 +681,19 @@ impl Resolve for Closure {
         };
 
         Ok(())
+    }
+}
+
+impl Desugar<Atomic> for Closure {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(output) = self.scope.desugar::<G>(scope_manager, scope_id)? {
+            self.scope = output;
+        }
+        Ok(None)
     }
 }
 
@@ -660,6 +765,22 @@ impl Resolve for Address {
         Ok(())
     }
 }
+
+impl Desugar<Atomic> for Address {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(Expression::Atomic(output)) =
+            self.value.desugar::<G>(scope_manager, scope_id)?
+        {
+            self.value = output.into();
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for PtrAccess {
     type Output = ();
     type Context = Option<EType>;
@@ -706,6 +827,21 @@ impl Resolve for PtrAccess {
     }
 }
 
+impl Desugar<Atomic> for PtrAccess {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(Expression::Atomic(output)) =
+            self.value.desugar::<G>(scope_manager, scope_id)?
+        {
+            self.value = output.into();
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Struct {
     type Output = ();
     type Context = Option<EType>;
@@ -721,7 +857,7 @@ impl Resolve for Struct {
         Self: Sized,
     {
         let UserType::Struct(semantic::scope::user_type_impl::Struct { fields, .. }) =
-            scope_manager.find_type_by_name(&self.id, scope_id)?.clone()
+            scope_manager.find_type_by_name(&self.id, scope_id)?.def
         else {
             return Err(SemanticError::ExpectedStruct);
         };
@@ -755,6 +891,22 @@ impl Resolve for Struct {
         Ok(())
     }
 }
+
+impl Desugar<Atomic> for Struct {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for (_, expr) in self.fields.iter_mut() {
+            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                *expr = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Union {
     type Output = ();
     type Context = Option<EType>;
@@ -772,7 +924,7 @@ impl Resolve for Union {
         let UserType::Union(semantic::scope::user_type_impl::Union { variants, .. }) =
             scope_manager
                 .find_type_by_name(&self.typename, scope_id)?
-                .clone()
+                .def
         else {
             return Err(SemanticError::ExpectedStruct);
         };
@@ -813,6 +965,21 @@ impl Resolve for Union {
     }
 }
 
+impl Desugar<Atomic> for Union {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for (_, expr) in self.fields.iter_mut() {
+            if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                *expr = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Enum {
     type Output = ();
     type Context = Option<EType>;
@@ -829,7 +996,7 @@ impl Resolve for Enum {
     {
         let UserType::Enum(semantic::scope::user_type_impl::Enum { values, .. }) = scope_manager
             .find_type_by_name(&self.typename, scope_id)?
-            .clone()
+            .def
         else {
             return Err(SemanticError::ExpectedStruct);
         };
@@ -925,18 +1092,162 @@ impl Resolve for Map {
                         value.resolve::<G>(scope_manager, scope_id, &svalues_type, &mut None)?;
                 }
 
-                {
-                    self.metadata.info = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(e_static!(StaticType::Map(MapType {
-                            keys_type: Box::new(keys_type),
-                            values_type: Box::new(values_type),
-                        }))),
-                    };
-                }
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(e_static!(StaticType::Map(MapType {
+                        keys_type: Box::new(keys_type),
+                        values_type: Box::new(values_type),
+                    }))),
+                };
+
                 Ok(())
             }
         }
+    }
+}
+
+impl Desugar<Atomic> for Map {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for (key, value) in self.fields.iter_mut() {
+            if let Some(output) = key.desugar::<G>(scope_manager, scope_id)? {
+                *key = output;
+            }
+            if let Some(output) = value.desugar::<G>(scope_manager, scope_id)? {
+                *value = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Resolve for Call {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        _extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        match &mut self.path {
+            LeftCall::VarCall(VarCall {
+                path: CompletePath { path, name },
+                id,
+                is_closure,
+            }) => {
+                match path {
+                    Path::Segment(vec) => todo!("module function"),
+                    Path::Empty => {
+                        let function = scope_manager.find_var_by_name(name, scope_id)?;
+
+                        if let Some(scope_id) = scope_id {
+                            scope_manager.signal_variable_access(&function, scope_id);
+                        }
+
+                        let (params, return_type) = match &function.ctype {
+                            EType::Static(StaticType::Closure(ClosureType {
+                                params, ret, ..
+                            })) => {
+                                *is_closure = true;
+                                (params, ret)
+                            }
+                            EType::Static(StaticType::StaticFn(FnType { params, ret, .. })) => {
+                                *is_closure = false;
+                                (params, ret)
+                            }
+                            _ => return Err(SemanticError::ExpectedCallable),
+                        };
+
+                        if params.len() != self.args.args.len() {
+                            return Err(SemanticError::IncorrectArguments);
+                        }
+
+                        let mut params_size = 0;
+                        for (arg, param) in self.args.args.iter_mut().zip(params) {
+                            let _ = arg.resolve::<G>(
+                                scope_manager,
+                                scope_id,
+                                &Some(param.clone()),
+                                &mut None,
+                            )?;
+                            params_size += param.size_of();
+                        }
+                        let _ = self.args.size.insert(params_size);
+
+                        if context.is_some() && *context.as_ref().unwrap() != **return_type {
+                            return Err(SemanticError::IncompatibleTypes);
+                        }
+                        self.metadata.info = Info::Resolved {
+                            context: context.clone(),
+                            signature: Some(return_type.as_ref().clone()),
+                        };
+
+                        let _ = id.insert(function.id);
+                    }
+                }
+                Ok(())
+            }
+            LeftCall::ExternCall(extern_call) => todo!(),
+            LeftCall::CoreCall(CoreCall { path }) => {
+                let return_type = path.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    context.as_ref(),
+                    &mut self.args.args,
+                )?;
+
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(return_type),
+                };
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl ResolveFromStruct for Call {
+    fn resolve_from_struct<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        struct_id: u64,
+    ) -> Result<(), SemanticError> {
+        todo!()
+    }
+}
+
+impl Desugar<Atomic> for Call {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        let path = match &self.path {
+            crate::ast::expressions::data::LeftCall::VarCall(VarCall { path, .. }) => path,
+            crate::ast::expressions::data::LeftCall::ExternCall(ExternCall { path }) => path,
+            _ => return Ok(None),
+        };
+        let name = &path.name;
+        let path = match &path.path {
+            crate::ast::expressions::Path::Segment(vec) => vec.as_slice(),
+            crate::ast::expressions::Path::Empty => &[],
+        };
+
+        if let Some(core_func) = Core::find(path, name.as_str()) {
+            self.path = LeftCall::CoreCall(CoreCall { path: core_func });
+        }
+        Ok(None)
     }
 }
 

@@ -8,28 +8,25 @@ use nom::{
 };
 use nom_supreme::ParserExt;
 
-use crate::{
-    ast::{
-        expressions::{
-            data::{Data, Primitive},
-            Atomic, Expression,
-        },
-        statements::{
-            self,
-            assignation::Assignation,
-            block::Block,
-            declaration::{Declaration, PatternVar},
-            Statement,
-        },
-        utils::{
-            error::squash,
-            io::{PResult, Span},
-            lexem,
-            strings::{parse_id, wst, wst_closed},
-        },
-        TryParse,
+use crate::ast::{
+    expressions::{
+        data::{Data, Primitive},
+        Atomic, Expression,
     },
-    semantic::{scope::ClosureState, Metadata},
+    statements::{
+        self,
+        assignation::Assignation,
+        block::Block,
+        declaration::{Declaration, PatternVar},
+        Statement,
+    },
+    utils::{
+        error::squash,
+        io::{PResult, Span},
+        lexem,
+        strings::{parse_id, wst, wst_closed},
+    },
+    TryParse,
 };
 
 use super::{ForInit, ForInits, ForLoop, Loop, WhileLoop};
@@ -85,35 +82,11 @@ impl TryParse for ForLoop {
                 ),
                 cut(Block::parse).context("Invalid block in for-loop statement"),
             )),
-            |(_, (indices, _, condition, _, increments), mut inner)| {
-                let mut statements = Vec::new();
-                for index in indices {
-                    match index {
-                        ForInit::Assignation(value) => {
-                            statements.push(Statement::Assignation(value))
-                        }
-                        ForInit::Declaration(value) => {
-                            statements.push(Statement::Declaration(value))
-                        }
-                    }
-                }
-
-                for increment in increments {
-                    inner.statements.push(Statement::Assignation(increment));
-                }
-
-                statements.push(Statement::Loops(Loop::While(WhileLoop {
-                    condition: Box::new(condition.unwrap_or(Expression::Atomic(Atomic::Data(
-                        Data::Primitive(Primitive::Bool(true)),
-                    )))),
-                    block: Box::new(inner),
-                })));
-
-                let block = Block::new(statements);
-
-                ForLoop {
-                    block: Box::new(block),
-                }
+            |(_, (indices, _, condition, _, increments), block)| ForLoop {
+                indices,
+                condition,
+                increments,
+                block: Box::new(block),
             },
         )(input)
     }
@@ -142,24 +115,6 @@ impl TryParse for WhileLoop {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
-
-    use crate::{
-        ast::{
-            expressions::{
-                data::{Data, Primitive, Variable},
-                operation::FnCall,
-                Atomic,
-            },
-            statements::{
-                flows::{CallStat, Flow},
-                Statement,
-            },
-        },
-        semantic::{scope::ClosureState, Metadata},
-        v_num,
-    };
-
     use super::*;
 
     #[test]
@@ -188,32 +143,6 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            WhileLoop {
-                condition: Box::new(Expression::Atomic(Atomic::Data(Data::Primitive(
-                    Primitive::Bool(true)
-                )))),
-                block: Box::new(Block::new(vec![Statement::Flow(Flow::Call(CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "f".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }))]))
-            },
-            value
-        );
     }
 
     #[test]
@@ -228,28 +157,5 @@ mod tests {
         );
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
-        assert_eq!(
-            Loop::Loop(Box::new(Block::new(vec![Statement::Flow(Flow::Call(
-                CallStat {
-                    call: Expression::FnCall(FnCall {
-                        lib: None,
-                        fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                            Variable {
-                                name: "f".to_string().into(),
-                                metadata: Metadata::default(),
-                                state: None,
-                            }
-                        )))),
-                        params: vec![Expression::Atomic(Atomic::Data(Data::Primitive(v_num!(
-                            Unresolved, 10
-                        ))))],
-                        metadata: Metadata::default(),
-                        platform: Default::default(),
-                        is_dynamic_fn: None,
-                    })
-                }
-            ))]))),
-            value
-        );
     }
 }

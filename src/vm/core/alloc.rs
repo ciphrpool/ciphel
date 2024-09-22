@@ -7,14 +7,12 @@ use crate::{
         scope::{
             scope::ScopeManager,
             static_types::{MapType, SliceType},
-            type_traits::TypeChecking,
         },
         ResolvePlatform,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
         casm::operation::{GetNumFrom, PopNum},
-        platform::stdlib::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE},
         stdio::StdIO,
         vm::CasmMetadata,
     },
@@ -29,7 +27,7 @@ use crate::{
         scope::static_types::{
             AddrType, NumberType, PrimitiveType, StaticType, StringType, VecType,
         },
-        AccessLevel, EType, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        EType, Info, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::align,
@@ -40,10 +38,11 @@ use crate::{
             operation::OpPrimitive,
             Casm, CasmProgram,
         },
-        platform::{utils::lexem, LibCasm},
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
 };
+
+use super::{lexem, CoreCasm, PathFinder, ERROR_SLICE, OK_SLICE};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AllocFn {
@@ -86,26 +85,23 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
     }
 }
 
-impl AllocFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::CORE {
-                    return None;
-                }
-            }
-            None => {}
+impl PathFinder for AllocFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::VEC) || path.len() == 0 {
+            return match name {
+                lexem::LEN => Some(AllocFn::Len),
+                lexem::CAP => Some(AllocFn::Cap),
+                lexem::FREE => Some(AllocFn::Free),
+                lexem::ALLOC => Some(AllocFn::Alloc),
+                lexem::MEMCPY => Some(AllocFn::MemCopy),
+                lexem::SIZEOF => Some(AllocFn::SizeOf { size: 0 }),
+                _ => None,
+            };
         }
-
-        match id.as_str() {
-            lexem::LEN => Some(AllocFn::Len),
-            lexem::CAP => Some(AllocFn::Cap),
-            lexem::FREE => Some(AllocFn::Free),
-            lexem::ALLOC => Some(AllocFn::Alloc),
-            lexem::MEMCPY => Some(AllocFn::MemCopy),
-            lexem::SIZEOF => Some(AllocFn::SizeOf { size: 0 }),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -273,27 +269,21 @@ impl GenerateCode for AllocFn {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            AllocFn::Free => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Free),
-            ))),
-            AllocFn::Alloc => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Alloc),
-            ))),
-            AllocFn::Len => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Len),
-            ))),
-            AllocFn::Cap => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::Cap),
-            ))),
+            AllocFn::Free => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Free))),
+            AllocFn::Alloc => {
+                instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Alloc)))
+            }
+            AllocFn::Len => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Len))),
+            AllocFn::Cap => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Cap))),
             AllocFn::SizeOf { size } => {
                 instructions.push(Casm::Pop(*size));
                 instructions.push(Casm::Data(Data::Serialized {
                     data: Box::new(size.to_le_bytes()),
                 }));
             }
-            AllocFn::MemCopy => instructions.push(Casm::Platform(LibCasm::Core(
-                super::CoreCasm::Alloc(AllocCasm::MemCopy),
-            ))),
+            AllocFn::MemCopy => {
+                instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::MemCopy)))
+            }
         }
         Ok(())
     }

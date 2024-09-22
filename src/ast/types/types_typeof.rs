@@ -26,10 +26,9 @@ impl TypeOf for Type {
             Type::StrSlice(value) => value.type_of(&scope_manager, scope_id),
             Type::UserType(value) => {
                 let user_type = scope_manager.find_type_by_name(&value, scope_id)?;
-                let user_id = ScopeManager::hash_id(&value, scope_id);
                 Ok(EType::User {
-                    id: user_id,
-                    size: user_type.size_of(),
+                    id: user_type.id,
+                    size: user_type.def.size_of(),
                 })
             }
             Type::Vec(value) => value.type_of(&scope_manager, scope_id),

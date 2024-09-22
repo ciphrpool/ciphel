@@ -9,10 +9,13 @@ use nom_supreme::error::{BaseErrorKind, ErrorTree, Expectation, GenericErrorTree
 
 use self::return_stat::Return;
 use crate::{
-    semantic::scope::scope::ScopeManager, vm::vm::CodeGenerationContext, CompilationError,
+    semantic::{scope::scope::ScopeManager, Desugar, Metadata},
+    vm::vm::CodeGenerationContext,
+    CompilationError,
 };
 
 use super::{
+    expressions::Expression,
     utils::{
         error::{generate_error_report, squash},
         strings::eater::{self, ws},
@@ -63,6 +66,16 @@ impl<T: Resolve> Resolve for WithLine<T> {
     {
         self.inner
             .resolve::<G>(scope_manager, scope_id, context, extra)
+    }
+}
+
+impl<T: Desugar<()>> Desugar<()> for WithLine<T> {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<()>, SemanticError> {
+        self.inner.desugar::<G>(scope_manager, scope_id)
     }
 }
 
@@ -136,6 +149,12 @@ impl TryParse for Statement {
                 map(definition::Definition::parse, Statement::Definition),
                 map(loops::Loop::parse, Statement::Loops),
                 map(assignation::Assignation::parse, Statement::Assignation),
+                map(Expression::parse, |expr| {
+                    Statement::Return(Return::Inline {
+                        expr: Box::new(expr),
+                        metadata: Metadata::default(),
+                    })
+                }),
             )),
             "expected a valid statements",
         ))(input)
@@ -155,10 +174,13 @@ impl Resolve for Statement {
     where
         Self: Sized,
     {
+        if let Some(output) = self.desugar::<G>(scope_manager, scope_id)? {
+            *self = output;
+        }
+
         match self {
             Statement::Scope(value) => {
-                let _ = value.resolve::<G>(scope_manager, scope_id, context, &mut ())?;
-                Ok(())
+                value.resolve::<G>(scope_manager, scope_id, context, &mut ())
             }
             Statement::Flow(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Statement::Assignation(value) => {
@@ -173,6 +195,36 @@ impl Resolve for Statement {
             Statement::Loops(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Statement::Return(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
         }
+    }
+}
+
+impl Desugar<Statement> for Statement {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        let output = match self {
+            Statement::Scope(block) => block.desugar::<G>(scope_manager, scope_id)?,
+            Statement::Flow(flow) => flow.desugar::<G>(scope_manager, scope_id)?,
+            Statement::Assignation(assignation) => {
+                assignation.desugar::<G>(scope_manager, scope_id)?
+            }
+            Statement::Declaration(declaration) => {
+                declaration.desugar::<G>(scope_manager, scope_id)?
+            }
+            Statement::Definition(definition) => {
+                definition.desugar::<G>(scope_manager, scope_id)?
+            }
+            Statement::Loops(loops) => loops.desugar::<G>(scope_manager, scope_id)?,
+            Statement::Return(returns) => returns.desugar::<G>(scope_manager, scope_id)?,
+        };
+
+        if let Some(output) = output {
+            *self = output;
+        }
+
+        Ok(None)
     }
 }
 

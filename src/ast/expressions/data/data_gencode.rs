@@ -1,14 +1,14 @@
 use num_traits::ToBytes;
 
 use crate::ast::expressions::locate::Locatable;
+use crate::ast::expressions::{CompletePath, Path};
 use crate::semantic;
 use crate::semantic::scope::scope::{self, GlobalMapping, ScopeManager};
+use crate::semantic::scope::static_types::st_sizeof::POINTER_SIZE;
 use crate::semantic::scope::static_types::{MapType, SliceType, StaticType, TupleType};
-use crate::semantic::AccessLevel;
-use crate::vm::platform::core::alloc::AllocCasm;
-use crate::vm::platform::core::core_map::MapCasm;
-use crate::vm::platform::core::CoreCasm;
-use crate::vm::platform::LibCasm;
+use crate::vm::core::alloc::AllocCasm;
+use crate::vm::core::core_map::MapCasm;
+use crate::vm::core::CoreCasm;
 use crate::vm::vm::CodeGenerationContext;
 use crate::{
     ast::utils::strings::ID,
@@ -28,8 +28,8 @@ use crate::{
 };
 
 use super::{
-    Address, Closure, Data, Enum, Map, Number, Primitive, PtrAccess, Slice, StrSlice, Struct,
-    Tuple, Union, Variable, Vector,
+    Address, Call, Closure, CoreCall, Data, Enum, Map, Number, Primitive, PtrAccess, Slice,
+    StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 
 impl GenerateCode for Data {
@@ -55,6 +55,7 @@ impl GenerateCode for Data {
             Data::Union(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::Enum(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::StrSlice(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Call(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }
@@ -258,12 +259,12 @@ impl GenerateCode for Variable {
         let Some(super::VariableState::Variable { id }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Ok(crate::semantic::scope::scope::Variable {
+        let Ok(crate::semantic::scope::scope::VariableInfo {
             ctype,
             address,
             state,
             ..
-        }) = scope_manager.find_var_by_id(*id, scope_id)
+        }) = scope_manager.find_var_by_id(*id)
         else {
             return Err(CodeGenerationError::Unlocatable);
         };
@@ -316,7 +317,7 @@ impl GenerateCode for StrSlice {
         buffer.extend_from_slice(self.value.as_bytes());
 
         let address = if self.value != "" {
-            let address = scope_manager.global_mapping.alloc(self.value.len());
+            let address = scope_manager.global_mapping.alloc(8 + self.value.len());
 
             address
                 .try_into()
@@ -546,7 +547,7 @@ impl GenerateCode for Struct {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(UserType::Struct(crate::semantic::scope::user_type_impl::Struct { id, fields })) =
-            scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+            scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -589,7 +590,7 @@ impl GenerateCode for Union {
         };
         let Some(UserType::Union(
             ref union_type @ crate::semantic::scope::user_type_impl::Union { ref variants, .. },
-        )) = scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+        )) = scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -660,7 +661,7 @@ impl GenerateCode for Enum {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(UserType::Enum(crate::semantic::scope::user_type_impl::Enum { values, .. })) =
-            scope_manager.find_type_by_id(id, scope_id).ok().cloned()
+            scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
         };
@@ -703,27 +704,88 @@ impl GenerateCode for Map {
         instructions.push(Casm::Data(data::Data::Serialized {
             data: cap.to_le_bytes().into(),
         }));
-        instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-            MapCasm::MapWithCapacity {
-                key_size,
-                item_size,
-            },
-        ))));
+        instructions.push(Casm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
+            key_size,
+            item_size,
+        })));
 
         for (key, value) in &self.fields {
             let _ = key.gencode(scope_manager, scope_id, instructions, context)?;
             let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Casm::Platform(LibCasm::Core(CoreCasm::Map(
-                MapCasm::Insert {
-                    key_size,
-                    ref_access: keys_type.as_ref().into(),
-                    item_size,
-                },
-            ))));
+            instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Insert {
+                key_size,
+                ref_access: keys_type.as_ref().into(),
+                item_size,
+            })));
         }
 
         Ok(())
+    }
+}
+
+impl GenerateCode for Call {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut CasmProgram,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        match &self.path {
+            super::LeftCall::VarCall(VarCall {
+                path: CompletePath { path, name },
+                id,
+                is_closure,
+            }) => match path {
+                Path::Segment(vec) => todo!("module function"),
+                Path::Empty => {
+                    let Some(id) = id else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    let Some(param_size) = self.args.size else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+
+                    let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
+                        scope_manager.find_var_by_id(*id)
+                    else {
+                        return Err(CodeGenerationError::Unlocatable);
+                    };
+                    let Ok(address) = address.clone().try_into() else {
+                        return Err(CodeGenerationError::Unlocatable);
+                    };
+
+                    for arg in self.args.args.iter() {
+                        arg.gencode(scope_manager, scope_id, instructions, context)?;
+                    }
+
+                    instructions.push(Casm::Access(Access::Static {
+                        address,
+                        size: POINTER_SIZE,
+                    }));
+
+                    if *is_closure {
+                        instructions.push(Casm::Call(crate::vm::casm::branch::Call::Closure {
+                            param_size,
+                        }));
+                    } else {
+                        instructions.push(Casm::Call(crate::vm::casm::branch::Call::Function {
+                            param_size,
+                        }));
+                    }
+
+                    Ok(())
+                }
+            },
+            super::LeftCall::ExternCall(extern_call) => todo!(),
+            super::LeftCall::CoreCall(CoreCall { path }) => {
+                for arg in self.args.args.iter() {
+                    arg.gencode(scope_manager, scope_id, instructions, context)?;
+                }
+                path.gencode(scope_manager, scope_id, instructions, context)
+            }
+        }
     }
 }
 
@@ -734,28 +796,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        assert_number,
-        ast::{
-            expressions::{
-                data::{Data, Number},
-                Atomic, Expression,
-            },
-            statements::Statement,
-            TryParse,
-        },
-        e_static, p_num,
-        semantic::{
-            scope::{
-                static_types::{PrimitiveType, SliceType, StrSliceType, TupleType, VecType},
-                user_type_impl,
-            },
-            Resolve,
-        },
-        test_extract_variable, test_extract_variable_with, test_statements, v_num,
+        test_extract_variable, test_extract_variable_with, test_statements,
         vm::{
             casm::operation::{GetNumFrom, OpPrimitive},
-            platform::core::{core_string::STRING_HEADER, core_vector::VEC_HEADER},
-            vm::{Executable, Runtime},
+            core::{core_string::STRING_HEADER, core_vector::VEC_HEADER},
         },
     };
 
@@ -1109,7 +1153,7 @@ mod tests {
 
         test_statements(
             r##"
-        let text = string("Hello World");
+        let text = core::string::string("Hello World");
         let text_complex = string("你好世界");
         "##,
             &mut engine,

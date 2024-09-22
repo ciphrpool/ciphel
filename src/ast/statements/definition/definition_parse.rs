@@ -149,7 +149,7 @@ impl TryParse for FnDef {
                     wst(lexem::PAR_C),
                 )),
                 map(
-                    opt(cut(preceded(wst(lexem::ARROW), Type::parse))),
+                    opt(preceded(wst(lexem::ARROW), Type::parse)),
                     |opt_return_type| opt_return_type.unwrap_or(Type::Unit),
                 ),
                 FunctionBlock::parse,
@@ -176,7 +176,7 @@ mod tests {
             statements::{block::FunctionBlock, Return, Statement},
             types::{NumberType, PrimitiveType},
         },
-        semantic::{scope::ClosureState, Metadata},
+        semantic::Metadata,
         v_num,
     };
 

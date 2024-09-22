@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{DefaultHasher, Hash, Hasher},
 };
 
@@ -50,6 +50,18 @@ pub struct Variable {
     pub id: u64,
     pub ctype: EType,
     pub scope: Option<u128>,
+    // pub address: VariableAddress,
+    // pub state: VariableState,
+}
+
+#[derive(Debug, Clone)]
+pub struct VariableInfo {
+    pub id: u64,
+    pub name: String,
+    pub count: usize,
+    pub ctype: EType,
+    pub scope: Option<u128>,
+    pub is_global: bool,
     pub address: VariableAddress,
     pub state: VariableState,
 }
@@ -58,13 +70,22 @@ pub struct Variable {
 pub struct Type {
     pub id: u64,
     pub def: UserType,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeInfo {
+    pub id: u64,
+    pub name: String,
+    pub count: usize,
+    pub def: UserType,
     pub scope: Option<u128>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum ScopeState {
     Function,
-    Inligned,
+    Closure,
+    Inline,
     IIFE,
     Loop,
     #[default]
@@ -94,12 +115,15 @@ impl GlobalMapping {
 
 #[derive(Debug, Clone)]
 pub struct ScopeManager {
-    vars: Vec<Variable>,
-    types: Vec<Type>,
+    vars: HashMap<u64, VariableInfo>,
+    types: Vec<TypeInfo>,
     transaction_vars_idx: Option<usize>, // Index of the last pushed variable
     transaction_types_idx: Option<usize>, // Index of the last pushed types
-    scope_branches: HashMap<u128, Vec<u128>>,
+    scope_branches: HashMap<u128, Vec<u128>>, // parent scope of a given scope (key)
+
+    pub allocating_scope: HashMap<u128, Vec<u64>>,
     pub scope_types: HashMap<u128, Vec<EType>>,
+    pub scope_lookup: HashMap<u128, HashSet<u64>>,
     pub scope_states: HashMap<u128, ScopeState>,
     pub global_mapping: GlobalMapping,
 }
@@ -111,8 +135,11 @@ impl Default for ScopeManager {
             transaction_types_idx: None,
             transaction_vars_idx: None,
             types: Vec::default(),
-            vars: Vec::default(),
+            vars: HashMap::default(),
+            allocating_scope: HashMap::default(),
+
             scope_types: HashMap::default(),
+            scope_lookup: HashMap::default(),
             scope_states: HashMap::default(),
             global_mapping: GlobalMapping::default(),
         }
@@ -131,17 +158,19 @@ impl ScopeManager {
         Ok(())
     }
     pub fn reject_transaction(&mut self) -> Result<(), CompilationError> {
-        self.vars
-            .truncate(self.transaction_vars_idx.unwrap_or(self.vars.len()));
-        self.types
-            .truncate(self.transaction_types_idx.unwrap_or(self.types.len()));
-        self.transaction_vars_idx = None;
-        self.transaction_types_idx = None;
+        todo!();
+        // self.vars
+        //     .truncate(self.transaction_vars_idx.unwrap_or(self.vars.len()));
+        // self.types
+        //     .truncate(self.transaction_types_idx.unwrap_or(self.types.len()));
+        // self.transaction_vars_idx = None;
+        // self.transaction_types_idx = None;
         Ok(())
     }
 
     pub fn spawn(&mut self, parent: Option<u128>) -> Result<u128, SemanticError> {
         let scope_id = Ulid::new().0;
+
         if let Some(parent) = parent {
             let Some(parent_branch) = self.scope_branches.get(&parent) else {
                 return Err(SemanticError::Default);
@@ -152,12 +181,17 @@ impl ScopeManager {
         } else {
             self.scope_branches.insert(scope_id, vec![scope_id]);
         }
+
+        self.scope_lookup.insert(scope_id, HashSet::new());
+
         Ok(scope_id)
     }
 
-    pub fn hash_id(name: &str, scope: Option<u128>) -> u64 {
+    pub fn hash_id(name: &str, count: usize, scope: Option<u128>) -> u64 {
         let mut hasher = DefaultHasher::default();
         name.hash(&mut hasher);
+        count.hash(&mut hasher);
+        scope.hash(&mut hasher);
         let hash = hasher.finish();
         hash
     }
@@ -168,14 +202,29 @@ impl ScopeManager {
         ctype: EType,
         scope: Option<u128>,
     ) -> Result<u64, SemanticError> {
-        let var_id = ScopeManager::hash_id(name, scope);
-        self.vars.push(Variable {
-            id: var_id,
-            ctype,
-            scope,
-            address: VariableAddress::default(),
-            state: scope.map_or(VariableState::Global, |_| VariableState::Local),
-        });
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, scope);
+        let is_global = self.signal_variable_registation(var_id, scope);
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global,
+                ctype,
+                scope,
+                address: VariableAddress::default(),
+                state: scope.map_or(VariableState::Global, |_| VariableState::Local),
+            },
+        );
         Ok(var_id)
     }
 
@@ -185,14 +234,29 @@ impl ScopeManager {
         ctype: EType,
         scope: Option<u128>,
     ) -> Result<u64, SemanticError> {
-        let var_id = ScopeManager::hash_id(name, scope);
-        self.vars.push(Variable {
-            id: var_id,
-            ctype,
-            scope,
-            address: VariableAddress::default(),
-            state: VariableState::Parameter,
-        });
+        let count = self
+            .vars
+            .values()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let var_id = ScopeManager::hash_id(name, count, scope);
+        let _ = self.signal_variable_registation(var_id, scope);
+        self.vars.insert(
+            var_id,
+            VariableInfo {
+                id: var_id,
+                name: name.to_string(),
+                count,
+                is_global: false,
+                ctype,
+                scope,
+                address: VariableAddress::default(),
+                state: VariableState::Parameter,
+            },
+        );
         Ok(var_id)
     }
 
@@ -202,9 +266,19 @@ impl ScopeManager {
         ctype: UserType,
         scope: Option<u128>,
     ) -> Result<u64, SemanticError> {
-        let type_id = ScopeManager::hash_id(name, scope);
-        self.types.push(Type {
+        let count = self
+            .types
+            .iter()
+            .filter(|v| v.name == name)
+            .map(|v| v.count)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let type_id = ScopeManager::hash_id(name, count, scope);
+        self.types.push(TypeInfo {
             id: type_id,
+            name: name.to_string(),
+            count,
             def: ctype,
             scope,
         });
@@ -213,29 +287,128 @@ impl ScopeManager {
 
     pub fn find_var_by_name(
         &self,
-        id: &str,
+        name: &str,
         scope: Option<u128>,
-    ) -> Result<&Variable, SemanticError> {
-        let var_id = ScopeManager::hash_id(id, scope);
-        let var = self.vars.iter().find(|var| var.id == var_id);
-        match var {
-            Some(var) => Ok(var),
-            None => return Err(SemanticError::UnknownVar(id.to_string())),
+    ) -> Result<Variable, SemanticError> {
+        match scope {
+            Some(scope) => {
+                let Some(branch) = self.scope_branches.get(&scope) else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                let mut buffer: Vec<_> = self
+                    .vars
+                    .values()
+                    .filter(|v| v.name == name)
+                    .filter(|v| {
+                        v.scope.is_none()
+                            || branch.iter().find(|id| **id == v.scope.unwrap()).is_some()
+                    })
+                    .collect();
+
+                buffer.sort_by(|v1, v2| {
+                    v1.count
+                        .partial_cmp(&v2.count)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let Some(variable) = buffer.last() else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                Ok(Variable {
+                    ctype: variable.ctype.clone(),
+                    id: variable.id,
+                    scope: variable.scope,
+                })
+            }
+            None => {
+                let mut buffer: Vec<_> = self.vars.values().filter(|v| v.name == name).collect();
+
+                buffer.sort_by(|v1, v2| {
+                    v1.count
+                        .partial_cmp(&v2.count)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let Some(variable) = buffer.last() else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                Ok(Variable {
+                    ctype: variable.ctype.clone(),
+                    id: variable.id,
+                    scope: variable.scope,
+                })
+            }
         }
     }
 
-    pub fn find_var_by_id(&self, id: u64, scope: Option<u128>) -> Result<&Variable, SemanticError> {
-        let var = self.vars.iter().find(|var| var.id == id);
-        match var {
-            Some(var) => Ok(var),
-            None => return Err(SemanticError::UnknownVar(id.to_string())),
+    pub fn signal_variable_access(&mut self, variable: &Variable, scope_id: u128) {
+        if variable.scope.is_none() {
+            return;
         }
+        let var_scope = variable.scope.unwrap();
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return;
+        };
+
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+            if (*scope_state == ScopeState::IIFE || *scope_state == ScopeState::Closure)
+                && (var_scope != *id)
+            {
+                let Some(outside) = self.scope_branches.get(&scope_id) else {
+                    continue;
+                };
+
+                if outside.iter().rev().find(|s| var_scope == **s).is_some() {
+                    // The variable is outside a closed scope
+                    self.scope_lookup
+                        .get_mut(&id)
+                        .map(|set| set.insert(variable.id));
+                }
+            }
+        }
+    }
+
+    pub fn signal_variable_registation(&mut self, var_id: u64, scope_id: Option<u128>) -> bool {
+        let Some(scope_id) = scope_id else {
+            return true;
+        };
+
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return true;
+        };
+
+        let mut is_global = true;
+
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Function)
+            {
+                is_global = false;
+                if let Some(vars) = self.allocating_scope.get_mut(id) {
+                    vars.push(var_id);
+                } else {
+                    self.allocating_scope.insert(*id, vec![var_id]);
+                }
+            }
+        }
+        return is_global;
+    }
+
+    pub fn find_var_by_id(&self, id: u64) -> Result<&VariableInfo, CodeGenerationError> {
+        self.vars.get(&id).ok_or(CodeGenerationError::Unlocatable)
     }
     pub fn alloc_global_var_by_id(
         &mut self,
         id: u64,
     ) -> Result<VariableAddress, CodeGenerationError> {
-        let Some(var) = self.vars.iter_mut().find(|var| var.id == id) else {
+        let Some(var) = self.vars.get_mut(&id) else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         var.address = self.global_mapping.alloc(var.ctype.size_of());
@@ -246,48 +419,55 @@ impl ScopeManager {
         &self,
         name: &str,
         scope: Option<u128>,
-    ) -> Result<&UserType, SemanticError> {
-        let type_id = ScopeManager::hash_id(name, scope);
+    ) -> Result<Type, SemanticError> {
         match scope {
-            Some(scope_id) => {}
-            None => {
-                let found = self
+            Some(scope) => {
+                let Some(branch) = self.scope_branches.get(&scope) else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+
+                let Some(ctype) = self
                     .types
                     .iter()
-                    .filter(|ut| ut.id == type_id && ut.scope.is_none())
                     .rev()
-                    .collect::<Vec<_>>();
-                let Some(user_type) = found.first() else {
-                    return Err(SemanticError::CantInferType(name.to_string()));
+                    .filter(|v| v.name == name)
+                    .filter(|v| {
+                        v.scope.is_none()
+                            || branch.iter().find(|id| **id == v.scope.unwrap()).is_some()
+                    })
+                    .next()
+                else {
+                    return Err(SemanticError::UnknownType(name.to_string()));
                 };
-                return Ok(&user_type.def);
+                Ok(Type {
+                    id: ctype.id,
+                    def: ctype.def.clone(),
+                })
+            }
+            None => {
+                let Some(ctype) = self
+                    .types
+                    .iter()
+                    .rev()
+                    .filter(|v| v.name == name && v.scope.is_none())
+                    .next()
+                else {
+                    return Err(SemanticError::UnknownVar(name.to_string()));
+                };
+                Ok(Type {
+                    id: ctype.id,
+                    def: ctype.def.clone(),
+                })
             }
         }
-        todo!()
     }
 
-    pub fn find_type_by_id(
-        &self,
-        id: u64,
-        scope: Option<u128>,
-    ) -> Result<&UserType, SemanticError> {
-        let type_id = id;
-        match scope {
-            Some(scope_id) => {}
-            None => {
-                let found = self
-                    .types
-                    .iter()
-                    .filter(|ut| ut.id == type_id && ut.scope.is_none())
-                    .rev()
-                    .collect::<Vec<_>>();
-                let Some(user_type) = found.first() else {
-                    return Err(SemanticError::CantInferType(id.to_string()));
-                };
-                return Ok(&user_type.def);
-            }
+    pub fn find_type_by_id(&self, id: u64, scope: Option<u128>) -> Result<UserType, SemanticError> {
+        let ctype = self.types.iter().find(|var| var.id == id);
+        match ctype {
+            Some(ctype) => Ok(ctype.def.clone()),
+            None => return Err(SemanticError::CantInferType("unknown".to_string())),
         }
-        todo!()
     }
 
     pub fn is_scope_in(&self, scope_id: u128, state: ScopeState) -> Option<u128> {
@@ -305,71 +485,39 @@ impl ScopeManager {
         return None;
     }
 
-    pub fn iter_on_global_variable(&self) -> impl Iterator<Item = &Variable> {
-        self.vars.iter().filter(move |var| var.scope.is_none())
+    pub fn is_var_global(&self, var_id: u64) -> bool {
+        self.vars.get(&var_id).filter(|v| v.is_global).is_some()
     }
 
-    pub fn iter_on_local_variable<'a, T: 'a>(
-        &'a self,
-        scope_id: u128,
-        map: fn(&Variable) -> T,
-    ) -> impl Iterator<Item = T> + 'a {
-        self.vars.iter().filter_map(move |var| {
-            var.scope.and_then(|var_scope| {
-                self.scope_branches.get(&var_scope).and_then(|branch| {
-                    if branch.iter().rev().any(|&id| id == scope_id) {
-                        Some(map(var))
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
+    pub fn iter_on_global_variable(&self) -> impl Iterator<Item = &VariableInfo> {
+        self.vars.values().filter(move |var| var.scope.is_none())
     }
 
     pub fn iter_mut_on_local_variable<'a>(
         &'a mut self,
         scope_id: u128,
-    ) -> impl Iterator<Item = &mut Variable> + 'a {
-        // First, collect the relevant scope branches
-        let relevant_scopes: Vec<_> = self
-            .scope_branches
-            .iter()
-            .filter(|(_, branch)| branch.iter().rev().any(|&id| id == scope_id))
-            .map(|(scope, _)| *scope)
-            .collect();
+    ) -> impl Iterator<Item = &mut VariableInfo> + 'a {
+        let vars = self.allocating_scope.get(&scope_id);
 
-        // Then, filter and map the variables
-        self.vars.iter_mut().filter_map(move |var| {
-            if let Some(var_scope) = var.scope {
-                if var.state == VariableState::Local && relevant_scopes.contains(&var_scope) {
-                    return Some(var);
-                }
-            }
-            None
+        self.vars.values_mut().filter(move |var| {
+            var.state == VariableState::Local
+                && vars
+                    .and_then(|buf| buf.iter().find(|v| **v == var.id))
+                    .is_some()
         })
     }
 
     pub fn iter_mut_on_parameters<'a>(
         &'a mut self,
         scope_id: u128,
-    ) -> impl Iterator<Item = &mut Variable> + 'a {
-        // First, collect the relevant scope branches
-        let relevant_scopes: Vec<_> = self
-            .scope_branches
-            .iter()
-            .filter(|(_, branch)| branch.iter().rev().any(|&id| id == scope_id))
-            .map(|(scope, _)| *scope)
-            .collect();
+    ) -> impl Iterator<Item = &mut VariableInfo> + 'a {
+        let vars = self.allocating_scope.get(&scope_id);
 
-        // Then, filter and map the variables
-        self.vars.iter_mut().filter_map(move |var| {
-            if let Some(var_scope) = var.scope {
-                if var.state == VariableState::Parameter && relevant_scopes.contains(&var_scope) {
-                    return Some(var);
-                }
-            }
-            None
+        self.vars.values_mut().filter(move |var| {
+            var.state == VariableState::Parameter
+                && vars
+                    .and_then(|buf| buf.iter().find(|v| **v == var.id))
+                    .is_some()
         })
     }
 }

@@ -1,6 +1,7 @@
 use super::{AssignValue, Assignation};
 use crate::ast::expressions::locate::Locatable;
-use crate::semantic::{CompatibleWith, EType, Resolve, SemanticError, TypeOf};
+use crate::ast::statements::Statement;
+use crate::semantic::{CompatibleWith, Desugar, EType, Resolve, SemanticError, TypeOf};
 
 impl Resolve for Assignation {
     type Output = ();
@@ -31,6 +32,23 @@ impl Resolve for Assignation {
         }
     }
 }
+
+impl Desugar<Statement> for Assignation {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        if let Some(output) = self.left.desugar::<G>(scope_manager, scope_id)? {
+            self.left = output.into();
+        }
+        if let Some(output) = self.right.desugar::<G>(scope_manager, scope_id)? {
+            self.right = output.into();
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for AssignValue {
     type Output = ();
     type Context = Option<EType>;
@@ -65,6 +83,28 @@ impl Resolve for AssignValue {
                 Ok(())
             }
         }
+    }
+}
+
+impl Desugar<AssignValue> for AssignValue {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<AssignValue>, SemanticError> {
+        match self {
+            AssignValue::Block(expr_block) => {
+                if let Some(output) = expr_block.desugar::<G>(scope_manager, scope_id)? {
+                    *expr_block = output.into();
+                }
+            }
+            AssignValue::Expr(expression) => {
+                if let Some(output) = expression.desugar::<G>(scope_manager, scope_id)? {
+                    *expression = output.into();
+                }
+            }
+        }
+        Ok(None)
     }
 }
 

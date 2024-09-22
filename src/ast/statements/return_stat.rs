@@ -1,7 +1,7 @@
 use crate::ast::utils::error::squash;
 use crate::ast::utils::strings::wst_closed;
 use crate::semantic::scope::scope::{ScopeManager, ScopeState};
-use crate::semantic::Info;
+use crate::semantic::{Desugar, Info};
 
 use crate::vm::casm::branch::Goto;
 use crate::{
@@ -15,8 +15,8 @@ use crate::{
         TryParse,
     },
     semantic::{
-        scope::{static_types::StaticType, type_traits::TypeChecking},
-        CompatibleWith, EType, Metadata, Resolve, SemanticError, SizeOf, TypeOf,
+        scope::static_types::StaticType, CompatibleWith, EType, Metadata, Resolve, SemanticError,
+        SizeOf, TypeOf,
     },
     vm::{
         casm::{Casm, CasmProgram},
@@ -32,10 +32,16 @@ use nom::{
 };
 use nom_supreme::context;
 
+use super::Statement;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Return {
     Unit,
     Expr {
+        expr: Box<Expression>,
+        metadata: Metadata,
+    },
+    Inline {
         expr: Box<Expression>,
         metadata: Metadata,
     },
@@ -83,6 +89,32 @@ impl TryParse for Return {
         )(input)
     }
 }
+
+impl Desugar<Statement> for Return {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Statement>, SemanticError> {
+        match self {
+            Return::Unit => {}
+            Return::Expr { expr, metadata } => {
+                if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                    *expr = output.into();
+                }
+            }
+            Return::Inline { expr, metadata } => {
+                if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                    *expr = output.into();
+                }
+            }
+            Return::Break => {}
+            Return::Continue => {}
+        }
+        return Ok(None);
+    }
+}
+
 impl Resolve for Return {
     type Output = ();
     type Context = Option<EType>;
@@ -141,6 +173,35 @@ impl Resolve for Return {
                 };
                 Ok(())
             }
+            Return::Inline { expr, metadata } => {
+                let _ = expr.resolve::<G>(scope_manager, Some(scope_id), &context, &mut None)?;
+                let return_type = expr.type_of(&scope_manager, Some(scope_id))?;
+                if let Some(context) = context {
+                    let _ =
+                        context.compatible_with(&return_type, &scope_manager, Some(scope_id))?;
+                }
+
+                let Some(ScopeState::Inline | ScopeState::IIFE) =
+                    scope_manager.scope_states.get(&scope_id)
+                else {
+                    return Err(SemanticError::ExpectedInlineBlock);
+                };
+                match scope_manager.scope_types.get_mut(&scope_id) {
+                    Some(types) => {
+                        types.push(return_type.clone());
+                    }
+                    None => {
+                        scope_manager
+                            .scope_types
+                            .insert(scope_id, vec![return_type.clone()]);
+                    }
+                }
+                metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(return_type),
+                };
+                Ok(())
+            }
             Return::Break => {
                 let Some(scope_id) = scope_manager.is_scope_in(scope_id, ScopeState::Loop) else {
                     return Err(SemanticError::ExpectedLoop);
@@ -169,6 +230,7 @@ impl TypeOf for Return {
         match self {
             Return::Unit => Ok(EType::Static(StaticType::Unit)),
             Return::Expr { expr, metadata: _ } => expr.type_of(&scope_manager, scope_id),
+            Return::Inline { expr, metadata: _ } => expr.type_of(&scope_manager, scope_id),
             Return::Break => Ok(EType::Static(StaticType::Unit)),
             Return::Continue => Ok(EType::Static(StaticType::Unit)),
         }
@@ -194,6 +256,17 @@ impl GenerateCode for Return {
                 Ok(())
             }
             Return::Expr { expr, metadata } => {
+                let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
+
+                let Some(return_label) = context.return_label else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Casm::Goto(Goto {
+                    label: Some(return_label),
+                }));
+                Ok(())
+            }
+            Return::Inline { expr, metadata } => {
                 let _ = expr.gencode(scope_manager, scope_id, instructions, context)?;
 
                 let Some(return_label) = context.return_label else {

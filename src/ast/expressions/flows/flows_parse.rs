@@ -9,7 +9,6 @@ use crate::{
     ast::{
         expressions::{
             data::{Data, Primitive, StrSlice, Variable},
-            operation::FnCall,
             Atomic, Expression,
         },
         statements::block::{BlockCommonApi, ExprBlock},
@@ -23,7 +22,7 @@ use crate::{
         TryParse,
     },
     semantic::{Metadata, Resolve},
-    vm::{self, platform, vm::GenerateCode},
+    vm::{self, core, vm::GenerateCode},
 };
 use std::fmt::Debug;
 
@@ -37,7 +36,7 @@ impl TryParse for ExprFlow {
      * @desc Parse expression statement
      *
      * @grammar
-     * ExprStatement := If_Expr | Match_Expr | Try_Expr | FnCall
+     * ExprStatement := If_Expr | Match_Expr | Try_Expr | Call
      */
     fn parse(input: Span) -> PResult<Self> {
         alt((
@@ -46,12 +45,12 @@ impl TryParse for ExprFlow {
             map(TryExpr::parse, |value| ExprFlow::Try(value)),
             map(
                 preceded(
-                    wst(vm::platform::utils::lexem::SIZEOF),
+                    wst(vm::core::lexem::SIZEOF),
                     delimited(wst(lexem::PAR_O), Type::parse, wst(lexem::PAR_C)),
                 ),
                 |value| ExprFlow::SizeOf(value, Metadata::default()),
             ),
-            map(FCall::parse, |value| ExprFlow::FCall(value)),
+            // map(FCall::parse, |value| ExprFlow::FCall(value)),
         ))(input)
     }
 }
@@ -294,38 +293,39 @@ impl TryParse for FCall {
      * @desc Parse fn call
      *
      * @grammar
-     * FnCall := f"string{Expression}"
+     * Call := f"string{Expression}"
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(pair(wst("f"), parse_fstring::<Expression>), |(_, items)| {
-            FCall {
-                value: items
-                    .into_iter()
-                    .map(|item| match item {
-                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
-                            FormatItem::Str(string)
-                        }
-                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
-                            FormatItem::Expr(Expression::FnCall(FnCall {
-                                lib: Some(platform::utils::lexem::STD.to_string().into()),
-                                fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
-                                    Variable {
-                                        name: platform::utils::lexem::TOSTR.to_string().into(),
-                                        metadata: Metadata::default(),
-                                        state: None,
-                                    },
-                                )))),
-                                params: vec![expr],
-                                metadata: Metadata::default(),
-                                platform: Default::default(),
-                                is_dynamic_fn: Default::default(),
-                            }))
-                        }
-                    })
-                    .collect(),
-                metadata: Metadata::default(),
-            }
-        })(input)
+        todo!();
+        // map(pair(wst("f"), parse_fstring::<Expression>), |(_, items)| {
+        //     FCall {
+        //         value: items
+        //             .into_iter()
+        //             .map(|item| match item {
+        //                 crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+        //                     FormatItem::Str(string)
+        //                 }
+        //                 crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+        //                     FormatItem::Expr(Expression::Call(Call {
+        //                         lib: Some(platform::utils::lexem::STD.to_string().into()),
+        //                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
+        //                             Variable {
+        //                                 name: platform::utils::lexem::TOSTR.to_string().into(),
+        //                                 metadata: Metadata::default(),
+        //                                 state: None,
+        //                             },
+        //                         )))),
+        //                         params: vec![expr],
+        //                         metadata: Metadata::default(),
+        //                         platform: Default::default(),
+        //                         is_dynamic_fn: Default::default(),
+        //                     }))
+        //                 }
+        //             })
+        //             .collect(),
+        //         metadata: Metadata::default(),
+        //     }
+        // })(input)
     }
 }
 
@@ -341,7 +341,7 @@ mod tests {
             },
             statements::{block::Block, return_stat::Return, Statement},
         },
-        semantic::{scope::ClosureState, Metadata},
+        semantic::Metadata,
         v_num,
     };
 

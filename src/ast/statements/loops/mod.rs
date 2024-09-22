@@ -21,14 +21,14 @@ pub enum ForInit {
 }
 
 pub type ForInits = Vec<ForInit>;
-pub type ForCondition = Expression;
+pub type ForCondition = Option<Expression>;
 pub type ForIncrements = Vec<super::assignation::Assignation>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForLoop {
-    // indices: ForInits,
-    // condition: ForCondition,
-    // increments: ForIncrements,
+    indices: ForInits,
+    condition: ForCondition,
+    increments: ForIncrements,
     block: Box<Block>,
 }
 

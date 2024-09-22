@@ -14,8 +14,8 @@ use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
 use crate::vm::casm::operation::OpPrimitive;
 use crate::vm::casm::Casm;
-use crate::vm::platform::utils::lexem;
-use crate::vm::platform::LibCasm;
+use crate::vm::core::lexem;
+use crate::vm::core::CoreCasm;
 
 use crate::vm::stdio::StdIO;
 use crate::vm::vm::CasmMetadata;
@@ -29,6 +29,8 @@ use crate::{
     },
 };
 use crate::{e_static, p_num};
+
+use super::PathFinder;
 #[derive(Debug, Clone, PartialEq)]
 pub enum MathFn {
     Ceil,
@@ -98,6 +100,51 @@ pub enum MathCasm {
     IsInf,
 }
 
+impl PathFinder for MathFn {
+    fn find(path: &[String], name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if (path.len() == 1 && path[0] == lexem::MATH) || path.len() == 0 {
+            return match name {
+                lexem::CEIL => Some(MathFn::Ceil),
+                lexem::FLOOR => Some(MathFn::Floor),
+                lexem::ABS => Some(MathFn::Abs),
+                lexem::EXP => Some(MathFn::Exp),
+                lexem::LN => Some(MathFn::Ln),
+                lexem::LOG => Some(MathFn::Log),
+                lexem::LOG10 => Some(MathFn::Log10),
+                lexem::POW => Some(MathFn::Pow),
+                lexem::SQRT => Some(MathFn::Sqrt),
+                lexem::ACOS => Some(MathFn::Acos),
+                lexem::ASIN => Some(MathFn::Asin),
+                lexem::ATAN => Some(MathFn::Atan),
+                lexem::ATAN2 => Some(MathFn::Atan2),
+                lexem::COS => Some(MathFn::Cos),
+                lexem::SIN => Some(MathFn::Sin),
+                lexem::TAN => Some(MathFn::Tan),
+                lexem::HYPOT => Some(MathFn::Hypot),
+                lexem::DEG => Some(MathFn::Deg),
+                lexem::RAD => Some(MathFn::Rad),
+                lexem::COSH => Some(MathFn::CosH),
+                lexem::SINH => Some(MathFn::SinH),
+                lexem::TANH => Some(MathFn::TanH),
+                lexem::ACOSH => Some(MathFn::ACosH),
+                lexem::ASINH => Some(MathFn::ASinH),
+                lexem::ATANH => Some(MathFn::ATanH),
+                lexem::PI => Some(MathFn::Pi),
+                lexem::E => Some(MathFn::E),
+                lexem::INF => Some(MathFn::Inf),
+                lexem::NEG_INF => Some(MathFn::NInf),
+                lexem::IS_NAN => Some(MathFn::IsNaN),
+                lexem::IS_INF => Some(MathFn::IsInf),
+                _ => None,
+            };
+        }
+        None
+    }
+}
+
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
         match self {
@@ -139,52 +186,6 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
     }
 }
 
-impl MathFn {
-    pub fn from(suffixe: &Option<ID>, id: &ID) -> Option<Self> {
-        match suffixe {
-            Some(suffixe) => {
-                if *suffixe != lexem::STD {
-                    return None;
-                }
-            }
-            None => {}
-        }
-        match id.as_str() {
-            lexem::CEIL => Some(MathFn::Ceil),
-            lexem::FLOOR => Some(MathFn::Floor),
-            lexem::ABS => Some(MathFn::Abs),
-            lexem::EXP => Some(MathFn::Exp),
-            lexem::LN => Some(MathFn::Ln),
-            lexem::LOG => Some(MathFn::Log),
-            lexem::LOG10 => Some(MathFn::Log10),
-            lexem::POW => Some(MathFn::Pow),
-            lexem::SQRT => Some(MathFn::Sqrt),
-            lexem::ACOS => Some(MathFn::Acos),
-            lexem::ASIN => Some(MathFn::Asin),
-            lexem::ATAN => Some(MathFn::Atan),
-            lexem::ATAN2 => Some(MathFn::Atan2),
-            lexem::COS => Some(MathFn::Cos),
-            lexem::SIN => Some(MathFn::Sin),
-            lexem::TAN => Some(MathFn::Tan),
-            lexem::HYPOT => Some(MathFn::Hypot),
-            lexem::DEG => Some(MathFn::Deg),
-            lexem::RAD => Some(MathFn::Rad),
-            lexem::COSH => Some(MathFn::CosH),
-            lexem::SINH => Some(MathFn::SinH),
-            lexem::TANH => Some(MathFn::TanH),
-            lexem::ACOSH => Some(MathFn::ACosH),
-            lexem::ASINH => Some(MathFn::ASinH),
-            lexem::ATANH => Some(MathFn::ATanH),
-            lexem::PI => Some(MathFn::Pi),
-            lexem::E => Some(MathFn::E),
-            lexem::INF => Some(MathFn::Inf),
-            lexem::NEG_INF => Some(MathFn::NInf),
-            lexem::IS_NAN => Some(MathFn::IsNaN),
-            lexem::IS_INF => Some(MathFn::IsInf),
-            _ => None,
-        }
-    }
-}
 impl ResolvePlatform for MathFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
@@ -292,101 +293,94 @@ impl GenerateCode for MathFn {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            MathFn::Ceil => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Ceil),
-            )))),
-            MathFn::Floor => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Floor),
-            )))),
-            MathFn::Abs => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Abs),
-            )))),
-            MathFn::Exp => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Exp),
-            )))),
-            MathFn::Log => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Log),
-            )))),
-            MathFn::Ln => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Ln),
-            )))),
-            MathFn::Log10 => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Log10),
-            )))),
-            MathFn::Pow => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Pow),
-            )))),
-            MathFn::Sqrt => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Sqrt),
-            )))),
-            MathFn::Acos => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Acos),
-            )))),
-            MathFn::Asin => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Asin),
-            )))),
-            MathFn::Atan => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Atan),
-            )))),
-            MathFn::Atan2 => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Atan2),
-            )))),
-            MathFn::Cos => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Cos),
-            )))),
-            MathFn::Sin => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Sin),
-            )))),
-            MathFn::Tan => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Tan),
-            )))),
-            MathFn::Hypot => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Hypot),
-            )))),
-            MathFn::Deg => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Deg),
-            )))),
-            MathFn::Rad => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Rad),
-            )))),
-            MathFn::CosH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::CosH),
-            )))),
-            MathFn::SinH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::SinH),
-            )))),
-            MathFn::TanH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::TanH),
-            )))),
-            MathFn::ACosH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::ACosH),
-            )))),
-            MathFn::ASinH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::ASinH),
-            )))),
-            MathFn::ATanH => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::ATanH),
-            )))),
-            MathFn::Pi => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Pi),
-            )))),
-            MathFn::E => Ok(
-                instructions.push(Casm::Platform(LibCasm::Std(super::StdCasm::Math(
-                    MathCasm::E,
-                )))),
-            ),
-            MathFn::Inf => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::Inf),
-            )))),
-            MathFn::NInf => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::NInf),
-            )))),
-            MathFn::IsNaN => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::IsNaN),
-            )))),
-            MathFn::IsInf => Ok(instructions.push(Casm::Platform(LibCasm::Std(
-                super::StdCasm::Math(MathCasm::IsInf),
-            )))),
+            MathFn::Ceil => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Ceil))))
+            }
+
+            MathFn::Floor => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Floor))))
+            }
+            MathFn::Abs => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Abs)))),
+
+            MathFn::Exp => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Exp)))),
+
+            MathFn::Log => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Log)))),
+
+            MathFn::Ln => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Ln)))),
+
+            MathFn::Log10 => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Log10))))
+            }
+            MathFn::Pow => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Pow)))),
+
+            MathFn::Sqrt => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Sqrt))))
+            }
+
+            MathFn::Acos => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Acos))))
+            }
+
+            MathFn::Asin => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Asin))))
+            }
+
+            MathFn::Atan => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Atan))))
+            }
+
+            MathFn::Atan2 => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Atan2))))
+            }
+            MathFn::Cos => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Cos)))),
+
+            MathFn::Sin => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Sin)))),
+
+            MathFn::Tan => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Tan)))),
+
+            MathFn::Hypot => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Hypot))))
+            }
+            MathFn::Deg => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Deg)))),
+
+            MathFn::Rad => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Rad)))),
+
+            MathFn::CosH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::CosH))))
+            }
+
+            MathFn::SinH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::SinH))))
+            }
+
+            MathFn::TanH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::TanH))))
+            }
+
+            MathFn::ACosH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ACosH))))
+            }
+            MathFn::ASinH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ASinH))))
+            }
+            MathFn::ATanH => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ATanH))))
+            }
+            MathFn::Pi => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Pi)))),
+
+            MathFn::E => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::E)))),
+            MathFn::Inf => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Inf)))),
+
+            MathFn::NInf => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::NInf))))
+            }
+
+            MathFn::IsNaN => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::IsNaN))))
+            }
+            MathFn::IsInf => {
+                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::IsInf))))
+            }
         }
     }
 }

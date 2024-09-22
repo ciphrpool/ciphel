@@ -1,20 +1,18 @@
-use crate::ast::statements::block::{Block, ClosureBlock, ExprBlock};
+use crate::ast::statements::block::{Block, ClosureBlock};
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
 use crate::vm::allocator::MemoryAddress;
+use crate::vm::core::Core;
 use crate::{
     ast::{self, statements::declaration::TypedVar, utils::strings::ID},
     e_static, p_num,
     semantic::{
-        scope::{
-            static_types::{PrimitiveType, StaticType},
-            ClosureState,
-        },
+        scope::static_types::{PrimitiveType, StaticType},
         EType, Metadata, SemanticError,
     },
 };
 
-use super::{Atomic, Expression};
+use super::{Atomic, CompletePath, Expression};
 
 pub mod data_gencode;
 pub mod data_parse;
@@ -32,6 +30,7 @@ pub enum Data {
     Address(Address),
     PtrAccess(PtrAccess),
     Variable(Variable),
+    Call(Call),
     Unit,
     Map(Map),
     Struct(Struct),
@@ -158,6 +157,43 @@ pub struct Map {
     pub metadata: Metadata,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallArgs {
+    pub args: Vec<Expression>,
+    pub size: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Call {
+    pub path: LeftCall,
+    pub args: CallArgs,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LeftCall {
+    VarCall(VarCall),
+    ExternCall(ExternCall),
+    CoreCall(CoreCall),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarCall {
+    pub path: CompletePath,
+    pub id: Option<u64>,
+    pub is_closure: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExternCall {
+    pub path: CompletePath,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreCall {
+    pub path: Core,
+}
+
 impl Data {
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
@@ -196,6 +232,7 @@ impl Data {
                 metadata,
             }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+            Data::Call(Call { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -231,6 +268,7 @@ impl Data {
                 metadata,
             }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
+            Data::Call(Call { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -292,6 +330,7 @@ impl Data {
                 metadata,
             }) => metadata.signature(),
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
+            Data::Call(Call { metadata, .. }) => metadata.signature(),
         }
     }
 }

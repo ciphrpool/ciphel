@@ -3,13 +3,10 @@ use super::{
     CasmProgram,
 };
 
-use crate::{
-    semantic::{scope::static_types::st_deserialize::extract_u64, AccessLevel},
-    vm::{
-        allocator::{heap::Heap, stack::Stack},
-        stdio::StdIO,
-        vm::{CasmMetadata, Executable, RuntimeError},
-    },
+use crate::vm::{
+    allocator::{heap::Heap, stack::Stack},
+    stdio::StdIO,
+    vm::{CasmMetadata, Executable, RuntimeError},
 };
 
 use num_traits::ToBytes;
@@ -54,7 +51,9 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Label {
 #[derive(Debug, Clone)]
 pub enum Call {
     From { label: Ulid, param_size: usize },
-    Stack,
+    // Stack,
+    Function { param_size: usize },
+    Closure { param_size: usize },
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
@@ -67,7 +66,8 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Call {
                     .to_string();
                 stdio.push_casm(engine, &format!("call {label} {param_size}"));
             }
-            Call::Stack => stdio.push_casm(engine, "call"),
+            Call::Function { param_size } => stdio.push_casm(engine, "call"),
+            Call::Closure { param_size } => stdio.push_casm(engine, "call"),
         }
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
@@ -85,18 +85,19 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Call {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        let (param_size, function_offset) = match self {
+        let (param_size, function_offset) = match *self {
             Call::From { label, param_size } => {
                 let Some(function_offset) = program.get(&label) else {
                     return Err(RuntimeError::CodeSegmentation);
                 };
-                (*param_size, function_offset)
+                (param_size, function_offset)
             }
-            Call::Stack => {
-                //let return_size = OpPrimitive::pop_num::<u64>(stack)? as usize;
-                let param_size = OpPrimitive::pop_num::<u64>(stack)? as usize;
+            Call::Function { param_size } => {
                 let function_offset = OpPrimitive::pop_num::<u64>(stack)? as usize;
                 (param_size, function_offset)
+            }
+            Call::Closure { param_size } => {
+                todo!()
             }
         };
 
@@ -520,7 +521,10 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Return {
         engine: &mut G,
         tid: usize,
     ) -> Result<(), RuntimeError> {
-        todo!()
+        let return_pointer = stack.return_pointer;
+        let _ = stack.close_frame(self.size)?;
+        program.cursor_set(return_pointer);
+        Ok(())
     }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for CloseFrame {
