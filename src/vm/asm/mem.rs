@@ -4,7 +4,7 @@ use ulid::Ulid;
 
 use super::{
     operation::{OpPrimitive, PopNum},
-    CasmProgram,
+    Program,
 };
 
 use crate::vm::{
@@ -26,19 +26,19 @@ pub enum Mem {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            Mem::Dup(n) => stdio.push_casm(engine, &format!("dup {n}")),
+            Mem::Dup(n) => stdio.push_asm(engine, &format!("dup {n}")),
             Mem::Label(label) => {
                 let label = program
                     .get_label_name(label)
                     .unwrap_or("".to_string().into())
                     .to_string();
-                stdio.push_casm(engine, &format!("dmp_label {label}"))
+                stdio.push_asm(engine, &format!("dmp_label {label}"))
             }
-            Mem::Take { size } => stdio.push_casm(engine, &format!("take {size}")),
+            Mem::Take { size } => stdio.push_asm(engine, &format!("take {size}")),
             Mem::Store { size, address } => {
-                stdio.push_casm(engine, &format!("store {} {}", address.name(), size))
+                stdio.push_asm(engine, &format!("store {} {}", address.name(), size))
             }
         }
     }
@@ -56,7 +56,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Mem {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mem {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

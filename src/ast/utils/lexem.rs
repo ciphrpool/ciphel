@@ -19,7 +19,7 @@ pub const BREAK: &str = "break";
 pub const CONTINUE: &str = "continue";
 pub const MOVE: &str = "move";
 pub const REC: &str = "rec";
-pub const DYN: &str = "dyn";
+pub const CLOSED: &str = "closed";
 
 // TYPE
 pub const U8: &str = "u8";

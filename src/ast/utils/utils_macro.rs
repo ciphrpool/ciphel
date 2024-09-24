@@ -133,7 +133,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         expr.gencode(
 //             &mut scope_manager,
 //             None,
@@ -186,7 +186,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         expr.gencode(
 //             &mut scope_manager,
 //             None,
@@ -226,7 +226,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         $statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -267,7 +267,7 @@ macro_rules! assert_number {
 //             )
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         $statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -305,7 +305,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         $statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -378,7 +378,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         expr.gencode(
 //             &mut scope_manager,
 //             None,
@@ -433,7 +433,7 @@ macro_rules! assert_number {
 //             .expect("Semantic resolution should have succeeded");
 
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         expr.gencode(
 //             &mut scope_manager,
 //             None,

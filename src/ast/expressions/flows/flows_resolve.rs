@@ -7,9 +7,9 @@ use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
 use crate::semantic::scope::static_types::{PrimitiveType, TupleType};
-use crate::semantic::scope::user_type_impl::{Enum, Struct, Union};
+use crate::semantic::scope::user_types::{Enum, Struct, Union};
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
+    scope::{static_types::StaticType, user_types::UserType},
     CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{Desugar, Info, MergeType, ResolveNumber};
@@ -724,7 +724,7 @@ mod tests {
         semantic::scope::{
             scope::ScopeManager,
             static_types::{StaticType, StringType},
-            user_type_impl::{Enum, Struct, Union, UserType},
+            user_types::{Enum, Struct, Union, UserType},
         },
     };
 

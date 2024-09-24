@@ -1,6 +1,6 @@
 // use crate::{
 //     semantic::ArcMutex,
-//     vm::{casm::Casm, vm::RuntimeError},
+//     vm::{asm::Asm, vm::RuntimeError},
 // };
 
 // #[derive(Debug, Clone, Copy)]
@@ -13,7 +13,7 @@
 
 // #[derive(Debug, Clone)]
 // pub struct VTable {
-//     functions: ArcMutex<Vec<Option<Vec<Casm>>>>,
+//     functions: ArcMutex<Vec<Option<Vec<Asm>>>>,
 // }
 // impl Into<RuntimeError> for VTableError {
 //     fn into(self) -> RuntimeError {
@@ -30,15 +30,15 @@
 // }
 
 // impl VTable {
-//     pub fn alloc(&self, function: Vec<Casm>) -> Result<u64, VTableError> {
+//     pub fn alloc(&self, function: Vec<Asm>) -> Result<u64, VTableError> {
 //         let mut borrowed = self.functions.as_ref().borrow_mut();
 //         let idx = borrowed.len();
 //         borrowed.push(Some(function));
 //         Ok(idx as u64)
 //     }
 
-//     pub fn read(&self, offset: u64) -> Result<Vec<Casm>, VTableError> {
-//         let borrowed: std::cell::Ref<'_, Vec<Option<Vec<Casm>>>> = self.functions.as_ref().borrow();
+//     pub fn read(&self, offset: u64) -> Result<Vec<Asm>, VTableError> {
+//         let borrowed: std::cell::Ref<'_, Vec<Option<Vec<Asm>>>> = self.functions.as_ref().borrow();
 //         match (&borrowed).get(offset as usize) {
 //             Some(Some(f)) => Ok(f.clone()),
 //             _ => Err(VTableError::AccessError),

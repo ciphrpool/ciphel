@@ -1,28 +1,29 @@
 use crate::semantic::scope::scope::{
     ScopeManager, ScopeState, Variable, VariableAddress, VariableInfo,
 };
-use crate::vm::casm::branch::{BranchTry, Return};
+use crate::semantic::scope::static_types::POINTER_SIZE;
+use crate::vm::asm::branch::{BranchTry, Return};
 use crate::vm::vm::CodeGenerationContext;
 use crate::{
     semantic::SizeOf,
     vm::{
-        casm::{
+        asm::{
             alloc::Alloc,
             branch::{Call, Goto, Label},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
 };
 
-use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 
 impl GenerateCode for Block {
     fn gencode(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         for statement in &self.statements {
@@ -37,7 +38,7 @@ impl GenerateCode for FunctionBlock {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
@@ -50,7 +51,8 @@ impl GenerateCode for FunctionBlock {
 
         let epilog_label = Label::gen();
 
-        let mut local_offset = 0;
+        let mut local_offset = POINTER_SIZE; // Account for function pointer
+
         // Allocate all parameter variable
         for VariableInfo {
             ref ctype,
@@ -62,7 +64,6 @@ impl GenerateCode for FunctionBlock {
             *address = VariableAddress::Local(local_offset);
             let size = ctype.size_of();
             local_offset += size;
-            // instructions.push(Casm::Alloc(Alloc::Stack { size }));
         }
 
         // Allocate all local variable
@@ -73,7 +74,7 @@ impl GenerateCode for FunctionBlock {
             *address = VariableAddress::Local(local_offset);
             let size = ctype.size_of();
             local_offset += size;
-            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+            instructions.push(Asm::Alloc(Alloc::Stack { size }));
         }
 
         // generate code for all statements
@@ -92,7 +93,7 @@ impl GenerateCode for FunctionBlock {
 
         // Function epilog
         instructions.push_label_id(epilog_label, "epilog_Function".to_string());
-        instructions.push(Casm::Return(Return { size: return_size }));
+        instructions.push(Asm::Return(Return { size: return_size }));
 
         Ok(())
     }
@@ -103,7 +104,7 @@ impl GenerateCode for ClosureBlock {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
@@ -116,7 +117,8 @@ impl GenerateCode for ClosureBlock {
 
         let epilog_label = Label::gen();
 
-        let mut local_offset = 0;
+        let mut local_offset = POINTER_SIZE; // Account for closure pointer
+
         // Allocate all parameter variable
         for VariableInfo {
             ref ctype, address, ..
@@ -125,7 +127,6 @@ impl GenerateCode for ClosureBlock {
             *address = VariableAddress::Local(local_offset);
             let size = ctype.size_of();
             local_offset += size;
-            instructions.push(Casm::Alloc(Alloc::Stack { size }));
         }
 
         // Allocate all local variable
@@ -136,7 +137,7 @@ impl GenerateCode for ClosureBlock {
             *address = VariableAddress::Local(local_offset);
             let size = ctype.size_of();
             local_offset += size;
-            instructions.push(Casm::Alloc(Alloc::Stack { size }));
+            instructions.push(Asm::Alloc(Alloc::Stack { size }));
         }
 
         // generate code for all statements
@@ -155,7 +156,73 @@ impl GenerateCode for ClosureBlock {
 
         // Function epilog
         instructions.push_label_id(epilog_label, "epilog_Function".to_string());
-        instructions.push(Casm::Return(Return { size: return_size }));
+        instructions.push(Asm::Return(Return { size: return_size }));
+
+        Ok(())
+    }
+}
+
+impl GenerateCode for LambdaBlock {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut Program,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(inner_scope) = self.scope else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(return_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let return_size = return_type.size_of();
+
+        let epilog_label = Label::gen();
+
+        let mut local_offset = POINTER_SIZE; // Account for lambda pointer
+
+        // Allocate all parameter variable
+        for VariableInfo {
+            ref ctype,
+            id,
+            address,
+            ..
+        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+        }
+
+        // Allocate all local variable
+        for VariableInfo {
+            ref ctype, address, ..
+        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(local_offset);
+            let size = ctype.size_of();
+            local_offset += size;
+            instructions.push(Asm::Alloc(Alloc::Stack { size }));
+        }
+
+        // generate code for all statements
+        for statement in &self.statements {
+            let _ = statement.gencode(
+                scope_manager,
+                self.scope,
+                instructions,
+                &CodeGenerationContext {
+                    return_label: Some(epilog_label),
+                    break_label: None,
+                    continue_label: None,
+                },
+            )?;
+        }
+
+        // lambda epilog
+        instructions.push_label_id(epilog_label, "epilog_lambda".to_string());
+        instructions.push(Asm::Return(Return { size: return_size }));
 
         Ok(())
     }
@@ -166,7 +233,7 @@ impl GenerateCode for ExprBlock {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(inner_scope) = self.scope else {
@@ -190,7 +257,7 @@ impl GenerateCode for ExprBlock {
         let end_iife = Label::gen();
 
         if ScopeState::IIFE == scope_state {
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::Goto(Goto {
                 label: Some(call_label),
             }));
             instructions.push_label_id(start_iife, "start_IIFE".to_string());
@@ -199,6 +266,7 @@ impl GenerateCode for ExprBlock {
         if ScopeState::IIFE == scope_state {
             // Allocate all local variable
             let mut local_offset = 0;
+
             for VariableInfo {
                 ref ctype, address, ..
             } in scope_manager.iter_mut_on_local_variable(inner_scope)
@@ -206,7 +274,7 @@ impl GenerateCode for ExprBlock {
                 *address = VariableAddress::Local(local_offset);
                 let size = ctype.size_of();
                 local_offset += size;
-                instructions.push(Casm::Alloc(Alloc::Stack { size }));
+                instructions.push(Asm::Alloc(Alloc::Stack { size }));
             }
         }
 
@@ -227,12 +295,12 @@ impl GenerateCode for ExprBlock {
         if ScopeState::IIFE == scope_state {
             // IIFE epilog
             instructions.push_label_id(epilog_label, "epilog_IIFE".to_string());
-            instructions.push(Casm::Return(Return { size: return_size }));
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::Return(Return { size: return_size }));
+            instructions.push(Asm::Goto(Goto {
                 label: Some(end_iife),
             }));
             instructions.push_label_id(call_label, "call_IIFE".to_string());
-            instructions.push(Casm::Call(Call::From {
+            instructions.push(Asm::Call(Call::From {
                 label: start_iife,
                 param_size: 0,
             }));

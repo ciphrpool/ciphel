@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::vm::{
-    casm::Casm,
+    asm::Asm,
     core::thread::{sig_close, sig_exit, sig_join, sig_sleep, sig_spawn, sig_wait, sig_wake},
     vm::{Signal, Thread, ThreadState, MAX_THREAD_COUNT},
 };
@@ -150,7 +150,7 @@ impl Scheduler {
             Player::P1 => &mut self.p1_context,
             Player::P2 => &mut self.p2_context,
         };
-        stdio.push_casm_info(engine, &format!("MINOR FRAME ::tid {0}\n", thread.tid));
+        stdio.push_asm_info(engine, &format!("MINOR FRAME ::tid {0}\n", thread.tid));
         while thread.current_maf_instruction_count < INSTRUCTION_MAX_COUNT {
             if thread.program.cursor_is_at_end() {
                 let _ = thread.state.to(ThreadState::IDLE);
@@ -158,7 +158,7 @@ impl Scheduler {
             }
             let return_status = thread.program.evaluate(|program, instruction| {
                 instruction.name(stdio, program, engine);
-                let weight = <Casm as CasmMetadata<G>>::weight(instruction).get();
+                let weight = <Asm as CasmMetadata<G>>::weight(instruction).get();
 
                 engine.consume_energy(weight)?;
 
@@ -253,7 +253,7 @@ impl Scheduler {
                         }
                     },
                     Err(err) => {
-                        stdio.push_casm_info(
+                        stdio.push_asm_info(
                             engine,
                             &format!("RUNTIME ERROR :: {:?} in {:?}", err, instruction),
                         );
@@ -307,7 +307,7 @@ impl Scheduler {
         self.wake_for_stdin(Player::P2, runtime, stdio, engine)?;
 
         let info = runtime.tid_info();
-        stdio.push_casm_info(engine, &format!("MAJOR FRAME START : {info}"));
+        stdio.push_asm_info(engine, &format!("MAJOR FRAME START : {info}"));
 
         for (p1, p2) in runtime.iter_mut() {
             if let Some(p1) = p1 {
@@ -368,7 +368,7 @@ impl Scheduler {
                 break;
             }
         }
-        stdio.push_casm_info(engine, "MAJOR FRAME END".into());
+        stdio.push_asm_info(engine, "MAJOR FRAME END".into());
         self.conclude(runtime, engine)?;
         Ok(())
     }

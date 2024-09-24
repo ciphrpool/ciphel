@@ -12,7 +12,7 @@ use super::{
         heap::{Heap, HeapError},
         stack::{Stack, StackError},
     },
-    casm::CasmProgram,
+    asm::Program,
     stdio::StdIO,
 };
 use thiserror::Error;
@@ -111,7 +111,7 @@ pub trait GenerateCode {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError>;
 }
@@ -121,7 +121,7 @@ pub trait GenerateCode {
 //         &self,
 //         scope: &mut semantic::scope::scope::ScopeManager,
 //         scope_id: Option<u128>,
-//         instructions: &mut CasmProgram,
+//         instructions: &mut Program,
 //         context: &crate::vm::vm::CodeGenerationContext,
 //     ) -> Result<(), CodeGenerationError>;
 
@@ -156,7 +156,7 @@ pub trait GameEngineStaticFn {
     fn stderr_print(&mut self, content: String);
     fn stdin_scan(&mut self) -> Option<String>;
     fn stdin_request(&mut self);
-    fn stdcasm_print(&mut self, content: String);
+    fn stdasm_print(&mut self, content: String);
 
     fn is_dynamic_fn(suffixe: &Option<ID>, id: &ID) -> Option<impl DynamicFnResolver> {
         None::<DefaultDynamicFn>
@@ -164,7 +164,7 @@ pub trait GameEngineStaticFn {
 
     fn execute_dynamic_fn(
         fn_id: String,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -177,7 +177,7 @@ pub trait GameEngineStaticFn {
     fn name_of_dynamic_fn(
         fn_id: String,
         stdio: &mut StdIO,
-        program: &mut CasmProgram,
+        program: &mut Program,
         engine: &mut Self,
     ) {
         unimplemented!("This engine does not have dynamic functions")
@@ -194,7 +194,7 @@ pub trait GameEngineStaticFn {
         usize::MAX
     }
 
-    fn consume_energy(&mut self, casm_weight: usize) -> Result<(), RuntimeError> {
+    fn consume_energy(&mut self, asm_weight: usize) -> Result<(), RuntimeError> {
         Ok(())
     }
 }
@@ -213,7 +213,7 @@ impl GameEngineStaticFn for NoopGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, content: String) {}
 }
 
 #[derive(Debug, Clone)]
@@ -235,7 +235,7 @@ impl GameEngineStaticFn for StdoutTestGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {
+    fn stdasm_print(&mut self, content: String) {
         // println!("{}", content);
     }
 }
@@ -264,7 +264,7 @@ impl GameEngineStaticFn for StdinTestGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {
+    fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
     }
 }
@@ -289,7 +289,7 @@ impl GameEngineStaticFn for DbgGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {
+    fn stdasm_print(&mut self, content: String) {
         println!("{}", content);
     }
 }
@@ -311,7 +311,7 @@ impl GameEngineStaticFn for ThreadTestGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, content: String) {}
     fn close(&mut self, tid: Tid) {
         self.closed_thread = tid;
     }
@@ -337,7 +337,7 @@ pub trait DynamicFnExecutable {
 
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -375,7 +375,7 @@ impl DynamicFnResolver for TestDynamicFn {
 impl<G: GameEngineStaticFn> Executable<G> for TestDynamicFn {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -403,11 +403,11 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
     }
     fn stdin_request(&mut self) {}
 
-    fn stdcasm_print(&mut self, content: String) {}
+    fn stdasm_print(&mut self, content: String) {}
 
     fn execute_dynamic_fn(
         fn_id: String,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -425,10 +425,10 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
     fn name_of_dynamic_fn(
         fn_id: String,
         stdio: &mut StdIO,
-        program: &mut CasmProgram,
+        program: &mut Program,
         engine: &mut Self,
     ) {
-        stdio.push_casm_lib(engine, &fn_id);
+        stdio.push_asm_lib(engine, &fn_id);
     }
     fn weight_of_dynamic_fn(fn_id: String) -> CasmWeight {
         CasmWeight::LOW
@@ -438,7 +438,7 @@ impl GameEngineStaticFn for TestDynamicGameEngine {
 pub trait Executable<G: GameEngineStaticFn> {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -487,14 +487,14 @@ impl CasmWeight {
 }
 
 pub trait CasmMetadata<G: GameEngineStaticFn> {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G);
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G);
     fn weight(&self) -> CasmWeight {
         CasmWeight::LOW
     }
 }
 
 pub trait Printer {
-    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError>;
+    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError>;
 }
 
 pub const MAX_THREAD_COUNT: usize = 4;
@@ -529,11 +529,7 @@ impl ThreadState {
         }
     }
 
-    pub fn init_maf<G: crate::GameEngineStaticFn>(
-        &mut self,
-        engine: &mut G,
-        program: &CasmProgram,
-    ) {
+    pub fn init_maf<G: crate::GameEngineStaticFn>(&mut self, engine: &mut G, program: &Program) {
         let program_at_end = program.cursor_is_at_end();
         match self {
             ThreadState::IDLE => {
@@ -572,11 +568,7 @@ impl ThreadState {
         }
     }
 
-    pub fn init_mif<G: crate::GameEngineStaticFn>(
-        &mut self,
-        engine: &mut G,
-        program: &CasmProgram,
-    ) {
+    pub fn init_mif<G: crate::GameEngineStaticFn>(&mut self, engine: &mut G, program: &Program) {
         let program_at_end = program.cursor_is_at_end();
         match self {
             ThreadState::IDLE => {
@@ -694,7 +686,7 @@ pub struct Thread {
     pub state: ThreadState,
     pub scope: ScopeManager,
     pub stack: Stack,
-    pub program: CasmProgram,
+    pub program: Program,
     pub tid: Tid,
     pub current_maf_instruction_count: usize,
 }
@@ -762,7 +754,7 @@ impl PlayerThreadsManager {
         }
 
         let scope = ScopeManager::default();
-        let program = CasmProgram::default();
+        let program = Program::default();
         let stack = Stack::new();
         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
             return Err(RuntimeError::TooManyThread);
@@ -792,7 +784,7 @@ impl PlayerThreadsManager {
             return Err(RuntimeError::InvalidTID(tid));
         }
         let scope = ScopeManager::default();
-        let program = CasmProgram::default();
+        let program = Program::default();
         let stack = Stack::new();
 
         self.threads[tid].replace(Thread {
@@ -822,7 +814,7 @@ impl PlayerThreadsManager {
     }
 
     pub fn spawn_with_scope(&mut self, scope: ScopeManager) -> Result<usize, RuntimeError> {
-        let program = CasmProgram::default();
+        let program = Program::default();
         let stack = Stack::new();
         let Some((tid, _)) = self.threads.iter().enumerate().find(|(i, t)| t.is_none()) else {
             return Err(RuntimeError::TooManyThread);
@@ -911,7 +903,7 @@ impl Runtime {
         (
             &'runtime mut ScopeManager,
             &'runtime mut Stack,
-            &mut CasmProgram,
+            &mut Program,
         ),
         RuntimeError,
     > {

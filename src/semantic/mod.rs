@@ -6,7 +6,7 @@ use std::{
 use crate::semantic::scope::scope::ScopeManager;
 use crate::{ast::utils::strings::ID, vm::vm::Printer};
 
-use self::scope::{static_types::StaticType, user_type_impl::UserType};
+use self::scope::{static_types::StaticType, user_types::UserType};
 
 use scope::static_types::NumberType;
 use thiserror::Error;
@@ -41,10 +41,10 @@ pub enum SemanticError {
     ExpectedStruct,
     #[error("expected to be inside a loop")]
     ExpectedLoop,
-    #[error("expected to be inside a moved closure")]
-    ExpectedMovedClosure,
     #[error("expected to be inside a closure")]
     ExpectedClosure,
+    #[error("expected to be inside a functio, a closure or a lambda")]
+    ExpectedFunctionClosureLambda,
     #[error("expected something assignable")]
     ExpectedLeftExpression,
 
@@ -293,7 +293,7 @@ impl MergeType for EType {
 // impl Printer for EType {
 //     fn build_printer(
 //         &self,
-//         instructions: &mut crate::vm::casm::CasmProgram,
+//         instructions: &mut crate::vm::asm::Program,
 //     ) -> Result<(), crate::vm::vm::CodeGenerationError> {
 //         match self {
 //             EType::Static(value) => value.build_printer(instructions),

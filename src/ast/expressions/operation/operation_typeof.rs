@@ -5,7 +5,7 @@ use crate::{
     },
     e_static,
     semantic::{
-        scope::static_types::{self, ClosureType, FnType, StaticType},
+        scope::static_types::{self, ClosureType, FunctionType, StaticType},
         EType, MergeType, Resolve, SemanticError, TypeOf,
     },
 };
@@ -109,7 +109,7 @@ impl TypeOf for ExprCall {
 
 //         let return_type = match fn_var_type {
 //             EType::Static(StaticType::Closure(ClosureType { ref ret, .. })) => ret.as_ref().clone(),
-//             EType::Static(StaticType::StaticFn(FnType { ref ret, .. })) => ret.as_ref().clone(),
+//             EType::Static(StaticType::Function(FunctionType { ref ret, .. })) => ret.as_ref().clone(),
 //             _ => return Err(SemanticError::ExpectedCallable),
 //         };
 

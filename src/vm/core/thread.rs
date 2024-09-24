@@ -3,8 +3,8 @@ use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
 use crate::semantic::{EType, ResolvePlatform, TypeOf};
 use crate::vm::allocator::stack::Stack;
-use crate::vm::casm::operation::{OpPrimitive, PopNum};
-use crate::vm::casm::Casm;
+use crate::vm::asm::operation::{OpPrimitive, PopNum};
+use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreCasm;
 use crate::vm::core::{ERROR_SLICE, ERROR_VALUE, OK_SLICE, OK_VALUE};
@@ -14,7 +14,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
     vm::{
-        casm::CasmProgram,
+        asm::Program,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -45,15 +45,15 @@ pub enum ThreadCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for ThreadCasm {
-    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut crate::vm::stdio::StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            ThreadCasm::Spawn => stdio.push_casm_lib(engine, "spawn"),
-            ThreadCasm::Close => stdio.push_casm_lib(engine, "close"),
-            ThreadCasm::Exit => stdio.push_casm_lib(engine, "exit"),
-            ThreadCasm::Wait => stdio.push_casm_lib(engine, "wait"),
-            ThreadCasm::Wake => stdio.push_casm_lib(engine, "wake"),
-            ThreadCasm::Sleep => stdio.push_casm_lib(engine, "sleep"),
-            ThreadCasm::Join => stdio.push_casm_lib(engine, "join"),
+            ThreadCasm::Spawn => stdio.push_asm_lib(engine, "spawn"),
+            ThreadCasm::Close => stdio.push_asm_lib(engine, "close"),
+            ThreadCasm::Exit => stdio.push_asm_lib(engine, "exit"),
+            ThreadCasm::Wait => stdio.push_asm_lib(engine, "wait"),
+            ThreadCasm::Wake => stdio.push_asm_lib(engine, "wake"),
+            ThreadCasm::Sleep => stdio.push_asm_lib(engine, "sleep"),
+            ThreadCasm::Join => stdio.push_asm_lib(engine, "join"),
         }
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
@@ -164,17 +164,17 @@ impl GenerateCode for ThreadFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            ThreadFn::Spawn => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Spawn))),
-            ThreadFn::Exit => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Exit))),
-            ThreadFn::Close => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Close))),
-            ThreadFn::Wait => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Wait))),
-            ThreadFn::Wake => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Wake))),
-            ThreadFn::Sleep => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Sleep))),
-            ThreadFn::Join => instructions.push(Casm::Core(CoreCasm::Thread(ThreadCasm::Join))),
+            ThreadFn::Spawn => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Spawn))),
+            ThreadFn::Exit => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Exit))),
+            ThreadFn::Close => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Close))),
+            ThreadFn::Wait => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Wait))),
+            ThreadFn::Wake => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Wake))),
+            ThreadFn::Sleep => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Sleep))),
+            ThreadFn::Join => instructions.push(Asm::Core(CoreCasm::Thread(ThreadCasm::Join))),
         }
         Ok(())
     }
@@ -182,7 +182,7 @@ impl GenerateCode for ThreadFn {
 
 pub fn sig_spawn(
     context: &mut SchedulerContext,
-    program: &mut CasmProgram,
+    program: &mut Program,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if let Ok(tid) = context.request_spawn() {
@@ -204,7 +204,7 @@ pub fn sig_spawn(
 pub fn sig_close(
     tid: Tid,
     context: &mut SchedulerContext,
-    program: &mut CasmProgram,
+    program: &mut Program,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_close(tid).is_ok() {
@@ -221,7 +221,7 @@ pub fn sig_close(
     }
 }
 
-pub fn sig_wait(state: &mut ThreadState, program: &mut CasmProgram) -> Result<(), RuntimeError> {
+pub fn sig_wait(state: &mut ThreadState, program: &mut Program) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::WAITING)?;
     program.incr();
     Err(RuntimeError::Signal(Signal::WAIT))
@@ -230,7 +230,7 @@ pub fn sig_wait(state: &mut ThreadState, program: &mut CasmProgram) -> Result<()
 pub fn sig_wake(
     tid: Tid,
     context: &mut SchedulerContext,
-    program: &mut CasmProgram,
+    program: &mut Program,
     stack: &mut Stack,
 ) -> Result<(), RuntimeError> {
     if context.request_wake(tid).is_ok() {
@@ -247,7 +247,7 @@ pub fn sig_wake(
 pub fn sig_sleep(
     nb_maf: &usize,
     state: &mut ThreadState,
-    program: &mut CasmProgram,
+    program: &mut Program,
 ) -> Result<(), RuntimeError> {
     let _ = state.to(ThreadState::SLEEPING(*nb_maf))?;
     program.incr();
@@ -259,7 +259,7 @@ pub fn sig_join(
     join_tid: Tid,
     context: &mut SchedulerContext,
     state: &mut ThreadState,
-    program: &mut CasmProgram,
+    program: &mut Program,
     stack: &mut Stack,
     waiting_list: &mut Vec<WaitingStatus>,
 ) -> Result<(), RuntimeError> {
@@ -333,7 +333,7 @@ pub fn sig_wait_stdin(
 impl<G: crate::GameEngineStaticFn> Executable<G> for ThreadCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut crate::vm::allocator::stack::Stack,
         heap: &mut crate::vm::allocator::heap::Heap,
         stdio: &mut crate::vm::stdio::StdIO,

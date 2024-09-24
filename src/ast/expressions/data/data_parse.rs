@@ -4,7 +4,12 @@ use crate::{
     ast::{
         self,
         expressions::{Atomic, CompletePath, Expression},
-        statements::{block::ClosureBlock, declaration::TypedVar, return_stat::Return, Statement},
+        statements::{
+            block::{ClosureBlock, LambdaBlock},
+            declaration::TypedVar,
+            return_stat::Return,
+            Statement,
+        },
         types::NumberType,
         utils::{
             error::squash,
@@ -35,8 +40,8 @@ use nom::{
 use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
-    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, LeftCall, Map, MultiData, Number,
-    Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
+    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, Lambda, LeftCall, Map, MultiData,
+    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -47,6 +52,7 @@ impl TryParse for Data {
                 map(Slice::parse, |value| Data::Slice(value)),
                 map(Vector::parse, |value| Data::Vec(value)),
                 map(Closure::parse, |value| Data::Closure(value)),
+                map(Lambda::parse, |value| Data::Lambda(value)),
                 map(Tuple::parse, |value| Data::Tuple(value)),
                 map(Address::parse, |value| Data::Address(value)),
                 map(PtrAccess::parse, |value| Data::PtrAccess(value)),
@@ -236,7 +242,7 @@ impl TryParse for Closure {
         map(
             pair(
                 pair(
-                    opt(wst_closed(lexem::MOVE)),
+                    wst_closed(lexem::MOVE),
                     delimited(
                         wst(lexem::PAR_O),
                         separated_list0(wst(lexem::COMA), ClosureParam::parse),
@@ -245,10 +251,30 @@ impl TryParse for Closure {
                 ),
                 preceded(wst(lexem::ARROW), cut(ClosureBlock::parse)).context("Invalid closure"),
             ),
-            |((state, params), scope)| Closure {
+            |((_, params), block)| Closure {
                 params,
-                scope,
-                closed: state.is_some(),
+                block,
+                repr_data: None,
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for Lambda {
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                delimited(
+                    wst(lexem::PAR_O),
+                    separated_list0(wst(lexem::COMA), ClosureParam::parse),
+                    wst(lexem::PAR_C),
+                ),
+                cut(preceded(wst(lexem::ARROW), cut(LambdaBlock::parse))).context("Invalid lambda"),
+            ),
+            |(params, block)| Lambda {
+                params,
+                block,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -597,8 +623,7 @@ mod tests {
                     ClosureParam::Minimal("x".to_string().into()),
                     ClosureParam::Minimal("y".to_string().into())
                 ],
-                closed: false,
-                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
                     Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
@@ -610,6 +635,7 @@ mod tests {
                         metadata: Metadata::default()
                     }
                 )]),
+                repr_data: None,
                 metadata: Metadata::default()
             },
             value
@@ -628,8 +654,7 @@ mod tests {
                     ClosureParam::Minimal("x".to_string().into()),
                     ClosureParam::Minimal("y".to_string().into())
                 ],
-                closed: true,
-                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
                     Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
@@ -641,6 +666,7 @@ mod tests {
                         metadata: Metadata::default()
                     }
                 )]),
+                repr_data: None,
                 metadata: Metadata::default()
             },
             value
@@ -661,9 +687,7 @@ mod tests {
                         NumberType::U64
                     )),
                 }),],
-                closed: false,
-
-                scope: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
+                block: ast::statements::block::ClosureBlock::new(vec![Statement::Return(
                     Return::Expr {
                         expr: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
                             Variable {
@@ -675,6 +699,7 @@ mod tests {
                         metadata: Metadata::default()
                     }
                 )]),
+                repr_data: None,
                 metadata: Metadata::default()
             },
             value

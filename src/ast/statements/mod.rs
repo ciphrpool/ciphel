@@ -27,9 +27,9 @@ use crate::{
     ast::utils::io::{PResult, Span},
     semantic::{scope::static_types::StaticType, EType, Resolve, SemanticError, TypeOf},
     vm::{
-        casm::{
+        asm::{
             branch::{Call, Goto, Label},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::CodeGenerationError,
     },
@@ -84,7 +84,7 @@ impl<T: GenerateCode> GenerateCode for WithLine<T> {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         self.inner
@@ -254,7 +254,7 @@ impl GenerateCode for Statement {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {

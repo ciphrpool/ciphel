@@ -12,11 +12,11 @@ use crate::{
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
-        casm::{
+        asm::{
             operation::{OpPrimitive, PopNum},
-            Casm, CasmProgram,
+            Asm, Program,
         },
-        core::{core_map::map_layout, lexem, CoreCasm},
+        core::{lexem, map::map_layout, CoreCasm},
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
@@ -39,11 +39,11 @@ pub enum IterCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IterCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            IterCasm::MapItems { .. } => stdio.push_casm_lib(engine, "items"),
-            IterCasm::MapValues { .. } => stdio.push_casm_lib(engine, "values"),
-            IterCasm::MapKeys { .. } => stdio.push_casm_lib(engine, "keys"),
+            IterCasm::MapItems { .. } => stdio.push_asm_lib(engine, "items"),
+            IterCasm::MapValues { .. } => stdio.push_asm_lib(engine, "values"),
+            IterCasm::MapKeys { .. } => stdio.push_asm_lib(engine, "keys"),
         }
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
@@ -212,28 +212,28 @@ impl GenerateCode for IterFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
             IterFn::MapItems {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapItems {
+            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapItems {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
             IterFn::MapValues {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapValues {
+            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapValues {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
             IterFn::MapKeys {
                 key_size,
                 value_size,
-            } => instructions.push(Casm::Core(super::CoreCasm::Iter(IterCasm::MapKeys {
+            } => instructions.push(Asm::Core(super::CoreCasm::Iter(IterCasm::MapKeys {
                 key_size: *key_size,
                 value_size: *value_size,
             }))),
@@ -245,7 +245,7 @@ impl GenerateCode for IterFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for IterCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

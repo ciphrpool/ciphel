@@ -4,14 +4,14 @@ use crate::ast::{statements::definition, types, utils::strings::ID};
 
 use self::{
     static_types::{NumberType, StaticType},
-    user_type_impl::UserType,
+    user_types::UserType,
 };
 use crate::semantic::scope::scope::ScopeManager;
 
 use super::{EType, SemanticError};
 pub mod scope;
 pub mod static_types;
-pub mod user_type_impl;
+pub mod user_types;
 
 pub trait BuildUserType {
     fn build_usertype(

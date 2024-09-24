@@ -11,12 +11,13 @@ use crate::{
     semantic::{EType, SemanticError, SizeOf},
     vm::{
         allocator::MemoryAddress,
+        asm::mem::Mem,
         vm::{CodeGenerationContext, CodeGenerationError},
     },
     CompilationError,
 };
 
-use super::user_type_impl::UserType;
+use super::user_types::UserType;
 
 #[derive(Debug, Clone, Default, PartialEq, Copy)]
 pub enum VariableAddress {
@@ -50,8 +51,44 @@ pub struct Variable {
     pub id: u64,
     pub ctype: EType,
     pub scope: Option<u128>,
-    // pub address: VariableAddress,
-    // pub state: VariableState,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClosedMarker {
+    Open,
+    Close {
+        closed_scope: u128,
+        env_address: MemoryAddress,
+        offset: usize,
+    },
+}
+
+impl ClosedMarker {
+    pub fn get(
+        &self,
+        scope_id: Option<u128>,
+        scope_manager: &ScopeManager,
+    ) -> Option<(MemoryAddress, usize)> {
+        let Some(scope_id) = scope_id else {
+            return None;
+        };
+        let ClosedMarker::Close {
+            closed_scope,
+            env_address,
+            offset,
+        } = self
+        else {
+            return None;
+        };
+        let Some(branch) = scope_manager.scope_branches.get(&scope_id) else {
+            return None;
+        };
+        if branch.iter().find(|sid| **sid == *closed_scope).is_some() {
+            return Some((env_address.clone(), *offset));
+        } else {
+            return None;
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +99,7 @@ pub struct VariableInfo {
     pub ctype: EType,
     pub scope: Option<u128>,
     pub is_global: bool,
+    pub marked_as_closed_var: ClosedMarker,
     pub address: VariableAddress,
     pub state: VariableState,
 }
@@ -85,6 +123,7 @@ pub struct TypeInfo {
 pub enum ScopeState {
     Function,
     Closure,
+    Lambda,
     Inline,
     IIFE,
     Loop,
@@ -219,6 +258,7 @@ impl ScopeManager {
                 name: name.to_string(),
                 count,
                 is_global,
+                marked_as_closed_var: ClosedMarker::Open,
                 ctype,
                 scope,
                 address: VariableAddress::default(),
@@ -243,6 +283,7 @@ impl ScopeManager {
             .unwrap_or(0)
             + 1;
         let var_id = ScopeManager::hash_id(name, count, scope);
+
         let _ = self.signal_variable_registation(var_id, scope);
         self.vars.insert(
             var_id,
@@ -251,6 +292,7 @@ impl ScopeManager {
                 name: name.to_string(),
                 count,
                 is_global: false,
+                marked_as_closed_var: ClosedMarker::Open,
                 ctype,
                 scope,
                 address: VariableAddress::default(),
@@ -321,7 +363,11 @@ impl ScopeManager {
                 })
             }
             None => {
-                let mut buffer: Vec<_> = self.vars.values().filter(|v| v.name == name).collect();
+                let mut buffer: Vec<_> = self
+                    .vars
+                    .values()
+                    .filter(|v| v.scope.is_none() && v.name == name)
+                    .collect();
 
                 buffer.sort_by(|v1, v2| {
                     v1.count
@@ -354,7 +400,9 @@ impl ScopeManager {
             let Some(scope_state) = self.scope_states.get(&id) else {
                 continue;
             };
-            if (*scope_state == ScopeState::IIFE || *scope_state == ScopeState::Closure)
+            if (*scope_state == ScopeState::IIFE
+                || *scope_state == ScopeState::Closure
+                || *scope_state == ScopeState::Lambda)
                 && (var_scope != *id)
             {
                 let Some(outside) = self.scope_branches.get(&scope_id) else {
@@ -371,6 +419,28 @@ impl ScopeManager {
         }
     }
 
+    pub fn mark_as_closed_var(
+        &mut self,
+        scope_id: u128,
+        id: u64,
+        address: MemoryAddress,
+        offset: usize,
+    ) -> Result<(), CodeGenerationError> {
+        let Some(VariableInfo {
+            marked_as_closed_var,
+            ..
+        }) = self.vars.get_mut(&id)
+        else {
+            return Err(CodeGenerationError::Unlocatable);
+        };
+        *marked_as_closed_var = ClosedMarker::Close {
+            closed_scope: scope_id,
+            env_address: address,
+            offset,
+        };
+        Ok(())
+    }
+
     pub fn signal_variable_registation(&mut self, var_id: u64, scope_id: Option<u128>) -> bool {
         let Some(scope_id) = scope_id else {
             return true;
@@ -381,13 +451,14 @@ impl ScopeManager {
         };
 
         let mut is_global = true;
-
         for id in branch.iter().rev() {
             let Some(scope_state) = self.scope_states.get(&id) else {
                 continue;
             };
+
             if (*scope_state == ScopeState::IIFE)
                 || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
                 || (*scope_state == ScopeState::Function)
             {
                 is_global = false;
@@ -478,6 +549,24 @@ impl ScopeManager {
         for id in branch.iter().rev() {
             if let Some(scope_state) = self.scope_states.get(&id) {
                 if *scope_state == state {
+                    return Some(*id);
+                }
+            }
+        }
+        return None;
+    }
+
+    pub fn can_return(&self, scope_id: u128) -> Option<u128> {
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return None;
+        };
+
+        for id in branch.iter().rev() {
+            if let Some(scope_state) = self.scope_states.get(&id) {
+                if *scope_state == ScopeState::Closure
+                    || *scope_state == ScopeState::Function
+                    || *scope_state == ScopeState::Lambda
+                {
                     return Some(*id);
                 }
             }

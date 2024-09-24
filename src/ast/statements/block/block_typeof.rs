@@ -1,4 +1,4 @@
-use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 use crate::ast::statements::Statement;
 use crate::e_static;
 use crate::semantic::scope::scope::ScopeManager;
@@ -38,6 +38,21 @@ impl TypeOf for FunctionBlock {
 }
 
 impl TypeOf for ClosureBlock {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        self.metadata
+            .signature()
+            .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+
+impl TypeOf for LambdaBlock {
     fn type_of(
         &self,
         scope_manager: &crate::semantic::scope::scope::ScopeManager,

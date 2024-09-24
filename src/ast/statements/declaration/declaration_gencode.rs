@@ -6,7 +6,7 @@ use crate::{
     semantic::SizeOf,
     vm::{
         allocator::MemoryAddress,
-        casm::{alloc::Alloc, locate::Locate, mem::Mem, Casm, CasmProgram},
+        asm::{alloc::Alloc, locate::Locate, mem::Mem, Asm, Program},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -18,7 +18,7 @@ impl GenerateCode for Declaration {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         fn store_right_side(
@@ -26,7 +26,7 @@ impl GenerateCode for Declaration {
             right: &AssignValue,
             scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
             scope_id: Option<u128>,
-            instructions: &mut CasmProgram,
+            instructions: &mut Program,
             context: &crate::vm::vm::CodeGenerationContext,
         ) -> Result<(), CodeGenerationError> {
             let first_variable_id = match left {
@@ -60,7 +60,7 @@ impl GenerateCode for Declaration {
                 return Err(CodeGenerationError::UnresolvedError);
             };
 
-            instructions.push(Casm::Mem(Mem::Store {
+            instructions.push(Asm::Mem(Mem::Store {
                 size: right_type.size_of(),
                 address: (*address)
                     .try_into()
@@ -121,13 +121,13 @@ mod tests {
             scope::{
                 scope::ScopeManager,
                 static_types::{NumberType, PrimitiveType},
-                user_type_impl::{self, UserType},
+                user_types::{self, UserType},
             },
             Resolve,
         },
         v_num,
         vm::{
-            casm::CasmProgram,
+            asm::Program,
             vm::{Executable, Runtime},
         },
     };
@@ -261,7 +261,7 @@ mod tests {
 
     // #[test]
     // fn valid_declaration_inplace_struct_in_scope() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -293,7 +293,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -337,7 +337,7 @@ mod tests {
 
     // #[test]
     // fn valid_declaration_inplace_struct_general_scope() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -366,7 +366,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -430,7 +430,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -489,7 +489,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -551,7 +551,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,

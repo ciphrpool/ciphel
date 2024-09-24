@@ -6,8 +6,8 @@ use crate::semantic::{EType, ResolvePlatform, TypeOf};
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
-use crate::vm::casm::operation::{OpPrimitive, PopNum};
-use crate::vm::casm::Casm;
+use crate::vm::asm::operation::{OpPrimitive, PopNum};
+use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreCasm;
 
@@ -17,7 +17,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
     vm::{
-        casm::CasmProgram,
+        asm::Program,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -54,10 +54,10 @@ pub enum ToStrCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringsCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            StringsCasm::ToStr(_) => stdio.push_casm_lib(engine, "to_str"),
-            StringsCasm::Join(_) => stdio.push_casm_lib(engine, "str_join"),
+            StringsCasm::ToStr(_) => stdio.push_asm_lib(engine, "to_str"),
+            StringsCasm::Join(_) => stdio.push_asm_lib(engine, "str_join"),
         }
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
@@ -94,7 +94,7 @@ impl ResolvePlatform for StringsFn {
         parameters: &mut Vec<Expression>,
     ) -> Result<EType, SemanticError> {
         match self {
-            StringsFn::ToStr(casm) => {
+            StringsFn::ToStr(asm) => {
                 if parameters.len() != 1 {
                     return Err(SemanticError::IncorrectArguments);
                 }
@@ -108,28 +108,24 @@ impl ResolvePlatform for StringsFn {
                     EType::Static(value) => match value {
                         StaticType::Primitive(p) => match p {
                             PrimitiveType::Number(n) => match n {
-                                NumberType::U8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU8),
-                                NumberType::U16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU16),
-                                NumberType::U32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU32),
-                                NumberType::U64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrU64),
-                                NumberType::U128 => {
-                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrU128)
-                                }
-                                NumberType::I8 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI8),
-                                NumberType::I16 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI16),
-                                NumberType::I32 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI32),
-                                NumberType::I64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrI64),
-                                NumberType::I128 => {
-                                    *casm = StringsCasm::ToStr(ToStrCasm::ToStrI128)
-                                }
-                                NumberType::F64 => *casm = StringsCasm::ToStr(ToStrCasm::ToStrF64),
+                                NumberType::U8 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrU8),
+                                NumberType::U16 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrU16),
+                                NumberType::U32 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrU32),
+                                NumberType::U64 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrU64),
+                                NumberType::U128 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrU128),
+                                NumberType::I8 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrI8),
+                                NumberType::I16 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrI16),
+                                NumberType::I32 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrI32),
+                                NumberType::I64 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrI64),
+                                NumberType::I128 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrI128),
+                                NumberType::F64 => *asm = StringsCasm::ToStr(ToStrCasm::ToStrF64),
                             },
-                            PrimitiveType::Char => *casm = StringsCasm::ToStr(ToStrCasm::ToStrChar),
-                            PrimitiveType::Bool => *casm = StringsCasm::ToStr(ToStrCasm::ToStrBool),
+                            PrimitiveType::Char => *asm = StringsCasm::ToStr(ToStrCasm::ToStrChar),
+                            PrimitiveType::Bool => *asm = StringsCasm::ToStr(ToStrCasm::ToStrBool),
                         },
-                        StaticType::String(_) => *casm = StringsCasm::ToStr(ToStrCasm::ToStrString),
+                        StaticType::String(_) => *asm = StringsCasm::ToStr(ToStrCasm::ToStrString),
                         StaticType::StrSlice(_) => {
-                            *casm = StringsCasm::ToStr(ToStrCasm::ToStrStrSlice)
+                            *asm = StringsCasm::ToStr(ToStrCasm::ToStrStrSlice)
                         }
                         _ => return Err(SemanticError::IncorrectArguments),
                     },
@@ -147,12 +143,12 @@ impl GenerateCode for StringsFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            StringsFn::ToStr(to_str_casm) => {
-                instructions.push(Casm::Core(super::CoreCasm::Strings(*to_str_casm)))
+            StringsFn::ToStr(to_str_asm) => {
+                instructions.push(Asm::Core(super::CoreCasm::Strings(*to_str_asm)))
             }
         }
         Ok(())
@@ -185,7 +181,7 @@ pub fn push_string(src: String, stack: &mut Stack, heap: &mut Heap) -> Result<()
 impl<G: crate::GameEngineStaticFn> Executable<G> for StringsCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

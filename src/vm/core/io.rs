@@ -9,9 +9,9 @@ use crate::semantic::{ResolvePlatform, TypeOf};
 use crate::vm::allocator::align;
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
-use crate::vm::casm::branch::Label;
-use crate::vm::casm::operation::{OpPrimitive, PopNum};
-use crate::vm::casm::Casm;
+use crate::vm::asm::branch::Label;
+use crate::vm::asm::operation::{OpPrimitive, PopNum};
+use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 
 use crate::vm::core::CoreCasm;
@@ -21,7 +21,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{EType, Resolve, SemanticError},
     vm::{
-        casm::CasmProgram,
+        asm::Program,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -44,13 +44,13 @@ pub enum IOCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for IOCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            IOCasm::Print(_) => stdio.push_casm_lib(engine, "print"),
-            IOCasm::Flush(true) => stdio.push_casm_lib(engine, "flushln"),
-            IOCasm::Flush(false) => stdio.push_casm_lib(engine, "flush"),
-            IOCasm::Scan => stdio.push_casm_lib(engine, "scan"),
-            IOCasm::RequestScan => stdio.push_casm_lib(engine, "rscan"),
+            IOCasm::Print(_) => stdio.push_asm_lib(engine, "print"),
+            IOCasm::Flush(true) => stdio.push_asm_lib(engine, "flushln"),
+            IOCasm::Flush(false) => stdio.push_asm_lib(engine, "flush"),
+            IOCasm::Scan => stdio.push_asm_lib(engine, "scan"),
+            IOCasm::RequestScan => stdio.push_asm_lib(engine, "rscan"),
         }
     }
 
@@ -153,7 +153,7 @@ impl GenerateCode for IOFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         todo!()
@@ -165,7 +165,7 @@ impl GenerateCode for IOFn {
         //             return Err(CodeGenerationError::UnresolvedError);
         //         };
         //         let _ = param_type.build_printer(instructions)?;
-        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Flush(false))));
+        //         instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::Flush(false))));
 
         //         Ok(())
         //     }
@@ -177,12 +177,12 @@ impl GenerateCode for IOFn {
         //         };
         //         let _ = param_type.build_printer(instructions)?;
 
-        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Flush(true))));
+        //         instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::Flush(true))));
         //         Ok(())
         //     }
         //     IOFn::Scan => {
-        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::RequestScan)));
-        //         instructions.push(Casm::Core(super::CoreCasm::IO(IOCasm::Scan)));
+        //         instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::RequestScan)));
+        //         instructions.push(Asm::Core(super::CoreCasm::IO(IOCasm::Scan)));
         //         Ok(())
         //     }
         // }
@@ -192,7 +192,7 @@ impl GenerateCode for IOFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -253,7 +253,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for IOCasm {
 impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -374,7 +374,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for PrintCasm {
                             None => return Ok(()),
                         };
                         match instruction {
-                            Casm::Label(Label { id, .. }) => {
+                            Asm::Label(Label { id, .. }) => {
                                 if id == *continue_label {
                                     program.cursor_set(start);
                                     break;

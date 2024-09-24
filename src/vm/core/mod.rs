@@ -1,12 +1,12 @@
 use alloc::{AllocCasm, AllocFn};
-use core_map::{MapCasm, MapFn};
-use core_string::{StringCasm, StringFn};
-use core_vector::{VectorCasm, VectorFn};
 use io::{IOCasm, IOFn};
 use iter::{IterCasm, IterFn};
+use map::{MapCasm, MapFn};
 use math::{MathCasm, MathFn};
+use string::{StringCasm, StringFn};
 use strings::{StringsCasm, StringsFn};
 use thread::{ThreadCasm, ThreadFn};
+use vector::{VectorCasm, VectorFn};
 
 use crate::{
     ast::{expressions::Expression, utils::strings::ID},
@@ -21,7 +21,7 @@ use crate::semantic::scope::scope::ScopeManager;
 
 use super::{
     allocator::{heap::Heap, stack::Stack},
-    casm::{operation::OpPrimitive, Casm, CasmProgram},
+    asm::{operation::OpPrimitive, Asm, Program},
     stdio::StdIO,
     vm::{
         CasmMetadata, CodeGenerationError, Executable, GameEngineStaticFn, GenerateCode,
@@ -30,15 +30,15 @@ use super::{
 };
 
 pub mod alloc;
-pub mod core_map;
-pub mod core_string;
-pub mod core_vector;
 pub mod io;
 pub mod iter;
 pub mod lexem;
+pub mod map;
 pub mod math;
+pub mod string;
 pub mod strings;
 pub mod thread;
+pub mod vector;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Core {
@@ -196,7 +196,7 @@ impl GenerateCode for Core {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -211,18 +211,18 @@ impl GenerateCode for Core {
             Core::Iter(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Core::Assert(expect_err) => {
                 if *expect_err {
-                    instructions.push(Casm::Core(CoreCasm::AssertErr));
+                    instructions.push(Asm::Core(CoreCasm::AssertErr));
                 } else {
-                    instructions.push(Casm::Core(CoreCasm::AssertBool));
+                    instructions.push(Asm::Core(CoreCasm::AssertBool));
                 }
                 Ok(())
             }
             Core::Error => {
-                instructions.push(Casm::Core(CoreCasm::Error));
+                instructions.push(Asm::Core(CoreCasm::Error));
                 Ok(())
             }
             Core::Ok => {
-                instructions.push(Casm::Core(CoreCasm::Ok));
+                instructions.push(Asm::Core(CoreCasm::Ok));
                 Ok(())
             }
         }
@@ -230,7 +230,7 @@ impl GenerateCode for Core {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
             CoreCasm::Engine(fn_id) => G::name_of_dynamic_fn(fn_id.clone(), stdio, program, engine),
             CoreCasm::Vec(value) => value.name(stdio, program, engine),
@@ -276,7 +276,7 @@ pub const OK_SLICE: [u8; 1] = [OK_VALUE];
 impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -367,7 +367,7 @@ mod tests {
             )
             .expect("Resolution should have succeeded");
         // Code generation.
-        let mut instructions = crate::vm::casm::CasmProgram::default();
+        let mut instructions = crate::vm::asm::Program::default();
         statement
             .gencode(
                 &mut scope_manager,

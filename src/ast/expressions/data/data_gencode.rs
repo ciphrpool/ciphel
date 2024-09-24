@@ -4,32 +4,34 @@ use crate::ast::expressions::locate::Locatable;
 use crate::ast::expressions::{CompletePath, Path};
 use crate::semantic;
 use crate::semantic::scope::scope::{self, GlobalMapping, ScopeManager};
-use crate::semantic::scope::static_types::st_sizeof::POINTER_SIZE;
+use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::semantic::scope::static_types::{MapType, SliceType, StaticType, TupleType};
+use crate::vm::asm::locate::LocateOffset;
 use crate::vm::core::alloc::AllocCasm;
-use crate::vm::core::core_map::MapCasm;
+use crate::vm::core::map::MapCasm;
+use crate::vm::core::vector::VEC_HEADER;
 use crate::vm::core::CoreCasm;
 use crate::vm::vm::CodeGenerationContext;
 use crate::{
     ast::utils::strings::ID,
-    semantic::{scope::user_type_impl::UserType, EType, SizeOf},
+    semantic::{scope::user_types::UserType, EType, SizeOf},
     vm::{
         allocator::{align, MemoryAddress},
-        casm::{
+        asm::{
             alloc::{Access, Alloc},
             branch::{Goto, Label},
             data,
             locate::Locate,
             mem::Mem,
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
 };
 
 use super::{
-    Address, Call, Closure, CoreCall, Data, Enum, Map, Number, Primitive, PtrAccess, Slice,
-    StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
+    Address, Call, Closure, ClosureReprData, CoreCall, Data, Enum, Lambda, Map, Number, Primitive,
+    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 
 impl GenerateCode for Data {
@@ -37,7 +39,7 @@ impl GenerateCode for Data {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -56,97 +58,20 @@ impl GenerateCode for Data {
             Data::Enum(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::StrSlice(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::Call(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Lambda(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }
-
-// impl Locatable for Data {
-//     fn locate(
-//         &self,
-//         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
-//         scope_id: Option<u128>,
-//         instructions: &mut CasmProgram,
-//         context: &crate::vm::vm::CodeGenerationContext,
-//     ) -> Result<(), CodeGenerationError> {
-//         match self {
-//             Data::Variable(Variable {
-//                 name,
-//                 state,
-//                 metadata,
-//             }) => {
-//                 if *from_field {
-//                     Ok(())
-//                 } else {
-//                     let (var, address, level) = scope_manager.access_var(id)?;
-
-//                     let var_type = &var.type_sig;
-//                     let _var_size = var_type.size_of();
-
-//                     instructions.push(Casm::Locate(Locate {
-//                         address: MemoryAddress::Stack {
-//                             offset: address,
-//                             level,
-//                         },
-//                     }));
-//                     Ok(())
-//                 }
-//             }
-//             Data::PtrAccess(PtrAccess { value, .. }) => {
-//                 let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
-//                 Ok(())
-//             }
-//             _ => {
-//                 let _ = self.gencode(scope_manager, scope_id, instructions, context)?;
-//                 let Some(value_type) = self.signature() else {
-//                     return Err(CodeGenerationError::UnresolvedError);
-//                 };
-//                 instructions.push(Casm::Locate(Locate {
-//                     address: MemoryAddress::Stack {
-//                         offset: Offset::ST(-(value_type.size_of() as isize)),
-//                         level: AccessLevel::Direct,
-//                     },
-//                 }));
-//                 Ok(())
-//             }
-//         }
-//     }
-
-//     fn is_assignable(&self) -> bool {
-//         match self {
-//             Data::Variable(_) => true,
-//             Data::PtrAccess(_) => true,
-//             Data::Primitive(_) => false,
-//             Data::Slice(_) => false,
-//             Data::StrSlice(_) => false,
-//             Data::Vec(_) => false,
-//             Data::Closure(_) => false,
-//             Data::Tuple(_) => false,
-//             Data::Address(_) => false,
-//             Data::Unit => false,
-//             Data::Map(_) => false,
-//             Data::Struct(_) => false,
-//             Data::Union(_) => false,
-//             Data::Enum(_) => false,
-//         }
-//     }
-
-//     fn most_left_id(&self) -> Option<ID> {
-//         match self {
-//             Data::Variable(Variable { name, metadata, .. }) => Some(name.clone()),
-//             _ => None,
-//         }
-//     }
-// }
 
 impl GenerateCode for Number {
     fn gencode(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let casm = match self {
+        let asm = match self {
             super::Number::U8(data) => data::Data::Serialized {
                 data: data.to_le_bytes().into(),
             },
@@ -182,7 +107,7 @@ impl GenerateCode for Number {
             },
             super::Number::Unresolved(_) => return Err(CodeGenerationError::UnresolvedError),
         };
-        instructions.push(Casm::Data(casm));
+        instructions.push(Asm::Data(asm));
         Ok(())
     }
 }
@@ -192,10 +117,10 @@ impl GenerateCode for Primitive {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let casm = match self {
+        let asm = match self {
             Primitive::Number(data) => match data {
                 super::Number::U8(data) => data::Data::Serialized {
                     data: data.to_le_bytes().into(),
@@ -243,7 +168,7 @@ impl GenerateCode for Primitive {
                 }
             }
         };
-        instructions.push(Casm::Data(casm));
+        instructions.push(Asm::Data(asm));
         Ok(())
     }
 }
@@ -253,7 +178,7 @@ impl GenerateCode for Variable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(super::VariableState::Variable { id }) = &self.state else {
@@ -262,20 +187,32 @@ impl GenerateCode for Variable {
         let Ok(crate::semantic::scope::scope::VariableInfo {
             ctype,
             address,
-            state,
+            marked_as_closed_var,
             ..
         }) = scope_manager.find_var_by_id(*id)
         else {
             return Err(CodeGenerationError::Unlocatable);
         };
-        let Ok(address) = (address.clone()).try_into() else {
-            return Err(CodeGenerationError::Unlocatable);
-        };
 
-        instructions.push(Casm::Access(Access::Static {
-            address,
-            size: ctype.size_of(),
-        }));
+        if let Some((env_address, offset)) = marked_as_closed_var.get(scope_id, &scope_manager) {
+            // The variable is in a closed environment
+            instructions.push(Asm::Access(Access::Static {
+                address: env_address,
+                size: POINTER_SIZE,
+            }));
+            instructions.push(Asm::Offset(LocateOffset { offset }));
+            instructions.push(Asm::Access(Access::Runtime {
+                size: Some(ctype.size_of()),
+            }));
+        } else {
+            let Ok(address) = (address.clone()).try_into() else {
+                return Err(CodeGenerationError::Unlocatable);
+            };
+            instructions.push(Asm::Access(Access::Static {
+                address,
+                size: ctype.size_of(),
+            }));
+        }
 
         Ok(())
     }
@@ -286,7 +223,7 @@ impl GenerateCode for Slice {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         for element in &self.value {
@@ -297,7 +234,7 @@ impl GenerateCode for Slice {
             .try_into()
             .map_err(|_| CodeGenerationError::Default)?;
 
-        instructions.push(Casm::Alloc(Alloc::GlobalFromStack {
+        instructions.push(Asm::Alloc(Alloc::GlobalFromStack {
             address,
             size: self.size,
         }));
@@ -310,7 +247,7 @@ impl GenerateCode for StrSlice {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let mut buffer = (self.value.len()).to_le_bytes().to_vec();
@@ -326,7 +263,7 @@ impl GenerateCode for StrSlice {
             GlobalMapping::EMPTY_STRING_ADDRESS
         };
 
-        instructions.push(Casm::Alloc(Alloc::Global {
+        instructions.push(Asm::Alloc(Alloc::Global {
             address,
             data: buffer.into(),
         }));
@@ -339,7 +276,7 @@ impl GenerateCode for Vector {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(EType::Static(StaticType::Vec(item_type))) = self.metadata.signature() else {
@@ -351,9 +288,9 @@ impl GenerateCode for Vector {
         let cap_bytes = (self.capacity as u64).to_le_bytes().as_slice().into();
 
         // Push Length on stack
-        instructions.push(Casm::Data(data::Data::Serialized { data: len_bytes }));
+        instructions.push(Asm::Data(data::Data::Serialized { data: len_bytes }));
         // Push Capacity on stack
-        instructions.push(Casm::Data(data::Data::Serialized { data: cap_bytes }));
+        instructions.push(Asm::Data(data::Data::Serialized { data: cap_bytes }));
 
         for element in &self.value {
             let _ = element.gencode(scope_manager, scope_id, instructions, context)?;
@@ -362,15 +299,15 @@ impl GenerateCode for Vector {
         // Copy data on stack to heap at address
 
         // Alloc and push heap address on stack
-        instructions.push(Casm::Alloc(Alloc::Heap {
-            size: Some(item_size * self.capacity + 16),
+        instructions.push(Asm::Alloc(Alloc::Heap {
+            size: item_size * self.capacity + VEC_HEADER,
         }));
         // Take the address on the top of the stack
         // and copy the data on the stack in the heap at given address and given offset
         // ( removing the data from the stack )
-        instructions.push(Casm::Mem(Mem::Take {
+        instructions.push(Asm::Mem(Mem::Take {
             //offset: vec_stack_address + 8,
-            size: item_size * self.value.len() + 16,
+            size: item_size * self.value.len() + VEC_HEADER,
         }));
 
         Ok(())
@@ -382,7 +319,7 @@ impl GenerateCode for Tuple {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(EType::Static(StaticType::Tuple(TupleType(tuple_types)))) =
@@ -397,99 +334,111 @@ impl GenerateCode for Tuple {
     }
 }
 
+impl GenerateCode for ClosureReprData {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut Program,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        instructions.push(Asm::Mem(Mem::Label(self.closure_label)));
+        instructions.push(Asm::Data(data::Data::Serialized {
+            data: self.bucket_size.to_le_bytes().into(),
+        }));
+        for (id, _) in &self.offsets {
+            let Ok(crate::semantic::scope::scope::VariableInfo { ctype, address, .. }) =
+                scope_manager.find_var_by_id(*id)
+            else {
+                return Err(CodeGenerationError::Unlocatable);
+            };
+
+            let Ok(address) = (address.clone()).try_into() else {
+                return Err(CodeGenerationError::Unlocatable);
+            };
+
+            instructions.push(Asm::Access(Access::Static {
+                address,
+                size: ctype.size_of(),
+            }));
+        }
+
+        // Alloc Repr data
+        instructions.push(Asm::Alloc(Alloc::Heap {
+            size: self.bucket_size + POINTER_SIZE * 2,
+        })); // the heap pointer is pushed on the stack
+
+        instructions.push(Asm::Mem(Mem::Take {
+            size: self.bucket_size + POINTER_SIZE * 2,
+        })); // the heap pointer is pushed on the stack
+
+        Ok(())
+    }
+}
+
 impl GenerateCode for Closure {
     fn gencode(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
-        // let end_closure = Label::gen();
-        // let return_label = Label::gen();
+        let store_label = Label::gen();
 
-        // instructions.push(Casm::Goto(Goto {
-        //     label: Some(end_closure),
-        // }));
+        let Some(repr_data) = &self.repr_data else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let Some(inner_scope) = self.block.scope else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
 
-        // let closure_label = instructions.push_label("fn_closure".into());
-        // let _ = self.scope.gencode(
-        //     scope_manager,
-        //     scope_id,
-        //     instructions,
-        //     &CodeGenerationContext {
-        //         return_label: Some(return_label),
-        //         ..Default::default()
-        //     },
-        // );
-        // let Some(return_size) = self.scope.signature().map(|t| t.size_of()) else {
-        //     return Err(CodeGenerationError::UnresolvedError);
-        // };
-        // // Function epilogue
-        // instructions.push_label_id(return_label, "function_epilogue".to_string().into());
-        // instructions.push(Casm::StackFrame(StackFrame::ReturnV2 {
-        //     return_size,
-        //     label: None,
-        // }));
+        for (id, offset) in &repr_data.offsets {
+            let _ = scope_manager.mark_as_closed_var(
+                inner_scope,
+                *id,
+                MemoryAddress::Frame { offset: 0 },
+                *offset + POINTER_SIZE * 2,
+            )?;
+        }
 
-        // instructions.push_label_id(end_closure, "end_closure".into());
+        instructions.push(Asm::Goto(Goto {
+            label: Some(store_label),
+        }));
+        instructions.push_label_id(repr_data.closure_label, "closure".to_string());
+        self.block
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
-        // instructions.push(Casm::Mem(Mem::Label(closure_label)));
+        instructions.push_label_id(store_label, "store_closure".to_string());
 
-        // if self.closed {
-        //     /* Load env and store in the heap */
-        //     let mut alloc_size = 16;
-        //     let mut env_size = 0;
+        repr_data.gencode(scope_manager, scope_id, instructions, context)?;
+        Ok(())
+    }
+}
 
-        //     let binding = self
-        //         .scope
-        //         .scope()
-        //         .map_err(|_| CodeGenerationError::UnresolvedError)?;
-        //     let inner_scope = binding.as_ref();
+impl GenerateCode for Lambda {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut Program,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        let lambda_label = Label::gen();
+        let store_label = Label::gen();
 
-        //     for var in inner_scope
-        //         .try_read()
-        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
-        //         .env_vars()
-        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
-        //     {
-        //         let var_type = &var.type_sig;
-        //         let var_size = var_type.size_of();
-        //         alloc_size += var_size;
-        //         env_size += var_size;
-        //     }
+        instructions.push(Asm::Goto(Goto {
+            label: Some(store_label),
+        }));
+        instructions.push_label_id(lambda_label, "lambda".to_string());
+        self.block
+            .gencode(scope_manager, scope_id, instructions, context)?;
 
-        //     // Load Env Size
-        //     instructions.push(Casm::Data(data::Data::Serialized {
-        //         data: env_size.to_le_bytes().into(),
-        //     }));
-        //     let outer_scope = scope_manager;
-        //     // Load Env variables
-        //     for var in inner_scope
-        //         .try_read()
-        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
-        //         .env_vars()
-        //         .map_err(|_| CodeGenerationError::ConcurrencyError)?
-        //     {
-        //         let (var, address, level) = outer_scope.access_var(&var.id)?;
-        //         let var_type = &var.type_sig;
-        //         let var_size = var_type.size_of();
-        //         instructions.push(Casm::Access(Access::Static {
-        //             address: MemoryAddress::Stack {
-        //                 offset: address,
-        //                 level: level,
-        //             },
-        //             size: var_size,
-        //         }));
-        //     }
-        //     instructions.push(Casm::Alloc(Alloc::Heap {
-        //         size: Some(alloc_size),
-        //     }));
-        //     instructions.push(Casm::Mem(Mem::TakeToHeap { size: alloc_size }));
-        // }
+        instructions.push_label_id(store_label, "store_lambda".to_string());
 
-        // Ok(())
+        instructions.push(Asm::Mem(Mem::Label(lambda_label)));
+
+        Ok(())
     }
 }
 
@@ -498,7 +447,7 @@ impl GenerateCode for Address {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let _ = self.value.locate(scope_manager, scope_id, instructions)?;
@@ -511,7 +460,7 @@ impl GenerateCode for PtrAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let _ = self
@@ -529,7 +478,7 @@ impl GenerateCode for PtrAccess {
                 .ok_or(CodeGenerationError::UnresolvedError)?
                 .size_of();
         }
-        instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+        instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
 
         Ok(())
     }
@@ -540,13 +489,13 @@ impl GenerateCode for Struct {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(UserType::Struct(crate::semantic::scope::user_type_impl::Struct { id, fields })) =
+        let Some(UserType::Struct(crate::semantic::scope::user_types::Struct { id, fields })) =
             scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -568,7 +517,7 @@ impl GenerateCode for Struct {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                instructions.push(Casm::Data(data::Data::Serialized {
+                instructions.push(Asm::Data(data::Data::Serialized {
                     data: vec![0; padding].into(),
                 }));
             }
@@ -582,14 +531,14 @@ impl GenerateCode for Union {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let Some(UserType::Union(
-            ref union_type @ crate::semantic::scope::user_type_impl::Union { ref variants, .. },
+            ref union_type @ crate::semantic::scope::user_types::Union { ref variants, .. },
         )) = scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -624,7 +573,7 @@ impl GenerateCode for Union {
             // Add padding
             let padding = align(field_size) - field_size;
             if padding > 0 {
-                instructions.push(Casm::Data(data::Data::Serialized {
+                instructions.push(Asm::Data(data::Data::Serialized {
                     data: vec![0; padding].into(),
                 }));
             }
@@ -635,13 +584,13 @@ impl GenerateCode for Union {
             // Add padding
             let padding = union_size - total_size;
             if padding > 0 {
-                instructions.push(Casm::Data(data::Data::Serialized {
+                instructions.push(Asm::Data(data::Data::Serialized {
                     data: vec![0; padding].into(),
                 }));
             }
         }
 
-        instructions.push(Casm::Data(data::Data::Serialized {
+        instructions.push(Asm::Data(data::Data::Serialized {
             data: (idx as u64).to_le_bytes().into(),
         }));
 
@@ -654,13 +603,13 @@ impl GenerateCode for Enum {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(EType::User { id, size }) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Some(UserType::Enum(crate::semantic::scope::user_type_impl::Enum { values, .. })) =
+        let Some(UserType::Enum(crate::semantic::scope::user_types::Enum { values, .. })) =
             scope_manager.find_type_by_id(id, scope_id).ok()
         else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -675,7 +624,7 @@ impl GenerateCode for Enum {
             return Err(CodeGenerationError::UnresolvedError);
         };
 
-        instructions.push(Casm::Data(data::Data::Serialized {
+        instructions.push(Asm::Data(data::Data::Serialized {
             data: (index as u64).to_le_bytes().into(),
         }));
         Ok(())
@@ -687,7 +636,7 @@ impl GenerateCode for Map {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let cap = align(self.fields.len());
@@ -701,10 +650,10 @@ impl GenerateCode for Map {
 
         let key_size = keys_type.size_of();
         let item_size = values_type.size_of();
-        instructions.push(Casm::Data(data::Data::Serialized {
+        instructions.push(Asm::Data(data::Data::Serialized {
             data: cap.to_le_bytes().into(),
         }));
-        instructions.push(Casm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
+        instructions.push(Asm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
             key_size,
             item_size,
         })));
@@ -713,7 +662,7 @@ impl GenerateCode for Map {
             let _ = key.gencode(scope_manager, scope_id, instructions, context)?;
             let _ = value.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Insert {
+            instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Insert {
                 key_size,
                 ref_access: keys_type.as_ref().into(),
                 item_size,
@@ -729,7 +678,7 @@ impl GenerateCode for Call {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match &self.path {
@@ -760,17 +709,18 @@ impl GenerateCode for Call {
                         arg.gencode(scope_manager, scope_id, instructions, context)?;
                     }
 
-                    instructions.push(Casm::Access(Access::Static {
+                    // call function stored in this address
+                    instructions.push(Asm::Access(Access::Static {
                         address,
                         size: POINTER_SIZE,
                     }));
 
                     if *is_closure {
-                        instructions.push(Casm::Call(crate::vm::casm::branch::Call::Closure {
+                        instructions.push(Asm::Call(crate::vm::asm::branch::Call::Closure {
                             param_size,
                         }));
                     } else {
-                        instructions.push(Casm::Call(crate::vm::casm::branch::Call::Function {
+                        instructions.push(Asm::Call(crate::vm::asm::branch::Call::Function {
                             param_size,
                         }));
                     }
@@ -798,8 +748,8 @@ mod tests {
     use crate::{
         test_extract_variable, test_extract_variable_with, test_statements,
         vm::{
-            casm::operation::{GetNumFrom, OpPrimitive},
-            core::{core_string::STRING_HEADER, core_vector::VEC_HEADER},
+            asm::operation::{GetNumFrom, OpPrimitive},
+            core::{string::STRING_HEADER, vector::VEC_HEADER},
         },
     };
 
@@ -1215,6 +1165,131 @@ mod tests {
         );
     }
 
+    #[test]
+    fn valid_lambda() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<u64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+            let res = test_extract_variable::<u64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<u64>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+            true
+        }
+        test_statements(
+            r##"
+            let lambda1 = (x:i64) -> x + 1; 
+            let res1 = lambda1(1);
+
+            let lambda2 = (x:i64) -> {
+                let y = 5;
+                return y + x;
+            }; 
+            let res2 = lambda2(1);
+
+            let z = 2;
+            let lambda3 : (i64) -> i64 = (x:i64) -> {x + z}; 
+            let res3 = lambda3(1);
+            
+            let arr = [lambda1,lambda2];
+            let res4 = arr[1](2);
+
+            /*let lambda5 = (x:i64) -> {[x]}; 
+            let res5 = lambda5(1)[0];*/
+
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
+    #[test]
+    fn valid_closure() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<u64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<u64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<u64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<u64>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            true
+        }
+        test_statements(
+            r##"
+            let closure1 = {
+                let z = 2;
+                let closure1 = move (x:i64) -> x + z;
+                let u = z + 1;
+                closure1
+            };
+            
+            let res1 = closure1(1);
+
+            let closure2 = {
+                let z = 2;
+                let closure2 = move (x:i64) -> x + 1;
+                let u = z + 1;
+                closure2
+            };
+            
+            let res2 = closure2(1);
+
+            let closure3 = {
+                let z = 2;
+                let closure3 = move (x:i64) -> {
+                    z = z + x;
+                    z
+                };
+                z = z + 1;
+                closure3
+            };
+            
+            let res3 = closure3(1);
+            res3 = closure3(1);
+            res3 = closure3(1);
+
+            let closure4 = {
+                let arr = vec[1,2,3];
+                let closure4 = move (x:i64) -> {
+                    arr[1] = arr[1] + x;
+                    arr[1]
+                };
+                closure4
+            };
+            
+            let res4 = closure4(1);
+            res4 = closure4(1);
+            res4 = closure4(1);
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
+
     // #[test]
     // fn valid_number() {
     //     let (expr_i64, data_i64) = compile_expression!(Primitive, "420");
@@ -1325,7 +1400,7 @@ mod tests {
 
     // #[test]
     // fn valid_struct() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -1366,7 +1441,7 @@ mod tests {
 
     // #[test]
     // fn valid_struct_complex() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -1407,13 +1482,13 @@ mod tests {
 
     // #[test]
     // fn valid_union() {
-    //     let user_type = user_type_impl::Union {
+    //     let user_type = user_types::Union {
     //         id: "Geo".to_string().into(),
     //         variants: {
     //             let mut res = Vec::new();
     //             res.push((
     //                 "Point".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Point".to_string().into(),
     //                     fields: vec![
     //                         ("x".to_string().into(), p_num!(I64)),
@@ -1423,7 +1498,7 @@ mod tests {
     //             ));
     //             res.push((
     //                 "Axe".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Axe".to_string().into(),
     //                     fields: {
     //                         let mut res = Vec::new();
@@ -1467,7 +1542,7 @@ mod tests {
 
     // #[test]
     // fn valid_enum() {
-    //     let user_type = user_type_impl::Enum {
+    //     let user_type = user_types::Enum {
     //         id: "Geo".to_string().into(),
     //         values: {
     //             let mut res = Vec::new();
@@ -1486,7 +1561,7 @@ mod tests {
     //         user_type
     //     );
     //     let result: Enum =
-    //         <user_type_impl::Enum as DeserializeFrom>::deserialize_from(&user_type, &data)
+    //         <user_types::Enum as DeserializeFrom>::deserialize_from(&user_type, &data)
     //             .expect("Deserialization should have succeeded");
     //     assert_eq!(expr, result)
     // }
@@ -1531,7 +1606,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     expr.gencode(
     //         &mut scope_manager,
     //         None,

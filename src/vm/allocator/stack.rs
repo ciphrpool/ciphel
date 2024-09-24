@@ -1,11 +1,16 @@
-use std::sync::{
-    atomic::{AtomicU64, AtomicUsize, Ordering},
-    Arc,
+use std::{
+    collections::VecDeque,
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use num_traits::ToBytes;
 
 use thiserror::Error;
+
+use crate::semantic::scope::static_types::POINTER_SIZE;
 
 use super::MemoryAddress;
 
@@ -61,14 +66,29 @@ impl Stack {
         &mut self,
         parameters_size: usize,
         return_pointer: usize,
+        with_caller_data: Option<u64>,
     ) -> Result<(), StackError> {
         if self.stack_pointer < parameters_size {
             return Err(StackError::StackUnderflow);
         }
-        let parameters =
-            self.stack[self.stack_pointer - parameters_size..self.stack_pointer].to_vec();
+        let parameters = if let Some(caller_data) = with_caller_data {
+            let mut buffer = Vec::with_capacity(POINTER_SIZE + parameters_size);
+            buffer.extend_from_slice(&caller_data.to_le_bytes());
+            buffer.extend_from_slice(
+                &self.stack[self.stack_pointer - parameters_size..self.stack_pointer],
+            );
+            buffer
+        } else {
+            self.stack[self.stack_pointer - parameters_size..self.stack_pointer].to_vec()
+        };
 
         self.stack_pointer -= parameters_size;
+
+        let parameters_size = if with_caller_data.is_some() {
+            parameters_size + POINTER_SIZE
+        } else {
+            parameters_size
+        };
 
         let frame = Frame {
             frame_pointer: self.frame_pointer as u64,
@@ -341,7 +361,7 @@ mod tests {
         let _ = stack.push(8).expect("Push should have succeeded"); /* parameter */
 
         let _ = stack
-            .open_frame(8, 0)
+            .open_frame(8, 0, None)
             .expect("Frame creation should have succeeded");
 
         assert_eq!(stack.frame_pointer, 8);
@@ -360,7 +380,7 @@ mod tests {
         let _ = stack.push(8).expect("Push should have succeeded"); /* parameter */
 
         let _ = stack
-            .open_frame(8, 0)
+            .open_frame(8, 0, None)
             .expect("Frame creation should have succeeded");
         let _ = stack.push(8).expect("Push should have succeeded"); /* return value */
 

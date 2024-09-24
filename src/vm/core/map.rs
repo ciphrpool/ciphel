@@ -6,9 +6,9 @@ use crate::{
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
-        casm::{
+        asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         core::{
             lexem, CoreCasm, {ERROR_SLICE, OK_SLICE},
@@ -23,7 +23,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use super::{core_string::STRING_HEADER, core_vector::VEC_HEADER, PathFinder};
+use super::{string::STRING_HEADER, vector::VEC_HEADER, PathFinder};
 use crate::vm::allocator::heap::{HeapError, HEAP_SIZE};
 use num_traits::ToBytes;
 use rand::Rng;
@@ -323,14 +323,14 @@ pub enum MapCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MapCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            MapCasm::Map { .. } => stdio.push_casm_lib(engine, "map"),
-            MapCasm::MapWithCapacity { .. } => stdio.push_casm_lib(engine, "map"),
-            MapCasm::Insert { .. } => stdio.push_casm_lib(engine, "insert"),
-            MapCasm::DelKey { .. } => stdio.push_casm_lib(engine, "del_key"),
-            MapCasm::Get { .. } => stdio.push_casm_lib(engine, "get"),
-            MapCasm::Clear { .. } => stdio.push_casm_lib(engine, "clear_map"),
+            MapCasm::Map { .. } => stdio.push_asm_lib(engine, "map"),
+            MapCasm::MapWithCapacity { .. } => stdio.push_asm_lib(engine, "map"),
+            MapCasm::Insert { .. } => stdio.push_asm_lib(engine, "insert"),
+            MapCasm::DelKey { .. } => stdio.push_asm_lib(engine, "del_key"),
+            MapCasm::Get { .. } => stdio.push_asm_lib(engine, "get"),
+            MapCasm::Clear { .. } => stdio.push_asm_lib(engine, "clear_map"),
         }
     }
 
@@ -351,7 +351,7 @@ impl GenerateCode for MapFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match *self {
@@ -361,12 +361,12 @@ impl GenerateCode for MapFn {
                 key_size,
             } => {
                 if with_capacity {
-                    instructions.push(Casm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
+                    instructions.push(Asm::Core(CoreCasm::Map(MapCasm::MapWithCapacity {
                         item_size,
                         key_size,
                     })));
                 } else {
-                    instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Map {
+                    instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Map {
                         item_size,
                         key_size,
                     })));
@@ -377,7 +377,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Insert {
+                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Insert {
                     item_size,
                     key_size,
                     ref_access,
@@ -388,7 +388,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Get {
+                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Get {
                     item_size,
                     key_size,
                     ref_access,
@@ -399,7 +399,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::DelKey {
+                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::DelKey {
                     item_size,
                     key_size,
                     ref_access,
@@ -410,7 +410,7 @@ impl GenerateCode for MapFn {
                 item_size,
                 ref_access,
             } => {
-                instructions.push(Casm::Core(CoreCasm::Map(MapCasm::Clear {
+                instructions.push(Asm::Core(CoreCasm::Map(MapCasm::Clear {
                     item_size,
                     key_size,
                 })));
@@ -1173,7 +1173,7 @@ fn retrieve_key(
             let len = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)?;
 
             let items_bytes = heap.read(
-                address.add(super::core_vector::VEC_HEADER),
+                address.add(super::vector::VEC_HEADER),
                 len as usize * item_size,
             )?;
             Ok((Some(address), items_bytes))
@@ -1183,8 +1183,7 @@ fn retrieve_key(
 
             let len = OpPrimitive::get_num_from::<u64>(address.add(8), stack, heap)?;
 
-            let items_bytes =
-                heap.read(address.add(super::core_string::STRING_HEADER), len as usize)?;
+            let items_bytes = heap.read(address.add(super::string::STRING_HEADER), len as usize)?;
             Ok((Some(address), items_bytes))
         }
         DerefHashing::Default => Ok((None, stack.pop(key_size)?.to_vec())),
@@ -1202,7 +1201,7 @@ fn retrieve_key(
 impl<G: crate::GameEngineStaticFn> Executable<G> for MapCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

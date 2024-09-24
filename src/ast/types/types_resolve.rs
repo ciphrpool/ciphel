@@ -1,6 +1,6 @@
 use super::{
-    AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
-    TupleType, Type, Types, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, RangeType, SliceType,
+    StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::{Resolve, SemanticError};
@@ -30,6 +30,8 @@ impl Resolve for Type {
             }
             Type::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Type::Closure(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Type::Function(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Type::Lambda(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Type::Tuple(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Type::Unit => Ok(()),
             Type::Any => Ok(()),
@@ -136,6 +138,28 @@ impl Resolve for VecType {
     }
 }
 
+impl Resolve for FunctionType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for param in &mut self.params {
+            let _ = param.resolve::<G>(scope_manager, scope_id, context, extra)?;
+        }
+        self.ret
+            .resolve::<G>(scope_manager, scope_id, context, extra)
+    }
+}
 impl Resolve for ClosureType {
     type Output = ();
     type Context = ();
@@ -159,6 +183,28 @@ impl Resolve for ClosureType {
     }
 }
 
+impl Resolve for LambdaType {
+    type Output = ();
+    type Context = ();
+
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for param in &mut self.params {
+            let _ = param.resolve::<G>(scope_manager, scope_id, context, extra)?;
+        }
+        self.ret
+            .resolve::<G>(scope_manager, scope_id, context, extra)
+    }
+}
 impl Resolve for Types {
     type Output = ();
     type Context = ();

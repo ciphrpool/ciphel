@@ -16,8 +16,8 @@ use crate::ast::utils::{
 use crate::ast::TryParse;
 
 use super::{
-    AddrType, ClosureType, MapType, NumberType, PrimitiveType, RangeType, SliceType, StrSliceType,
-    StringType, TupleType, Type, Types, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, RangeType,
+    SliceType, StrSliceType, StringType, TupleType, Type, Types, VecType,
 };
 
 impl TryParse for Type {
@@ -38,7 +38,9 @@ impl TryParse for Type {
                 value(Type::Any, wst_closed(lexem::ANY)),
                 value(Type::Error, wst_closed(lexem::ERR)),
                 map(VecType::parse, |value| Type::Vec(value)),
+                map(FunctionType::parse, |value| Type::Function(value)),
                 map(ClosureType::parse, |value| Type::Closure(value)),
+                map(LambdaType::parse, |value| Type::Lambda(value)),
                 map(RangeType::parse, |value| Type::Range(value)),
                 map(TupleType::parse, |value| Type::Tuple(value)),
                 map(AddrType::parse, |value| Type::Address(value)),
@@ -154,26 +156,69 @@ impl TryParse for VecType {
     }
 }
 
+impl TryParse for FunctionType {
+    /*
+     * @desc Parse Closure Type Definition
+     *
+     * @grammar
+     * Fn := fn (Types) -> Type
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            tuple((
+                wst_closed(lexem::FN),
+                delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
+                wst(lexem::ARROW),
+                Type::parse,
+            )),
+            |(_, params, _, ret)| FunctionType {
+                params,
+                ret: Box::new(ret),
+            },
+        )(input)
+    }
+}
+
 impl TryParse for ClosureType {
     /*
      * @desc Parse Closure Type Definition
      *
      * @grammar
-     * Fn := Fn(Types) -> Type
+     * Closure := closed (Types) -> Type
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
             tuple((
-                pair(opt(wst_closed(lexem::DYN)), wst_closed(lexem::FN)),
+                wst_closed(lexem::CLOSED),
                 delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
                 wst(lexem::ARROW),
                 Type::parse,
             )),
-            |((opt_dyn, _), params, _, ret)| ClosureType {
+            |(_, params, _, ret)| ClosureType {
                 params,
                 ret: Box::new(ret),
-                closed: opt_dyn.is_some(),
-                scope_params_size: 0,
+            },
+        )(input)
+    }
+}
+
+impl TryParse for LambdaType {
+    /*
+     * @desc Parse Closure Type Definition
+     *
+     * @grammar
+     * Lambda := (Types) -> Type
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            tuple((
+                delimited(wst(lexem::PAR_O), Types::parse, wst(lexem::PAR_C)),
+                wst(lexem::ARROW),
+                Type::parse,
+            )),
+            |(params, _, ret)| LambdaType {
+                params,
+                ret: Box::new(ret),
             },
         )(input)
     }
@@ -376,21 +421,17 @@ mod tests {
             ClosureType {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
-                closed: false,
-                scope_params_size: 0,
             },
             value
         );
 
-        let res = ClosureType::parse("dyn fn(u16) -> bool".into());
+        let res = ClosureType::parse("closed (u16) -> bool".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
             ClosureType {
                 params: vec![Type::Primitive(PrimitiveType::Number(NumberType::U16))],
                 ret: Box::new(Type::Primitive(PrimitiveType::Bool)),
-                closed: true,
-                scope_params_size: 0,
             },
             value
         );

@@ -1,7 +1,7 @@
 use super::{Declaration, DeclaredVar, PatternVar, TypedVar};
 use crate::ast::statements::Statement;
 use crate::semantic::scope::static_types::TupleType;
-use crate::semantic::scope::user_type_impl::{Struct, UserType};
+use crate::semantic::scope::user_types::{Struct, UserType};
 use crate::semantic::{scope::static_types::StaticType, Resolve, SemanticError, TypeOf};
 use crate::semantic::{CompatibleWith, Desugar, EType};
 
@@ -44,7 +44,7 @@ impl Resolve for Declaration {
                 }
                 let var_id =
                     scope_manager.register_var(value.name.as_str(), var_type.clone(), scope_id)?;
-                value.id.insert(var_id);
+                let _ = value.id.insert(var_id);
 
                 let _ = right.resolve::<G>(
                     scope_manager,
@@ -52,7 +52,6 @@ impl Resolve for Declaration {
                     &Some(var_type.clone()),
                     &mut (),
                 )?;
-
                 let _ = var_type.compatible_with(
                     &right.type_of(scope_manager, scope_id)?,
                     &scope_manager,
@@ -225,7 +224,7 @@ mod tests {
         semantic::scope::{
             scope::ScopeManager,
             static_types::{PrimitiveType, StaticType},
-            user_type_impl::{Struct, UserType},
+            user_types::{Struct, UserType},
         },
     };
 

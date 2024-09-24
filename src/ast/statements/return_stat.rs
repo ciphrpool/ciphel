@@ -3,7 +3,7 @@ use crate::ast::utils::strings::wst_closed;
 use crate::semantic::scope::scope::{ScopeManager, ScopeState};
 use crate::semantic::{Desugar, Info};
 
-use crate::vm::casm::branch::Goto;
+use crate::vm::asm::branch::Goto;
 use crate::{
     ast::{
         expressions::Expression,
@@ -19,7 +19,7 @@ use crate::{
         SizeOf, TypeOf,
     },
     vm::{
-        casm::{Casm, CasmProgram},
+        asm::{Asm, Program},
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -134,10 +134,19 @@ impl Resolve for Return {
         };
         match self {
             Return::Unit => {
-                let Some(scope_id) = scope_manager.is_scope_in(scope_id, ScopeState::Function)
-                else {
-                    return Err(SemanticError::ExpectedClosure);
+                let Some(scope_id) = scope_manager.can_return(scope_id) else {
+                    return Err(SemanticError::ExpectedFunctionClosureLambda);
                 };
+                match scope_manager.scope_types.get_mut(&scope_id) {
+                    Some(types) => {
+                        types.push(EType::Static(StaticType::Unit));
+                    }
+                    None => {
+                        scope_manager
+                            .scope_types
+                            .insert(scope_id, vec![EType::Static(StaticType::Unit)]);
+                    }
+                }
                 if let Some(context) = context {
                     if *context != EType::Static(StaticType::Unit) {
                         return Err(SemanticError::IncompatibleTypes);
@@ -153,9 +162,8 @@ impl Resolve for Return {
                         context.compatible_with(&return_type, &scope_manager, Some(scope_id))?;
                 }
 
-                let Some(scope_id) = scope_manager.is_scope_in(scope_id, ScopeState::Function)
-                else {
-                    return Err(SemanticError::ExpectedClosure);
+                let Some(scope_id) = scope_manager.can_return(scope_id) else {
+                    return Err(SemanticError::ExpectedFunctionClosureLambda);
                 };
                 match scope_manager.scope_types.get_mut(&scope_id) {
                     Some(types) => {
@@ -165,6 +173,11 @@ impl Resolve for Return {
                         scope_manager
                             .scope_types
                             .insert(scope_id, vec![return_type.clone()]);
+                    }
+                }
+                if let Some(context) = context {
+                    if *context != return_type {
+                        return Err(SemanticError::IncompatibleTypes);
                     }
                 }
                 metadata.info = Info::Resolved {
@@ -181,10 +194,12 @@ impl Resolve for Return {
                         context.compatible_with(&return_type, &scope_manager, Some(scope_id))?;
                 }
 
-                let Some(ScopeState::Inline | ScopeState::IIFE) =
-                    scope_manager.scope_states.get(&scope_id)
-                else {
-                    return Err(SemanticError::ExpectedInlineBlock);
+                let scope_id = match scope_manager.can_return(scope_id) {
+                    Some(scope_id) => scope_id,
+                    None => match scope_manager.scope_states.get(&scope_id) {
+                        Some(ScopeState::Inline | ScopeState::IIFE) => scope_id,
+                        _ => return Err(SemanticError::ExpectedInlineBlock),
+                    },
                 };
                 match scope_manager.scope_types.get_mut(&scope_id) {
                     Some(types) => {
@@ -194,6 +209,12 @@ impl Resolve for Return {
                         scope_manager
                             .scope_types
                             .insert(scope_id, vec![return_type.clone()]);
+                    }
+                }
+
+                if let Some(context) = context {
+                    if *context != return_type {
+                        return Err(SemanticError::IncompatibleTypes);
                     }
                 }
                 metadata.info = Info::Resolved {
@@ -242,7 +263,7 @@ impl GenerateCode for Return {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -250,7 +271,7 @@ impl GenerateCode for Return {
                 let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(return_label),
                 }));
                 Ok(())
@@ -261,7 +282,7 @@ impl GenerateCode for Return {
                 let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(return_label),
                 }));
                 Ok(())
@@ -272,7 +293,7 @@ impl GenerateCode for Return {
                 let Some(return_label) = context.return_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(return_label),
                 }));
                 Ok(())
@@ -281,7 +302,7 @@ impl GenerateCode for Return {
                 let Some(break_label) = context.break_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(break_label),
                 }));
                 Ok(())
@@ -290,7 +311,7 @@ impl GenerateCode for Return {
                 let Some(continue_label) = context.continue_label else {
                     return Err(CodeGenerationError::UnresolvedError);
                 };
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(continue_label),
                 }));
                 Ok(())

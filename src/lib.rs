@@ -2,7 +2,7 @@ use ast::statements::{self, Statement, WithLine};
 use semantic::SemanticError;
 use vm::{
     allocator::heap::Heap,
-    casm::TransactionState,
+    asm::TransactionState,
     scheduler::Scheduler,
     stdio::StdIO,
     vm::{CodeGenerationError, GameEngineStaticFn, Runtime, RuntimeError},
@@ -281,7 +281,7 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
         .expect("the address should have been known");
 
     let res =
-        <vm::casm::operation::OpPrimitive as vm::casm::operation::GetNumFrom>::get_num_from::<N>(
+        <vm::asm::operation::OpPrimitive as vm::asm::operation::GetNumFrom>::get_num_from::<N>(
             address, stack, heap,
         )
         .expect("Deserialization should have succeeded");
@@ -300,7 +300,7 @@ pub fn test_statements<G: crate::GameEngineStaticFn>(
 ) {
     let mut statements = parse_statements(input.into(), 0).expect("Parsing should have succeeded");
     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
-    let mut instructions = vm::casm::CasmProgram::default();
+    let mut instructions = vm::asm::Program::default();
     let (mut runtime, mut heap, mut stdio) = Runtime::new();
 
     for statement in statements.iter_mut() {

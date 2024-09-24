@@ -3,13 +3,13 @@ use super::{Definition, EnumDef, FnDef, StructDef, TypeDef, UnionDef};
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::statements::Statement;
 use crate::semantic::scope::scope::ScopeState;
-use crate::semantic::scope::static_types::FnType;
+use crate::semantic::scope::static_types::FunctionType;
 use crate::semantic::scope::BuildUserType;
 use crate::semantic::Desugar;
 use crate::semantic::EType;
 use crate::semantic::SizeOf;
 use crate::semantic::{
-    scope::{static_types::StaticType, user_type_impl::UserType},
+    scope::{static_types::StaticType, user_types::UserType},
     Resolve, SemanticError, TypeOf,
 };
 
@@ -156,6 +156,10 @@ impl Resolve for FnDef {
     where
         Self: Sized,
     {
+        if scope_id.is_some() {
+            return Err(SemanticError::Default);
+        }
+
         for value in &mut self.params {
             let _ = value.resolve::<G>(scope_manager, scope_id, context, extra)?;
         }
@@ -174,19 +178,21 @@ impl Resolve for FnDef {
         for arg in &self.params {
             let argtype = arg.type_of(scope_manager, scope_id)?;
             param_types.push(argtype.clone());
+        }
+
+        let fn_type_sig = EType::Static(StaticType::Function(FunctionType {
+            params: param_types,
+            ret: Box::new(return_type.clone()),
+        }));
+
+        // Register parameters, add as first parameter the function pointer
+        let id = scope_manager.register_parameter(self.name.as_str(), fn_type_sig, scope_id)?;
+        for arg in &self.params {
+            let argtype = arg.type_of(scope_manager, scope_id)?;
             let _ =
                 scope_manager.register_parameter(arg.name.as_str(), argtype, Some(inner_scope))?;
         }
 
-        let param_total_size = param_types.iter().map(|t| t.size_of()).sum();
-
-        let fn_type_sig = EType::Static(StaticType::StaticFn(FnType {
-            params: param_types,
-            ret: Box::new(return_type.clone()),
-            scope_params_size: param_total_size,
-        }));
-
-        let id = scope_manager.register_var(self.name.as_str(), fn_type_sig, scope_id)?;
         let _ = self.id.insert(id);
 
         let _ = self
@@ -218,8 +224,8 @@ mod tests {
         e_static, p_num,
         semantic::scope::{
             scope,
-            static_types::{FnType, StaticType, StringType},
-            user_type_impl::{Enum, Struct, Union, UserType},
+            static_types::{FunctionType, StaticType, StringType},
+            user_types::{Enum, Struct, Union, UserType},
         },
     };
 
@@ -461,10 +467,9 @@ mod tests {
         assert_eq!(
             *function_type,
             crate::semantic::EType::Static(
-                StaticType::StaticFn(FnType {
+                StaticType::Function(FunctionType {
                     params: vec![],
                     ret: Box::new(e_static!(StaticType::Unit)),
-                    scope_params_size: 0,
                 })
                 .into()
             )
@@ -503,10 +508,9 @@ mod tests {
         assert_eq!(
             *function_type,
             crate::semantic::EType::Static(
-                StaticType::StaticFn(FnType {
+                StaticType::Function(FunctionType {
                     params: vec![p_num!(U64), e_static!(StaticType::String(StringType()))],
                     ret: Box::new(e_static!(StaticType::Unit)),
-                    scope_params_size: 16,
                 })
                 .into()
             )
@@ -552,10 +556,9 @@ mod tests {
         assert_eq!(
             *function_type,
             crate::semantic::EType::Static(
-                StaticType::StaticFn(FnType {
+                StaticType::Function(FunctionType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),
-                    scope_params_size: 8,
                 })
                 .into()
             )
@@ -656,10 +659,9 @@ mod tests {
         assert_eq!(
             *function_type,
             crate::semantic::EType::Static(
-                StaticType::StaticFn(FnType {
+                StaticType::Function(FunctionType {
                     params: vec![],
                     ret: Box::new(p_num!(U64)),
-                    scope_params_size: 0,
                 })
                 .into()
             )

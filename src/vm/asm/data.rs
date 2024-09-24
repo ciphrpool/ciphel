@@ -8,7 +8,7 @@ use crate::vm::{
     vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::{alloc::ALLOC_SIZE_THRESHOLD, CasmProgram};
+use super::{alloc::ALLOC_SIZE_THRESHOLD, Program};
 pub struct HexSlice<'a>(pub &'a [u8]);
 
 impl<'a> fmt::Display for HexSlice<'a> {
@@ -29,15 +29,15 @@ pub enum Data {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
             Data::Serialized { data } => {
-                stdio.push_casm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
+                stdio.push_asm(engine, &format!("dmp 0x{}", HexSlice(data.as_ref())))
             }
             Data::Dump { data } => {
                 let arr: Vec<String> = data.iter().map(|e| format!("0x{}", HexSlice(e))).collect();
                 let arr = arr.join(", ");
-                stdio.push_casm(engine, &format!("data {}", arr))
+                stdio.push_asm(engine, &format!("data {}", arr))
             }
             Data::Table { data } => {
                 let arr: Vec<String> = data
@@ -51,7 +51,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
                     })
                     .collect();
                 let arr = arr.join(", ");
-                stdio.push_casm(engine, &format!("labels {}", arr))
+                stdio.push_asm(engine, &format!("labels {}", arr))
             }
         }
     }
@@ -72,7 +72,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Data {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Data {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

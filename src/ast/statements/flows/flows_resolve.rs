@@ -7,7 +7,7 @@ use crate::semantic::Desugar;
 use crate::semantic::{
     scope::{
         static_types::StaticType,
-        user_type_impl::{Enum, Union, UserType},
+        user_types::{Enum, Union, UserType},
     },
     EType, Resolve, SemanticError, TypeOf,
 };

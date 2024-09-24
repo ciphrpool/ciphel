@@ -1,4 +1,8 @@
-use crate::ast::statements::block::{Block, ClosureBlock};
+use std::collections::HashMap;
+
+use ulid::Ulid;
+
+use crate::ast::statements::block::{Block, ClosureBlock, LambdaBlock};
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
 use crate::vm::allocator::MemoryAddress;
@@ -26,6 +30,7 @@ pub enum Data {
     StrSlice(StrSlice),
     Vec(Vector),
     Closure(Closure),
+    Lambda(Lambda),
     Tuple(Tuple),
     Address(Address),
     PtrAccess(PtrAccess),
@@ -104,10 +109,24 @@ pub struct Tuple {
 pub type MultiData = Vec<Expression>;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ClosureReprData {
+    closure_label: Ulid,
+    bucket_size: usize,
+    offsets: HashMap<u64, usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     params: Vec<ClosureParam>,
-    pub scope: ClosureBlock,
-    pub closed: bool,
+    pub block: ClosureBlock,
+    pub repr_data: Option<ClosureReprData>,
+    pub metadata: Metadata,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lambda {
+    params: Vec<ClosureParam>,
+    pub block: LambdaBlock,
     pub metadata: Metadata,
 }
 
@@ -233,6 +252,7 @@ impl Data {
             }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
+            Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -269,6 +289,7 @@ impl Data {
             }) => Some(metadata),
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
+            Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -331,6 +352,7 @@ impl Data {
             }) => metadata.signature(),
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
             Data::Call(Call { metadata, .. }) => metadata.signature(),
+            Data::Lambda(Lambda { metadata, .. }) => metadata.signature(),
         }
     }
 }

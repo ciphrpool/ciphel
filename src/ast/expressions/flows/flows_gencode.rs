@@ -6,12 +6,12 @@ use ulid::Ulid;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
 use crate::semantic::scope::scope::ScopeManager;
-use crate::semantic::scope::static_types::st_sizeof::POINTER_SIZE;
+use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::semantic::{EType, Resolve, SemanticError};
-use crate::vm::casm::branch::{BranchTry, CloseFrame, Return};
-use crate::vm::casm::data;
-use crate::vm::casm::mem::Mem;
-use crate::vm::casm::operation::{Equal, Operation, StrEqual};
+use crate::vm::asm::branch::{BranchTry, CloseFrame, Return};
+use crate::vm::asm::data;
+use crate::vm::asm::mem::Mem;
+use crate::vm::asm::operation::{Equal, Operation, StrEqual};
 use crate::vm::core::ERROR_VALUE;
 use crate::vm::vm::CodeGenerationContext;
 use crate::{
@@ -19,15 +19,15 @@ use crate::{
     semantic::{
         scope::{
             static_types::StaticType,
-            user_type_impl::{Enum, Union, UserType},
+            user_types::{Enum, Union, UserType},
         },
         SizeOf, TypeOf,
     },
     vm::{
-        casm::{
+        asm::{
             branch::{BranchIf, Call, Goto, Label},
             data::Data,
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
@@ -42,7 +42,7 @@ impl GenerateCode for ExprFlow {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -54,7 +54,7 @@ impl GenerateCode for ExprFlow {
                     .type_of(scope_manager, scope_id)
                     .map_err(|_| CodeGenerationError::UnresolvedError)?;
 
-                instructions.push(Casm::Data(Data::Serialized {
+                instructions.push(Asm::Data(Data::Serialized {
                     data: (value.size_of() as u64).to_le_bytes().into(),
                 }));
                 Ok(())
@@ -69,7 +69,7 @@ impl GenerateCode for IfExpr {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();
@@ -79,11 +79,11 @@ impl GenerateCode for IfExpr {
             .condition
             .gencode(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::If(BranchIf { else_label }));
+        instructions.push(Asm::If(BranchIf { else_label }));
         let _ = self
             .then_branch
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
 
@@ -91,7 +91,7 @@ impl GenerateCode for IfExpr {
         let _ = self
             .else_branch
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
 
@@ -108,7 +108,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let block_label = Label::gen();
@@ -116,21 +116,21 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
 
         for (i, value) in self.patterns.iter().enumerate() {
             instructions.push_label_id(else_label, format!("case_{}", i));
-            instructions.push(Casm::Mem(Mem::Dup(value.size_of())));
+            instructions.push(Asm::Mem(Mem::Dup(value.size_of())));
 
             value.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Casm::Operation(Operation {
-                kind: crate::vm::casm::operation::OperationKind::Equal(Equal {
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::Equal(Equal {
                     left: value.size_of(),
                     right: value.size_of(),
                 }),
             }));
 
             else_label = Label::gen();
-            instructions.push(Casm::If(BranchIf { else_label }));
-            instructions.push(Casm::Pop(value.size_of()));
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(value.size_of()));
+            instructions.push(Asm::Goto(Goto {
                 label: Some(block_label),
             }));
         }
@@ -138,7 +138,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         instructions.push_label_id(block_label, "match_block".to_string());
         self.block
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: context.break_label,
         }));
         instructions.push_label_id(else_label, "fallthrough".to_string());
@@ -154,7 +154,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let block_label = Label::gen();
@@ -162,18 +162,18 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
 
         for (i, value) in self.patterns.iter().enumerate() {
             instructions.push_label_id(else_label, format!("case_{}", i));
-            instructions.push(Casm::Mem(Mem::Dup(POINTER_SIZE)));
+            instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 
             value.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Casm::Operation(Operation {
-                kind: crate::vm::casm::operation::OperationKind::StrEqual(StrEqual),
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::StrEqual(StrEqual),
             }));
 
             else_label = Label::gen();
-            instructions.push(Casm::If(BranchIf { else_label }));
-            instructions.push(Casm::Pop(POINTER_SIZE));
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(POINTER_SIZE));
+            instructions.push(Asm::Goto(Goto {
                 label: Some(block_label),
             }));
         }
@@ -181,7 +181,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         instructions.push_label_id(block_label, "match_block".to_string());
         self.block
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: context.break_label,
         }));
         instructions.push_label_id(else_label, "fallthrough".to_string());
@@ -197,7 +197,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let block_label = Label::gen();
@@ -205,23 +205,23 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
 
         for (i, (_, _, value)) in self.patterns.iter().enumerate() {
             instructions.push_label_id(else_label, format!("case_{}", i));
-            instructions.push(Casm::Mem(Mem::Dup(POINTER_SIZE)));
+            instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
 
             let Some(value) = value else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
-            instructions.push(Casm::Data(Data::Serialized {
+            instructions.push(Asm::Data(Data::Serialized {
                 data: (*value).to_le_bytes().into(),
             }));
 
-            instructions.push(Casm::Operation(Operation {
-                kind: crate::vm::casm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
+            instructions.push(Asm::Operation(Operation {
+                kind: crate::vm::asm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
             }));
 
             else_label = Label::gen();
-            instructions.push(Casm::If(BranchIf { else_label }));
-            instructions.push(Casm::Pop(POINTER_SIZE));
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::If(BranchIf { else_label }));
+            instructions.push(Asm::Pop(POINTER_SIZE));
+            instructions.push(Asm::Goto(Goto {
                 label: Some(block_label),
             }));
         }
@@ -229,7 +229,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         instructions.push_label_id(block_label, "match_block".to_string());
         self.block
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: context.break_label,
         }));
         instructions.push_label_id(else_label, "fallthrough".to_string());
@@ -245,7 +245,7 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let block_label = Label::gen();
@@ -254,20 +254,20 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         let Some(value) = self.pattern.variant_value else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        instructions.push(Casm::Data(Data::Serialized {
+        instructions.push(Asm::Data(Data::Serialized {
             data: value.to_le_bytes().into(),
         }));
 
-        instructions.push(Casm::Operation(Operation {
-            kind: crate::vm::casm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
+        instructions.push(Asm::Operation(Operation {
+            kind: crate::vm::asm::operation::OperationKind::Equal(Equal { left: 8, right: 8 }),
         }));
 
-        instructions.push(Casm::If(BranchIf { else_label }));
+        instructions.push(Asm::If(BranchIf { else_label }));
 
         instructions.push_label_id(block_label, "match_block".to_string());
         self.block
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: context.break_label,
         }));
         instructions.push_label_id(else_label, "fallthrough".to_string());
@@ -280,7 +280,7 @@ impl GenerateCode for MatchExpr {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let break_label = Label::gen();
@@ -363,7 +363,7 @@ impl GenerateCode for TryExpr {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let Some(return_size) = self.metadata.signature().map(|t| t.size_of()) else {
@@ -376,7 +376,7 @@ impl GenerateCode for TryExpr {
 
         let _ = instructions.push_label("try".to_string().into());
 
-        instructions.push(Casm::Try(BranchTry::StartTry {
+        instructions.push(Asm::Try(BranchTry::StartTry {
             else_label: recover_else_label,
         }));
 
@@ -391,17 +391,17 @@ impl GenerateCode for TryExpr {
         if self.pop_last_err {
             let next = Label::gen();
             /* Pop the error */
-            instructions.push(Casm::If(BranchIf { else_label: next }));
-            instructions.push(Casm::Pop(return_size)); // discard error value
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::If(BranchIf { else_label: next }));
+            instructions.push(Asm::Pop(return_size)); // discard error value
+            instructions.push(Asm::Goto(Goto {
                 label: Some(else_label),
             }));
             instructions.push_label_id(next, "else".to_string().into());
         }
 
-        instructions.push(Casm::Try(BranchTry::EndTry));
+        instructions.push(Asm::Try(BranchTry::EndTry));
 
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
         instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
@@ -411,16 +411,16 @@ impl GenerateCode for TryExpr {
             let mut dummy_data = vec![0; return_size];
             dummy_data.push(ERROR_VALUE);
 
-            instructions.push(Casm::Data(Data::Serialized {
+            instructions.push(Asm::Data(Data::Serialized {
                 data: vec![0; return_size].into(),
             }));
-            instructions.push(Casm::Return(Return { size: return_size })); // Once return the cursor will go back to (1)
+            instructions.push(Asm::Return(Return { size: return_size })); // Once return the cursor will go back to (1)
         } else {
-            instructions.push(Casm::CloseFrame(CloseFrame));
+            instructions.push(Asm::CloseFrame(CloseFrame));
         }
 
         instructions.push_label_id(else_label, "else".to_string().into());
-        instructions.push(Casm::Try(BranchTry::EndTry));
+        instructions.push(Asm::Try(BranchTry::EndTry));
 
         if let Some(block) = &self.else_branch {
             block.gencode(scope_manager, scope_id, instructions, context)?;
@@ -435,7 +435,7 @@ impl GenerateCode for FCall {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         todo!();
@@ -444,11 +444,11 @@ impl GenerateCode for FCall {
         //         super::FormatItem::Str(string) => {
         //             let str_bytes: Box<[u8]> = string.as_bytes().into();
         //             let size = (&str_bytes).len() as u64;
-        //             instructions.push(Casm::Data(data::Data::Serialized { data: str_bytes }));
-        //             instructions.push(Casm::Data(data::Data::Serialized {
+        //             instructions.push(Asm::Data(data::Data::Serialized { data: str_bytes }));
+        //             instructions.push(Asm::Data(data::Data::Serialized {
         //                 data: size.to_le_bytes().into(),
         //             }));
-        //             instructions.push(Casm::Core(CoreCasm::Std(StdCasm::Strings(
+        //             instructions.push(Asm::Core(CoreCasm::Std(StdCasm::Strings(
         //                 StringsCasm::ToStr(ToStrCasm::ToStrStrSlice),
         //             ))));
         //         }
@@ -457,7 +457,7 @@ impl GenerateCode for FCall {
         //         }
         //     }
         // }
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::Strings(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::Strings(
         //     StringsCasm::Join(JoinCasm::NoSepFromSlice(Some(self.value.len()))),
         // ))));
         Ok(())
@@ -481,13 +481,13 @@ mod tests {
             scope::{
                 scope::ScopeManager,
                 static_types::{NumberType, PrimitiveType},
-                user_type_impl::{self, UserType},
+                user_types::{self, UserType},
             },
             Resolve,
         },
         test_extract_variable, test_extract_variable_with, test_statements, v_num,
         vm::{
-            casm::operation::OpPrimitive,
+            asm::operation::OpPrimitive,
             vm::{Executable, Runtime},
         },
     };
@@ -675,7 +675,7 @@ mod tests {
     //         .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
     //         .expect("Semantic resolution should have succeeded");
     //     // Code generation.
-    //     let mut instructions_then = CasmProgram::default();
+    //     let mut instructions_then = Program::default();
     //     statement_then
     //         .gencode(
     //             &mut scope_manager,
@@ -729,7 +729,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions_else = CasmProgram::default();
+    //     let mut instructions_else = Program::default();
     //     statement_else
     //         .gencode(
     //             &mut scope_manager,
@@ -785,7 +785,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions_then = CasmProgram::default();
+    //     let mut instructions_then = Program::default();
     //     statement_then
     //         .gencode(
     //             &mut scope_manager,
@@ -844,7 +844,7 @@ mod tests {
 
     //     // Code generation.
 
-    //     let mut instructions_else = CasmProgram::default();
+    //     let mut instructions_else = Program::default();
     //     statement_else
     //         .gencode(
     //             &mut scope_manager,
@@ -882,7 +882,7 @@ mod tests {
 
     // #[test]
     // fn valid_if_complex() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -917,7 +917,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions_then = CasmProgram::default();
+    //     let mut instructions_then = Program::default();
     //     statement_then
     //         .gencode(
     //             &mut scope_manager,
@@ -970,7 +970,7 @@ mod tests {
 
     // #[test]
     // fn valid_if_complex_else() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -1005,7 +1005,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions_else = CasmProgram::default();
+    //     let mut instructions_else = Program::default();
     //     statement_else
     //         .gencode(
     //             &mut scope_manager,
@@ -1076,7 +1076,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions_then = CasmProgram::default();
+    //     let mut instructions_then = Program::default();
     //     statement_then
     //         .gencode(
     //             &mut scope_manager,
@@ -1115,13 +1115,13 @@ mod tests {
 
     // #[test]
     // fn valid_match_union() {
-    //     let user_type = user_type_impl::Union {
+    //     let user_type = user_types::Union {
     //         id: "Geo".to_string().into(),
     //         variants: {
     //             let mut res = Vec::new();
     //             res.push((
     //                 "Point".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Point".to_string().into(),
     //                     fields: vec![
     //                         ("x".to_string().into(), p_num!(I64)),
@@ -1131,7 +1131,7 @@ mod tests {
     //             ));
     //             res.push((
     //                 "Axe".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Axe".to_string().into(),
     //                     fields: {
     //                         let mut res = Vec::new();
@@ -1171,7 +1171,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -1209,7 +1209,7 @@ mod tests {
 
     // #[test]
     // fn valid_match_enum() {
-    //     let user_type = user_type_impl::Enum {
+    //     let user_type = user_types::Enum {
     //         id: "Geo".to_string().into(),
     //         values: vec![
     //             "Point".to_string().into(),
@@ -1243,7 +1243,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -1281,7 +1281,7 @@ mod tests {
 
     // #[test]
     // fn valid_match_enum_else() {
-    //     let user_type = user_type_impl::Enum {
+    //     let user_type = user_types::Enum {
     //         id: "Geo".to_string().into(),
     //         values: vec![
     //             "Point".to_string().into(),
@@ -1315,7 +1315,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -1353,13 +1353,13 @@ mod tests {
 
     // #[test]
     // fn valid_match_union_else() {
-    //     let user_type = user_type_impl::Union {
+    //     let user_type = user_types::Union {
     //         id: "Geo".to_string().into(),
     //         variants: {
     //             let mut res = Vec::new();
     //             res.push((
     //                 "Point".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Point".to_string().into(),
     //                     fields: vec![
     //                         ("x".to_string().into(), p_num!(I64)),
@@ -1369,7 +1369,7 @@ mod tests {
     //             ));
     //             res.push((
     //                 "Axe".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Axe".to_string().into(),
     //                     fields: {
     //                         let mut res = Vec::new();
@@ -1409,7 +1409,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -1589,27 +1589,27 @@ mod tests {
 
     // #[test]
     // fn valid_match_union_mult() {
-    //     let user_type = user_type_impl::Union {
+    //     let user_type = user_types::Union {
     //         id: "Geo".to_string().into(),
     //         variants: {
     //             let mut res = Vec::new();
     //             res.push((
     //                 "Point".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Point".to_string().into(),
     //                     fields: vec![("x".to_string().into(), p_num!(I64))],
     //                 },
     //             ));
     //             res.push((
     //                 "Axe".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Axe".to_string().into(),
     //                     fields: vec![("x".to_string().into(), p_num!(I64))],
     //                 },
     //             ));
     //             res.push((
     //                 "Other".to_string().into(),
-    //                 user_type_impl::Struct {
+    //                 user_types::Struct {
     //                     id: "Axe".to_string().into(),
     //                     fields: vec![("x".to_string().into(), p_num!(I64))],
     //                 },
@@ -1644,7 +1644,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -1682,7 +1682,7 @@ mod tests {
 
     // #[test]
     // fn valid_match_enum_mult() {
-    //     let user_type = user_type_impl::Enum {
+    //     let user_type = user_types::Enum {
     //         id: "Geo".to_string().into(),
     //         values: vec![
     //             "Point".to_string().into(),
@@ -1715,7 +1715,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,

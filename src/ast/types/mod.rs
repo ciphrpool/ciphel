@@ -15,7 +15,9 @@ pub enum Type {
     Range(RangeType),
     UserType(ID),
     Vec(VecType),
+    Function(FunctionType),
     Closure(ClosureType),
+    Lambda(LambdaType),
     Tuple(TupleType),
     Unit,
     Any,
@@ -61,12 +63,23 @@ pub struct StringType();
 pub struct VecType(pub SubType);
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct FunctionType {
+    pub params: Types,
+    pub ret: SubType,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClosureType {
     pub params: Types,
-    pub scope_params_size: usize,
     pub ret: SubType,
-    pub closed: bool,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LambdaType {
+    pub params: Types,
+    pub ret: SubType,
+}
+
 pub type Types = Vec<Type>;
 
 #[derive(Debug, Clone, PartialEq)]

@@ -6,9 +6,9 @@ use crate::{
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack},
-        casm::{
+        asm::{
             operation::{GetNumFrom, OpPrimitive, PopNum},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         core::{lexem, CoreCasm},
         stdio::StdIO,
@@ -202,15 +202,15 @@ pub enum VectorCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for VectorCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            VectorCasm::Vec { item_size } => stdio.push_casm_lib(engine, "vec"),
-            VectorCasm::VecWithCapacity { item_size } => stdio.push_casm_lib(engine, "vec"),
-            VectorCasm::Push { item_size } => stdio.push_casm_lib(engine, "push"),
-            VectorCasm::Pop { item_size } => stdio.push_casm_lib(engine, "pop"),
-            VectorCasm::Extend { item_size } => stdio.push_casm_lib(engine, "extend"),
-            VectorCasm::Delete { item_size } => stdio.push_casm_lib(engine, "delete"),
-            VectorCasm::Clear { item_size } => stdio.push_casm_lib(engine, "clear_vec"),
+            VectorCasm::Vec { item_size } => stdio.push_asm_lib(engine, "vec"),
+            VectorCasm::VecWithCapacity { item_size } => stdio.push_asm_lib(engine, "vec"),
+            VectorCasm::Push { item_size } => stdio.push_asm_lib(engine, "push"),
+            VectorCasm::Pop { item_size } => stdio.push_asm_lib(engine, "pop"),
+            VectorCasm::Extend { item_size } => stdio.push_asm_lib(engine, "extend"),
+            VectorCasm::Delete { item_size } => stdio.push_asm_lib(engine, "delete"),
+            VectorCasm::Clear { item_size } => stdio.push_asm_lib(engine, "clear_vec"),
         }
     }
 
@@ -232,7 +232,7 @@ impl GenerateCode for VectorFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match *self {
@@ -241,27 +241,27 @@ impl GenerateCode for VectorFn {
                 item_size,
             } => {
                 if with_capacity {
-                    instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::VecWithCapacity {
+                    instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::VecWithCapacity {
                         item_size,
                     })));
                 } else {
-                    instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Vec { item_size })));
+                    instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Vec { item_size })));
                 }
             }
             VectorFn::Push { item_size } => {
-                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Push { item_size })));
+                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Push { item_size })));
             }
             VectorFn::Pop { item_size } => {
-                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Pop { item_size })));
+                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Pop { item_size })));
             }
             VectorFn::Extend { item_size } => {
-                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Extend { item_size })));
+                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Extend { item_size })));
             }
             VectorFn::Delete { item_size } => {
-                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Delete { item_size })));
+                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Delete { item_size })));
             }
             VectorFn::ClearVec { item_size } => {
-                instructions.push(Casm::Core(CoreCasm::Vec(VectorCasm::Clear { item_size })))
+                instructions.push(Asm::Core(CoreCasm::Vec(VectorCasm::Clear { item_size })))
             }
         }
         Ok(())
@@ -280,7 +280,7 @@ pub const VEC_HEADER: usize = 16;
 impl<G: crate::GameEngineStaticFn> Executable<G> for VectorCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

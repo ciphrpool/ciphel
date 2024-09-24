@@ -1,6 +1,6 @@
 use std::{arch::x86_64, sync::Arc};
 
-use crate::{semantic::scope::scope::ScopeManager, vm::casm};
+use crate::{semantic::scope::scope::ScopeManager, vm::asm};
 use ulid::Ulid;
 
 use crate::{
@@ -16,9 +16,9 @@ use crate::{
     semantic::{CompatibleWith, EType, Info, MergeType, Metadata, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::align,
-        casm::{
+        asm::{
             branch::{Goto, Label},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, Printer, RuntimeError},
     },
@@ -122,7 +122,7 @@ impl SizeOf for UserType {
 }
 
 impl Printer for UserType {
-    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError> {
         match self {
             UserType::Struct(value) => value.build_printer(instructions),
             UserType::Enum(value) => value.build_printer(instructions),
@@ -305,35 +305,35 @@ impl Enum {
 }
 
 impl Printer for Struct {
-    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError> {
         todo!();
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintID(self.id.clone()),
         // )))));
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::StdOutBufOpen,
         // )))));
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintLexem(lexem::BRA_C),
         // )))));
         // for (idx, (field_name, field_type)) in self.fields.iter().enumerate().rev() {
         //     if idx != self.fields.len() - 1 {
-        //         instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        //         instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //             PrintCasm::PrintLexem(lexem::COMA),
         //         )))));
         //     }
         //     let _ = field_type.build_printer(instructions)?;
-        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintLexem(lexem::COLON),
         //     )))));
-        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(field_name.clone()),
         //     )))));
         // }
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::PrintLexem(lexem::BRA_O),
         // )))));
-        // instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        // instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //     PrintCasm::StdOutBufRevFlush,
         // )))));
         Ok(())
@@ -341,7 +341,7 @@ impl Printer for Struct {
 }
 
 impl Printer for Union {
-    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError> {
         todo!();
         // let mut cases: Vec<Ulid> = Vec::with_capacity(self.variants.len());
         // let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.variants.len());
@@ -354,29 +354,29 @@ impl Printer for Union {
         //     cases.push(label);
         // }
 
-        // let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+        // let dump_data_label = instructions.push_data(asm::data::Data::Dump {
         //     data: dump_data.into(),
         // });
-        // let table_data_label = instructions.push_data(casm::data::Data::Table {
+        // let table_data_label = instructions.push_data(asm::data::Data::Table {
         //     data: cases.clone().into(),
         // });
-        // instructions.push(Casm::Switch(BranchTable::Swith {
+        // instructions.push(Asm::Switch(BranchTable::Swith {
         //     size: Some(8),
         //     data_label: Some(dump_data_label),
         //     else_label: None,
         // }));
-        // instructions.push(Casm::Switch(BranchTable::Table {
+        // instructions.push(Asm::Switch(BranchTable::Table {
         //     table_label: Some(table_data_label),
         //     else_label: None,
         // }));
 
         // for ((name, value), label) in self.variants.iter().zip(cases) {
         //     instructions.push_label_id(label, format!("print_{}", name).into());
-        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(format!("{}::", self.id.clone()).into()),
         //     )))));
         //     let _ = value.build_printer(instructions)?;
-        //     instructions.push(Casm::Goto(Goto {
+        //     instructions.push(Asm::Goto(Goto {
         //         label: Some(end_label),
         //     }));
         // }
@@ -386,7 +386,7 @@ impl Printer for Union {
 }
 
 impl Printer for Enum {
-    fn build_printer(&self, instructions: &mut CasmProgram) -> Result<(), CodeGenerationError> {
+    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError> {
         todo!();
         // let mut cases: Vec<Ulid> = Vec::with_capacity(self.values.len());
         // let mut dump_data: Vec<Box<[u8]>> = Vec::with_capacity(self.values.len());
@@ -398,28 +398,28 @@ impl Printer for Enum {
         //     cases.push(label);
         // }
 
-        // let dump_data_label = instructions.push_data(casm::data::Data::Dump {
+        // let dump_data_label = instructions.push_data(asm::data::Data::Dump {
         //     data: dump_data.into(),
         // });
-        // let table_data_label = instructions.push_data(casm::data::Data::Table {
+        // let table_data_label = instructions.push_data(asm::data::Data::Table {
         //     data: cases.clone().into(),
         // });
-        // instructions.push(Casm::Switch(BranchTable::Swith {
+        // instructions.push(Asm::Switch(BranchTable::Swith {
         //     size: Some(8),
         //     data_label: Some(dump_data_label),
         //     else_label: None,
         // }));
-        // instructions.push(Casm::Switch(BranchTable::Table {
+        // instructions.push(Asm::Switch(BranchTable::Table {
         //     table_label: Some(table_data_label),
         //     else_label: None,
         // }));
 
         // for (name, label) in self.values.iter().zip(cases) {
         //     instructions.push_label_id(label, format!("print_{}", name).into());
-        //     instructions.push(Casm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
+        //     instructions.push(Asm::Core(CoreCasm::Std(StdCasm::IO(IOCasm::Print(
         //         PrintCasm::PrintID(format!("{}::{}", self.id.clone(), name.clone()).into()),
         //     )))));
-        //     instructions.push(Casm::Goto(Goto {
+        //     instructions.push(Asm::Goto(Goto {
         //         label: Some(end_label),
         //     }));
         // }

@@ -1,6 +1,6 @@
 use super::{
-    Address, Call, Closure, ClosureParam, Data, Enum, Map, Number, Primitive, PtrAccess, Slice,
-    StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, Data, Enum, Lambda, Map, Number, Primitive, PtrAccess,
+    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{self, StaticType};
@@ -22,6 +22,7 @@ impl TypeOf for Data {
             Data::Slice(value) => value.type_of(&scope_manager, scope_id),
             Data::Vec(value) => value.type_of(&scope_manager, scope_id),
             Data::Closure(value) => value.type_of(&scope_manager, scope_id),
+            Data::Lambda(value) => value.type_of(&scope_manager, scope_id),
             Data::Tuple(value) => value.type_of(&scope_manager, scope_id),
             Data::Address(value) => value.type_of(&scope_manager, scope_id),
             Data::PtrAccess(value) => value.type_of(&scope_manager, scope_id),
@@ -180,20 +181,41 @@ impl TypeOf for Closure {
         Self: Sized + Resolve,
     {
         let mut params_types = Vec::with_capacity(self.params.len());
-        let mut scope_params_size = 0;
         for expr in &self.params {
             let expr_type = expr.type_of(&scope_manager, scope_id)?;
-            scope_params_size += expr_type.size_of();
             params_types.push(expr_type);
         }
-        let ret_type = self.scope.type_of(&scope_manager, scope_id)?;
+        let ret_type = self.block.type_of(&scope_manager, scope_id)?;
 
         Ok(EType::Static(StaticType::Closure(
             static_types::ClosureType {
                 params: params_types,
                 ret: Box::new(ret_type),
-                closed: self.closed,
-                scope_params_size,
+            },
+        )))
+    }
+}
+
+impl TypeOf for Lambda {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        let mut params_types = Vec::with_capacity(self.params.len());
+        for expr in &self.params {
+            let expr_type = expr.type_of(&scope_manager, scope_id)?;
+            params_types.push(expr_type);
+        }
+        let ret_type = self.block.type_of(&scope_manager, scope_id)?;
+
+        Ok(EType::Static(StaticType::Lambda(
+            static_types::LambdaType {
+                params: params_types,
+                ret: Box::new(ret_type),
             },
         )))
     }

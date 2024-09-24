@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use super::{Block, ClosureBlock, ExprBlock, FunctionBlock};
+use super::{Block, ClosureBlock, ExprBlock, FunctionBlock, LambdaBlock};
 
 use crate::ast::statements::{self, Statement};
 use crate::semantic::scope::scope::{ScopeManager, ScopeState};
@@ -183,6 +183,10 @@ impl Resolve for ClosureBlock {
             self.scope = Some(inner_scope)
         }
 
+        scope_manager
+            .scope_states
+            .insert(self.scope.unwrap(), ScopeState::Closure);
+
         for instruction in &mut self.statements {
             let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
         }
@@ -225,6 +229,80 @@ impl Desugar<ClosureBlock> for ClosureBlock {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<ClosureBlock>, SemanticError> {
+        for statement in self.statements.iter_mut() {
+            if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
+                *statement = output;
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Resolve for LambdaBlock {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        if self.scope.is_none() {
+            let inner_scope = scope_manager.spawn(scope_id)?;
+            self.scope = Some(inner_scope)
+        }
+
+        scope_manager
+            .scope_states
+            .insert(self.scope.unwrap(), ScopeState::Lambda);
+
+        for instruction in &mut self.statements {
+            let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
+        }
+
+        // let return_type = self.type_of(&scope_manager, scope_id)?;
+
+        let return_types = scope_manager
+            .scope_types
+            .get(&self.scope.ok_or(SemanticError::NotResolvedYet)?)
+            .cloned()
+            .unwrap_or(vec![EType::Static(StaticType::Unit)]);
+
+        let mut scope_type = EType::Static(StaticType::Unit);
+        for return_type in return_types.into_iter() {
+            if scope_type == EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type = return_type;
+                continue;
+            }
+            if scope_type != EType::Static(StaticType::Unit)
+                && return_type != EType::Static(StaticType::Unit)
+            {
+                scope_type.compatible_with(&return_type, scope_manager, scope_id)?;
+            }
+        }
+
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(scope_type),
+        };
+
+        Ok(())
+    }
+}
+
+impl Desugar<LambdaBlock> for LambdaBlock {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<LambdaBlock>, SemanticError> {
         for statement in self.statements.iter_mut() {
             if let Some(output) = statement.desugar::<G>(scope_manager, scope_id)? {
                 *statement = output;

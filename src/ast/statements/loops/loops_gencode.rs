@@ -1,13 +1,13 @@
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::SizeOf;
-use crate::vm::casm::branch::BranchIf;
+use crate::vm::asm::branch::BranchIf;
 
 use crate::vm::vm::CodeGenerationContext;
 use crate::vm::{
-    casm::{
+    asm::{
         branch::{Goto, Label},
         mem::Mem,
-        Casm, CasmProgram,
+        Asm, Program,
     },
     vm::{CodeGenerationError, GenerateCode},
 };
@@ -19,7 +19,7 @@ impl GenerateCode for Loop {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -45,16 +45,16 @@ impl GenerateCode for Loop {
                     },
                 )?;
 
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(start_label),
                 }));
 
                 instructions.push_label_id(break_label, "break_loop".to_string().into());
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(end_label),
                 }));
                 instructions.push_label_id(continue_label, "continue_loop".to_string().into());
-                instructions.push(Casm::Goto(Goto {
+                instructions.push(Asm::Goto(Goto {
                     label: Some(start_label),
                 }));
                 instructions.push_label_id(end_label, "end_loop".to_string().into());
@@ -70,7 +70,7 @@ impl GenerateCode for ForLoop {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let break_label = Label::gen();
@@ -94,7 +94,7 @@ impl GenerateCode for ForLoop {
 
         if let Some(condition) = &self.condition {
             let _ = condition.gencode(scope_manager, scope_id, instructions, context)?;
-            instructions.push(Casm::If(BranchIf {
+            instructions.push(Asm::If(BranchIf {
                 else_label: break_label,
             }));
         }
@@ -112,18 +112,18 @@ impl GenerateCode for ForLoop {
 
         // Loop epilog
         instructions.push_label_id(epilog_label, "epilog_loop".to_string());
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(continue_label),
         }));
         instructions.push_label_id(continue_label, "continue_loop".to_string());
         for increment in self.increments.iter() {
             let _ = increment.gencode(scope_manager, scope_id, instructions, context)?;
         }
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(start_label),
         }));
         instructions.push_label_id(break_label, "break_loop".to_string());
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
         instructions.push_label_id(end_label, "end_loop".to_string());
@@ -137,7 +137,7 @@ impl GenerateCode for WhileLoop {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let start_label = Label::gen();
@@ -152,7 +152,7 @@ impl GenerateCode for WhileLoop {
             .condition
             .gencode(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::If(BranchIf {
+        instructions.push(Asm::If(BranchIf {
             else_label: end_label,
         }));
         self.block.gencode(
@@ -168,16 +168,16 @@ impl GenerateCode for WhileLoop {
 
         // Loop epilog
         instructions.push_label_id(epilog_label, "epilog_loop".to_string());
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(continue_label),
         }));
         instructions.push_label_id(continue_label, "continue_loop".to_string());
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(start_label),
         }));
 
         instructions.push_label_id(break_label, "break_loop".to_string());
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
         instructions.push_label_id(end_label, "end_loop".to_string());
@@ -219,6 +219,9 @@ mod tests {
             let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(res, 20);
+            let res = test_extract_variable::<i64>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 150);
             true
         }
 
@@ -248,6 +251,17 @@ mod tests {
             }
         }
 
+
+                
+        let res4 = 0;
+        for ( let i = 0; i < 10; i = i + 1) {
+            for ( let j = 0; j < 10; j = j + 1) {
+                res4 = res4 + j;
+                if j >= 5 {
+                    break;
+                }
+            }
+        }
         "##,
             &mut engine,
             assert_fn,

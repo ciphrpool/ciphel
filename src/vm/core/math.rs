@@ -12,8 +12,8 @@ use crate::semantic::ResolvePlatform;
 use crate::semantic::{EType, TypeOf};
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
-use crate::vm::casm::operation::OpPrimitive;
-use crate::vm::casm::Casm;
+use crate::vm::asm::operation::OpPrimitive;
+use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreCasm;
 
@@ -24,7 +24,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{Resolve, SemanticError},
     vm::{
-        casm::CasmProgram,
+        asm::Program,
         vm::{CodeGenerationError, GenerateCode},
     },
 };
@@ -146,39 +146,39 @@ impl PathFinder for MathFn {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            MathCasm::Ceil => stdio.push_casm_lib(engine, "ceil"),
-            MathCasm::Floor => stdio.push_casm_lib(engine, "floor"),
-            MathCasm::Abs => stdio.push_casm_lib(engine, "abs"),
-            MathCasm::Exp => stdio.push_casm_lib(engine, "exp"),
-            MathCasm::Ln => stdio.push_casm_lib(engine, "ln"),
-            MathCasm::Log => stdio.push_casm_lib(engine, "log"),
-            MathCasm::Log10 => stdio.push_casm_lib(engine, "log10"),
-            MathCasm::Pow => stdio.push_casm_lib(engine, "pow"),
-            MathCasm::Sqrt => stdio.push_casm_lib(engine, "sqrt"),
-            MathCasm::Acos => stdio.push_casm_lib(engine, "acos"),
-            MathCasm::Asin => stdio.push_casm_lib(engine, "asin"),
-            MathCasm::Atan => stdio.push_casm_lib(engine, "atan"),
-            MathCasm::Atan2 => stdio.push_casm_lib(engine, "atan2"),
-            MathCasm::Cos => stdio.push_casm_lib(engine, "cos"),
-            MathCasm::Sin => stdio.push_casm_lib(engine, "sin"),
-            MathCasm::Tan => stdio.push_casm_lib(engine, "tan"),
-            MathCasm::Hypot => stdio.push_casm_lib(engine, "hypot"),
-            MathCasm::Deg => stdio.push_casm_lib(engine, "deg"),
-            MathCasm::Rad => stdio.push_casm_lib(engine, "rad"),
-            MathCasm::CosH => stdio.push_casm_lib(engine, "cosh"),
-            MathCasm::SinH => stdio.push_casm_lib(engine, "sinh"),
-            MathCasm::TanH => stdio.push_casm_lib(engine, "tanh"),
-            MathCasm::ACosH => stdio.push_casm_lib(engine, "acosh"),
-            MathCasm::ASinH => stdio.push_casm_lib(engine, "asinh"),
-            MathCasm::ATanH => stdio.push_casm_lib(engine, "atanh"),
-            MathCasm::Pi => stdio.push_casm_lib(engine, "pi"),
-            MathCasm::E => stdio.push_casm_lib(engine, "e"),
-            MathCasm::Inf => stdio.push_casm_lib(engine, "inf"),
-            MathCasm::NInf => stdio.push_casm_lib(engine, "ninf"),
-            MathCasm::IsNaN => stdio.push_casm_lib(engine, "isnan"),
-            MathCasm::IsInf => stdio.push_casm_lib(engine, "isinf"),
+            MathCasm::Ceil => stdio.push_asm_lib(engine, "ceil"),
+            MathCasm::Floor => stdio.push_asm_lib(engine, "floor"),
+            MathCasm::Abs => stdio.push_asm_lib(engine, "abs"),
+            MathCasm::Exp => stdio.push_asm_lib(engine, "exp"),
+            MathCasm::Ln => stdio.push_asm_lib(engine, "ln"),
+            MathCasm::Log => stdio.push_asm_lib(engine, "log"),
+            MathCasm::Log10 => stdio.push_asm_lib(engine, "log10"),
+            MathCasm::Pow => stdio.push_asm_lib(engine, "pow"),
+            MathCasm::Sqrt => stdio.push_asm_lib(engine, "sqrt"),
+            MathCasm::Acos => stdio.push_asm_lib(engine, "acos"),
+            MathCasm::Asin => stdio.push_asm_lib(engine, "asin"),
+            MathCasm::Atan => stdio.push_asm_lib(engine, "atan"),
+            MathCasm::Atan2 => stdio.push_asm_lib(engine, "atan2"),
+            MathCasm::Cos => stdio.push_asm_lib(engine, "cos"),
+            MathCasm::Sin => stdio.push_asm_lib(engine, "sin"),
+            MathCasm::Tan => stdio.push_asm_lib(engine, "tan"),
+            MathCasm::Hypot => stdio.push_asm_lib(engine, "hypot"),
+            MathCasm::Deg => stdio.push_asm_lib(engine, "deg"),
+            MathCasm::Rad => stdio.push_asm_lib(engine, "rad"),
+            MathCasm::CosH => stdio.push_asm_lib(engine, "cosh"),
+            MathCasm::SinH => stdio.push_asm_lib(engine, "sinh"),
+            MathCasm::TanH => stdio.push_asm_lib(engine, "tanh"),
+            MathCasm::ACosH => stdio.push_asm_lib(engine, "acosh"),
+            MathCasm::ASinH => stdio.push_asm_lib(engine, "asinh"),
+            MathCasm::ATanH => stdio.push_asm_lib(engine, "atanh"),
+            MathCasm::Pi => stdio.push_asm_lib(engine, "pi"),
+            MathCasm::E => stdio.push_asm_lib(engine, "e"),
+            MathCasm::Inf => stdio.push_asm_lib(engine, "inf"),
+            MathCasm::NInf => stdio.push_asm_lib(engine, "ninf"),
+            MathCasm::IsNaN => stdio.push_asm_lib(engine, "isnan"),
+            MathCasm::IsInf => stdio.push_asm_lib(engine, "isinf"),
         }
     }
     fn weight(&self) -> crate::vm::vm::CasmWeight {
@@ -289,97 +289,79 @@ impl GenerateCode for MathFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            MathFn::Ceil => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Ceil))))
-            }
+            MathFn::Ceil => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Ceil)))),
 
             MathFn::Floor => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Floor))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Floor))))
             }
-            MathFn::Abs => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Abs)))),
+            MathFn::Abs => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Abs)))),
 
-            MathFn::Exp => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Exp)))),
+            MathFn::Exp => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Exp)))),
 
-            MathFn::Log => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Log)))),
+            MathFn::Log => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Log)))),
 
-            MathFn::Ln => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Ln)))),
+            MathFn::Ln => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Ln)))),
 
             MathFn::Log10 => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Log10))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Log10))))
             }
-            MathFn::Pow => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Pow)))),
+            MathFn::Pow => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Pow)))),
 
-            MathFn::Sqrt => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Sqrt))))
-            }
+            MathFn::Sqrt => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Sqrt)))),
 
-            MathFn::Acos => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Acos))))
-            }
+            MathFn::Acos => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Acos)))),
 
-            MathFn::Asin => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Asin))))
-            }
+            MathFn::Asin => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Asin)))),
 
-            MathFn::Atan => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Atan))))
-            }
+            MathFn::Atan => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Atan)))),
 
             MathFn::Atan2 => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Atan2))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Atan2))))
             }
-            MathFn::Cos => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Cos)))),
+            MathFn::Cos => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Cos)))),
 
-            MathFn::Sin => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Sin)))),
+            MathFn::Sin => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Sin)))),
 
-            MathFn::Tan => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Tan)))),
+            MathFn::Tan => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Tan)))),
 
             MathFn::Hypot => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Hypot))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Hypot))))
             }
-            MathFn::Deg => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Deg)))),
+            MathFn::Deg => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Deg)))),
 
-            MathFn::Rad => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Rad)))),
+            MathFn::Rad => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Rad)))),
 
-            MathFn::CosH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::CosH))))
-            }
+            MathFn::CosH => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::CosH)))),
 
-            MathFn::SinH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::SinH))))
-            }
+            MathFn::SinH => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::SinH)))),
 
-            MathFn::TanH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::TanH))))
-            }
+            MathFn::TanH => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::TanH)))),
 
             MathFn::ACosH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ACosH))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::ACosH))))
             }
             MathFn::ASinH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ASinH))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::ASinH))))
             }
             MathFn::ATanH => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::ATanH))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::ATanH))))
             }
-            MathFn::Pi => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Pi)))),
+            MathFn::Pi => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Pi)))),
 
-            MathFn::E => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::E)))),
-            MathFn::Inf => Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::Inf)))),
+            MathFn::E => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::E)))),
+            MathFn::Inf => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::Inf)))),
 
-            MathFn::NInf => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::NInf))))
-            }
+            MathFn::NInf => Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::NInf)))),
 
             MathFn::IsNaN => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::IsNaN))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::IsNaN))))
             }
             MathFn::IsInf => {
-                Ok(instructions.push(Casm::Core(super::CoreCasm::Math(MathCasm::IsInf))))
+                Ok(instructions.push(Asm::Core(super::CoreCasm::Math(MathCasm::IsInf))))
             }
         }
     }
@@ -388,7 +370,7 @@ impl GenerateCode for MathFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for MathCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

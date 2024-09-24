@@ -1,6 +1,6 @@
 use super::{
-    AddrType, ClosureType, MapType, PrimitiveType, RangeType, SliceType, StrSliceType, StringType,
-    TupleType, Type, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, PrimitiveType, RangeType, SliceType,
+    StrSliceType, StringType, TupleType, Type, VecType,
 };
 use crate::e_static;
 use crate::semantic::scope::scope::ScopeManager;
@@ -48,6 +48,8 @@ impl TypeOf for Type {
             Type::String(value) => value.type_of(&scope_manager, scope_id),
             Type::Range(value) => value.type_of(&scope_manager, scope_id),
             Type::Error => Ok(e_static!(StaticType::Error)),
+            Type::Function(value) => value.type_of(&scope_manager, scope_id),
+            Type::Lambda(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
@@ -167,6 +169,32 @@ impl TypeOf for VecType {
 }
 impl CompatibleWith for static_types::VecType {}
 
+impl TypeOf for FunctionType {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized,
+    {
+        let params = {
+            let mut params = Vec::with_capacity(self.params.len());
+            for p in &self.params {
+                params.push(p.type_of(scope_manager, scope_id)?);
+            }
+            params
+        };
+
+        let static_type: StaticType =
+            static_types::StaticType::Function(static_types::FunctionType {
+                params,
+                ret: Box::new(self.ret.type_of(scope_manager, scope_id)?),
+            });
+        Ok(e_static!(static_type))
+    }
+}
+
 impl TypeOf for ClosureType {
     fn type_of(
         &self,
@@ -183,29 +211,49 @@ impl TypeOf for ClosureType {
             }
             params
         };
-        let scope_params_size =
-            params.iter().map(|p| p.size_of()).sum::<usize>() + if self.closed { 8 } else { 0 };
+
         let static_type: StaticType =
             static_types::StaticType::Closure(static_types::ClosureType {
                 params,
                 ret: Box::new(self.ret.type_of(scope_manager, scope_id)?),
-                closed: self.closed,
-                scope_params_size,
             });
         Ok(e_static!(static_type))
     }
 }
 
-impl CompatibleWith for static_types::FnType {
+impl TypeOf for LambdaType {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized,
+    {
+        let params = {
+            let mut params = Vec::with_capacity(self.params.len());
+            for p in &self.params {
+                params.push(p.type_of(scope_manager, scope_id)?);
+            }
+            params
+        };
+
+        let static_type: StaticType = static_types::StaticType::Lambda(static_types::LambdaType {
+            params,
+            ret: Box::new(self.ret.type_of(scope_manager, scope_id)?),
+        });
+        Ok(e_static!(static_type))
+    }
+}
+
+impl CompatibleWith for static_types::FunctionType {
     fn compatible_with(
         &self,
         other: &Self,
         scope_manager: &crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<(), SemanticError> {
-        if self.params.len() != other.params.len()
-            || self.scope_params_size != other.scope_params_size
-        {
+        if self.params.len() != other.params.len() {
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_param, other_param) in self.params.iter().zip(other.params.iter()) {
@@ -224,10 +272,7 @@ impl CompatibleWith for static_types::ClosureType {
         scope_manager: &crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<(), SemanticError> {
-        if self.params.len() != other.params.len()
-                    // || self.rec != *other.rec
-                    || self.closed != other.closed
-        {
+        if self.params.len() != other.params.len() {
             return Err(SemanticError::IncompatibleTypes);
         }
         for (self_param, other_param) in self.params.iter().zip(other.params.iter()) {
@@ -239,6 +284,24 @@ impl CompatibleWith for static_types::ClosureType {
     }
 }
 
+impl CompatibleWith for static_types::LambdaType {
+    fn compatible_with(
+        &self,
+        other: &Self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<(), SemanticError> {
+        if self.params.len() != other.params.len() {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+        for (self_param, other_param) in self.params.iter().zip(other.params.iter()) {
+            let _ = self_param.compatible_with(&other_param, scope_manager, scope_id)?;
+        }
+        return self
+            .ret
+            .compatible_with(&other.ret, scope_manager, scope_id);
+    }
+}
 impl TypeOf for TupleType {
     fn type_of(
         &self,

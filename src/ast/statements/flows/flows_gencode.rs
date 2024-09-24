@@ -1,7 +1,7 @@
 use crate::{
     semantic::scope::scope::ScopeManager,
     vm::{
-        casm::{branch::BranchTry, data::Data, mem::Mem},
+        asm::{branch::BranchTry, data::Data, mem::Mem},
         vm::CodeGenerationContext,
     },
 };
@@ -18,14 +18,14 @@ use crate::{
     semantic::{
         scope::{
             static_types::StaticType,
-            user_type_impl::{Enum, Union, UserType},
+            user_types::{Enum, Union, UserType},
         },
         EType, SizeOf,
     },
     vm::{
-        casm::{
+        asm::{
             branch::{BranchIf, Goto, Label},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
@@ -38,7 +38,7 @@ impl GenerateCode for Flow {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -55,7 +55,7 @@ impl GenerateCode for CallStat {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let _ = self
@@ -67,7 +67,7 @@ impl GenerateCode for CallStat {
         let size = return_type.size_of();
 
         if size != 0 {
-            instructions.push(Casm::Pop(size));
+            instructions.push(Asm::Pop(size));
         }
         Ok(())
     }
@@ -78,7 +78,7 @@ impl GenerateCode for IfStat {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let mut else_label = Label::gen();
@@ -88,11 +88,11 @@ impl GenerateCode for IfStat {
             .condition
             .gencode(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::If(BranchIf { else_label }));
+        instructions.push(Asm::If(BranchIf { else_label }));
         let _ = self
             .then_branch
             .gencode(scope_manager, scope_id, instructions, context)?;
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_label),
         }));
 
@@ -103,10 +103,10 @@ impl GenerateCode for IfStat {
 
             let _ = condition.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Casm::If(BranchIf { else_label }));
+            instructions.push(Asm::If(BranchIf { else_label }));
 
             let _ = block.gencode(scope_manager, scope_id, instructions, context)?;
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::Goto(Goto {
                 label: Some(end_label),
             }));
         }
@@ -114,7 +114,7 @@ impl GenerateCode for IfStat {
         instructions.push_label_id(else_label, "else".to_string().into());
         if let Some(block) = &self.else_branch {
             let _ = block.gencode(scope_manager, scope_id, instructions, context)?;
-            instructions.push(Casm::Goto(Goto {
+            instructions.push(Asm::Goto(Goto {
                 label: Some(end_label),
             }));
         }
@@ -129,7 +129,7 @@ impl GenerateCode for MatchStat {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let break_label = Label::gen();
@@ -212,14 +212,14 @@ impl GenerateCode for TryStat {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let else_label = Label::gen();
         let end_try_label = Label::gen();
         let recover_else_label = Label::gen();
 
-        instructions.push(Casm::Try(BranchTry::StartTry {
+        instructions.push(Asm::Try(BranchTry::StartTry {
             else_label: recover_else_label,
         }));
 
@@ -227,14 +227,14 @@ impl GenerateCode for TryStat {
             .try_branch
             .gencode(scope_manager, scope_id, instructions, context)?;
 
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(end_try_label),
         }));
 
         instructions.push_label_id(recover_else_label, "recover_else".to_string().into());
 
         instructions.push_label_id(else_label, "else".to_string().into());
-        instructions.push(Casm::Try(BranchTry::EndTry));
+        instructions.push(Asm::Try(BranchTry::EndTry));
 
         if let Some(block) = &self.else_branch {
             block.gencode(scope_manager, scope_id, instructions, context)?;

@@ -1,8 +1,8 @@
 use crate::semantic::scope::static_types::{PrimitiveType, StaticType, StrSliceType, StringType};
 use crate::semantic::TypeOf;
 use crate::vm::allocator::{align, MemoryAddress};
-use crate::vm::casm::operation::{GetNumFrom, OpPrimitive, PopNum};
-use crate::vm::casm::Casm;
+use crate::vm::asm::operation::{GetNumFrom, OpPrimitive, PopNum};
+use crate::vm::asm::Asm;
 use crate::vm::core::lexem;
 use crate::vm::core::CoreCasm;
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     semantic::{EType, Metadata, Resolve, ResolvePlatform, SemanticError},
     vm::{
         allocator::{heap::Heap, stack::Stack},
-        casm::CasmProgram,
+        asm::Program,
         stdio::StdIO,
         vm::{CasmMetadata, CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
@@ -162,13 +162,13 @@ pub enum StringCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for StringCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            StringCasm::String {} => stdio.push_casm_lib(engine, "string"),
-            StringCasm::Append {} => stdio.push_casm_lib(engine, "append"),
-            StringCasm::CharAtString => stdio.push_casm_lib(engine, "char_at"),
-            StringCasm::CharAtStrslice => stdio.push_casm_lib(engine, "char_at"),
-            StringCasm::ToConstStr => stdio.push_casm_lib(engine, "to_const_str"),
+            StringCasm::String {} => stdio.push_asm_lib(engine, "string"),
+            StringCasm::Append {} => stdio.push_asm_lib(engine, "append"),
+            StringCasm::CharAtString => stdio.push_asm_lib(engine, "char_at"),
+            StringCasm::CharAtStrslice => stdio.push_asm_lib(engine, "char_at"),
+            StringCasm::ToConstStr => stdio.push_asm_lib(engine, "to_const_str"),
         }
     }
 
@@ -188,25 +188,25 @@ impl GenerateCode for StringFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match *self {
             StringFn::String {} => {
-                instructions.push(Casm::Core(CoreCasm::String(StringCasm::String {})))
+                instructions.push(Asm::Core(CoreCasm::String(StringCasm::String {})))
             }
             StringFn::Append {} => {
-                instructions.push(Casm::Core(CoreCasm::String(StringCasm::Append {})))
+                instructions.push(Asm::Core(CoreCasm::String(StringCasm::Append {})))
             }
             StringFn::CharAt { for_string } => {
                 if for_string {
-                    instructions.push(Casm::Core(CoreCasm::String(StringCasm::CharAtString {})))
+                    instructions.push(Asm::Core(CoreCasm::String(StringCasm::CharAtString {})))
                 } else {
-                    instructions.push(Casm::Core(CoreCasm::String(StringCasm::CharAtStrslice {})))
+                    instructions.push(Asm::Core(CoreCasm::String(StringCasm::CharAtStrslice {})))
                 }
             }
             StringFn::ToConstStr {} => {
-                instructions.push(Casm::Core(CoreCasm::String(StringCasm::ToConstStr {})))
+                instructions.push(Asm::Core(CoreCasm::String(StringCasm::ToConstStr {})))
             }
         }
         Ok(())
@@ -223,7 +223,7 @@ pub const STRING_HEADER: usize = 16;
 impl<G: crate::GameEngineStaticFn> Executable<G> for StringCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

@@ -9,19 +9,19 @@ use crate::vm::{
         stack::{Stack, STACK_SIZE},
         MemoryAddress,
     },
-    casm::operation::OpPrimitive,
+    asm::operation::OpPrimitive,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, RuntimeError},
 };
 
-use super::{data::HexSlice, operation::PopNum, CasmProgram};
+use super::{data::HexSlice, operation::PopNum, Program};
 
 pub const ALLOC_SIZE_THRESHOLD: usize = STACK_SIZE / 10;
 
 #[derive(Debug, Clone)]
 pub enum Alloc {
     Heap {
-        size: Option<usize>,
+        size: usize,
     },
     Stack {
         size: usize,
@@ -37,18 +37,15 @@ pub enum Alloc {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            Alloc::Heap { size } => match size {
-                None => stdio.push_casm(engine, "halloc"),
-                Some(n) => stdio.push_casm(engine, &format!("halloc {n}")),
-            },
-            Alloc::Stack { size } => stdio.push_casm(engine, &format!("salloc {size}")),
+            Alloc::Heap { size } => stdio.push_asm(engine, &format!("halloc {size}")),
+            Alloc::Stack { size } => stdio.push_asm(engine, &format!("salloc {size}")),
             Alloc::Global { data, .. } => {
-                stdio.push_casm(engine, &format!("galloc 0x{}", HexSlice(data.as_ref())))
+                stdio.push_asm(engine, &format!("galloc 0x{}", HexSlice(data.as_ref())))
             }
             Alloc::GlobalFromStack { address, size } => {
-                stdio.push_casm(engine, &format!("galloc {}", size))
+                stdio.push_asm(engine, &format!("galloc {}", size))
             }
         }
     }
@@ -56,7 +53,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
     fn weight(&self) -> crate::vm::vm::CasmWeight {
         match self {
             Alloc::Heap { size } => {
-                if size.unwrap_or(0) > ALLOC_SIZE_THRESHOLD {
+                if *size > ALLOC_SIZE_THRESHOLD {
                     crate::vm::vm::CasmWeight::EXTREME
                 } else {
                     crate::vm::vm::CasmWeight::MEDIUM
@@ -89,7 +86,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Alloc {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -98,11 +95,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Alloc {
     ) -> Result<(), RuntimeError> {
         match self {
             Alloc::Heap { size } => {
-                let size = match size {
-                    Some(size) => *size,
-                    None => OpPrimitive::pop_num::<u64>(stack)? as usize,
-                };
-                let address = heap.alloc(size)?;
+                let address = heap.alloc(*size)?;
                 let address: u64 = address.into(stack);
 
                 let _ = stack.push_with(&address.to_le_bytes())?;
@@ -140,10 +133,10 @@ pub struct Realloc {
     pub size: Option<usize>,
 }
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self.size {
-            Some(n) => stdio.push_casm(engine, &format!("realloc {n}")),
-            None => stdio.push_casm(engine, "realloc"),
+            Some(n) => stdio.push_asm(engine, &format!("realloc {n}")),
+            None => stdio.push_asm(engine, "realloc"),
         }
     }
 
@@ -158,7 +151,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Realloc {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -186,14 +179,14 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Realloc {
 #[derive(Debug, Clone)]
 pub struct Free();
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Free {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, "free");
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+        stdio.push_asm(engine, "free");
     }
 }
 impl<G: crate::GameEngineStaticFn> Executable<G> for Free {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -214,14 +207,14 @@ pub enum Access {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
             Access::Static { address, size } => {
-                stdio.push_casm(engine, &format!("load {} {size}", address.name()))
+                stdio.push_asm(engine, &format!("load {} {size}", address.name()))
             }
             Access::Runtime { size } => match size {
-                Some(n) => stdio.push_casm(engine, &format!("load {n}")),
-                None => stdio.push_casm(engine, "load"),
+                Some(n) => stdio.push_asm(engine, &format!("load {n}")),
+                None => stdio.push_asm(engine, "load"),
             },
         }
     }
@@ -237,7 +230,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Access {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -304,8 +297,8 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 // }
 
 // impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CheckIndex {
-//     fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-//         stdio.push_casm(engine, "chidx");
+//     fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+//         stdio.push_asm(engine, "chidx");
 //     }
 //     fn weight(&self) -> crate::vm::vm::CasmWeight {
 //         crate::vm::vm::CasmWeight::ZERO
@@ -315,7 +308,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Access {
 // impl<G: crate::GameEngineStaticFn> Executable<G> for CheckIndex {
 //     fn execute(
 //         &self,
-//         program: &mut CasmProgram,
+//         program: &mut Program,
 //         stack: &mut Stack,
 //         heap: &mut Heap,
 //         stdio: &mut StdIO,

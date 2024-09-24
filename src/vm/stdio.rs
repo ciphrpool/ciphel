@@ -3,7 +3,7 @@ use super::vm::GameEngineStaticFn;
 #[derive(Debug, Clone)]
 pub struct StdIO {
     pub stdout: StdOut,
-    // pub casm_out: String,
+    // pub asm_out: String,
     pub stdin: StdIn,
 }
 
@@ -12,31 +12,31 @@ impl Default for StdIO {
         Self {
             stdin: StdIn::default(),
             stdout: StdOut::default(),
-            // casm_out: String::new(),
+            // asm_out: String::new(),
         }
     }
 }
 
 impl StdIO {
-    pub fn push_casm_info<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
-        engine.stdcasm_print(format!("INFO :: {content}\n"));
+    pub fn push_asm_info<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+        engine.stdasm_print(format!("INFO :: {content}\n"));
     }
-    pub fn push_casm<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
-        // self.casm_out.push('\t');
-        // self.casm_out.push_str(content);
-        // self.casm_out.push('\n');
-        engine.stdcasm_print(format!("\t{content}"));
+    pub fn push_asm<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+        // self.asm_out.push('\t');
+        // self.asm_out.push_str(content);
+        // self.asm_out.push('\n');
+        engine.stdasm_print(format!("\t{content}"));
     }
-    pub fn push_casm_lib<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
-        // self.casm_out.push_str("\tsyscall ");
-        // self.casm_out.push_str(content);
-        // self.casm_out.push('\n');
-        engine.stdcasm_print(format!("\tsyscall {content}"));
+    pub fn push_asm_lib<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+        // self.asm_out.push_str("\tsyscall ");
+        // self.asm_out.push_str(content);
+        // self.asm_out.push('\n');
+        engine.stdasm_print(format!("\tsyscall {content}"));
     }
-    pub fn push_casm_label<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
-        // self.casm_out.push_str(content);
-        // self.casm_out.push_str(" :\n");
-        engine.stdcasm_print(format!("{content} :"));
+    pub fn push_asm_label<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {
+        // self.asm_out.push_str(content);
+        // self.asm_out.push_str(" :\n");
+        engine.stdasm_print(format!("{content} :"));
     }
 
     pub fn print_stderr<G: GameEngineStaticFn>(&mut self, engine: &mut G, content: &str) {

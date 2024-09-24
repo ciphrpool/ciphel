@@ -68,12 +68,46 @@ pub trait TryParseOperation {
     where
         Self: Sized;
 }
+
+pub trait TryParseAtomicOperation {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized;
+}
+
+impl TryParseAtomicOperation for ExprCall {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = map(Atomic::parse, Expression::Atomic)(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
+        }
+        let (remainder, dot_args) = opt(CallArgs::parse)(remainder)?;
+
+        if let Some(args) = dot_args {
+            Ok((
+                remainder,
+                Expression::ExprCall(ExprCall {
+                    var: Box::new(left),
+                    args,
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 impl TryParseOperation for ExprCall {
     fn parse(input: Span) -> PResult<Expression>
     where
         Self: Sized,
     {
-        let (remainder, left) = map(Atomic::parse, Expression::Atomic)(input)?;
+        let (remainder, left) = FieldAccess::parse_atomic(input)?;
         let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
         if peeked.is_some() {
             return Ok((remainder, left));
@@ -133,6 +167,73 @@ impl TryParseOperation for TupleAccess {
         }
     }
 }
+
+impl TryParseAtomicOperation for TupleAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = ExprCall::parse_atomic(input)?;
+        let (_, peeked_result) = opt(peek(preceded(
+            wst(lexem::DOT),
+            take_while_m_n(1, usize::MAX, |c: char| c.is_digit(10)),
+        )))(remainder)?;
+
+        if let Some(_) = peeked_result {
+            let (remainder, (_, num)) = tuple((wst(lexem::DOT), digit1))(remainder)?;
+
+            match num.parse::<usize>() {
+                Ok(index) => {
+                    return Ok((
+                        remainder,
+                        Expression::TupleAccess(TupleAccess {
+                            var: Box::new(left),
+                            index,
+                            offset: None,
+                            metadata: Metadata::default(),
+                        }),
+                    ));
+                }
+                Err(_) => {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: remainder,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+            }
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+impl TryParseAtomicOperation for ListAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = TupleAccess::parse_atomic(input)?;
+        let (remainder, index) = opt(delimited(
+            wst(lexem::SQ_BRA_O),
+            cut(Expression::parse.context("Invalid list accessing expression")),
+            cut(wst(lexem::SQ_BRA_C)),
+        ))(remainder)?;
+
+        if let Some(index) = index {
+            Ok((
+                remainder,
+                Expression::ListAccess(ListAccess {
+                    var: Box::new(left),
+                    index: Box::new(index),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
 impl TryParseOperation for ListAccess {
     fn parse(input: Span) -> PResult<Expression>
     where
@@ -159,12 +260,62 @@ impl TryParseOperation for ListAccess {
         }
     }
 }
+
 impl TryParseOperation for FieldAccess {
     fn parse(input: Span) -> PResult<Expression>
     where
         Self: Sized,
     {
         let (remainder, left) = ListAccess::parse(input)?;
+        let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
+        if peeked.is_some() {
+            return Ok((remainder, left));
+        }
+        let (remainder, dot_field) = opt(wst(lexem::DOT))(remainder)?;
+
+        if let Some(_) = dot_field {
+            let (remainder, num) = opt(digit1)(remainder)?;
+            if let Some(try_num) = num {
+                let index = try_num.parse::<usize>();
+                if index.is_err() {
+                    return Err(nom::Err::Error(ErrorTree::Base {
+                        location: try_num,
+                        kind: nom_supreme::error::BaseErrorKind::Kind(nom::error::ErrorKind::Fail),
+                    }));
+                }
+                let index = index.unwrap();
+                return Ok((
+                    remainder,
+                    Expression::TupleAccess(TupleAccess {
+                        var: Box::new(left),
+                        index,
+                        offset: None,
+                        metadata: Metadata::default(),
+                    }),
+                ));
+            }
+            let (remainder, right) =
+                cut(FieldAccess::parse.context("Invalid field accessing expression"))(remainder)?;
+            Ok((
+                remainder,
+                Expression::FieldAccess(FieldAccess {
+                    var: Box::new(left),
+                    field: Box::new(right),
+                    metadata: Metadata::default(),
+                }),
+            ))
+        } else {
+            Ok((remainder, left))
+        }
+    }
+}
+
+impl TryParseAtomicOperation for FieldAccess {
+    fn parse_atomic(input: Span) -> PResult<Expression>
+    where
+        Self: Sized,
+    {
+        let (remainder, left) = ListAccess::parse_atomic(input)?;
         let (_, peeked) = opt(peek(wst(lexem::RANGE_SEP)))(remainder)?;
         if peeked.is_some() {
             return Ok((remainder, left));

@@ -5,10 +5,10 @@ use crate::{
     },
     semantic::SizeOf,
     vm::{
-        casm::{
+        asm::{
             branch::{Call, Goto, Label},
             mem::Mem,
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationContext, CodeGenerationError, GenerateCode},
     },
@@ -22,7 +22,7 @@ impl GenerateCode for Assignation {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let _ = &self
@@ -40,14 +40,14 @@ impl GenerateCode for Assignation {
         }
         match self.left.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
-                instructions.push(Casm::Mem(Mem::Store {
+                instructions.push(Asm::Mem(Mem::Store {
                     size: var_size,
                     address,
                 }));
             }
             None => {
                 // The address was push on stack
-                instructions.push(Casm::Mem(Mem::Take { size: var_size }));
+                instructions.push(Asm::Mem(Mem::Take { size: var_size }));
             }
         }
 
@@ -60,7 +60,7 @@ impl GenerateCode for AssignValue {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -94,14 +94,14 @@ mod tests {
             scope::{
                 scope::ScopeManager,
                 static_types::{NumberType, PrimitiveType, SliceType, StaticType, TupleType},
-                user_type_impl::{self, UserType},
+                user_types::{self, UserType},
             },
             EType, Resolve,
         },
         test_extract_variable, test_extract_variable_with, test_statements, v_num,
         vm::{
             allocator::MemoryAddress,
-            casm::operation::{GetNumFrom, OpPrimitive},
+            asm::operation::{GetNumFrom, OpPrimitive},
             vm::{Executable, Runtime},
         },
     };
@@ -331,7 +331,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     declaration
     //         .gencode(
     //             &mut scope_manager,
@@ -378,7 +378,7 @@ mod tests {
 
     // #[test]
     // fn valid_assignation_struct_in_scope() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -411,7 +411,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -483,7 +483,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -572,7 +572,7 @@ mod tests {
 
     // #[test]
     // fn valid_assignation_field_access_in_scope() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -603,7 +603,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -657,7 +657,7 @@ mod tests {
 
     // #[test]
     // fn valid_assignation_complex_in_scope() {
-    //     let user_type = user_type_impl::Struct {
+    //     let user_type = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -699,7 +699,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -785,7 +785,7 @@ mod tests {
 
     //     let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
-    //     let user_type_point3d = user_type_impl::Struct {
+    //     let user_type_point3d = user_types::Struct {
     //         id: "Point3D".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -799,7 +799,7 @@ mod tests {
     //         .register_type("Point3D", UserType::Struct(user_type_point3d.clone()), None)
     //         .expect("Registering of user type should have succeeded");
 
-    //     let user_type_point = user_type_impl::Struct {
+    //     let user_type_point = user_types::Struct {
     //         id: "Point".to_string().into(),
     //         fields: {
     //             let mut res = Vec::new();
@@ -823,7 +823,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,

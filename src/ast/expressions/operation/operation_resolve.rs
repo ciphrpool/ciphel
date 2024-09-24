@@ -8,10 +8,10 @@ use crate::ast::expressions::data::{Data, Number, Primitive, Variable};
 use crate::ast::expressions::{Atomic, Expression};
 use crate::p_num;
 use crate::semantic::scope::static_types::{
-    ClosureType, FnType, NumberType, PrimitiveType, RangeType, SliceType, StaticType, StrSliceType,
-    TupleType, VecType,
+    ClosureType, FunctionType, LambdaType, NumberType, PrimitiveType, RangeType, SliceType,
+    StaticType, StrSliceType, TupleType, VecType,
 };
-use crate::semantic::scope::user_type_impl::{Struct, UserType};
+use crate::semantic::scope::user_types::{Struct, UserType};
 use crate::semantic::{
     CompatibleWith, Desugar, EType, Resolve, ResolveNumber, ResolvePlatform, SemanticError, TypeOf,
 };
@@ -411,7 +411,37 @@ impl Resolve for ExprCall {
     where
         Self: Sized,
     {
-        todo!()
+        let _ = self
+            .var
+            .resolve::<G>(scope_manager, scope_id, &None, extra)?;
+
+        let var_type = self.var.type_of(scope_manager, scope_id)?;
+        let (params, return_type) = match &var_type {
+            EType::Static(StaticType::Closure(ClosureType { params, ret, .. })) => (params, ret),
+            EType::Static(StaticType::Lambda(LambdaType { params, ret, .. })) => (params, ret),
+            EType::Static(StaticType::Function(FunctionType { params, ret, .. })) => (params, ret),
+            _ => return Err(SemanticError::ExpectedCallable),
+        };
+
+        if params.len() != self.args.args.len() {
+            return Err(SemanticError::IncorrectArguments);
+        }
+
+        let mut params_size = 0;
+        for (arg, param) in self.args.args.iter_mut().zip(params) {
+            let _ = arg.resolve::<G>(scope_manager, scope_id, &Some(param.clone()), &mut None)?;
+            params_size += param.size_of();
+        }
+        let _ = self.args.size.insert(params_size);
+
+        if context.is_some() && *context.as_ref().unwrap() != **return_type {
+            return Err(SemanticError::IncompatibleTypes);
+        }
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(return_type.as_ref().clone()),
+        };
+        Ok(())
     }
 }
 
@@ -497,7 +527,7 @@ impl Desugar<Expression> for ExprCall {
 
 //         let params_type = match fn_var_type {
 //             EType::Static(StaticType::Closure(ClosureType { ref params, .. })) => params.clone(),
-//             EType::Static(StaticType::StaticFn(FnType { ref params, .. })) => params.clone(),
+//             EType::Static(StaticType::Function(FunctionType { ref params, .. })) => params.clone(),
 //             _ => return Err(SemanticError::ExpectedCallable),
 //         };
 
@@ -1753,7 +1783,7 @@ mod tests {
             TryParse,
         },
         p_num,
-        semantic::scope::static_types::{FnType, StaticType},
+        semantic::scope::static_types::{FunctionType, StaticType},
     };
 
     use super::*;
@@ -2322,7 +2352,7 @@ mod tests {
     //         .register_var(
     //             "f",
     //             EType::Static(
-    //                 StaticType::StaticFn(FnType {
+    //                 StaticType::Function(FunctionType {
     //                     params: vec![p_num!(I64), p_num!(I64)],
     //                     ret: Box::new(p_num!(I64)),
     //                     scope_params_size: 24,

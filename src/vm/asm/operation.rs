@@ -16,7 +16,7 @@ use num_traits::{FromBytes, PrimInt, ToBytes};
 
 use super::{
     math_operation::{comparaison_operator, math_operator, ComparaisonOperator, MathOperator},
-    CasmProgram,
+    Program,
 };
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct Operation {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -43,69 +43,69 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Operation {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Operation {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self.kind {
-            OperationKind::Align => stdio.push_casm(engine, "align"),
-            OperationKind::CastCharToUTF8 => stdio.push_casm(engine, "char_to_utf8"),
+            OperationKind::Align => stdio.push_asm(engine, "align"),
+            OperationKind::CastCharToUTF8 => stdio.push_asm(engine, "char_to_utf8"),
             OperationKind::Mult(Mult { left, right }) => {
-                stdio.push_casm(engine, &format!("mult_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("mult_{}_{}", left.name(), right.name()))
             }
             OperationKind::Div(Division { left, right }) => {
-                stdio.push_casm(engine, &format!("div_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("div_{}_{}", left.name(), right.name()))
             }
             OperationKind::Mod(Mod { left, right }) => {
-                stdio.push_casm(engine, &format!("mod_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("mod_{}_{}", left.name(), right.name()))
             }
             OperationKind::Addition(Addition { left, right }) => {
-                stdio.push_casm(engine, &format!("add_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("add_{}_{}", left.name(), right.name()))
             }
             OperationKind::Substraction(Substraction { left, right }) => {
-                stdio.push_casm(engine, &format!("sub_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("sub_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftLeft(ShiftLeft { left, right }) => {
-                stdio.push_casm(engine, &format!("shl_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("shl_{}_{}", left.name(), right.name()))
             }
             OperationKind::ShiftRight(ShiftRight { left, right }) => {
-                stdio.push_casm(engine, &format!("shr_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("shr_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseAnd(BitwiseAnd { left, right }) => {
-                stdio.push_casm(engine, &format!("band_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("band_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseXOR(BitwiseXOR { left, right }) => {
-                stdio.push_casm(engine, &format!("bxor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("bxor_{}_{}", left.name(), right.name()))
             }
             OperationKind::BitwiseOR(BitwiseOR { left, right }) => {
-                stdio.push_casm(engine, &format!("bor_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("bor_{}_{}", left.name(), right.name()))
             }
             OperationKind::Cast(Cast { from, to }) => {
-                stdio.push_casm(engine, &format!("cast_{}_{}", from.name(), to.name()))
+                stdio.push_asm(engine, &format!("cast_{}_{}", from.name(), to.name()))
             }
             OperationKind::Less(Less { left, right }) => {
-                stdio.push_casm(engine, &format!("le_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("le_{}_{}", left.name(), right.name()))
             }
             OperationKind::LessEqual(LessEqual { left, right }) => {
-                stdio.push_casm(engine, &format!("leq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("leq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Greater(Greater { left, right }) => {
-                stdio.push_casm(engine, &format!("ge_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("ge_{}_{}", left.name(), right.name()))
             }
             OperationKind::GreaterEqual(GreaterEqual { left, right }) => {
-                stdio.push_casm(engine, &format!("geq_{}_{}", left.name(), right.name()))
+                stdio.push_asm(engine, &format!("geq_{}_{}", left.name(), right.name()))
             }
             OperationKind::Equal(Equal { left, right }) => {
-                stdio.push_casm(engine, &format!("eq {}B", left))
+                stdio.push_asm(engine, &format!("eq {}B", left))
             }
             OperationKind::NotEqual(NotEqual { left, right }) => {
-                stdio.push_casm(engine, &format!("neq {}B", left))
+                stdio.push_asm(engine, &format!("neq {}B", left))
             }
-            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_casm(engine, &format!("and")),
-            OperationKind::LogicalOr(LogicalOr()) => stdio.push_casm(engine, &format!("or")),
+            OperationKind::LogicalAnd(LogicalAnd()) => stdio.push_asm(engine, &format!("and")),
+            OperationKind::LogicalOr(LogicalOr()) => stdio.push_asm(engine, &format!("or")),
             OperationKind::Minus(Minus { data_type }) => {
-                stdio.push_casm(engine, &format!("neg_{}", data_type.name()))
+                stdio.push_asm(engine, &format!("neg_{}", data_type.name()))
             }
-            OperationKind::Not(Not()) => stdio.push_casm(engine, "not"),
-            OperationKind::StrEqual(_) => stdio.push_casm(engine, &format!("str_eq")),
-            OperationKind::StrNotEqual(_) => stdio.push_casm(engine, &format!("str_eq")),
+            OperationKind::Not(Not()) => stdio.push_asm(engine, "not"),
+            OperationKind::StrEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
+            OperationKind::StrNotEqual(_) => stdio.push_asm(engine, &format!("str_eq")),
         }
     }
 }
@@ -280,7 +280,7 @@ fn pop_data<const N: usize>(stack: &mut Stack) -> Result<[u8; N], RuntimeError> 
     data.try_into().map_err(|_| RuntimeError::Deserialization)
 }
 
-impl PopNum for crate::vm::casm::operation::OpPrimitive {
+impl PopNum for crate::vm::asm::operation::OpPrimitive {
     fn pop_num<T: PrimInt + Debug>(
         stack: &mut crate::vm::allocator::stack::Stack,
     ) -> Result<T, RuntimeError> {
@@ -342,7 +342,7 @@ fn read_data<const N: usize>(
     vec.try_into().map_err(|_| RuntimeError::Deserialization)
 }
 
-impl GetNumFrom for crate::vm::casm::operation::OpPrimitive {
+impl GetNumFrom for crate::vm::asm::operation::OpPrimitive {
     fn get_num_from<T: PrimInt>(
         address: crate::vm::allocator::MemoryAddress,
         stack: &mut crate::vm::allocator::stack::Stack,
@@ -387,7 +387,7 @@ impl GetNumFrom for crate::vm::casm::operation::OpPrimitive {
 impl<G: crate::GameEngineStaticFn> Executable<G> for OperationKind {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -483,7 +483,7 @@ pub struct Mod {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -502,7 +502,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Mult {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -521,7 +521,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Division {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Mod {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -552,7 +552,7 @@ pub struct Substraction {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -571,7 +571,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Addition {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Substraction {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -601,7 +601,7 @@ pub struct ShiftRight {
 impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -620,7 +620,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftLeft {
 impl<G: crate::GameEngineStaticFn> Executable<G> for ShiftRight {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -645,7 +645,7 @@ pub struct BitwiseAnd {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseAnd {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -670,7 +670,7 @@ pub struct BitwiseXOR {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseXOR {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -695,7 +695,7 @@ pub struct BitwiseOR {
 impl<G: crate::GameEngineStaticFn> Executable<G> for BitwiseOR {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -735,7 +735,7 @@ pub struct GreaterEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -771,7 +771,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Less {
 impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -807,7 +807,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LessEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -843,7 +843,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Greater {
 impl<G: crate::GameEngineStaticFn> Executable<G> for GreaterEqual {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -896,7 +896,7 @@ pub struct StrNotEqual;
 impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -915,7 +915,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for Equal {
 impl<G: crate::GameEngineStaticFn> Executable<G> for StrEqual {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -936,7 +936,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for StrEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -955,7 +955,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for NotEqual {
 impl<G: crate::GameEngineStaticFn> Executable<G> for StrNotEqual {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -978,7 +978,7 @@ pub struct LogicalAnd();
 impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalAnd {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -998,7 +998,7 @@ pub struct LogicalOr();
 impl<G: crate::GameEngineStaticFn> Executable<G> for LogicalOr {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -1020,7 +1020,7 @@ pub struct Minus {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Minus {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -1087,7 +1087,7 @@ pub struct Not();
 impl<G: crate::GameEngineStaticFn> Executable<G> for Not {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -1127,7 +1127,7 @@ macro_rules! push_data_as_type {
 impl<G: crate::GameEngineStaticFn> Executable<G> for Cast {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,

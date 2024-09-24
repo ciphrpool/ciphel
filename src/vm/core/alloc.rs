@@ -12,7 +12,7 @@ use crate::{
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
-        casm::operation::{GetNumFrom, PopNum},
+        asm::operation::{GetNumFrom, PopNum},
         stdio::StdIO,
         vm::CasmMetadata,
     },
@@ -31,12 +31,12 @@ use crate::{
     },
     vm::{
         allocator::align,
-        casm::{
+        asm::{
             alloc::{Access, Alloc, Free},
             data::Data,
             mem::Mem,
             operation::OpPrimitive,
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, Executable, GenerateCode, RuntimeError},
     },
@@ -64,13 +64,13 @@ pub enum AllocCasm {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for AllocCasm {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self {
-            AllocCasm::Len => stdio.push_casm_lib(engine, "len"),
-            AllocCasm::Cap => stdio.push_casm_lib(engine, "cap"),
-            AllocCasm::Free => stdio.push_casm_lib(engine, "free"),
-            AllocCasm::Alloc => stdio.push_casm_lib(engine, "malloc"),
-            AllocCasm::MemCopy => stdio.push_casm_lib(engine, "memcpy"),
+            AllocCasm::Len => stdio.push_asm_lib(engine, "len"),
+            AllocCasm::Cap => stdio.push_asm_lib(engine, "cap"),
+            AllocCasm::Free => stdio.push_asm_lib(engine, "free"),
+            AllocCasm::Alloc => stdio.push_asm_lib(engine, "malloc"),
+            AllocCasm::MemCopy => stdio.push_asm_lib(engine, "memcpy"),
         }
     }
 
@@ -265,24 +265,24 @@ impl GenerateCode for AllocFn {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
-            AllocFn::Free => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Free))),
+            AllocFn::Free => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Free))),
             AllocFn::Alloc => {
-                instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Alloc)))
+                instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Alloc)))
             }
-            AllocFn::Len => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Len))),
-            AllocFn::Cap => instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::Cap))),
+            AllocFn::Len => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Len))),
+            AllocFn::Cap => instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::Cap))),
             AllocFn::SizeOf { size } => {
-                instructions.push(Casm::Pop(*size));
-                instructions.push(Casm::Data(Data::Serialized {
+                instructions.push(Asm::Pop(*size));
+                instructions.push(Asm::Data(Data::Serialized {
                     data: Box::new(size.to_le_bytes()),
                 }));
             }
             AllocFn::MemCopy => {
-                instructions.push(Casm::Core(super::CoreCasm::Alloc(AllocCasm::MemCopy)))
+                instructions.push(Asm::Core(super::CoreCasm::Alloc(AllocCasm::MemCopy)))
             }
         }
         Ok(())
@@ -292,7 +292,7 @@ impl GenerateCode for AllocFn {
 impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -427,7 +427,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -490,7 +490,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -544,7 +544,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -619,7 +619,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -864,7 +864,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -913,7 +913,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -977,7 +977,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1052,7 +1052,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1150,7 +1150,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1201,7 +1201,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1257,7 +1257,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1333,7 +1333,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1393,7 +1393,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1468,7 +1468,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1550,7 +1550,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1612,7 +1612,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1668,7 +1668,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1749,7 +1749,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,
@@ -1820,7 +1820,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for AllocCasm {
 //             .resolve::<crate::vm::vm::NoopGameEngine>(&mut scope_manager, None, &None, &mut ())
 //             .expect("Resolution should have succeeded");
 //         // Code generation.
-//         let mut instructions = CasmProgram::default();
+//         let mut instructions = Program::default();
 //         statement
 //             .gencode(
 //                 &mut scope_manager,

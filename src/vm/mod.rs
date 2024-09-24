@@ -1,5 +1,5 @@
 pub mod allocator;
-pub mod casm;
+pub mod asm;
 pub mod core;
 pub mod scheduler;
 pub mod stdio;

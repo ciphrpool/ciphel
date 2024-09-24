@@ -4,14 +4,14 @@ use crate::semantic::SizeOf;
 use crate::vm::allocator::MemoryAddress;
 use crate::vm::vm::CodeGenerationContext;
 
-use crate::vm::casm::alloc::Alloc;
-use crate::vm::casm::locate::Locate;
+use crate::vm::asm::alloc::Alloc;
+use crate::vm::asm::locate::Locate;
 
 use crate::vm::{
-    casm::{
+    asm::{
         branch::{Goto, Label},
         mem::Mem,
-        Casm, CasmProgram,
+        Asm, Program,
     },
     vm::{CodeGenerationError, GenerateCode},
 };
@@ -21,7 +21,7 @@ impl GenerateCode for Definition {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -38,7 +38,7 @@ impl GenerateCode for TypeDef {
         &self,
         _scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        _instructions: &mut CasmProgram,
+        _instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         Ok(())
@@ -50,13 +50,13 @@ impl GenerateCode for FnDef {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         let function_label = Label::gen();
         let store_label = Label::gen();
 
-        instructions.push(Casm::Goto(Goto {
+        instructions.push(Asm::Goto(Goto {
             label: Some(store_label),
         }));
         instructions.push_label_id(function_label, format!("fn_{0}", self.name));
@@ -65,7 +65,7 @@ impl GenerateCode for FnDef {
 
         instructions.push_label_id(store_label, format!("store_fn_{0}", self.name));
 
-        instructions.push(Casm::Mem(Mem::Label(function_label)));
+        instructions.push(Asm::Mem(Mem::Label(function_label)));
 
         if let Some(scope_id) = scope_id {
             // LOCAL FUNCTION
@@ -76,7 +76,7 @@ impl GenerateCode for FnDef {
             let Ok(VariableInfo { address, .. }) = scope_manager.find_var_by_id(id) else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
-            instructions.push(Casm::Mem(Mem::Store {
+            instructions.push(Asm::Mem(Mem::Store {
                 size: 8,
                 address: (*address)
                     .try_into()
@@ -90,7 +90,7 @@ impl GenerateCode for FnDef {
             };
             // store the function label as it is considered a variable
             let address = scope_manager.alloc_global_var_by_id(id)?;
-            instructions.push(Casm::Mem(Mem::Store {
+            instructions.push(Asm::Mem(Mem::Store {
                 size: 8,
                 address: (address)
                     .try_into()
@@ -307,7 +307,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,
@@ -371,7 +371,7 @@ mod tests {
     //         .expect("Semantic resolution should have succeeded");
 
     //     // Code generation.
-    //     let mut instructions = CasmProgram::default();
+    //     let mut instructions = Program::default();
     //     statement
     //         .gencode(
     //             &mut scope_manager,

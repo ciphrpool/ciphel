@@ -4,7 +4,7 @@ use crate::vm::{
         stack::{Stack, STACK_SIZE},
         MemoryAddress,
     },
-    casm::operation::OpPrimitive,
+    asm::operation::OpPrimitive,
     stdio::StdIO,
     vm::{CasmMetadata, Executable, RuntimeError},
 };
@@ -12,7 +12,7 @@ use num_traits::ToBytes;
 
 use super::{
     operation::{GetNumFrom, PopNum},
-    CasmProgram,
+    Program,
 };
 
 #[derive(Debug, Clone)]
@@ -21,15 +21,15 @@ pub struct Locate {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for Locate {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, &format!("addr {}", self.address.name()));
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+        stdio.push_asm(engine, &format!("addr {}", self.address.name()));
     }
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for Locate {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -50,15 +50,15 @@ pub struct LocateOffsetFromStackPointer {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateOffsetFromStackPointer {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, &format!("addr SP[-{}]", self.offset));
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+        stdio.push_asm(engine, &format!("addr SP[-{}]", self.offset));
     }
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffsetFromStackPointer {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -84,15 +84,15 @@ pub struct LocateOffset {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateOffset {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
-        stdio.push_casm(engine, &format!("offset {}", self.offset));
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
+        stdio.push_asm(engine, &format!("offset {}", self.offset));
     }
 }
 
 impl<G: crate::GameEngineStaticFn> Executable<G> for LocateOffset {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -117,13 +117,13 @@ pub struct LocateIndex {
 }
 
 impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateIndex {
-    fn name(&self, stdio: &mut StdIO, program: &mut CasmProgram, engine: &mut G) {
+    fn name(&self, stdio: &mut StdIO, program: &mut Program, engine: &mut G) {
         match self.base_address {
-            Some(addr) => stdio.push_casm(
+            Some(addr) => stdio.push_asm(
                 engine,
                 &format!("addr_at_idx {},{}", addr.name(), self.size),
             ),
-            None => stdio.push_casm(engine, &format!("addr_at_idx _,{}", self.size)),
+            None => stdio.push_asm(engine, &format!("addr_at_idx _,{}", self.size)),
         }
     }
 }
@@ -131,7 +131,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for LocateIndex {
 impl<G: crate::GameEngineStaticFn> Executable<G> for LocateIndex {
     fn execute(
         &self,
-        program: &mut CasmProgram,
+        program: &mut Program,
         stack: &mut Stack,
         heap: &mut Heap,
         stdio: &mut StdIO,
@@ -148,7 +148,6 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for LocateIndex {
             None => {
                 let index = OpPrimitive::pop_num::<u64>(stack)?;
                 let address = OpPrimitive::pop_num::<u64>(stack)?.try_into()?;
-
                 (address, index)
             }
         };

@@ -1,24 +1,26 @@
+use std::collections::HashMap;
 use std::process::Output;
 
 use super::{
-    Address, Call, Closure, ClosureParam, Data, Enum, LeftCall, Map, Number, Primitive, PtrAccess,
-    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, Lambda, LeftCall, Map,
+    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::ast::expressions::data::{CoreCall, ExternCall, VarCall};
 use crate::ast::expressions::{Atomic, CompletePath, Expression, Path};
 use crate::ast::statements::block::BlockCommonApi;
-use crate::semantic::scope::scope::{GlobalMapping, ScopeManager};
+use crate::semantic::scope::scope::{GlobalMapping, ScopeManager, ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::{
-    AddrType, ClosureType, FnType, MapType, NumberType, PrimitiveType, SliceType, StrSliceType,
-    TupleType, VecType,
+    AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, SliceType,
+    StrSliceType, TupleType, VecType,
 };
-use crate::semantic::scope::user_type_impl::UserType;
+use crate::semantic::scope::user_types::UserType;
 use crate::semantic::ResolvePlatform;
 use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
 use crate::semantic::{Desugar, Info, MergeType, ResolveFromStruct, ResolveNumber, SizeOf};
 use crate::vm::allocator::{align, MemoryAddress};
+use crate::vm::asm::branch::Label;
 use crate::vm::core::{Core, PathFinder};
 use crate::{e_static, semantic};
 
@@ -41,6 +43,7 @@ impl Resolve for Data {
             Data::Slice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Vec(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Closure(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Lambda(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Tuple(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Address(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::PtrAccess(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
@@ -104,6 +107,7 @@ impl Desugar<Atomic> for Data {
             Data::StrSlice(value) => Ok(None),
             Data::Vec(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::Closure(value) => value.desugar::<G>(scope_manager, scope_id),
+            Data::Lambda(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::Tuple(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::Address(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::PtrAccess(value) => value.desugar::<G>(scope_manager, scope_id),
@@ -157,7 +161,7 @@ impl ResolveFromStruct for Variable {
         scope_id: Option<u128>,
         struct_id: u64,
     ) -> Result<(), SemanticError> {
-        let UserType::Struct(struct_type @ semantic::scope::user_type_impl::Struct { .. }) =
+        let UserType::Struct(struct_type @ semantic::scope::user_types::Struct { .. }) =
             scope_manager.find_type_by_id(struct_id, scope_id)?
         else {
             return Err(SemanticError::ExpectedStruct);
@@ -634,16 +638,13 @@ impl Resolve for Closure {
     where
         Self: Sized,
     {
-        let inner_scope = self.scope.init_from_parent(scope_manager, scope_id)?;
-
+        let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
+        scope_manager
+            .scope_states
+            .insert(inner_scope, ScopeState::Closure);
         match context {
             Some(context) => {
-                let EType::Static(StaticType::Closure(ClosureType {
-                    params,
-                    ret,
-                    closed,
-                    scope_params_size,
-                })) = context
+                let EType::Static(StaticType::Closure(ClosureType { params, ret })) = context
                 else {
                     return Err(SemanticError::IncompatibleTypes);
                 };
@@ -657,7 +658,7 @@ impl Resolve for Closure {
                     )?;
                 }
 
-                let _ = self.scope.resolve::<G>(
+                let _ = self.block.resolve::<G>(
                     scope_manager,
                     scope_id,
                     &Some(ret.as_ref().clone()),
@@ -670,10 +671,30 @@ impl Resolve for Closure {
                 }
 
                 let _ = self
-                    .scope
+                    .block
                     .resolve::<G>(scope_manager, scope_id, &None, &mut ())?;
             }
         }
+
+        let mut offsets = HashMap::default();
+        let mut bucket_size = 0;
+
+        if let Some(out_vars) = scope_manager.scope_lookup.get(&inner_scope) {
+            for id in out_vars {
+                if let Ok(VariableInfo { id, ctype, .. }) = scope_manager.find_var_by_id(*id) {
+                    offsets.insert(*id, bucket_size);
+                    bucket_size += ctype.size_of();
+                }
+            }
+        }
+
+        let repr_data = ClosureReprData {
+            closure_label: Label::gen(),
+            bucket_size,
+            offsets,
+        };
+
+        let _ = self.repr_data.insert(repr_data);
 
         self.metadata.info = Info::Resolved {
             context: context.clone(),
@@ -690,8 +711,8 @@ impl Desugar<Atomic> for Closure {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
-        if let Some(output) = self.scope.desugar::<G>(scope_manager, scope_id)? {
-            self.scope = output;
+        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+            self.block = output;
         }
         Ok(None)
     }
@@ -713,13 +734,15 @@ impl Resolve for ClosureParam {
     {
         match self {
             ClosureParam::Full(var) => {
-                var.resolve::<G>(scope_manager, scope_id, &mut (), &mut ());
+                let _ = var.resolve::<G>(scope_manager, scope_id, &mut (), &mut ());
                 let var_type = var.type_of(scope_manager, scope_id)?;
-                let _ = scope_manager.register_parameter(&var.name, var_type.clone(), scope_id)?;
 
                 if let Some(context) = context {
                     let _ = context.compatible_with(&var_type, scope_manager, scope_id)?;
                 }
+
+                let _ = scope_manager.register_parameter(&var.name, var_type.clone(), scope_id)?;
+
                 Ok(())
             }
             ClosureParam::Minimal(value) => match context {
@@ -735,6 +758,88 @@ impl Resolve for ClosureParam {
         }
     }
 }
+
+impl Resolve for Lambda {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        _extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
+        scope_manager
+            .scope_states
+            .insert(inner_scope, ScopeState::Lambda);
+        match context {
+            Some(context) => {
+                let EType::Static(StaticType::Lambda(LambdaType { params, ret })) = context else {
+                    return Err(SemanticError::IncompatibleTypes);
+                };
+
+                for (param, expected_param) in self.params.iter_mut().zip(params) {
+                    let _ = param.resolve::<G>(
+                        scope_manager,
+                        Some(inner_scope),
+                        &Some(expected_param.clone()),
+                        &mut (),
+                    )?;
+                }
+
+                let _ = self.block.resolve::<G>(
+                    scope_manager,
+                    scope_id,
+                    &Some(ret.as_ref().clone()),
+                    &mut (),
+                )?;
+            }
+            None => {
+                for param in self.params.iter_mut() {
+                    let _ = param.resolve::<G>(scope_manager, Some(inner_scope), &None, &mut ())?;
+                }
+
+                let _ = self
+                    .block
+                    .resolve::<G>(scope_manager, scope_id, &None, &mut ())?;
+            }
+        }
+
+        if scope_manager
+            .scope_lookup
+            .get(&inner_scope)
+            .filter(|set| set.len() > 0)
+            .is_some()
+        {
+            return Err(SemanticError::ExpectedClosure);
+        }
+
+        self.metadata.info = Info::Resolved {
+            context: context.clone(),
+            signature: Some(self.type_of(&scope_manager, scope_id)?),
+        };
+        Ok(())
+    }
+}
+
+impl Desugar<Atomic> for Lambda {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        if let Some(output) = self.block.desugar::<G>(scope_manager, scope_id)? {
+            self.block = output;
+        }
+        Ok(None)
+    }
+}
+
 impl Resolve for Address {
     type Output = ();
     type Context = Option<EType>;
@@ -856,7 +961,7 @@ impl Resolve for Struct {
     where
         Self: Sized,
     {
-        let UserType::Struct(semantic::scope::user_type_impl::Struct { fields, .. }) =
+        let UserType::Struct(semantic::scope::user_types::Struct { fields, .. }) =
             scope_manager.find_type_by_name(&self.id, scope_id)?.def
         else {
             return Err(SemanticError::ExpectedStruct);
@@ -921,15 +1026,14 @@ impl Resolve for Union {
     where
         Self: Sized,
     {
-        let UserType::Union(semantic::scope::user_type_impl::Union { variants, .. }) =
-            scope_manager
-                .find_type_by_name(&self.typename, scope_id)?
-                .def
+        let UserType::Union(semantic::scope::user_types::Union { variants, .. }) = scope_manager
+            .find_type_by_name(&self.typename, scope_id)?
+            .def
         else {
             return Err(SemanticError::ExpectedStruct);
         };
 
-        let Some((_, semantic::scope::user_type_impl::Struct { fields, .. })) =
+        let Some((_, semantic::scope::user_types::Struct { fields, .. })) =
             variants.iter().find(|(n, _)| *n == self.variant)
         else {
             return Err(SemanticError::UnknownField);
@@ -994,7 +1098,7 @@ impl Resolve for Enum {
     where
         Self: Sized,
     {
-        let UserType::Enum(semantic::scope::user_type_impl::Enum { values, .. }) = scope_manager
+        let UserType::Enum(semantic::scope::user_types::Enum { values, .. }) = scope_manager
             .find_type_by_name(&self.typename, scope_id)?
             .def
         else {
@@ -1160,7 +1264,17 @@ impl Resolve for Call {
                                 *is_closure = true;
                                 (params, ret)
                             }
-                            EType::Static(StaticType::StaticFn(FnType { params, ret, .. })) => {
+                            EType::Static(StaticType::Lambda(LambdaType {
+                                params, ret, ..
+                            })) => {
+                                *is_closure = false;
+                                (params, ret)
+                            }
+                            EType::Static(StaticType::Function(FunctionType {
+                                params,
+                                ret,
+                                ..
+                            })) => {
                                 *is_closure = false;
                                 (params, ret)
                             }
@@ -1263,7 +1377,7 @@ mod tests {
                 AddrType, MapType, PrimitiveType, SliceType, StaticType, StrSliceType, StringType,
                 TupleType, VecType,
             },
-            user_type_impl::{self, UserType},
+            user_types::{self, UserType},
         },
     };
 
@@ -1559,7 +1673,7 @@ mod tests {
         let mut scope_manager = crate::semantic::scope::scope::ScopeManager::default();
 
         // EType::User(UserType::Struct(
-        //     user_type_impl::Struct {
+        //     user_types::Struct {
         //         id: "Point".to_string().into(),
         //         fields: {
         //             let mut res = Vec::new();
@@ -1751,7 +1865,7 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Point",
-                UserType::Struct(user_type_impl::Struct {
+                UserType::Struct(user_types::Struct {
                     id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
@@ -1789,7 +1903,7 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Point",
-                UserType::Struct(user_type_impl::Struct {
+                UserType::Struct(user_types::Struct {
                     id: "Point".to_string().into(),
                     fields: {
                         let mut res = Vec::new();
@@ -1823,13 +1937,13 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Geo",
-                UserType::Union(user_type_impl::Union {
+                UserType::Union(user_types::Union {
                     id: "Geo".to_string().into(),
                     variants: {
                         let mut res = Vec::new();
                         res.push((
                             "Point".to_string().into(),
-                            user_type_impl::Struct {
+                            user_types::Struct {
                                 id: "Point".to_string().into(),
                                 fields: vec![
                                     ("x".to_string().into(), p_num!(U64)),
@@ -1839,7 +1953,7 @@ mod tests {
                         ));
                         res.push((
                             "Axe".to_string().into(),
-                            user_type_impl::Struct {
+                            user_types::Struct {
                                 id: "Axe".to_string().into(),
                                 fields: {
                                     let mut res = Vec::new();
@@ -1882,13 +1996,13 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Geo",
-                UserType::Union(user_type_impl::Union {
+                UserType::Union(user_types::Union {
                     id: "Geo".to_string().into(),
                     variants: {
                         let mut res = Vec::new();
                         res.push((
                             "Point".to_string().into(),
-                            user_type_impl::Struct {
+                            user_types::Struct {
                                 id: "Point".to_string().into(),
                                 fields: vec![
                                     ("x".to_string().into(), p_num!(U64)),
@@ -1939,7 +2053,7 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Geo",
-                UserType::Enum(user_type_impl::Enum {
+                UserType::Enum(user_types::Enum {
                     id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();
@@ -1968,7 +2082,7 @@ mod tests {
         let _ = scope_manager
             .register_type(
                 "Geo",
-                UserType::Enum(user_type_impl::Enum {
+                UserType::Enum(user_types::Enum {
                     id: "Geo".to_string().into(),
                     values: {
                         let mut res = Vec::new();

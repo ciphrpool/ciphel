@@ -1,11 +1,14 @@
 use crate::{
-    semantic::{scope::static_types::StaticType, EType, SizeOf},
+    semantic::{
+        scope::static_types::{StaticType, POINTER_SIZE},
+        EType, SizeOf,
+    },
     vm::{
         allocator::MemoryAddress,
-        casm::{
+        asm::{
             alloc::Access,
             locate::{LocateIndex, LocateOffset},
-            Casm,
+            Asm,
         },
         vm::{CodeGenerationContext, CodeGenerationError, GenerateCode},
     },
@@ -22,14 +25,14 @@ pub trait Locatable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError>;
 
     fn locate_from(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError>;
 
@@ -37,7 +40,7 @@ pub trait Locatable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError>;
 
@@ -45,7 +48,7 @@ pub trait Locatable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError>;
 
     fn is_assignable(&self) -> bool;
@@ -59,27 +62,40 @@ impl Locatable for Variable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(super::data::VariableState::Variable { id }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        let Ok(crate::semantic::scope::scope::VariableInfo { address, .. }) =
-            scope_manager.find_var_by_id(*id)
+        let Ok(crate::semantic::scope::scope::VariableInfo {
+            address,
+            marked_as_closed_var,
+            ..
+        }) = scope_manager.find_var_by_id(*id)
         else {
             return Err(CodeGenerationError::Unlocatable);
         };
-        let Ok(address) = (address.clone()).try_into() else {
-            return Err(CodeGenerationError::Unlocatable);
-        };
-        return Ok(Some(address));
+
+        if let Some((env_address, offset)) = marked_as_closed_var.get(scope_id, &scope_manager) {
+            instructions.push(Asm::Access(Access::Static {
+                address: env_address,
+                size: POINTER_SIZE,
+            }));
+            instructions.push(Asm::Offset(LocateOffset { offset }));
+            return Ok(None);
+        } else {
+            let Ok(address) = (address.clone()).try_into() else {
+                return Err(CodeGenerationError::Unlocatable);
+            };
+            return Ok(Some(address));
+        }
     }
 
     fn locate_from(
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
@@ -93,7 +109,7 @@ impl Locatable for Variable {
             }
             None => {
                 // the address was pushed on the stack
-                instructions.push(Casm::Offset(LocateOffset { offset: *offset }));
+                instructions.push(Asm::Offset(LocateOffset { offset: *offset }));
                 Ok(None)
             }
         }
@@ -103,13 +119,13 @@ impl Locatable for Variable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        instructions.push(Casm::Access(Access::Static {
+        instructions.push(Asm::Access(Access::Static {
             address: address.add(*offset),
             size: *size,
         }));
@@ -120,13 +136,13 @@ impl Locatable for Variable {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         let Some(super::data::VariableState::Field { offset, size }) = &self.state else {
             return Err(CodeGenerationError::UnresolvedError);
         };
-        instructions.push(Casm::Offset(LocateOffset { offset: *offset }));
-        instructions.push(Casm::Access(Access::Runtime { size: Some(*size) }));
+        instructions.push(Asm::Offset(LocateOffset { offset: *offset }));
+        instructions.push(Asm::Access(Access::Runtime { size: Some(*size) }));
         Ok(())
     }
 }
@@ -139,7 +155,7 @@ impl Locatable for Address {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
     }
@@ -148,7 +164,7 @@ impl Locatable for Address {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
@@ -158,7 +174,7 @@ impl Locatable for Address {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
@@ -168,7 +184,7 @@ impl Locatable for Address {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
@@ -181,7 +197,7 @@ impl Locatable for PtrAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let _ = self.value.gencode(
             scope_manager,
@@ -196,7 +212,7 @@ impl Locatable for PtrAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         Err(CodeGenerationError::Unlocatable)
@@ -206,7 +222,7 @@ impl Locatable for PtrAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
@@ -216,7 +232,7 @@ impl Locatable for PtrAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         Err(CodeGenerationError::Unaccessible)
     }
@@ -229,7 +245,7 @@ impl Locatable for FieldAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self.var.locate(scope_manager, scope_id, instructions)? {
             Some(address) => {
@@ -249,7 +265,7 @@ impl Locatable for FieldAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self
@@ -273,7 +289,7 @@ impl Locatable for FieldAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         match self
@@ -298,7 +314,7 @@ impl Locatable for FieldAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         match self
             .var
@@ -326,7 +342,7 @@ impl Locatable for TupleAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(offset) = self.offset else {
             return Err(CodeGenerationError::Unlocatable);
@@ -339,7 +355,7 @@ impl Locatable for TupleAccess {
             }
             None => {
                 // the address was pushed on the stack
-                instructions.push(Casm::Offset(LocateOffset { offset }));
+                instructions.push(Asm::Offset(LocateOffset { offset }));
                 Ok(None)
             }
         }
@@ -349,7 +365,7 @@ impl Locatable for TupleAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(offset) = self.offset else {
@@ -366,7 +382,7 @@ impl Locatable for TupleAccess {
             }
             None => {
                 // the address was pushed on the stack
-                instructions.push(Casm::Offset(LocateOffset { offset }));
+                instructions.push(Asm::Offset(LocateOffset { offset }));
                 Ok(None)
             }
         }
@@ -376,7 +392,7 @@ impl Locatable for TupleAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
@@ -395,15 +411,15 @@ impl Locatable for TupleAccess {
         {
             Some(address) => {
                 // the address is static
-                instructions.push(Casm::Access(Access::Static {
+                instructions.push(Asm::Access(Access::Static {
                     address: address.add(offset),
                     size,
                 }))
             }
             None => {
                 // the address was pushed on the stack
-                instructions.push(Casm::Offset(LocateOffset { offset }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Offset(LocateOffset { offset }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
         }
         Ok(())
@@ -413,7 +429,7 @@ impl Locatable for TupleAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::Unlocatable);
@@ -431,15 +447,15 @@ impl Locatable for TupleAccess {
         {
             Some(address) => {
                 // the address is static
-                instructions.push(Casm::Access(Access::Static {
+                instructions.push(Asm::Access(Access::Static {
                     address: address.add(offset),
                     size,
                 }))
             }
             None => {
                 // the address was pushed on the stack
-                instructions.push(Casm::Offset(LocateOffset { offset }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Offset(LocateOffset { offset }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
         }
         Ok(())
@@ -454,7 +470,7 @@ impl Locatable for ListAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -466,7 +482,7 @@ impl Locatable for ListAccess {
         };
 
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -481,7 +497,7 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
                     offset: Some(offset),
@@ -489,6 +505,9 @@ impl Locatable for ListAccess {
             }
             None => {
                 // the address was pushed on the stack
+                instructions.push(Asm::Access(Access::Runtime {
+                    size: Some(POINTER_SIZE),
+                }));
 
                 let _ = self.index.gencode(
                     scope_manager,
@@ -497,7 +516,7 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
                     offset: Some(offset),
@@ -511,7 +530,7 @@ impl Locatable for ListAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
@@ -523,7 +542,7 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -541,7 +560,7 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
                     offset: Some(offset),
@@ -549,6 +568,9 @@ impl Locatable for ListAccess {
             }
             None => {
                 // the address was pushed on the stack
+                instructions.push(Asm::Access(Access::Runtime {
+                    size: Some(POINTER_SIZE),
+                }));
 
                 let _ = self.index.gencode(
                     scope_manager,
@@ -557,7 +579,7 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
                     offset: Some(offset),
@@ -571,7 +593,7 @@ impl Locatable for ListAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
@@ -583,7 +605,7 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -600,15 +622,18 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
             None => {
                 // the address was pushed on the stack
+                instructions.push(Asm::Access(Access::Runtime {
+                    size: Some(POINTER_SIZE),
+                }));
 
                 let _ = self.index.gencode(
                     scope_manager,
@@ -617,12 +642,12 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
                     offset: Some(offset),
                 }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
         }
         Ok(())
@@ -632,7 +657,7 @@ impl Locatable for ListAccess {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         let Some(item_type) = self.metadata.signature() else {
             return Err(CodeGenerationError::UnresolvedError);
@@ -643,7 +668,7 @@ impl Locatable for ListAccess {
             return Err(CodeGenerationError::UnresolvedError);
         };
         let offset = match array_type {
-            EType::Static(StaticType::Vec(_)) => crate::vm::core::core_vector::VEC_HEADER,
+            EType::Static(StaticType::Vec(_)) => crate::vm::core::vector::VEC_HEADER,
             EType::Static(StaticType::Slice(_)) => 0,
             _ => return Err(CodeGenerationError::UnresolvedError),
         };
@@ -661,12 +686,12 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: Some(address),
                     offset: Some(offset),
                 }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
             None => {
                 // the address was pushed on the stack
@@ -678,12 +703,12 @@ impl Locatable for ListAccess {
                     &CodeGenerationContext::default(),
                 )?;
 
-                instructions.push(Casm::OffsetIdx(LocateIndex {
+                instructions.push(Asm::OffsetIdx(LocateIndex {
                     size,
                     base_address: None,
                     offset: Some(offset),
                 }));
-                instructions.push(Casm::Access(Access::Runtime { size: Some(size) }));
+                instructions.push(Asm::Access(Access::Runtime { size: Some(size) }));
             }
         }
         Ok(())
@@ -698,7 +723,7 @@ impl Locatable for Call {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         todo!()
     }
@@ -707,7 +732,7 @@ impl Locatable for Call {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         todo!()
@@ -717,7 +742,7 @@ impl Locatable for Call {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         todo!()
@@ -727,7 +752,7 @@ impl Locatable for Call {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         todo!()
     }
@@ -747,7 +772,7 @@ impl Locatable for Expression {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => value.locate(scope_manager, scope_id, instructions),
@@ -762,7 +787,7 @@ impl Locatable for Expression {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -786,7 +811,7 @@ impl Locatable for Expression {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -810,7 +835,7 @@ impl Locatable for Expression {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Expression::FieldAccess(value) => {
@@ -841,7 +866,7 @@ impl Locatable for Atomic {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.locate(scope_manager, scope_id, instructions),
@@ -854,7 +879,7 @@ impl Locatable for Atomic {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -872,7 +897,7 @@ impl Locatable for Atomic {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -890,7 +915,7 @@ impl Locatable for Atomic {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Atomic::Data(value) => value.runtime_access(scope_manager, scope_id, instructions),
@@ -912,7 +937,7 @@ impl Locatable for Data {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
             Data::Address(value) => value.locate(scope_manager, scope_id, instructions),
@@ -926,7 +951,7 @@ impl Locatable for Data {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
         match self {
@@ -947,7 +972,7 @@ impl Locatable for Data {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -968,7 +993,7 @@ impl Locatable for Data {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut crate::vm::casm::CasmProgram,
+        instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
         match self {
             Data::Address(value) => value.runtime_access(scope_manager, scope_id, instructions),

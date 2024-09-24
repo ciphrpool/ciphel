@@ -19,9 +19,9 @@ use crate::{
     semantic::{EType, Metadata, Resolve, ResolveFromStruct, SemanticError, SizeOf, TypeOf},
     vm::{
         allocator::MemoryAddress,
-        casm::{
+        asm::{
             locate::{Locate, LocateOffsetFromStackPointer},
-            Casm, CasmProgram,
+            Asm, Program,
         },
         vm::{CodeGenerationError, GenerateCode},
     },
@@ -486,7 +486,7 @@ impl GenerateCode for Expression {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
@@ -553,7 +553,7 @@ impl GenerateCode for Atomic {
         &self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
-        instructions: &mut CasmProgram,
+        instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         match self {
