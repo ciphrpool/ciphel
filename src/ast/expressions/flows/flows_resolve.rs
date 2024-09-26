@@ -775,7 +775,17 @@ impl Desugar<Atomic> for FCall {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         scope_id: Option<u128>,
     ) -> Result<Option<Atomic>, SemanticError> {
-        todo!()
+        for item in &mut self.value {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                        *expr = output;
+                    }
+                }
+            }
+        }
+        Ok(None)
     }
 }
 

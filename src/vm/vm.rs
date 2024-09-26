@@ -493,10 +493,6 @@ pub trait CasmMetadata<G: GameEngineStaticFn> {
     }
 }
 
-pub trait Printer {
-    fn build_printer(&self, instructions: &mut Program) -> Result<(), CodeGenerationError>;
-}
-
 pub const MAX_THREAD_COUNT: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]

@@ -1,6 +1,6 @@
 use super::{
-    Address, Call, Closure, ClosureParam, Data, Enum, Lambda, Map, Number, Primitive, PtrAccess,
-    Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, Data, Enum, Lambda, Map, Number, Primitive, Printf,
+    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
 };
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{self, StaticType};
@@ -34,6 +34,7 @@ impl TypeOf for Data {
             Data::Enum(value) => value.type_of(&scope_manager, scope_id),
             Data::StrSlice(value) => value.type_of(&scope_manager, scope_id),
             Data::Call(value) => value.type_of(&scope_manager, scope_id),
+            Data::Printf(value) => value.type_of(&scope_manager, scope_id),
         }
     }
 }
@@ -341,5 +342,18 @@ impl TypeOf for Call {
         self.metadata
             .signature()
             .ok_or(SemanticError::NotResolvedYet)
+    }
+}
+
+impl TypeOf for Printf {
+    fn type_of(
+        &self,
+        scope_manager: &crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<EType, SemanticError>
+    where
+        Self: Sized + Resolve,
+    {
+        Ok(EType::Static(StaticType::Unit))
     }
 }

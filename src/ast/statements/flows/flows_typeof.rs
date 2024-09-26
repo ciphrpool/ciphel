@@ -16,6 +16,7 @@ impl TypeOf for Flow {
             Flow::If(value) => value.type_of(&scope_manager, scope_id),
             Flow::Match(value) => value.type_of(&scope_manager, scope_id),
             Flow::Try(value) => value.type_of(&scope_manager, scope_id),
+            Flow::Printf(value) => value.type_of(&scope_manager, scope_id),
             Flow::Call(value) => value.type_of(&scope_manager, scope_id),
         }
     }

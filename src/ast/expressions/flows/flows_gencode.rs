@@ -465,6 +465,7 @@ impl GenerateCode for TryExpr {
         Ok(())
     }
 }
+
 impl GenerateCode for FCall {
     fn gencode(
         &self,
@@ -474,6 +475,7 @@ impl GenerateCode for FCall {
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
         todo!();
+
         // for item in &self.value {
         //     match item {
         //         super::FormatItem::Str(string) => {

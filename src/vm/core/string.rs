@@ -7,7 +7,7 @@ use crate::vm::core::lexem;
 use crate::vm::core::CoreCasm;
 use crate::{
     ast::expressions::Expression,
-    semantic::{EType, Metadata, Resolve, ResolvePlatform, SemanticError},
+    semantic::{EType, Metadata, Resolve, ResolveCore, SemanticError},
     vm::{
         allocator::{heap::Heap, stack::Stack},
         asm::Program,
@@ -43,7 +43,7 @@ impl PathFinder for StringFn {
         None
     }
 }
-impl ResolvePlatform for StringFn {
+impl ResolveCore for StringFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

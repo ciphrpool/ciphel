@@ -8,7 +8,7 @@ use num_traits::ToBytes;
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
-use crate::semantic::ResolvePlatform;
+use crate::semantic::ResolveCore;
 use crate::semantic::{EType, TypeOf};
 use crate::vm::allocator::heap::Heap;
 use crate::vm::allocator::stack::Stack;
@@ -186,7 +186,7 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for MathCasm {
     }
 }
 
-impl ResolvePlatform for MathFn {
+impl ResolveCore for MathFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

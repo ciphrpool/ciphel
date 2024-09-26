@@ -165,14 +165,12 @@ impl StdOut {
     }
 
     pub fn flush<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
-        let binding = self.take();
-        let content = binding.trim_matches('\"');
+        let content = self.take();
         engine.stdout_print(content.into());
     }
 
     pub fn flushln<G: GameEngineStaticFn>(&mut self, engine: &mut G) {
-        let binding = self.take();
-        let content = binding.trim_matches('\"');
+        let content = self.take();
         engine.stdout_println(content.into());
     }
 }

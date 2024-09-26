@@ -307,17 +307,17 @@ impl TryParse for FCall {
         //                 }
         //                 crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
         //                     FormatItem::Expr(Expression::Call(Call {
-        //                         lib: Some(platform::utils::lexem::STD.to_string().into()),
+        //                         lib: Some(Core::utils::lexem::STD.to_string().into()),
         //                         fn_var: Box::new(Expression::Atomic(Atomic::Data(Data::Variable(
         //                             Variable {
-        //                                 name: platform::utils::lexem::TOSTR.to_string().into(),
+        //                                 name: Core::utils::lexem::TOSTR.to_string().into(),
         //                                 metadata: Metadata::default(),
         //                                 state: None,
         //                             },
         //                         )))),
         //                         params: vec![expr],
         //                         metadata: Metadata::default(),
-        //                         platform: Default::default(),
+        //                         Core: Default::default(),
         //                         is_dynamic_fn: Default::default(),
         //                     }))
         //                 }

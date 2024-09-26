@@ -1,10 +1,10 @@
 use alloc::{AllocCasm, AllocFn};
+use format::{FormatCasm, FormatFn};
 use io::{IOCasm, IOFn};
 use iter::{IterCasm, IterFn};
 use map::{MapCasm, MapFn};
 use math::{MathCasm, MathFn};
 use string::{StringCasm, StringFn};
-use strings::{StringsCasm, StringsFn};
 use thread::{ThreadCasm, ThreadFn};
 use vector::{VectorCasm, VectorFn};
 
@@ -13,7 +13,7 @@ use crate::{
     e_static,
     semantic::{
         scope::static_types::{PrimitiveType, StaticType},
-        EType, Resolve, ResolvePlatform, SemanticError, TypeOf,
+        EType, Resolve, ResolveCore, SemanticError, TypeOf,
     },
 };
 
@@ -30,13 +30,13 @@ use super::{
 };
 
 pub mod alloc;
+pub mod format;
 pub mod io;
 pub mod iter;
 pub mod lexem;
 pub mod map;
 pub mod math;
 pub mod string;
-pub mod strings;
 pub mod thread;
 pub mod vector;
 
@@ -49,7 +49,7 @@ pub enum Core {
     Thread(ThreadFn),
     IO(IOFn),
     Math(MathFn),
-    Strings(StringsFn),
+    Format(FormatFn),
     Assert(bool),
     Iter(IterFn),
     Error,
@@ -102,8 +102,8 @@ impl PathFinder for Core {
         if let Some(core) = MathFn::find(path, name) {
             return Some(Core::Math(core));
         }
-        if let Some(core) = StringsFn::find(path, name) {
-            return Some(Core::Strings(core));
+        if let Some(core) = FormatFn::find(path, name) {
+            return Some(Core::Format(core));
         }
         if let Some(core) = IterFn::find(path, name) {
             return Some(Core::Iter(core));
@@ -113,7 +113,7 @@ impl PathFinder for Core {
     }
 }
 
-impl ResolvePlatform for Core {
+impl ResolveCore for Core {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -129,9 +129,7 @@ impl ResolvePlatform for Core {
             Core::Thread(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
             Core::IO(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
             Core::Math(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
-            Core::Strings(value) => {
-                value.resolve::<G>(scope_manager, scope_id, context, parameters)
-            }
+            Core::Format(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
             Core::Iter(value) => value.resolve::<G>(scope_manager, scope_id, context, parameters),
             Core::Assert(expect_err) => {
                 if parameters.len() != 1 {
@@ -182,7 +180,7 @@ pub enum CoreCasm {
     Thread(ThreadCasm),
     IO(IOCasm),
     Math(MathCasm),
-    Strings(StringsCasm),
+    Format(FormatCasm),
     AssertBool,
     AssertErr,
     Error,
@@ -207,7 +205,7 @@ impl GenerateCode for Core {
             Core::Thread(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Core::IO(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Core::Math(value) => value.gencode(scope_manager, scope_id, instructions, context),
-            Core::Strings(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Core::Format(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Core::Iter(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Core::Assert(expect_err) => {
                 if *expect_err {
@@ -240,12 +238,12 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
             CoreCasm::Thread(value) => value.name(stdio, program, engine),
             CoreCasm::IO(value) => value.name(stdio, program, engine),
             CoreCasm::Math(value) => value.name(stdio, program, engine),
-            CoreCasm::Strings(value) => value.name(stdio, program, engine),
+            CoreCasm::Format(value) => value.name(stdio, program, engine),
             CoreCasm::Iter(value) => value.name(stdio, program, engine),
-            CoreCasm::AssertBool => todo!(),
-            CoreCasm::AssertErr => todo!(),
-            CoreCasm::Error => todo!(),
-            CoreCasm::Ok => todo!(),
+            CoreCasm::AssertBool => stdio.push_asm_lib(engine, "assert_true"),
+            CoreCasm::AssertErr => stdio.push_asm_lib(engine, "assert_ok"),
+            CoreCasm::Error => stdio.push_asm_lib(engine, "error"),
+            CoreCasm::Ok => stdio.push_asm_lib(engine, "ok"),
         }
     }
     fn weight(&self) -> super::vm::CasmWeight {
@@ -258,12 +256,12 @@ impl<G: crate::GameEngineStaticFn> CasmMetadata<G> for CoreCasm {
             CoreCasm::Thread(value) => <ThreadCasm as CasmMetadata<G>>::weight(value),
             CoreCasm::IO(value) => <IOCasm as CasmMetadata<G>>::weight(value),
             CoreCasm::Math(value) => <MathCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::Strings(value) => <StringsCasm as CasmMetadata<G>>::weight(value),
+            CoreCasm::Format(value) => <FormatCasm as CasmMetadata<G>>::weight(value),
             CoreCasm::Iter(value) => <IterCasm as CasmMetadata<G>>::weight(value),
-            CoreCasm::AssertBool => todo!(),
-            CoreCasm::AssertErr => todo!(),
-            CoreCasm::Error => todo!(),
-            CoreCasm::Ok => todo!(),
+            CoreCasm::AssertBool => super::vm::CasmWeight::ZERO,
+            CoreCasm::AssertErr => super::vm::CasmWeight::ZERO,
+            CoreCasm::Error => super::vm::CasmWeight::ZERO,
+            CoreCasm::Ok => super::vm::CasmWeight::ZERO,
         }
     }
 }
@@ -294,7 +292,7 @@ impl<G: crate::GameEngineStaticFn> Executable<G> for CoreCasm {
             CoreCasm::Thread(value) => value.execute(program, stack, heap, stdio, engine, tid),
             CoreCasm::IO(value) => value.execute(program, stack, heap, stdio, engine, tid),
             CoreCasm::Math(value) => value.execute(program, stack, heap, stdio, engine, tid),
-            CoreCasm::Strings(value) => value.execute(program, stack, heap, stdio, engine, tid),
+            CoreCasm::Format(value) => value.execute(program, stack, heap, stdio, engine, tid),
             CoreCasm::Iter(value) => value.execute(program, stack, heap, stdio, engine, tid),
             CoreCasm::AssertBool => {
                 let condition = OpPrimitive::pop_bool(stack)?;

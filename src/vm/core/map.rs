@@ -2,7 +2,7 @@ use crate::{
     ast::expressions::Expression,
     semantic::{
         scope::static_types::{MapType, StaticType, VecType},
-        CompatibleWith, EType, Metadata, Resolve, ResolvePlatform, SemanticError, SizeOf, TypeOf,
+        CompatibleWith, EType, Metadata, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
@@ -117,7 +117,7 @@ impl PathFinder for MapFn {
     }
 }
 
-impl ResolvePlatform for MapFn {
+impl ResolveCore for MapFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

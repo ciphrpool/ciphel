@@ -3,12 +3,15 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::ScopeManager;
-use crate::{ast::utils::strings::ID, vm::vm::Printer};
 
 use self::scope::{static_types::StaticType, user_types::UserType};
 
-use scope::static_types::NumberType;
+use scope::{
+    static_types::NumberType,
+    user_types::{Enum, Struct, Union},
+};
 use thiserror::Error;
 pub mod scope;
 
@@ -16,8 +19,8 @@ pub mod scope;
 pub enum SemanticError {
     #[error("NotResolvedYet")]
     NotResolvedYet,
-    #[error("PlatformAPIOverriding")]
-    PlatformAPIOverriding,
+    #[error("CoreAPIOverriding")]
+    CoreAPIOverriding,
 
     #[error("cannot infer type {0}")]
     CantInferType(String),
@@ -161,7 +164,7 @@ pub trait ResolveNumber {
     fn resolve_number(&mut self, to: NumberType) -> Result<(), SemanticError>;
 }
 
-pub trait ResolvePlatform {
+pub trait ResolveCore {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
@@ -290,14 +293,104 @@ impl MergeType for EType {
     }
 }
 
-// impl Printer for EType {
-//     fn build_printer(
-//         &self,
-//         instructions: &mut crate::vm::asm::Program,
-//     ) -> Result<(), crate::vm::vm::CodeGenerationError> {
-//         match self {
-//             EType::Static(value) => value.build_printer(instructions),
-//             EType::User { id, size } => todo!(),
-//         }
-//     }
-// }
+impl EType {
+    pub fn name(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<String, crate::vm::vm::CodeGenerationError> {
+        match self {
+            EType::Static(static_type) => match static_type {
+                StaticType::Primitive(primitive_type) => match primitive_type {
+                    scope::static_types::PrimitiveType::Number(number_type) => match number_type {
+                        NumberType::U8 => Ok("u8".to_string()),
+                        NumberType::U16 => Ok("u16".to_string()),
+                        NumberType::U32 => Ok("u32".to_string()),
+                        NumberType::U64 => Ok("u64".to_string()),
+                        NumberType::U128 => Ok("u128".to_string()),
+                        NumberType::I8 => Ok("i8".to_string()),
+                        NumberType::I16 => Ok("i16".to_string()),
+                        NumberType::I32 => Ok("i32".to_string()),
+                        NumberType::I64 => Ok("i64".to_string()),
+                        NumberType::I128 => Ok("i128".to_string()),
+                        NumberType::F64 => Ok("f64".to_string()),
+                    },
+                    scope::static_types::PrimitiveType::Char => Ok("char".to_string()),
+                    scope::static_types::PrimitiveType::Bool => Ok("bool".to_string()),
+                },
+                StaticType::Slice(slice_type) => Ok(format!(
+                    "[{0}]{1}",
+                    slice_type.size,
+                    slice_type.item_type.name(scope_manager, scope_id)?
+                )),
+                StaticType::String(string_type) => Ok("String".to_string()),
+                StaticType::StrSlice(str_slice_type) => Ok("str".to_string()),
+                StaticType::Vec(vec_type) => Ok(format!(
+                    "Vec[{0}]",
+                    vec_type.0.name(scope_manager, scope_id)?
+                )),
+                StaticType::Closure(closure_type) => Ok(format!(
+                    "closed({0}) -> {1}",
+                    closure_type
+                        .params
+                        .iter()
+                        .filter_map(|p| p.name(scope_manager, scope_id).ok())
+                        .collect::<Vec<String>>()
+                        .join(","),
+                    closure_type.ret.name(scope_manager, scope_id)?
+                )),
+                StaticType::Lambda(lambda_type) => Ok(format!(
+                    "({0}) -> {1}",
+                    lambda_type
+                        .params
+                        .iter()
+                        .filter_map(|p| p.name(scope_manager, scope_id).ok())
+                        .collect::<Vec<String>>()
+                        .join(","),
+                    lambda_type.ret.name(scope_manager, scope_id)?
+                )),
+                StaticType::Function(function_type) => Ok(format!(
+                    "fn({0}) -> {1}",
+                    function_type
+                        .params
+                        .iter()
+                        .filter_map(|p| p.name(scope_manager, scope_id).ok())
+                        .collect::<Vec<String>>()
+                        .join(","),
+                    function_type.ret.name(scope_manager, scope_id)?
+                )),
+                StaticType::Range(range_type) => todo!(),
+                StaticType::Tuple(tuple_type) => Ok(format!(
+                    "({0})",
+                    tuple_type
+                        .0
+                        .iter()
+                        .filter_map(|p| p.name(scope_manager, scope_id).ok())
+                        .collect::<Vec<String>>()
+                        .join(",")
+                )),
+                StaticType::Unit => Ok("Unit".to_string()),
+                StaticType::Any => Ok("Any".to_string()),
+                StaticType::Error => Ok("Error".to_string()),
+                StaticType::Address(addr_type) => {
+                    Ok(format!("&{0}", addr_type.0.name(scope_manager, scope_id)?))
+                }
+                StaticType::Map(map_type) => Ok(format!(
+                    "Map[{0}]{1}",
+                    map_type.keys_type.name(scope_manager, scope_id)?,
+                    map_type.values_type.name(scope_manager, scope_id)?,
+                )),
+            },
+            EType::User { id, size } => {
+                let Ok(utype) = scope_manager.find_type_by_id(*id, scope_id) else {
+                    return Err(crate::vm::vm::CodeGenerationError::UnresolvedError);
+                };
+                match utype {
+                    UserType::Struct(Struct { id, fields }) => Ok(id),
+                    UserType::Enum(Enum { id, values }) => Ok(id),
+                    UserType::Union(Union { id, variants }) => Ok(id),
+                }
+            }
+        }
+    }
+}

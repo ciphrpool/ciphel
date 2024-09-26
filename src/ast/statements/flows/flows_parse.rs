@@ -1,5 +1,9 @@
 use crate::ast::{
-    expressions::{data::Call, flows::Cases, operation::operation_parse::TryParseOperation},
+    expressions::{
+        data::{Call, Printf},
+        flows::Cases,
+        operation::operation_parse::TryParseOperation,
+    },
     statements::block::Block,
     utils::{error::squash, strings::wst_closed},
     TryParse,
@@ -30,6 +34,9 @@ impl TryParse for Flow {
                 map(IfStat::parse, |value| Flow::If(value)),
                 map(MatchStat::parse, |value| Flow::Match(value)),
                 map(TryStat::parse, |value| Flow::Try(value)),
+                map(terminated(Printf::parse, wst(lexem::SEMI_COLON)), |value| {
+                    Flow::Printf(value)
+                }),
                 map(CallStat::parse, |value| Flow::Call(value)),
             )),
             "Expected an if, match, try statement or a function call",

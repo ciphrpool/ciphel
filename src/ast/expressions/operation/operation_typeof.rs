@@ -98,7 +98,7 @@ impl TypeOf for ExprCall {
 //     where
 //         Self: Sized + Resolve,
 //     {
-//         if self.is_dynamic_fn.is_some() || self.platform.is_some() {
+//         if self.is_dynamic_fn.is_some() || self.Core.is_some() {
 //             return self
 //                 .metadata
 //                 .signature()

@@ -8,7 +8,7 @@ use crate::{
             scope::ScopeManager,
             static_types::{MapType, SliceType},
         },
-        ResolvePlatform,
+        ResolveCore,
     },
     vm::{
         allocator::{heap::Heap, stack::Stack, MemoryAddress},
@@ -105,7 +105,7 @@ impl PathFinder for AllocFn {
     }
 }
 
-impl ResolvePlatform for AllocFn {
+impl ResolveCore for AllocFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

@@ -13,7 +13,7 @@ use crate::semantic::scope::static_types::{
 };
 use crate::semantic::scope::user_types::{Struct, UserType};
 use crate::semantic::{
-    CompatibleWith, Desugar, EType, Resolve, ResolveNumber, ResolvePlatform, SemanticError, TypeOf,
+    CompatibleWith, Desugar, EType, Resolve, ResolveCore, ResolveNumber, SemanticError, TypeOf,
 };
 use crate::semantic::{Info, ResolveFromStruct, SizeOf};
 use crate::vm::vm::DynamicFnResolver;
@@ -506,7 +506,7 @@ impl Desugar<Expression> for ExprCall {
 //                             &mut self.params,
 //                         )?;
 
-//                         self.platform = Some(api);
+//                         self.Core = Some(api);
 
 //                         self.metadata.info = crate::semantic::Info::Resolved {
 //                             context: context.clone(),

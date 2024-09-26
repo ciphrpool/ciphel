@@ -400,7 +400,7 @@ impl TryParseAtomicOperation for FieldAccess {
 //                 fn_var,
 //                 params,
 //                 metadata: Metadata::default(),
-//                 platform: Default::default(),
+//                 Core: Default::default(),
 //                 is_dynamic_fn: Default::default(),
 //             });
 //             Ok((remainder, left))
@@ -454,7 +454,7 @@ impl TryParseAtomicOperation for FieldAccess {
 //                 fn_var,
 //                 params,
 //                 metadata: Metadata::default(),
-//                 platform: Default::default(),
+//                 Core: Default::default(),
 //                 is_dynamic_fn: Default::default(),
 //             });
 //             if peeked.is_some() {
@@ -1400,7 +1400,7 @@ mod tests {
     //                 ))))
     //             ],
     //             metadata: Metadata::default(),
-    //             platform: Default::default(),
+    //             Core: Default::default(),
     //             is_dynamic_fn: Default::default(),
     //         }),
     //         value
@@ -1431,7 +1431,7 @@ mod tests {
     //                 ))))
     //             ],
     //             metadata: Metadata::default(),
-    //             platform: Default::default(),
+    //             Core: Default::default(),
     //             is_dynamic_fn: Default::default(),
     //         }),
     //         value

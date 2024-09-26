@@ -36,6 +36,7 @@ pub enum Data {
     PtrAccess(PtrAccess),
     Variable(Variable),
     Call(Call),
+    Printf(Printf),
     Unit,
     Map(Map),
     Struct(Struct),
@@ -192,6 +193,17 @@ pub struct Call {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum FormatItem {
+    Str(String),
+    Expr(Expression),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Printf {
+    pub args: Vec<FormatItem>,
+    pub metadata: Metadata,
+}
+#[derive(Debug, Clone, PartialEq)]
 pub enum LeftCall {
     VarCall(VarCall),
     ExternCall(ExternCall),
@@ -255,6 +267,7 @@ impl Data {
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
             Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
+            Data::Printf(Printf { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -292,6 +305,7 @@ impl Data {
             Data::StrSlice(StrSlice { metadata, .. }) => Some(metadata),
             Data::Call(Call { metadata, .. }) => Some(metadata),
             Data::Lambda(Lambda { metadata, .. }) => Some(metadata),
+            Data::Printf(Printf { metadata, .. }) => Some(metadata),
         }
     }
 
@@ -355,6 +369,7 @@ impl Data {
             Data::StrSlice(StrSlice { metadata, .. }) => metadata.signature(),
             Data::Call(Call { metadata, .. }) => metadata.signature(),
             Data::Lambda(Lambda { metadata, .. }) => metadata.signature(),
+            Data::Printf(Printf { metadata, .. }) => metadata.signature(),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::e_static;
 use crate::semantic::scope::scope::ScopeManager;
-use crate::semantic::scope::static_types::StringType;
+use crate::semantic::scope::static_types::{StrSliceType, StringType};
 use crate::{
     p_num,
     semantic::{scope::static_types::StaticType, EType, MergeType, Resolve, SemanticError, TypeOf},
@@ -99,6 +99,6 @@ impl TypeOf for FCall {
     where
         Self: Sized + Resolve,
     {
-        Ok(e_static!(StaticType::String(StringType())))
+        Ok(e_static!(StaticType::StrSlice(StrSliceType())))
     }
 }

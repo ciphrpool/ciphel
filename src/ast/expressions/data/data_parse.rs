@@ -18,7 +18,7 @@ use crate::{
             numbers::{parse_float, parse_number},
             strings::{
                 parse_id,
-                string_parser::{parse_char, parse_string},
+                string_parser::{parse_char, parse_fstring, parse_string},
                 wst, wst_closed,
             },
         },
@@ -40,8 +40,9 @@ use nom::{
 use nom_supreme::{final_parser::ExtractContext, ParserExt};
 
 use super::{
-    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, Lambda, LeftCall, Map, MultiData,
-    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
+    Address, Call, CallArgs, Closure, ClosureParam, Data, Enum, FormatItem, Lambda, LeftCall, Map,
+    MultiData, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
+    VarCall, Variable, Vector,
 };
 impl TryParse for Data {
     fn parse(input: Span) -> PResult<Self> {
@@ -58,6 +59,7 @@ impl TryParse for Data {
                 map(PtrAccess::parse, |value| Data::PtrAccess(value)),
                 value(Data::Unit, wst_closed(lexem::UNIT)),
                 map(Map::parse, |value| Data::Map(value)),
+                map(Printf::parse, |value| Data::Printf(value)),
                 map(Call::parse, |value| Data::Call(value)),
                 map(Struct::parse, |value| Data::Struct(value)),
                 map(Union::parse, |value| Data::Union(value)),
@@ -489,6 +491,47 @@ impl TryParse for Call {
                     is_closure: false,
                 }),
                 args,
+                metadata: Metadata::default(),
+            },
+        )(input)
+    }
+}
+
+impl TryParse for Printf {
+    /*
+     * @desc Parse variable
+     *
+     * @grammar
+     * Printf := CompletePath (CallArgs)
+     */
+    fn parse(input: Span) -> PResult<Self> {
+        map(
+            pair(
+                preceded(
+                    opt(pair(wst_closed(core::lexem::CORE), wst(lexem::SEP))),
+                    preceded(
+                        opt(pair(wst_closed(core::lexem::IO), wst(lexem::SEP))),
+                        wst_closed(core::lexem::PRINTF),
+                    ),
+                ),
+                delimited(
+                    wst(lexem::PAR_O),
+                    parse_fstring::<Expression>,
+                    wst(lexem::PAR_C),
+                ),
+            ),
+            |(_, args)| Printf {
+                args: args
+                    .into_iter()
+                    .map(|item| match item {
+                        crate::ast::utils::strings::string_parser::FItem::Str(string) => {
+                            FormatItem::Str(string)
+                        }
+                        crate::ast::utils::strings::string_parser::FItem::Expr(expr) => {
+                            FormatItem::Expr(expr)
+                        }
+                    })
+                    .collect(),
                 metadata: Metadata::default(),
             },
         )(input)

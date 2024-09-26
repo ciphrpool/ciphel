@@ -31,6 +31,7 @@ impl Resolve for Flow {
             Flow::If(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Flow::Match(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
             Flow::Try(value) => value.resolve::<G>(scope_manager, scope_id, context, extra),
+            Flow::Printf(value) => value.resolve::<G>(scope_manager, scope_id, &None, &mut ()),
             Flow::Call(value) => value.resolve::<G>(scope_manager, scope_id, &(), &mut ()),
         }
     }
@@ -46,6 +47,10 @@ impl Desugar<Statement> for Flow {
             Flow::If(value) => value.desugar::<G>(scope_manager, scope_id),
             Flow::Match(value) => value.desugar::<G>(scope_manager, scope_id),
             Flow::Try(value) => value.desugar::<G>(scope_manager, scope_id),
+            Flow::Printf(value) => {
+                let _ = value.desugar::<G>(scope_manager, scope_id);
+                Ok(None)
+            }
             Flow::Call(value) => value.desugar::<G>(scope_manager, scope_id),
         }
     }

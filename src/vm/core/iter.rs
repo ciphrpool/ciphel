@@ -8,7 +8,7 @@ use crate::{
             scope::ScopeManager,
             static_types::{AddrType, MapType, StaticType, TupleType, VecType},
         },
-        EType, Info, Metadata, Resolve, ResolvePlatform, SemanticError, SizeOf, TypeOf,
+        EType, Info, Metadata, Resolve, ResolveCore, SemanticError, SizeOf, TypeOf,
     },
     vm::{
         allocator::{align, heap::Heap, stack::Stack, MemoryAddress},
@@ -77,7 +77,7 @@ impl PathFinder for IterFn {
     }
 }
 
-impl ResolvePlatform for IterFn {
+impl ResolveCore for IterFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

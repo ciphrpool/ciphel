@@ -1,7 +1,7 @@
 use crate::ast::utils::strings::ID;
 use crate::semantic::scope::scope::ScopeManager;
 use crate::semantic::scope::static_types::{NumberType, PrimitiveType, StaticType};
-use crate::semantic::{EType, ResolvePlatform, TypeOf};
+use crate::semantic::{EType, ResolveCore, TypeOf};
 use crate::vm::allocator::stack::Stack;
 use crate::vm::asm::operation::{OpPrimitive, PopNum};
 use crate::vm::asm::Asm;
@@ -112,7 +112,7 @@ fn expect_one_u64<G: crate::GameEngineStaticFn>(
     }
     Ok(())
 }
-impl ResolvePlatform for ThreadFn {
+impl ResolveCore for ThreadFn {
     fn resolve<G: crate::GameEngineStaticFn>(
         &mut self,
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,

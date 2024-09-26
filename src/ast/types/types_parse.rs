@@ -119,10 +119,10 @@ impl TryParse for StrSliceType {
      *
      * @grammar
      * Slice :=
-     *  | [ num ] str
+     *  | str
      */
     fn parse(input: Span) -> PResult<Self> {
-        map(wst(lexem::STR), |_| StrSliceType {})(input)
+        map(wst_closed(lexem::STR), |_| StrSliceType {})(input)
     }
 }
 
@@ -143,13 +143,13 @@ impl TryParse for VecType {
      * @desc Parse Vec Type
      *
      * @grammar
-     * Vec := Vec< Type >
+     * Vec := Vec[Type]
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
                 wst_closed(lexem::UVEC),
-                delimited(wst(lexem::LESSER), Type::parse, wst(lexem::GREATER)),
+                delimited(wst(lexem::SQ_BRA_O), Type::parse, wst(lexem::SQ_BRA_C)),
             ),
             |value| VecType(Box::new(value)),
         )(input)
@@ -304,16 +304,15 @@ impl TryParse for MapType {
      * @desc Parse Map Type
      *
      * @grammar
-     * Map := map < Key , Types >
+     * Map := map[Key]Types
      */
     fn parse(input: Span) -> PResult<Self> {
         map(
             preceded(
                 wst_closed(lexem::UMAP),
-                delimited(
-                    wst(lexem::LESSER),
-                    separated_pair(Type::parse, wst(lexem::COMA), Type::parse),
-                    wst(lexem::GREATER),
+                pair(
+                    delimited(wst(lexem::SQ_BRA_O), Type::parse, wst(lexem::GREATER)),
+                    Type::parse,
                 ),
             ),
             |(keys, values)| MapType {
@@ -390,7 +389,7 @@ mod tests {
 
     #[test]
     fn valid_vec_type() {
-        let res = VecType::parse("Vec<[8]u128>".into());
+        let res = VecType::parse("Vec[[8]u128]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -401,7 +400,7 @@ mod tests {
             value
         );
 
-        let res = VecType::parse("Vec<u64>".into());
+        let res = VecType::parse("Vec[u64]".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(
@@ -452,7 +451,7 @@ mod tests {
 
     #[test]
     fn valid_map_type() {
-        let res = MapType::parse("Map<String,bool>".into());
+        let res = MapType::parse("Map[String]bool".into());
         assert!(res.is_ok(), "{:?}", res);
         let value = res.unwrap().1;
         assert_eq!(

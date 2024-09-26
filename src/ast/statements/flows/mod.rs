@@ -1,4 +1,8 @@
-use crate::ast::expressions::{data::Call, flows::Cases, Expression};
+use crate::ast::expressions::{
+    data::{Call, Printf},
+    flows::Cases,
+    Expression,
+};
 
 use super::block::{Block, ClosureBlock, ExprBlock};
 
@@ -12,6 +16,7 @@ pub enum Flow {
     If(IfStat),
     Match(MatchStat),
     Try(TryStat),
+    Printf(Printf),
     Call(CallStat),
 }
 

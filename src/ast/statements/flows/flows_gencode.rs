@@ -45,6 +45,7 @@ impl GenerateCode for Flow {
             Flow::If(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Flow::Match(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Flow::Try(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Flow::Printf(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Flow::Call(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }

@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::process::Output;
 
 use super::{
-    Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, Lambda, LeftCall, Map,
-    Number, Primitive, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, Variable, Vector,
+    Address, Call, Closure, ClosureParam, ClosureReprData, Data, Enum, FormatItem, Lambda,
+    LeftCall, Map, Number, Primitive, Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union,
+    Variable, Vector,
 };
 use crate::ast::expressions::data::{CoreCall, ExternCall, VarCall};
 use crate::ast::expressions::{Atomic, CompletePath, Expression, Path};
@@ -14,7 +15,7 @@ use crate::semantic::scope::static_types::{
     StrSliceType, TupleType, VecType, POINTER_SIZE,
 };
 use crate::semantic::scope::user_types::UserType;
-use crate::semantic::ResolvePlatform;
+use crate::semantic::ResolveCore;
 use crate::semantic::{
     scope::static_types::StaticType, CompatibleWith, EType, Resolve, SemanticError, TypeOf,
 };
@@ -55,6 +56,7 @@ impl Resolve for Data {
             Data::Enum(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::StrSlice(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
             Data::Call(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
+            Data::Printf(value) => value.resolve::<G>(scope_manager, scope_id, context, &mut ()),
         }
     }
 }
@@ -118,6 +120,7 @@ impl Desugar<Atomic> for Data {
             Data::Struct(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::Union(value) => value.desugar::<G>(scope_manager, scope_id),
             Data::Enum(value) => Ok(None),
+            Data::Printf(value) => value.desugar::<G>(scope_manager, scope_id),
         }
     }
 }
@@ -582,14 +585,13 @@ impl Resolve for Tuple {
                         )?;
                     }
 
-                    {
-                        self.metadata.info = Info::Resolved {
-                            context: context.clone(),
-                            signature: Some(e_static!(StaticType::Tuple(TupleType(
-                                values_type.clone()
-                            )))),
-                        };
-                    }
+                    self.metadata.info = Info::Resolved {
+                        context: context.clone(),
+                        signature: Some(e_static!(StaticType::Tuple(TupleType(
+                            values_type.clone()
+                        )))),
+                    };
+
                     Ok(())
                 }
                 _ => Err(SemanticError::IncompatibleTypes),
@@ -601,12 +603,11 @@ impl Resolve for Tuple {
                     values_type.push(value.type_of(&scope_manager, scope_id)?);
                 }
 
-                {
-                    self.metadata.info = Info::Resolved {
-                        context: context.clone(),
-                        signature: Some(e_static!(StaticType::Tuple(TupleType(values_type)))),
-                    };
-                }
+                self.metadata.info = Info::Resolved {
+                    context: context.clone(),
+                    signature: Some(e_static!(StaticType::Tuple(TupleType(values_type)))),
+                };
+
                 Ok(())
             }
         }
@@ -1175,31 +1176,41 @@ impl Resolve for Map {
                 _ => Err(SemanticError::IncompatibleTypes),
             },
             None => {
-                let mut keys_type = e_static!(StaticType::Any);
-                let mut values_type = e_static!(StaticType::Any);
+                let mut current_key_type: Option<EType> = None;
+                let mut current_value_type: Option<EType> = None;
+
                 for (key, value) in &mut self.fields {
                     let _ = key.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-                    keys_type = keys_type.merge(
-                        &key.type_of(scope_manager, scope_id)?,
-                        &scope_manager,
-                        scope_id,
-                    )?;
+
+                    let key_type = key.type_of(scope_manager, scope_id)?;
+                    if let Some(current_key_type) = &current_key_type {
+                        let _ =
+                            current_key_type.compatible_with(&key_type, scope_manager, scope_id)?;
+                    }
+                    let _ = current_key_type.insert(key_type);
+
                     let _ = value.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
-                    values_type = values_type.merge(
-                        &value.type_of(scope_manager, scope_id)?,
-                        &scope_manager,
-                        scope_id,
-                    )?;
-                }
 
-                let skeys_type = Some(keys_type.clone());
-                let svalues_type = Some(values_type.clone());
-                for (key, value) in &mut self.fields {
-                    let _ = key.resolve::<G>(scope_manager, scope_id, &skeys_type, &mut None)?;
-                    let _ =
-                        value.resolve::<G>(scope_manager, scope_id, &svalues_type, &mut None)?;
+                    let value_type = value.type_of(scope_manager, scope_id)?;
+                    if let Some(current_value_type) = &current_value_type {
+                        let _ = current_value_type.compatible_with(
+                            &value_type,
+                            scope_manager,
+                            scope_id,
+                        )?;
+                    }
+                    let _ = current_value_type.insert(value_type);
                 }
-
+                let Some(keys_type) = current_key_type else {
+                    return Err(SemanticError::CantInferType(
+                        "of the key of the map".to_string(),
+                    ));
+                };
+                let Some(values_type) = current_value_type else {
+                    return Err(SemanticError::CantInferType(
+                        "of the key of the map".to_string(),
+                    ));
+                };
                 self.metadata.info = Info::Resolved {
                     context: context.clone(),
                     signature: Some(e_static!(StaticType::Map(MapType {
@@ -1364,6 +1375,56 @@ impl Desugar<Atomic> for Call {
 
         if let Some(core_func) = Core::find(path, name.as_str()) {
             self.path = LeftCall::CoreCall(CoreCall { path: core_func });
+        }
+        Ok(None)
+    }
+}
+
+impl Resolve for Printf {
+    type Output = ();
+    type Context = Option<EType>;
+    type Extra = ();
+    fn resolve<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        context: &Self::Context,
+        _extra: &mut Self::Extra,
+    ) -> Result<Self::Output, SemanticError>
+    where
+        Self: Sized,
+    {
+        for item in self.args.iter_mut() {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    let _ = expr.resolve::<G>(scope_manager, scope_id, &None, &mut None)?;
+                }
+            }
+        }
+        self.metadata.info = crate::semantic::Info::Resolved {
+            context: context.clone(),
+            signature: Some(EType::Static(StaticType::Unit)),
+        };
+        Ok(())
+    }
+}
+
+impl Desugar<Atomic> for Printf {
+    fn desugar<G: crate::GameEngineStaticFn>(
+        &mut self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+    ) -> Result<Option<Atomic>, SemanticError> {
+        for item in self.args.iter_mut() {
+            match item {
+                FormatItem::Str(_) => {}
+                FormatItem::Expr(expr) => {
+                    if let Some(output) = expr.desugar::<G>(scope_manager, scope_id)? {
+                        *expr = output;
+                    }
+                }
+            }
         }
         Ok(None)
     }

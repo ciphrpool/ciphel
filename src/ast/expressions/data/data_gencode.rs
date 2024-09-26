@@ -2,12 +2,13 @@ use num_traits::ToBytes;
 
 use crate::ast::expressions::locate::Locatable;
 use crate::ast::expressions::{CompletePath, Path};
-use crate::semantic;
 use crate::semantic::scope::scope::{self, GlobalMapping, ScopeManager};
 use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::semantic::scope::static_types::{MapType, SliceType, StaticType, TupleType};
+use crate::semantic::{self, TypeOf};
 use crate::vm::asm::locate::LocateOffset;
 use crate::vm::core::alloc::AllocCasm;
+use crate::vm::core::format::FormatCasm;
 use crate::vm::core::map::MapCasm;
 use crate::vm::core::vector::VEC_HEADER;
 use crate::vm::core::CoreCasm;
@@ -31,7 +32,7 @@ use crate::{
 
 use super::{
     Address, Call, Closure, ClosureReprData, CoreCall, Data, Enum, Lambda, Map, Number, Primitive,
-    PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
+    Printf, PtrAccess, Slice, StrSlice, Struct, Tuple, Union, VarCall, Variable, Vector,
 };
 
 impl GenerateCode for Data {
@@ -59,6 +60,7 @@ impl GenerateCode for Data {
             Data::StrSlice(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::Call(value) => value.gencode(scope_manager, scope_id, instructions, context),
             Data::Lambda(value) => value.gencode(scope_manager, scope_id, instructions, context),
+            Data::Printf(value) => value.gencode(scope_manager, scope_id, instructions, context),
         }
     }
 }
@@ -474,7 +476,14 @@ impl GenerateCode for Address {
         instructions: &mut Program,
         context: &crate::vm::vm::CodeGenerationContext,
     ) -> Result<(), CodeGenerationError> {
-        let _ = self.value.locate(scope_manager, scope_id, instructions)?;
+        match self.value.locate(scope_manager, scope_id, instructions)? {
+            Some(address) => {
+                instructions.push(Asm::Locate(Locate { address }));
+            }
+            None => {
+                // Noop : the address was push on the stack
+            }
+        }
         Ok(())
     }
 }
@@ -760,6 +769,46 @@ impl GenerateCode for Call {
                 path.gencode(scope_manager, scope_id, instructions, context)
             }
         }
+    }
+}
+
+impl GenerateCode for Printf {
+    fn gencode(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut Program,
+        context: &crate::vm::vm::CodeGenerationContext,
+    ) -> Result<(), CodeGenerationError> {
+        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PrintfStart)));
+
+        for segment in self.args.iter() {
+            match segment {
+                super::FormatItem::Str(segment) => {
+                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PushStr(
+                        segment.as_bytes().into(),
+                    ))));
+                }
+                super::FormatItem::Expr(expression) => {
+                    let _ = expression.gencode(scope_manager, scope_id, instructions, context)?;
+
+                    let Some(ctype) = expression.signature() else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+
+                    let _ = crate::vm::core::format::type_printer::build(
+                        &ctype,
+                        scope_manager,
+                        scope_id,
+                        instructions,
+                    )?;
+                    instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::Push)));
+                }
+            }
+        }
+
+        instructions.push(Asm::Core(CoreCasm::Format(FormatCasm::PrintfEnd)));
+        Ok(())
     }
 }
 
