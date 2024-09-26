@@ -48,7 +48,7 @@ impl TypeOf for MatchExpr {
     where
         Self: Sized + Resolve,
     {
-        let Some(Ok(pattern_type)) = (match &self.cases {
+        let Some(Ok(case_type)) = (match &self.cases {
             super::Cases::Primitive { cases } => cases
                 .first()
                 .map(|case| case.block.type_of(scope_manager, scope_id)),
@@ -69,9 +69,9 @@ impl TypeOf for MatchExpr {
         match &self.else_branch {
             Some(else_branch) => {
                 let else_type = else_branch.type_of(&scope_manager, scope_id)?;
-                pattern_type.merge(&else_type, scope_manager, scope_id)
+                case_type.merge(&else_type, scope_manager, scope_id)
             }
-            None => Ok(pattern_type),
+            None => Ok(case_type),
         }
     }
 }

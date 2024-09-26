@@ -273,9 +273,10 @@ pub fn test_extract_variable<N: num_traits::PrimInt>(
     let crate::semantic::scope::scope::Variable { id, .. } = scope_manager
         .find_var_by_name(variable_name, None)
         .expect("The variable should have been found");
-    let crate::semantic::scope::scope::VariableInfo { address, .. } = scope_manager
+    let crate::semantic::scope::scope::VariableInfo { address, ctype, .. } = scope_manager
         .find_var_by_id(id)
         .expect("The variable should have been found");
+
     let address: vm::allocator::MemoryAddress = (*address)
         .try_into()
         .expect("the address should have been known");

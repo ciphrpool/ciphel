@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use super::BuildUserType;
+use super::{static_types::POINTER_SIZE, BuildUserType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserType {
@@ -133,25 +133,23 @@ impl Printer for UserType {
 
 impl SizeOf for Struct {
     fn size_of(&self) -> usize {
-        self.fields
-            .iter()
-            .map(|(_, field)| align(field.size_of()))
-            .sum()
+        self.fields.iter().map(|(_, field)| field.size_of()).sum()
     }
 }
 impl SizeOf for Union {
     fn size_of(&self) -> usize {
-        8 + self
-            .variants
-            .iter()
-            .map(|(_, variant)| variant.size_of())
-            .max()
-            .unwrap_or(0)
+        POINTER_SIZE
+            + self
+                .variants
+                .iter()
+                .map(|(_, variant)| variant.size_of())
+                .max()
+                .unwrap_or(0)
     }
 }
 impl SizeOf for Enum {
     fn size_of(&self) -> usize {
-        8
+        POINTER_SIZE
     }
 }
 

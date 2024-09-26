@@ -17,7 +17,7 @@ use crate::{
     CompilationError,
 };
 
-use super::user_types::UserType;
+use super::{static_types::POINTER_SIZE, user_types::UserType};
 
 #[derive(Debug, Clone, Default, PartialEq, Copy)]
 pub enum VariableAddress {
@@ -152,6 +152,14 @@ impl GlobalMapping {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct FrameMapping {
+    pub param_size: usize,
+    pub local_size: usize,
+    pub top: usize,
+    pub vars: Vec<(u64, usize)>, // var id and offset
+}
+
 #[derive(Debug, Clone)]
 pub struct ScopeManager {
     vars: HashMap<u64, VariableInfo>,
@@ -160,7 +168,8 @@ pub struct ScopeManager {
     transaction_types_idx: Option<usize>, // Index of the last pushed types
     scope_branches: HashMap<u128, Vec<u128>>, // parent scope of a given scope (key)
 
-    pub allocating_scope: HashMap<u128, Vec<u64>>,
+    pub allocating_scope: HashMap<u128, FrameMapping>,
+
     pub scope_types: HashMap<u128, Vec<EType>>,
     pub scope_lookup: HashMap<u128, HashSet<u64>>,
     pub scope_states: HashMap<u128, ScopeState>,
@@ -187,11 +196,13 @@ impl Default for ScopeManager {
 
 impl ScopeManager {
     pub fn open_transaction(&mut self) -> Result<(), CompilationError> {
+        todo!();
         self.transaction_vars_idx = Some(self.vars.len());
         self.transaction_types_idx = Some(self.types.len());
         Ok(())
     }
     pub fn commit_transaction(&mut self) -> Result<(), CompilationError> {
+        todo!();
         self.transaction_vars_idx = None;
         self.transaction_types_idx = None;
         Ok(())
@@ -226,6 +237,24 @@ impl ScopeManager {
         Ok(scope_id)
     }
 
+    pub fn spawn_allocating(
+        &mut self,
+        parent: Option<u128>,
+        with_caller: bool,
+    ) -> Result<u128, SemanticError> {
+        let scope_id = self.spawn(parent)?;
+        self.allocating_scope.insert(
+            scope_id,
+            FrameMapping {
+                top: if with_caller { POINTER_SIZE } else { 0 },
+                local_size: 0,
+                param_size: 0,
+                vars: Vec::default(),
+            },
+        );
+        Ok(scope_id)
+    }
+
     pub fn hash_id(name: &str, count: usize, scope: Option<u128>) -> u64 {
         let mut hasher = DefaultHasher::default();
         name.hash(&mut hasher);
@@ -233,6 +262,45 @@ impl ScopeManager {
         scope.hash(&mut hasher);
         let hash = hasher.finish();
         hash
+    }
+
+    pub fn register_data(
+        &mut self,
+        data_size: usize,
+        scope_id: Option<u128>,
+    ) -> Result<Option<MemoryAddress>, SemanticError> {
+        let Some(scope_id) = scope_id else {
+            return Ok(None);
+        };
+
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return Ok(None);
+        };
+
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
+                || (*scope_state == ScopeState::Function)
+            {
+                let address: MemoryAddress;
+                if let Some(mapping) = self.allocating_scope.get_mut(id) {
+                    address = MemoryAddress::Frame {
+                        offset: mapping.top,
+                    };
+                    mapping.top += data_size;
+                    mapping.local_size += data_size;
+                } else {
+                    return Err(SemanticError::NotResolvedYet);
+                }
+                return Ok(Some(address));
+            }
+        }
+        return Ok(None);
     }
 
     pub fn register_var(
@@ -250,7 +318,7 @@ impl ScopeManager {
             .unwrap_or(0)
             + 1;
         let var_id = ScopeManager::hash_id(name, count, scope);
-        let is_global = self.signal_variable_registation(var_id, scope);
+        let is_global = self.signal_variable_registation(var_id, ctype.size_of(), scope, false);
         self.vars.insert(
             var_id,
             VariableInfo {
@@ -284,7 +352,7 @@ impl ScopeManager {
             + 1;
         let var_id = ScopeManager::hash_id(name, count, scope);
 
-        let _ = self.signal_variable_registation(var_id, scope);
+        let _ = self.signal_variable_registation(var_id, ctype.size_of(), scope, true);
         self.vars.insert(
             var_id,
             VariableInfo {
@@ -441,7 +509,39 @@ impl ScopeManager {
         Ok(())
     }
 
-    pub fn signal_variable_registation(&mut self, var_id: u64, scope_id: Option<u128>) -> bool {
+    pub fn is_scope_global(&self, scope_id: Option<u128>) -> bool {
+        let Some(scope_id) = scope_id else {
+            return true;
+        };
+
+        let Some(branch) = self.scope_branches.get(&scope_id) else {
+            return true;
+        };
+
+        let mut is_global = true;
+        for id in branch.iter().rev() {
+            let Some(scope_state) = self.scope_states.get(&id) else {
+                continue;
+            };
+            if (*scope_state == ScopeState::IIFE)
+                || (*scope_state == ScopeState::Closure)
+                || (*scope_state == ScopeState::Lambda)
+                || (*scope_state == ScopeState::Function)
+            {
+                is_global = false;
+                break;
+            }
+        }
+        return is_global;
+    }
+
+    pub fn signal_variable_registation(
+        &mut self,
+        var_id: u64,
+        var_size: usize,
+        scope_id: Option<u128>,
+        is_parameter: bool,
+    ) -> bool {
         let Some(scope_id) = scope_id else {
             return true;
         };
@@ -462,11 +562,16 @@ impl ScopeManager {
                 || (*scope_state == ScopeState::Function)
             {
                 is_global = false;
-                if let Some(vars) = self.allocating_scope.get_mut(id) {
-                    vars.push(var_id);
-                } else {
-                    self.allocating_scope.insert(*id, vec![var_id]);
+                if let Some(mapping) = self.allocating_scope.get_mut(id) {
+                    mapping.vars.push((var_id, mapping.top));
+                    mapping.top += var_size;
+                    if is_parameter {
+                        mapping.param_size += var_size;
+                    } else {
+                        mapping.local_size += var_size;
+                    }
                 }
+                break;
             }
         }
         return is_global;
@@ -585,28 +690,34 @@ impl ScopeManager {
     pub fn iter_mut_on_local_variable<'a>(
         &'a mut self,
         scope_id: u128,
-    ) -> impl Iterator<Item = &mut VariableInfo> + 'a {
+    ) -> impl Iterator<Item = (&mut VariableInfo, usize)> + 'a {
         let vars = self.allocating_scope.get(&scope_id);
 
-        self.vars.values_mut().filter(move |var| {
-            var.state == VariableState::Local
-                && vars
-                    .and_then(|buf| buf.iter().find(|v| **v == var.id))
-                    .is_some()
+        self.vars.values_mut().filter_map(move |var| {
+            let opt =
+                vars.and_then(|mapping| mapping.vars.iter().find(|(id, offset)| *id == var.id));
+
+            match opt {
+                Some((_, offset)) if var.state == VariableState::Local => Some((var, *offset)),
+                _ => None,
+            }
         })
     }
 
     pub fn iter_mut_on_parameters<'a>(
         &'a mut self,
         scope_id: u128,
-    ) -> impl Iterator<Item = &mut VariableInfo> + 'a {
+    ) -> impl Iterator<Item = (&mut VariableInfo, usize)> + 'a {
         let vars = self.allocating_scope.get(&scope_id);
 
-        self.vars.values_mut().filter(move |var| {
-            var.state == VariableState::Parameter
-                && vars
-                    .and_then(|buf| buf.iter().find(|v| **v == var.id))
-                    .is_some()
+        self.vars.values_mut().filter_map(move |var| {
+            let opt =
+                vars.and_then(|mapping| mapping.vars.iter().find(|(id, offset)| *id == var.id));
+
+            match opt {
+                Some((_, offset)) if var.state == VariableState::Parameter => Some((var, *offset)),
+                _ => None,
+            }
         })
     }
 }

@@ -374,21 +374,15 @@ mod tests {
             let res = test_extract_variable::<i64>("res8", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("res9", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
             true
         }
 
         test_statements(
             r##"
-        union Test {
-            Point {
-                x :i64,
-                y :i64,
-            },
-            Other {
-                cond : bool,
-            }
-        }
-        
+
         let test1 = 1;
         let res1 = 0;
         match test1 {
@@ -504,6 +498,28 @@ mod tests {
             },
             else => {
                 res8 = 5;
+            }
+        }
+
+        union Test {
+            Point {
+                x : i64,
+                y : i64,
+            },
+            Point2 {
+                x : u32,
+                y : i64,
+            }
+        }
+        let test9 = Test::Point2 { x : 1, y : 5 };
+        let res9 = 0;
+
+        match test9 {
+            case Test::Point { x, y } => {
+                res9 = 2;
+            },
+            case Test::Point2 { x, y } => {
+                res9 = y;
             }
         }
 

@@ -29,43 +29,86 @@ impl GenerateCode for Declaration {
             instructions: &mut Program,
             context: &crate::vm::vm::CodeGenerationContext,
         ) -> Result<(), CodeGenerationError> {
-            let first_variable_id = match left {
-                DeclaredVar::Id { id: Some(id), .. }
-                | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => *id,
-                DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. })
-                | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => {
-                    *ids.first().ok_or(CodeGenerationError::UnresolvedError)?
-                }
-                _ => {
-                    return Err(CodeGenerationError::UnresolvedError);
-                }
-            };
-
-            let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
             let Some(right_type) = (match right {
-                crate::ast::statements::assignation::AssignValue::Block(value) => {
-                    value.metadata.signature()
-                }
-                crate::ast::statements::assignation::AssignValue::Expr(value) => value.signature(),
+                AssignValue::Block(value) => value.metadata.signature(),
+                AssignValue::Expr(value) => value.signature(),
             }) else {
                 return Err(CodeGenerationError::UnresolvedError);
             };
 
-            // memcopy the right side at the address of the first varairable offset
-            // if there is multiple variable ( in the case of destructuring ) the variables are aligned and in order
-            // and the right side is packed
-            let Some(VariableInfo { address, .. }) =
-                scope_manager.find_var_by_id(first_variable_id).ok()
-            else {
-                return Err(CodeGenerationError::UnresolvedError);
-            };
+            let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
 
-            instructions.push(Asm::Mem(Mem::Store {
-                size: right_type.size_of(),
-                address: (*address)
-                    .try_into()
-                    .map_err(|_| CodeGenerationError::UnresolvedError)?,
-            }));
+            match left {
+                DeclaredVar::Id { id: Some(id), .. }
+                | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => {
+                    let Some(VariableInfo { address, .. }) = scope_manager.find_var_by_id(*id).ok()
+                    else {
+                        return Err(CodeGenerationError::UnresolvedError);
+                    };
+                    instructions.push(Asm::Mem(Mem::Store {
+                        size: right_type.size_of(),
+                        address: (*address)
+                            .try_into()
+                            .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                    }));
+                }
+                DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. })
+                | DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. }) => {
+                    for id in ids.iter().rev() {
+                        let Some(VariableInfo { address, ctype, .. }) =
+                            scope_manager.find_var_by_id(*id).ok()
+                        else {
+                            return Err(CodeGenerationError::UnresolvedError);
+                        };
+                        instructions.push(Asm::Mem(Mem::Store {
+                            size: ctype.size_of(),
+                            address: (*address)
+                                .try_into()
+                                .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                        }));
+                    }
+                }
+                _ => {
+                    return Err(CodeGenerationError::UnresolvedError);
+                }
+            }
+
+            // let first_variable_id = match left {
+            //     DeclaredVar::Id { id: Some(id), .. }
+            //     | DeclaredVar::Typed(TypedVar { id: Some(id), .. }) => vec![*id],
+            //     DeclaredVar::Pattern(PatternVar::StructFields { ids: Some(ids), .. })
+            //     | DeclaredVar::Pattern(PatternVar::Tuple { ids: Some(ids), .. }) => ids.clone(),
+            //     _ => {
+            //         return Err(CodeGenerationError::UnresolvedError);
+            //     }
+            // };
+
+            // let _ = right.gencode(scope_manager, scope_id, instructions, context)?;
+
+            // let Some(right_type) = (match right {
+            //     crate::ast::statements::assignation::AssignValue::Block(value) => {
+            //         value.metadata.signature()
+            //     }
+            //     crate::ast::statements::assignation::AssignValue::Expr(value) => value.signature(),
+            // }) else {
+            //     return Err(CodeGenerationError::UnresolvedError);
+            // };
+
+            // // memcopy the right side at the address of the first varairable offset
+            // // if there is multiple variable ( in the case of destructuring ) the variables are aligned and in order
+            // // and the right side is packed
+            // let Some(VariableInfo { address, .. }) =
+            //     scope_manager.find_var_by_id(first_variable_id).ok()
+            // else {
+            //     return Err(CodeGenerationError::UnresolvedError);
+            // };
+
+            // instructions.push(Asm::Mem(Mem::Store {
+            //     size: right_type.size_of(),
+            //     address: (*address)
+            //         .try_into()
+            //         .map_err(|_| CodeGenerationError::UnresolvedError)?,
+            // }));
             Ok(())
         }
 
@@ -125,7 +168,7 @@ mod tests {
             },
             Resolve,
         },
-        v_num,
+        test_extract_variable, test_statements, v_num,
         vm::{
             asm::Program,
             vm::{Executable, Runtime},
@@ -133,6 +176,95 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn valid_declaration() {
+        let mut engine = crate::vm::vm::NoopGameEngine {};
+
+        fn assert_fn(
+            scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+            stack: &mut crate::vm::allocator::stack::Stack,
+            heap: &mut crate::vm::allocator::heap::Heap,
+        ) -> bool {
+            let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
+            let res = test_extract_variable::<u32>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 2);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 3);
+            let res = test_extract_variable::<u8>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 4);
+
+            let res = test_extract_variable::<i64>("res5", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+
+            let res = test_extract_variable::<i64>("res6", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 6);
+
+            let res = test_extract_variable::<i64>("x", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 7);
+
+            let res = test_extract_variable::<i64>("y", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 8);
+
+            let res = test_extract_variable::<i64>("a", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 9);
+
+            let res = test_extract_variable::<u32>("b", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 10);
+
+            let res = test_extract_variable::<i64>("c", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 11);
+            true
+        }
+
+        test_statements(
+            r##"
+
+        let res1 = 1;
+        let res2:u32 = 2;
+        let res3 = {
+            let x = 1;
+            x + 2
+        };
+        let res4 : u8 = {
+            let x = 3u8;
+            x + 1
+        };
+
+        let (res5,res6) = (5,6);
+
+        struct Point {
+            x : i64,
+            y : i64,
+        }
+
+        let Point {x,y} = Point {x:7,y:8};
+
+        struct Test {
+            a : i64,
+            b : u32,
+            c : i64,
+        }
+        
+        let Test {a,b,c} = Test {a:9,b:10,c:11};
+        
+        "##,
+            &mut engine,
+            assert_fn,
+        );
+    }
 
     // #[test]
     // fn valid_declaration_inplace_in_scope() {

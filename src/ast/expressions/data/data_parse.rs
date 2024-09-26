@@ -159,6 +159,7 @@ impl TryParse for Slice {
             |value| Slice {
                 value,
                 size: 0,
+                address: None,
                 metadata: Metadata::default(),
             },
         )(input)
@@ -175,6 +176,7 @@ impl TryParse for StrSlice {
     fn parse(input: Span) -> PResult<Self> {
         map(parse_string, |value| StrSlice {
             value,
+            address: None,
             metadata: Metadata::default(),
         })(input)
     }
@@ -565,6 +567,7 @@ mod tests {
                     ))))
                 ],
                 size: 0,
+                address: None,
                 metadata: Metadata::default(),
             },
             value
@@ -579,6 +582,7 @@ mod tests {
         assert_eq!(
             StrSlice {
                 value: "Hello World".to_string(),
+                address: None,
                 metadata: Metadata::default(),
             },
             value
@@ -773,6 +777,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "x".to_string().into(),
+                            address: None,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(
@@ -782,6 +787,7 @@ mod tests {
                     (
                         Expression::Atomic(Atomic::Data(Data::StrSlice(StrSlice {
                             value: "y".to_string().into(),
+                            address: None,
                             metadata: Metadata::default(),
                         }))),
                         Expression::Atomic(Atomic::Data(Data::Primitive(Primitive::Number(

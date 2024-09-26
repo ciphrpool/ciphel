@@ -5,7 +5,7 @@ use ulid::Ulid;
 
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
-use crate::semantic::scope::scope::ScopeManager;
+use crate::semantic::scope::scope::{ScopeManager, ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::POINTER_SIZE;
 use crate::semantic::{EType, Resolve, SemanticError};
 use crate::vm::asm::branch::{BranchTry, CloseFrame, Return};
@@ -254,6 +254,8 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         let Some(value) = self.pattern.variant_value else {
             return Err(CodeGenerationError::UnresolvedError);
         };
+        instructions.push(Asm::Mem(Mem::Dup(POINTER_SIZE)));
+
         instructions.push(Asm::Data(Data::Serialized {
             data: value.to_le_bytes().into(),
         }));
@@ -263,8 +265,41 @@ impl<B: TryParse + Resolve + GenerateCode + BlockCommonApi + Clone + Debug + Par
         }));
 
         instructions.push(Asm::If(BranchIf { else_label }));
+        instructions.push(Asm::Pop(POINTER_SIZE));
 
         instructions.push_label_id(block_label, "match_block".to_string());
+
+        let Some(ids) = &self.pattern.vars_id else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        let Some(inner_scope) = self.block.scope() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+
+        if ScopeState::IIFE
+            == *scope_manager
+                .scope_states
+                .get(&inner_scope)
+                .unwrap_or(&ScopeState::Inline)
+        {
+            // IIFE : the created vars are left on the stack to be picked up by the IIFE
+        } else {
+            for id in ids.iter().rev() {
+                let Some(VariableInfo { address, ctype, .. }) =
+                    scope_manager.find_var_by_id(*id).ok()
+                else {
+                    return Err(CodeGenerationError::UnresolvedError);
+                };
+                instructions.push(Asm::Mem(Mem::Store {
+                    size: ctype.size_of(),
+                    address: (*address)
+                        .try_into()
+                        .map_err(|_| CodeGenerationError::UnresolvedError)?,
+                }));
+            }
+        }
+
         self.block
             .gencode(scope_manager, scope_id, instructions, context)?;
         instructions.push(Asm::Goto(Goto {
@@ -629,23 +664,37 @@ mod tests {
             let res = test_extract_variable::<i64>("res1", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res2", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<i64>("res3", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 5);
+            let res = test_extract_variable::<u32>("res4", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
             true
         }
 
         test_statements(
             r##"
 
+        union Test {
+            Point {
+                x : i64,
+                y : i64,
+            },
+            Point2 {
+                x : u32,
+                y : i64,
+            }
+        }
+
         let res1 = match 1 {
             case 1 | 2 => { 5 },
             else => { 10 }
         };
 
-        union Test {
-            Point {
-                x : i64,
-                y : i64,
-            }
-        }
 
         let var2 = Test::Point { x : 1, y : 5 };
         let res2 = match var2 {
@@ -653,6 +702,24 @@ mod tests {
             else => { 10 }
         };
 
+        let res3 = {  
+            let var3 = Test::Point { x : 1, y : 5 };
+            let res3 = match var3 {
+                case Test::Point { x, y } => { y },
+                else => { 10 }
+            };
+            res3
+        };
+
+        let res4 = {  
+            let var4 = Test::Point2 { x : 1, y : 5 };
+            let res4 = match var4 {
+                case Test::Point { x, y } => { y },
+                case Test::Point2 { x, y } => { x },
+                else => { 10 }
+            };
+            res4
+        };
         "##,
             &mut engine,
             assert_fn,

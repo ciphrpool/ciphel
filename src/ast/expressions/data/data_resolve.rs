@@ -11,7 +11,7 @@ use crate::ast::statements::block::BlockCommonApi;
 use crate::semantic::scope::scope::{GlobalMapping, ScopeManager, ScopeState, VariableInfo};
 use crate::semantic::scope::static_types::{
     AddrType, ClosureType, FunctionType, LambdaType, MapType, NumberType, PrimitiveType, SliceType,
-    StrSliceType, TupleType, VecType,
+    StrSliceType, TupleType, VecType, POINTER_SIZE,
 };
 use crate::semantic::scope::user_types::UserType;
 use crate::semantic::ResolvePlatform;
@@ -363,6 +363,8 @@ impl Resolve for Slice {
 
                     self.size = self.value.len() * item_type.size_of();
 
+                    self.address = scope_manager.register_data(self.size, scope_id)?;
+
                     self.metadata.info = Info::Resolved {
                         context: context.clone(),
                         signature: Some(e_static!(StaticType::Slice(SliceType {
@@ -398,6 +400,7 @@ impl Resolve for Slice {
                 }
 
                 self.size = self.value.len() * item_type.size_of();
+                self.address = scope_manager.register_data(self.size, scope_id)?;
 
                 self.metadata.info = Info::Resolved {
                     context: context.clone(),
@@ -447,6 +450,7 @@ impl Resolve for StrSlice {
                 return Err(SemanticError::IncompatibleTypes);
             }
         }
+        self.address = scope_manager.register_data(POINTER_SIZE + self.value.len(), scope_id)?;
 
         self.metadata.info = crate::semantic::Info::Resolved {
             context: context.clone(),
@@ -1337,7 +1341,7 @@ impl ResolveFromStruct for Call {
         scope_id: Option<u128>,
         struct_id: u64,
     ) -> Result<(), SemanticError> {
-        todo!()
+        Err(SemanticError::Default)
     }
 }
 

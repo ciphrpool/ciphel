@@ -1,6 +1,9 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use crate::semantic::{Metadata, SemanticError};
@@ -54,6 +57,8 @@ pub trait BlockCommonApi {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         parent_scope_id: Option<u128>,
     ) -> Result<u128, SemanticError>;
+
+    fn scope(&self) -> Option<u128>;
 }
 
 impl FunctionBlock {
@@ -71,9 +76,12 @@ impl BlockCommonApi for FunctionBlock {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         parent_scope_id: Option<u128>,
     ) -> Result<u128, SemanticError> {
-        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        let inner_scope = scope_manager.spawn_allocating(parent_scope_id, true)?;
         self.scope = Some(inner_scope);
         Ok(inner_scope)
+    }
+    fn scope(&self) -> Option<u128> {
+        self.scope
     }
 }
 
@@ -92,9 +100,12 @@ impl BlockCommonApi for ClosureBlock {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         parent_scope_id: Option<u128>,
     ) -> Result<u128, SemanticError> {
-        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        let inner_scope = scope_manager.spawn_allocating(parent_scope_id, true)?;
         self.scope = Some(inner_scope);
         Ok(inner_scope)
+    }
+    fn scope(&self) -> Option<u128> {
+        self.scope
     }
 }
 
@@ -113,9 +124,12 @@ impl BlockCommonApi for LambdaBlock {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         parent_scope_id: Option<u128>,
     ) -> Result<u128, SemanticError> {
-        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        let inner_scope = scope_manager.spawn_allocating(parent_scope_id, true)?;
         self.scope = Some(inner_scope);
         Ok(inner_scope)
+    }
+    fn scope(&self) -> Option<u128> {
+        self.scope
     }
 }
 impl ExprBlock {
@@ -133,9 +147,12 @@ impl BlockCommonApi for ExprBlock {
         scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
         parent_scope_id: Option<u128>,
     ) -> Result<u128, SemanticError> {
-        let inner_scope = scope_manager.spawn(parent_scope_id)?;
+        let inner_scope = scope_manager.spawn_allocating(parent_scope_id, false)?;
         self.scope = Some(inner_scope);
         Ok(inner_scope)
+    }
+    fn scope(&self) -> Option<u128> {
+        self.scope
     }
 }
 
@@ -157,5 +174,8 @@ impl BlockCommonApi for Block {
         let inner_scope = scope_manager.spawn(parent_scope_id)?;
         self.scope = Some(inner_scope);
         Ok(inner_scope)
+    }
+    fn scope(&self) -> Option<u128> {
+        self.scope
     }
 }

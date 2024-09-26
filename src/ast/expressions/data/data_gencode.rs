@@ -229,15 +229,23 @@ impl GenerateCode for Slice {
         for element in &self.value {
             let _ = element.gencode(scope_manager, scope_id, instructions, context)?;
         }
-        let address = scope_manager.global_mapping.alloc(self.size);
-        let address = address
-            .try_into()
-            .map_err(|_| CodeGenerationError::Default)?;
+        if let Some(address) = self.address {
+            instructions.push(Asm::Mem(Mem::Store {
+                size: self.size,
+                address,
+            }));
+            instructions.push(Asm::Locate(Locate { address }));
+        } else {
+            let address = scope_manager.global_mapping.alloc(self.size);
+            let address = address
+                .try_into()
+                .map_err(|_| CodeGenerationError::Default)?;
+            instructions.push(Asm::Alloc(Alloc::GlobalFromStack {
+                address,
+                size: self.size,
+            }));
+        }
 
-        instructions.push(Asm::Alloc(Alloc::GlobalFromStack {
-            address,
-            size: self.size,
-        }));
         Ok(())
     }
 }
@@ -253,20 +261,36 @@ impl GenerateCode for StrSlice {
         let mut buffer = (self.value.len()).to_le_bytes().to_vec();
         buffer.extend_from_slice(self.value.as_bytes());
 
-        let address = if self.value != "" {
-            let address = scope_manager.global_mapping.alloc(8 + self.value.len());
+        if self.value != "" {
+            if let Some(address) = self.address {
+                instructions.push(Asm::Data(data::Data::Serialized {
+                    data: buffer.into(),
+                }));
+                instructions.push(Asm::Mem(Mem::Store {
+                    size: POINTER_SIZE + self.value.len(),
+                    address,
+                }));
+                instructions.push(Asm::Locate(Locate { address }));
+            } else {
+                let address = scope_manager
+                    .global_mapping
+                    .alloc(POINTER_SIZE + self.value.len());
 
-            address
-                .try_into()
-                .map_err(|_| CodeGenerationError::Default)?
+                let address = address
+                    .try_into()
+                    .map_err(|_| CodeGenerationError::Default)?;
+                instructions.push(Asm::Alloc(Alloc::Global {
+                    address,
+                    data: buffer.into(),
+                }));
+            }
         } else {
-            GlobalMapping::EMPTY_STRING_ADDRESS
-        };
+            instructions.push(Asm::Alloc(Alloc::Global {
+                address: GlobalMapping::EMPTY_STRING_ADDRESS,
+                data: buffer.into(),
+            }));
+        }
 
-        instructions.push(Asm::Alloc(Alloc::Global {
-            address,
-            data: buffer.into(),
-        }));
         Ok(())
     }
 }
@@ -514,13 +538,13 @@ impl GenerateCode for Struct {
             };
 
             let _ = field_expr.gencode(scope_manager, scope_id, instructions, context)?;
-            // Add padding
-            let padding = align(field_size) - field_size;
-            if padding > 0 {
-                instructions.push(Asm::Data(data::Data::Serialized {
-                    data: vec![0; padding].into(),
-                }));
-            }
+            // // Add padding
+            // let padding = align(field_size) - field_size;
+            // if padding > 0 {
+            //     instructions.push(Asm::Data(data::Data::Serialized {
+            //         data: vec![0; padding].into(),
+            //     }));
+            // }
         }
         Ok(())
     }
@@ -571,24 +595,24 @@ impl GenerateCode for Union {
 
             let _ = field_expr.gencode(scope_manager, scope_id, instructions, context)?;
             // Add padding
-            let padding = align(field_size) - field_size;
-            if padding > 0 {
-                instructions.push(Asm::Data(data::Data::Serialized {
-                    data: vec![0; padding].into(),
-                }));
-            }
-            total_size += align(field_size);
+            // let padding = align(field_size) - field_size;
+            // if padding > 0 {
+            //     instructions.push(Asm::Data(data::Data::Serialized {
+            //         data: vec![0; padding].into(),
+            //     }));
+            // }
+            total_size += field_size;
         }
 
-        if total_size < union_size {
-            // Add padding
-            let padding = union_size - total_size;
-            if padding > 0 {
-                instructions.push(Asm::Data(data::Data::Serialized {
-                    data: vec![0; padding].into(),
-                }));
-            }
-        }
+        // if total_size < union_size {
+        //     // Add padding
+        //     let padding = union_size - total_size;
+        //     if padding > 0 {
+        //         instructions.push(Asm::Data(data::Data::Serialized {
+        //             data: vec![0; padding].into(),
+        //         }));
+        //     }
+        // }
 
         instructions.push(Asm::Data(data::Data::Serialized {
             data: (idx as u64).to_le_bytes().into(),
@@ -999,6 +1023,11 @@ mod tests {
         test_statements(
             r##"
         let arr = [1,2,3];
+
+        let res = {
+            let buf = [1,2,3,4];
+            unit
+        };
         "##,
             &mut engine,
             assert_fn,
@@ -1105,6 +1134,12 @@ mod tests {
             r##"
         let text = core::string::string("Hello World");
         let text_complex = string("你好世界");
+
+        
+        let res = {
+            let buf = "Hello World";
+            unit
+        };
         "##,
             &mut engine,
             assert_fn,
@@ -1186,6 +1221,9 @@ mod tests {
             let res = test_extract_variable::<u64>("res4", scope_manager, stack, heap)
                 .expect("Deserialization should have succeeded");
             assert_eq!(res, 7);
+            let res = test_extract_variable::<u64>("res5", scope_manager, stack, heap)
+                .expect("Deserialization should have succeeded");
+            assert_eq!(res, 1);
             true
         }
         test_statements(
@@ -1206,8 +1244,8 @@ mod tests {
             let arr = [lambda1,lambda2];
             let res4 = arr[1](2);
 
-            /*let lambda5 = (x:i64) -> {[x]}; 
-            let res5 = lambda5(1)[0];*/
+            let lambda5 = (x:i64) -> {vec[x]}; 
+            let res5 = lambda5(1)[0];
 
         "##,
             &mut engine,

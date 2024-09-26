@@ -83,12 +83,14 @@ pub enum Number {
 pub struct Slice {
     pub value: MultiData,
     pub size: usize,
+    pub address: Option<MemoryAddress>,
     pub metadata: Metadata,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrSlice {
     pub value: String,
+    pub address: Option<MemoryAddress>,
     pub metadata: Metadata,
 }
 

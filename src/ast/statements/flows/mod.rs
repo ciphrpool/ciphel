@@ -1,6 +1,6 @@
 use crate::ast::expressions::{data::Call, flows::Cases, Expression};
 
-use super::block::{Block, ClosureBlock};
+use super::block::{Block, ClosureBlock, ExprBlock};
 
 pub mod flows_gencode;
 pub mod flows_parse;
@@ -26,7 +26,7 @@ pub struct IfStat {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchStat {
     expr: Box<Expression>,
-    cases: Cases<Block, ClosureBlock>,
+    cases: Cases<Block, ExprBlock>,
     else_branch: Option<Box<Block>>,
 }
 

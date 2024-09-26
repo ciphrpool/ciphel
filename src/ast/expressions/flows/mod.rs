@@ -41,7 +41,7 @@ pub struct IfExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchExpr {
     expr: Box<Expression>,
-    cases: Cases<ExprBlock, ClosureBlock>,
+    cases: Cases<ExprBlock, ExprBlock>,
     else_branch: Option<ExprBlock>,
     metadata: Metadata,
 }

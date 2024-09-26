@@ -51,30 +51,27 @@ impl GenerateCode for FunctionBlock {
 
         let epilog_label = Label::gen();
 
-        let mut local_offset = POINTER_SIZE; // Account for function pointer
-
         // Allocate all parameter variable
-        for VariableInfo {
-            ref ctype,
-            id,
-            address,
-            ..
-        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_parameters(inner_scope)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
+            *address = VariableAddress::Local(offset);
         }
 
         // Allocate all local variable
-        for VariableInfo {
-            ref ctype, address, ..
-        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        if let Some(allocating_size) = scope_manager
+            .allocating_scope
+            .get(&inner_scope)
+            .map(|m| m.local_size)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
-            instructions.push(Asm::Alloc(Alloc::Stack { size }));
+            instructions.push(Asm::Alloc(Alloc::Stack {
+                size: allocating_size,
+            }));
+        }
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(offset);
         }
 
         // generate code for all statements
@@ -117,27 +114,27 @@ impl GenerateCode for ClosureBlock {
 
         let epilog_label = Label::gen();
 
-        let mut local_offset = POINTER_SIZE; // Account for closure pointer
-
         // Allocate all parameter variable
-        for VariableInfo {
-            ref ctype, address, ..
-        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_parameters(inner_scope)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
+            *address = VariableAddress::Local(offset);
         }
 
         // Allocate all local variable
-        for VariableInfo {
-            ref ctype, address, ..
-        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        if let Some(allocating_size) = scope_manager
+            .allocating_scope
+            .get(&inner_scope)
+            .map(|m| m.local_size)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
-            instructions.push(Asm::Alloc(Alloc::Stack { size }));
+            instructions.push(Asm::Alloc(Alloc::Stack {
+                size: allocating_size,
+            }));
+        }
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(offset);
         }
 
         // generate code for all statements
@@ -180,30 +177,27 @@ impl GenerateCode for LambdaBlock {
 
         let epilog_label = Label::gen();
 
-        let mut local_offset = POINTER_SIZE; // Account for lambda pointer
-
         // Allocate all parameter variable
-        for VariableInfo {
-            ref ctype,
-            id,
-            address,
-            ..
-        } in scope_manager.iter_mut_on_parameters(inner_scope)
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_parameters(inner_scope)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
+            *address = VariableAddress::Local(offset);
         }
 
         // Allocate all local variable
-        for VariableInfo {
-            ref ctype, address, ..
-        } in scope_manager.iter_mut_on_local_variable(inner_scope)
+        if let Some(allocating_size) = scope_manager
+            .allocating_scope
+            .get(&inner_scope)
+            .map(|m| m.local_size)
         {
-            *address = VariableAddress::Local(local_offset);
-            let size = ctype.size_of();
-            local_offset += size;
-            instructions.push(Asm::Alloc(Alloc::Stack { size }));
+            instructions.push(Asm::Alloc(Alloc::Stack {
+                size: allocating_size,
+            }));
+        }
+        for (VariableInfo { address, .. }, offset) in
+            scope_manager.iter_mut_on_local_variable(inner_scope)
+        {
+            *address = VariableAddress::Local(offset);
         }
 
         // generate code for all statements
@@ -262,19 +256,40 @@ impl GenerateCode for ExprBlock {
             }));
             instructions.push_label_id(start_iife, "start_IIFE".to_string());
         }
-
+        let mut param_size = None;
         if ScopeState::IIFE == scope_state {
             // Allocate all local variable
-            let mut local_offset = 0;
 
-            for VariableInfo {
-                ref ctype, address, ..
-            } in scope_manager.iter_mut_on_local_variable(inner_scope)
+            if let Some(allocating_size) = scope_manager
+                .allocating_scope
+                .get(&inner_scope)
+                .map(|m| m.local_size)
             {
-                *address = VariableAddress::Local(local_offset);
-                let size = ctype.size_of();
-                local_offset += size;
-                instructions.push(Asm::Alloc(Alloc::Stack { size }));
+                instructions.push(Asm::Alloc(Alloc::Stack {
+                    size: allocating_size,
+                }));
+            }
+            if let Some(allocating_size) = scope_manager
+                .allocating_scope
+                .get(&inner_scope)
+                .map(|m| m.param_size)
+            {
+                param_size = Some(allocating_size);
+            }
+            for (VariableInfo { address, .. }, offset) in
+                scope_manager.iter_mut_on_parameters(inner_scope)
+            {
+                *address = VariableAddress::Local(offset);
+            }
+
+            for (
+                VariableInfo {
+                    ref ctype, address, ..
+                },
+                offset,
+            ) in scope_manager.iter_mut_on_local_variable(inner_scope)
+            {
+                *address = VariableAddress::Local(offset);
             }
         }
 
@@ -302,7 +317,7 @@ impl GenerateCode for ExprBlock {
             instructions.push_label_id(call_label, "call_IIFE".to_string());
             instructions.push(Asm::Call(Call::From {
                 label: start_iife,
-                param_size: 0,
+                param_size: param_size.unwrap_or(0),
             }));
             instructions.push_label_id(end_iife, "end_IIFE".to_string());
         } else {

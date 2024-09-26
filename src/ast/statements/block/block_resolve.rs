@@ -109,7 +109,7 @@ impl Resolve for FunctionBlock {
         Self: Sized,
     {
         if self.scope.is_none() {
-            let inner_scope = scope_manager.spawn(scope_id)?;
+            let inner_scope = scope_manager.spawn_allocating(scope_id, true)?;
             self.scope = Some(inner_scope)
         }
 
@@ -179,7 +179,7 @@ impl Resolve for ClosureBlock {
         Self: Sized,
     {
         if self.scope.is_none() {
-            let inner_scope = scope_manager.spawn(scope_id)?;
+            let inner_scope = scope_manager.spawn_allocating(scope_id, true)?;
             self.scope = Some(inner_scope)
         }
 
@@ -253,7 +253,7 @@ impl Resolve for LambdaBlock {
         Self: Sized,
     {
         if self.scope.is_none() {
-            let inner_scope = scope_manager.spawn(scope_id)?;
+            let inner_scope = scope_manager.spawn_allocating(scope_id, true)?;
             self.scope = Some(inner_scope)
         }
 
@@ -327,10 +327,10 @@ impl Resolve for ExprBlock {
         Self: Sized,
     {
         if self.scope.is_none() {
-            let inner_scope = scope_manager.spawn(scope_id)?;
+            let inner_scope = scope_manager.spawn_allocating(scope_id, false)?;
             self.scope = Some(inner_scope)
         }
-        if scope_id.is_none() {
+        if scope_manager.is_scope_global(scope_id) {
             scope_manager
                 .scope_states
                 .insert(self.scope.unwrap(), ScopeState::IIFE);
@@ -344,18 +344,13 @@ impl Resolve for ExprBlock {
             let _ = instruction.resolve::<G>(scope_manager, self.scope, context, &mut ())?;
         }
 
-        if scope_manager
-            .allocating_scope
-            .get(&self.scope.unwrap())
-            .filter(|vars| (vars.len() > 0))
-            .is_some()
-        {
-            // Noop
-        } else {
-            // The block is now Inlined
-            scope_manager
-                .scope_states
-                .insert(self.scope.unwrap(), ScopeState::Inline);
+        if let Some(mapping) = scope_manager.allocating_scope.get(&self.scope.unwrap()) {
+            if mapping.vars.len() == 0 && mapping.param_size == 0 {
+                // The block is now Inlined
+                scope_manager
+                    .scope_states
+                    .insert(self.scope.unwrap(), ScopeState::Inline);
+            }
         }
 
         let return_types = scope_manager

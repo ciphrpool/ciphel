@@ -6,6 +6,7 @@ use crate::ast::expressions::flows::FormatItem;
 use crate::ast::expressions::Atomic;
 use crate::ast::statements::block::BlockCommonApi;
 use crate::ast::TryParse;
+use crate::semantic::scope::scope::ScopeState;
 use crate::semantic::scope::static_types::{PrimitiveType, TupleType};
 use crate::semantic::scope::user_types::{Enum, Struct, Union};
 use crate::semantic::{
@@ -210,8 +211,22 @@ impl Resolve for UnionPattern {
             .vars_id
             .insert(Vec::with_capacity(self.vars_names.len()));
 
+        let is_scope_iife = scope_id.is_some()
+            && *scope_manager
+                .scope_states
+                .get(&scope_id.unwrap())
+                .unwrap_or(&ScopeState::Inline)
+                == ScopeState::IIFE;
+
         for (field_name, field_type) in fields.iter() {
-            let id = scope_manager.register_parameter(&field_name, field_type.clone(), scope_id)?;
+            let id: u64;
+            if is_scope_iife {
+                // the block is an IIFE
+                id = scope_manager.register_parameter(&field_name, field_type.clone(), scope_id)?;
+            } else {
+                id = scope_manager.register_var(&field_name, field_type.clone(), scope_id)?;
+            }
+
             ids.push(id);
         }
 
@@ -361,6 +376,15 @@ impl<
     {
         let inner_scope = self.block.init_from_parent(scope_manager, scope_id)?;
 
+        if scope_manager.is_scope_global(Some(inner_scope)) {
+            scope_manager
+                .scope_states
+                .insert(inner_scope, ScopeState::IIFE);
+        } else {
+            scope_manager
+                .scope_states
+                .insert(inner_scope, ScopeState::Inline);
+        }
         let _ = self
             .pattern
             .resolve::<G>(scope_manager, Some(inner_scope), &extra, &mut ())?;
@@ -398,6 +422,7 @@ impl Resolve for MatchExpr {
                 let EType::Static(StaticType::Primitive(_)) = expr_type else {
                     return Err(SemanticError::IncompatibleTypes);
                 };
+                let mut current_case_type: Option<EType> = None;
                 for case in cases {
                     let _ = case.resolve::<G>(
                         scope_manager,
@@ -405,6 +430,15 @@ impl Resolve for MatchExpr {
                         context,
                         &mut Some(expr_type.clone()),
                     )?;
+                    let case_type = case.block.type_of(scope_manager, scope_id)?;
+                    if let Some(current_case_type) = &current_case_type {
+                        let _ = current_case_type.compatible_with(
+                            &case_type,
+                            scope_manager,
+                            scope_id,
+                        )?;
+                    }
+                    let _ = current_case_type.insert(case_type);
                 }
             }
             super::Cases::String { cases } => {
@@ -414,6 +448,7 @@ impl Resolve for MatchExpr {
                     _ => return Err(SemanticError::IncompatibleTypes),
                 }
 
+                let mut current_case_type: Option<EType> = None;
                 for case in cases {
                     let _ = case.resolve::<G>(
                         scope_manager,
@@ -421,6 +456,15 @@ impl Resolve for MatchExpr {
                         context,
                         &mut Some(expr_type.clone()),
                     )?;
+                    let case_type = case.block.type_of(scope_manager, scope_id)?;
+                    if let Some(current_case_type) = &current_case_type {
+                        let _ = current_case_type.compatible_with(
+                            &case_type,
+                            scope_manager,
+                            scope_id,
+                        )?;
+                    }
+                    let _ = current_case_type.insert(case_type);
                 }
             }
             super::Cases::Enum { cases } => {
@@ -433,6 +477,7 @@ impl Resolve for MatchExpr {
                     return Err(SemanticError::IncompatibleTypes);
                 };
 
+                let mut current_case_type: Option<EType> = None;
                 for case in cases.iter_mut() {
                     let _ = case.resolve::<G>(
                         scope_manager,
@@ -440,6 +485,15 @@ impl Resolve for MatchExpr {
                         context,
                         &mut Some(expr_type.clone()),
                     )?;
+                    let case_type = case.block.type_of(scope_manager, scope_id)?;
+                    if let Some(current_case_type) = &current_case_type {
+                        let _ = current_case_type.compatible_with(
+                            &case_type,
+                            scope_manager,
+                            scope_id,
+                        )?;
+                    }
+                    let _ = current_case_type.insert(case_type);
                 }
 
                 if should_be_exhaustive {
@@ -468,6 +522,7 @@ impl Resolve for MatchExpr {
                     return Err(SemanticError::IncompatibleTypes);
                 };
 
+                let mut current_case_type: Option<EType> = None;
                 for case in cases.iter_mut() {
                     let _ = case.resolve::<G>(
                         scope_manager,
@@ -475,6 +530,15 @@ impl Resolve for MatchExpr {
                         context,
                         &mut Some(expr_type.clone()),
                     )?;
+                    let case_type = case.block.type_of(scope_manager, scope_id)?;
+                    if let Some(current_case_type) = &current_case_type {
+                        let _ = current_case_type.compatible_with(
+                            &case_type,
+                            scope_manager,
+                            scope_id,
+                        )?;
+                    }
+                    let _ = current_case_type.insert(case_type);
                 }
 
                 if should_be_exhaustive {

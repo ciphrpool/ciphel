@@ -7,7 +7,7 @@ use crate::{
         allocator::MemoryAddress,
         asm::{
             alloc::Access,
-            locate::{LocateIndex, LocateOffset},
+            locate::{LocateIndex, LocateOffset, LocateOffsetFromStackPointer},
             Asm,
         },
         vm::{CodeGenerationContext, CodeGenerationError, GenerateCode},
@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     data::{Address, Call, Data, PtrAccess, Variable},
-    operation::{FieldAccess, ListAccess, TupleAccess},
+    operation::{ExprCall, FieldAccess, ListAccess, TupleAccess},
     Atomic, Expression,
 };
 
@@ -725,7 +725,18 @@ impl Locatable for Call {
         scope_id: Option<u128>,
         instructions: &mut crate::vm::asm::Program,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
-        todo!()
+        self.gencode(
+            scope_manager,
+            scope_id,
+            instructions,
+            &CodeGenerationContext::default(),
+        )?;
+        let Some(return_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let offset = return_type.size_of();
+        instructions.push(Asm::OffsetSP(LocateOffsetFromStackPointer { offset }));
+        Ok(None)
     }
 
     fn locate_from(
@@ -735,7 +746,7 @@ impl Locatable for Call {
         instructions: &mut crate::vm::asm::Program,
         address: Option<MemoryAddress>,
     ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
-        todo!()
+        Err(CodeGenerationError::Unlocatable)
     }
 
     fn access_from(
@@ -745,7 +756,7 @@ impl Locatable for Call {
         instructions: &mut crate::vm::asm::Program,
         address: MemoryAddress,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        Err(CodeGenerationError::Unlocatable)
     }
 
     fn runtime_access(
@@ -754,7 +765,61 @@ impl Locatable for Call {
         scope_id: Option<u128>,
         instructions: &mut crate::vm::asm::Program,
     ) -> Result<(), CodeGenerationError> {
-        todo!()
+        Err(CodeGenerationError::Unlocatable)
+    }
+}
+
+impl Locatable for ExprCall {
+    fn is_assignable(&self) -> bool {
+        false
+    }
+    fn locate(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::asm::Program,
+    ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
+        self.gencode(
+            scope_manager,
+            scope_id,
+            instructions,
+            &CodeGenerationContext::default(),
+        )?;
+        let Some(return_type) = self.metadata.signature() else {
+            return Err(CodeGenerationError::UnresolvedError);
+        };
+        let offset = return_type.size_of();
+        instructions.push(Asm::OffsetSP(LocateOffsetFromStackPointer { offset }));
+        Ok(None)
+    }
+
+    fn locate_from(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::asm::Program,
+        address: Option<MemoryAddress>,
+    ) -> Result<Option<MemoryAddress>, CodeGenerationError> {
+        Err(CodeGenerationError::Unlocatable)
+    }
+
+    fn access_from(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::asm::Program,
+        address: MemoryAddress,
+    ) -> Result<(), CodeGenerationError> {
+        Err(CodeGenerationError::Unlocatable)
+    }
+
+    fn runtime_access(
+        &self,
+        scope_manager: &mut crate::semantic::scope::scope::ScopeManager,
+        scope_id: Option<u128>,
+        instructions: &mut crate::vm::asm::Program,
+    ) -> Result<(), CodeGenerationError> {
+        Err(CodeGenerationError::Unlocatable)
     }
 }
 
@@ -778,6 +843,7 @@ impl Locatable for Expression {
             Expression::FieldAccess(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::ListAccess(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::TupleAccess(value) => value.locate(scope_manager, scope_id, instructions),
+            Expression::ExprCall(value) => value.locate(scope_manager, scope_id, instructions),
             Expression::Atomic(value) => value.locate(scope_manager, scope_id, instructions),
             _ => Err(CodeGenerationError::Unlocatable),
         }
@@ -798,6 +864,9 @@ impl Locatable for Expression {
                 value.locate_from(scope_manager, scope_id, instructions, address)
             }
             Expression::TupleAccess(value) => {
+                value.locate_from(scope_manager, scope_id, instructions, address)
+            }
+            Expression::ExprCall(value) => {
                 value.locate_from(scope_manager, scope_id, instructions, address)
             }
             Expression::Atomic(value) => {
@@ -824,6 +893,9 @@ impl Locatable for Expression {
             Expression::TupleAccess(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
             }
+            Expression::ExprCall(value) => {
+                value.access_from(scope_manager, scope_id, instructions, address)
+            }
             Expression::Atomic(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
             }
@@ -845,6 +917,9 @@ impl Locatable for Expression {
                 value.runtime_access(scope_manager, scope_id, instructions)
             }
             Expression::TupleAccess(value) => {
+                value.runtime_access(scope_manager, scope_id, instructions)
+            }
+            Expression::ExprCall(value) => {
                 value.runtime_access(scope_manager, scope_id, instructions)
             }
             Expression::Atomic(value) => {
@@ -943,6 +1018,7 @@ impl Locatable for Data {
             Data::Address(value) => value.locate(scope_manager, scope_id, instructions),
             Data::PtrAccess(value) => value.locate(scope_manager, scope_id, instructions),
             Data::Variable(value) => value.locate(scope_manager, scope_id, instructions),
+            Data::Call(value) => value.locate(scope_manager, scope_id, instructions),
             _ => Err(CodeGenerationError::Unlocatable),
         }
     }
@@ -964,6 +1040,7 @@ impl Locatable for Data {
             Data::Variable(value) => {
                 value.locate_from(scope_manager, scope_id, instructions, address)
             }
+            Data::Call(value) => value.locate_from(scope_manager, scope_id, instructions, address),
             _ => Err(CodeGenerationError::Unlocatable),
         }
     }
@@ -985,6 +1062,7 @@ impl Locatable for Data {
             Data::Variable(value) => {
                 value.access_from(scope_manager, scope_id, instructions, address)
             }
+            Data::Call(value) => value.access_from(scope_manager, scope_id, instructions, address),
             _ => Err(CodeGenerationError::Unaccessible),
         }
     }
@@ -999,6 +1077,7 @@ impl Locatable for Data {
             Data::Address(value) => value.runtime_access(scope_manager, scope_id, instructions),
             Data::PtrAccess(value) => value.runtime_access(scope_manager, scope_id, instructions),
             Data::Variable(value) => value.runtime_access(scope_manager, scope_id, instructions),
+            Data::Call(value) => value.runtime_access(scope_manager, scope_id, instructions),
             _ => Err(CodeGenerationError::Unaccessible),
         }
     }
